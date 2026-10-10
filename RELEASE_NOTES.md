@@ -1,13 +1,9 @@
-# Road Conquest 1.0 Beta 37
+# Road Conquest 1.0 Beta 38
 
-- Fix town overlay fills darkening where municipal polygons intersect. Overlapping map shapes are clipped into mutually exclusive visible regions, with smaller boroughs taking precedence. Shared boundaries are dissolved into single thin lines instead of being drawn multiple times.
-- Correct town-boundary matching so Gloucester City and Gloucester Township (and other different municipal legal types) are NEVER treated as the same municipality. Accept equivalent labels such as Borough of Pine Hill / Pine Hill Borough.
-- Rebuild town overlay caches under stricter municipal-boundary matching. Older cached town outlines are replaced once; valid cached state and country outlines are preserved. This affects visuals, not historical visits.
-- Reject non-administrative places and, where available, U.S. county-level polygons mistakenly returned for municipality searches.
-- Add regression tests for adjacent and intersecting municipalities, duplicate areas, boroughs surrounded by townships, disjoint islands, polygon holes and different legal municipal names.
+- Road details no longer report **about 1 time** for every unique matcher fragment. An older driving export contained 2,546 unique road segments and 2,546 visit windows, every one showing one visit, although several physical road sections were traversed 3–5 times. Tapped-road pass estimates now aggregate matched visits across nearby physical segments in the same road group and combine fragments of the same drive. A fast return counts separately when stored GPS proves departure. Estimates are read-only: roads and saved driving history remain unchanged.
+- In **New Jersey**, discover municipalities and draw their town polygons from the authoritative New Jersey Office of GIS administrative boundary layer instead of ambiguous postal-address or OSM name searches. The query is based on the recorded GPS coordinate and checks actual polygon containment; neighborhood and CDP names cannot become phantom municipal polygons. Outside NJ, continue using the pre-existing provider.
+- Invalidate the older NJ/other town overlay cache (v5), while retaining cached state and country polygons. Reuse official NJ polygons in a bounded in-memory cache to avoid repeated downloads every few yards.
+- Preserve points, achievements, historical visited-place entries, user account, fog, routes, and all other history. Historic incorrectly labeled places are not automatically erased or charged back. A wrongly named town from earlier versions will not display an invented polygon; future NJ discoveries use the real official municipal name.
+- Regression tests cover four repeat drives using different matched geometries, overlapping fragments, neighboring roads, fast returns, official municipal containment, false communities, legal municipality type, islands and geometry holes.
 
-**All saved roads, locations, visited towns, points, rewards, account data and purchases remain unchanged.** This update only corrects polygon display and verification. Previously earned town rewards are not retroactively removed. Town overlays may take time to reload once from the boundary provider after installation.
-
-Version code **63**, minimum Android 12. Install the signed Beta 37 APK over Beta 36 without uninstalling or clearing app data.
-
-For Play Store, upload only the signed `RoadConquest-1.0-beta.37.aab` from the matching GitHub release after all Android checks pass.
+Version code **64**, minimum Android 12. Install the Beta 38 APK over the existing installation. Do **not** uninstall or clear app data. Play Store upload requires the signed `RoadConquest-1.0-beta.38.aab` once the required CI tests and release signing complete.
