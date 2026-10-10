@@ -696,9 +696,9 @@ class ProgressionRepository(context: Context) {
         val text = value.trim().lowercase(java.util.Locale.ROOT)
             .replace(Regex("\\s+"), " ").removePrefix("the ")
         for (kind in listOf("township", "borough", "municipality", "village", "town", "city")) {
-            val prefix = "$" + "{kind} of "
+            val prefix = "${kind} of "
             if (text.startsWith(prefix)) return text.removePrefix(prefix) to kind
-            val suffix = " $" + "{kind}"
+            val suffix = " $kind"
             if (text.endsWith(suffix)) return text.removeSuffix(suffix) to kind
         }
         return text to ""
