@@ -122,13 +122,16 @@ object SavedTurnRepair {
                 id.takeIf { it in window.markableIds &&
                     confidence >= OsrmMatcher.MIN_ACCEPTABLE_CONFIDENCE }
             }.orEmpty()
-            if (acceptedRoads.isNotEmpty() && matchedIds.isNotEmpty()) {
+            val resolvedIds = if (acceptedRoads.isNotEmpty() && matchedIds.isNotEmpty()) {
                 repository.completeMatch(acceptedRoads, matchedIds)
                 recovered += matchedIds.size
+                matchedIds.toSet()
+            } else {
+                emptySet()
             }
-            // Never pretend an unmatched GPS fix was resolved. Avoid hammering
-            // unroutable parking areas on every map redraw.
-            val unresolved = window.markableIds - matchedIds.toSet()
+            // GPS points without accepted geometry remain pending, even when a
+            // routing response advertises confidence for those tracepoints.
+            val unresolved = window.markableIds - resolvedIds
             if (unresolved.isNotEmpty()) {
                 repository.deferMatching(unresolved,
                     System.currentTimeMillis() + REPAIR_DEFERRAL_MS)
