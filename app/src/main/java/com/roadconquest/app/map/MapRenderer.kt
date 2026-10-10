@@ -224,9 +224,13 @@ class MapRenderer(
             val loaded = ArrayList<PlaceOverlayData>(places.size)
             val missing = ArrayList<com.roadconquest.app.data.PlaceDiscovery>()
             for (place in places) {
-                val cached = if (NewJerseyMunicipalBoundaries.applies(place)) {
-                    PlaceOverlayCache.readOfficialNj(context, place)
-                } else PlaceOverlayCache.read(context, place)
+                val cached = when {
+                    NewJerseyMunicipalBoundaries.applies(place) ->
+                        PlaceOverlayCache.readOfficialNj(context, place)
+                    UnitedStatesMunicipalBoundaries.applies(place) ->
+                        PlaceOverlayCache.readOfficialUs(context, place)
+                    else -> PlaceOverlayCache.read(context, place)
+                }
                 if (!cached.cached) missing += place
                 cached.data?.let(loaded::add)
             }
@@ -238,9 +242,13 @@ class MapRenderer(
                 // Do not fall back to Nominatim: mixing sources creates the
                 // overlaps and unexplained holes reported by users.
                 val nj = NewJerseyMunicipalBoundaries.applies(place)
+                val us = UnitedStatesMunicipalBoundaries.applies(place)
                 val result = runCatching {
-                    if (nj) NewJerseyMunicipalBoundaries.fetch(place)
-                    else overlayClient.fetch(place)
+                    when {
+                        nj -> NewJerseyMunicipalBoundaries.fetch(place)
+                        us -> UnitedStatesMunicipalBoundaries.fetch(place)
+                        else -> overlayClient.fetch(place)
+                    }
                 }
                 if (result.isFailure) {
                     Log.w("RoadConquest", "Could not load place boundary", result.exceptionOrNull())
@@ -248,9 +256,11 @@ class MapRenderer(
                 }
                 if (cacheGeneration != PlaceOverlayCache.generation()) return@execute
                 val data = result.getOrNull()
-                val written = if (nj) {
-                    PlaceOverlayCache.writeOfficialNj(context, place, data, cacheGeneration)
-                } else PlaceOverlayCache.write(context, place, data, cacheGeneration)
+                val written = when {
+                    nj -> PlaceOverlayCache.writeOfficialNj(context, place, data, cacheGeneration)
+                    us -> PlaceOverlayCache.writeOfficialUs(context, place, data, cacheGeneration)
+                    else -> PlaceOverlayCache.write(context, place, data, cacheGeneration)
+                }
                 if (!written) return@execute
                 if (data != null) {
                     loaded += data
@@ -684,30 +694,30 @@ class MapRenderer(
         // Existing boundaries can overlap due to mismatched or historical OSM
         // polygons. Partition only town shapes so their translucent fills never
         // stack or paint an overlapping boundary twice.
-        // NJOGIS already defines coincident, shared municipal edges. Clipping
-        // those polygons against one another can introduce slivers and gaps.
-        // Keep official NJ rings verbatim. Retain the legacy partition ONLY for
-        // non-NJ sources, which don't necessarily share the same topology.
-        val officialNj = if (kind == com.roadconquest.app.data.PlaceKind.TOWN) {
-            snapshot.filter { NewJerseyMunicipalBoundaries.isNewJerseyKey(it.key) }
+        // Official US Census and NJOGIS boundaries are used as supplied.
+        // Clipping individual municipalities invents slivers and gaps; only
+        // shared boundary linework is dissolved. Other countries retain
+        // the verified administrative OpenStreetMap fallback.
+        val officialUs = if (kind == com.roadconquest.app.data.PlaceKind.TOWN) {
+            snapshot.filter { UnitedStatesMunicipalBoundaries.isUnitedStatesKey(it.key) }
         } else emptyList()
-        val other = if (officialNj.isNotEmpty()) {
-            snapshot.filterNot { NewJerseyMunicipalBoundaries.isNewJerseyKey(it.key) }
+        val other = if (officialUs.isNotEmpty()) {
+            snapshot.filterNot { UnitedStatesMunicipalBoundaries.isUnitedStatesKey(it.key) }
         } else snapshot
         val otherPartition = if (kind == com.roadconquest.app.data.PlaceKind.TOWN &&
             other.isNotEmpty()
         ) TownOverlayPartition.render(other) else null
         val keys = snapshot.map { "${it.key}:${it.geometryJson.hashCode()}" }
         val fillFeatures = when {
-            officialNj.isNotEmpty() && otherPartition != null ->
-                mergeOverlayCollections(overlayFeatureCollection(officialNj), otherPartition.fills)
-            officialNj.isNotEmpty() -> overlayFeatureCollection(officialNj)
+            officialUs.isNotEmpty() && otherPartition != null ->
+                mergeOverlayCollections(overlayFeatureCollection(officialUs), otherPartition.fills)
+            officialUs.isNotEmpty() -> overlayFeatureCollection(officialUs)
             else -> otherPartition?.fills ?: overlayFeatureCollection(snapshot)
         }
         val boundaries = when {
-            officialNj.isNotEmpty() && otherPartition != null ->
-                mergeOverlayCollections(TownOverlayPartition.authoritativeOutlines(officialNj), otherPartition.outlines)
-            officialNj.isNotEmpty() -> TownOverlayPartition.authoritativeOutlines(officialNj)
+            officialUs.isNotEmpty() && otherPartition != null ->
+                mergeOverlayCollections(TownOverlayPartition.authoritativeOutlines(officialUs), otherPartition.outlines)
+            officialUs.isNotEmpty() -> TownOverlayPartition.authoritativeOutlines(officialUs)
             else -> otherPartition?.outlines ?: overlayBoundaryFeatureCollection(snapshot)
         }
         mainHandler.post {
