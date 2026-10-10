@@ -1,13 +1,13 @@
-# Road Conquest 1.0 Beta 31
+# Road Conquest 1.0 Beta 36
 
-- Fix visited one-mile squares temporarily appearing covered again during fast pinch zooms. A geographically anchored regional fog mask retains those clearings between detailed redraws, with one active fog raster at a time to prevent double-darkening.
-- Capture town discovery candidates from actual accepted driving GPS locations at finer intervals and smaller geocoding cells, rather than querying an approximate 2-kilometer cell center that might lie outside a briefly crossed town.
-- Re-check accurate saved GPS driving history in bounded batches so previously missed towns can be recovered where the original data contains evidence; preserve each profile's zero-point starting location and never award town points solely for a raw GPS coordinate or twice for an existing place.
-- Show already-cached town/state/country boundaries without clearing them during refresh, and add newly downloaded boundaries individually instead of delaying until four are available.
-- Add **First visited** and **Last visited** timestamps to the popup for each visited town, state or country. The latest confirmed reverse-geocoded visit updates the last timestamp without awarding points again. Existing place records show their first saved visit as both values until a newer revisit is verified.
-- Add unit tests for geographic cutout stability, old history and reset-baseline safety, exact municipal-boundary candidate positions, timestamp ordering, and first/last visits. Test the live rendered fog during animated zoom on Android 12, 15 and 17.
-- Keep recorded roads, mileage, exploration data, verified scoring, achievement balance, purchases and account state unchanged.
+- Fix accidental town unlocks and points from nearby postal localities. Municipal discoveries now require the actual recorded GPS fix to fall inside a correctly named administrative boundary polygon, with state and country cross-checks.
+- Reject inaccurate, stationary GPS exploration and remove temporary fog clearings caused solely by the map's live location preview. Genuine walking continues to reveal fog without counting as driving.
+- Stop automatically replaying all historical drives to create new place candidates. Existing queued discoveries are filtered using saved accepted GPS evidence in a one-time database update; late confirmations no longer appear as new arrival notifications.
+- Retain existing road history, road matching, distances, time driven, accounts, progression purchases, and verified scoring. Optional town-storage errors can no longer interrupt accepted driving samples.
+- Preserve valid historical walking and driving exploration during old fog-cell cleanup, and add tests for stationary GPS scatter, legitimate walking, administrative polygons, nearby towns, polygon holes, and database upgrades.
 
-Version code **57**, minimum Android 12. Install the signed Beta 31 APK over the existing app without uninstalling or clearing data.
+Existing visited-town records and points are preserved rather than deleted without positive evidence, because older releases sometimes recorded approximate grid centers rather than exact entry coordinates.
 
-For Play Store upload, use only the signed `RoadConquest-1.0-beta.31.aab` attached to the GitHub Release. Its signing identity and embedded complete native debug symbols remain unchanged.
+Version code **62**, minimum Android 12. Install the signed Beta 36 APK over the existing app; do not clear its storage or uninstall first.
+
+For Play Store upload, use only the signed `RoadConquest-1.0-beta.36.aab` from the release after GitHub's full verification passes.
