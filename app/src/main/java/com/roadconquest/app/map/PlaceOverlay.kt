@@ -60,7 +60,7 @@ object PlaceOverlayCache {
     // Leave valid state and country caches in place; only municipal
     // outlines need the stricter verification rules.
     private const val DIRECTORY = "place-overlays-v3"
-    private const val TOWN_DIRECTORY = "place-overlays-v4-towns"
+    private const val TOWN_DIRECTORY = "place-overlays-v5-verified-towns"
     private const val NEGATIVE_CACHE_MS = 15L * 60L * 1000L
     private const val HEX_DIGITS = "0123456789abcdef"
     private val generation = AtomicLong()
@@ -163,7 +163,11 @@ class PlaceOverlayClient(
 ) {
     private var resolvedEndpoint: String? = null
 
-    fun fetch(place: PlaceDiscovery, requireContainment: Boolean = true): PlaceOverlayData? {
+    fun fetch(
+        place: PlaceDiscovery,
+        requireContainment: Boolean = true,
+        townBoundaryEvidence: ((JSONObject) -> Boolean)? = null
+    ): PlaceOverlayData? {
         val base = resolveEndpoint()
         throttle()
         val threshold = when (place.kind) {
@@ -185,7 +189,7 @@ class PlaceOverlayClient(
         return try {
             val status = connection.responseCode
             if (status !in 200..299) throw IOException("Place overlay service returned HTTP $status")
-            parseResponse(place, readLimited(connection), requireContainment)
+            parseResponse(place, readLimited(connection), requireContainment, townBoundaryEvidence)
         } finally {
             connection.disconnect()
         }
@@ -287,7 +291,12 @@ class PlaceOverlayClient(
             "city", "town", "village", "municipality", "township", "locality", "administrative"
         )
 
-        internal fun parseResponse(place: PlaceDiscovery, body: String, requireContainment: Boolean = true): PlaceOverlayData? {
+        internal fun parseResponse(
+            place: PlaceDiscovery,
+            body: String,
+            requireContainment: Boolean = true,
+            townBoundaryEvidence: ((JSONObject) -> Boolean)? = null
+        ): PlaceOverlayData? {
             val results = runCatching { JSONArray(body) }.getOrNull() ?: return null
             var best: JSONObject? = null
             var bestScore = Int.MIN_VALUE
@@ -303,11 +312,22 @@ class PlaceOverlayClient(
                     // Address classification alone is not enough: a county can
                     // contain an identically named town and incorrectly fill it.
                     if (category != "boundary" || type != "administrative") continue
-                    val adminLevel = candidate.optJSONObject("extratags")
-                        ?.optString("admin_level").orEmpty()
-                    if (canonical(place.countryName) == "united states" &&
-                        adminLevel.isNotBlank() && adminLevel != "8"
-                    ) continue
+                    val adminLevel = candidate.optString("admin_level").ifBlank {
+                        candidate.optJSONObject("extratags")?.optString("admin_level").orEmpty()
+                    }
+                    if (canonical(place.countryName) == "united states") {
+                        // In New Jersey the municipality is an OSM admin_level=8
+                        // boundary; counties and CDPs must not substitute for one.
+                        // Nominatim may omit admin_level from extratags, in which
+                        // case its municipality place_rank (16-22) is a fallback.
+                        val rank = candidate.optInt("place_rank", -1)
+                        if (canonical(place.parentName) == "new jersey") {
+                            if (adminLevel.isNotBlank() && adminLevel != "8") continue
+                            if (adminLevel.isBlank() && rank !in 16..22) continue
+                        } else if (adminLevel.isNotBlank() && adminLevel != "8") {
+                            continue
+                        }
+                    }
                     // A boundary can contain the GPS point but still represent a
                     // different nearby town or county. Require the actual name
                     // and available parent jurisdiction to agree before rewarding.
@@ -326,6 +346,12 @@ class PlaceOverlayClient(
                 // Require the GPS point to be inside this exact municipal polygon.
                 if (place.kind == PlaceKind.TOWN && requireContainment &&
                     !PlaceGeometry.contains(geometry, place.latitude, place.longitude)
+                ) continue
+                // For historical visits, an old sampled grid center is NOT
+                // authoritative proof. Evaluate the polygon against actual
+                // accepted GPS fixes around the recorded visit instead.
+                if (place.kind == PlaceKind.TOWN &&
+                    townBoundaryEvidence != null && !townBoundaryEvidence(geometry)
                 ) continue
                 val score = score(place, candidate)
                 if (score > bestScore) {
