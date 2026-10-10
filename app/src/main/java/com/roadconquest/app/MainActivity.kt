@@ -794,9 +794,13 @@ class MainActivity : Activity() {
                 repository.findRoadNear(latitude, longitude, radiusMeters)?.let { road ->
                     // Normalize legacy visit windows only for the tapped road, off the UI
                     // thread. No visit records are deleted or changed by this estimate.
-                    val estimated = repository.estimatedRoadVisitCount(road)
-                    road.copy(timesDriven = estimated, timesDrivenExact = false) to
-                        repository.roadLengthMeters(road)
+                    val estimate = repository.estimatedRoadPassesAt(road, latitude, longitude)
+                    road.copy(
+                        timesDriven = estimate.count,
+                        timesDrivenExact = false,
+                        firstUnlockedAt = minOf(road.firstUnlockedAt, estimate.firstSeenAt),
+                        lastDrivenAt = maxOf(road.lastDrivenAt, estimate.lastSeenAt)
+                    ) to repository.roadLengthMeters(road)
                 }
             }
             runOnUiThread {
@@ -820,7 +824,8 @@ class MainActivity : Activity() {
         } else {
             // GPS interruptions and short repeat journeys make traversal counts estimates,
             // not guaranteed lower bounds. Avoid an inaccurate "At least" label.
-            if (road.timesDriven == 1) "About 1 time" else "About ${road.timesDriven} times"
+            if (road.timesDriven == 1) "1 recorded pass (estimated)" else
+                "${road.timesDriven} recorded passes (estimated)"
         }
         AlertDialog.Builder(this)
             .setTitle(road.name)
