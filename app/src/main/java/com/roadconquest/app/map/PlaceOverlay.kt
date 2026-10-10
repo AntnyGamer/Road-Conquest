@@ -487,14 +487,23 @@ class PlaceOverlayClient(
         }
 
         private fun municipalityIdentity(value: String): Pair<String, String?> {
-            val name = canonical(value).removePrefix("the ")
-            for (kind in listOf("township", "borough", "municipality", "city", "town", "village")) {
-                val prefix = "${kind} of "
-                if (name.startsWith(prefix)) return name.removePrefix(prefix) to kind
-                val suffix = " $kind"
-                if (name.endsWith(suffix)) return name.removeSuffix(suffix) to kind
+            var name = canonical(value).removePrefix("the ")
+            var legalType: String? = null
+            // Some providers redundantly say "City of Gloucester City".
+            // Strip equivalent prefix/suffix types, but never equate a CITY to
+            // a TOWNSHIP or BOROUGH of the same base name.
+            repeat(3) {
+                for (kind in listOf("township", "borough", "municipality", "city", "town", "village")) {
+                    val prefix = "${kind} of "
+                    val suffix = " $kind"
+                    if (name.startsWith(prefix) || name.endsWith(suffix)) {
+                        if (legalType != null && legalType != kind) return canonical(value) to null
+                        name = if (name.startsWith(prefix)) name.removePrefix(prefix) else name.removeSuffix(suffix)
+                        legalType = kind
+                    }
+                }
             }
-            return name to null
+            return name to legalType
         }
 
         private fun canonical(value: String): String =
