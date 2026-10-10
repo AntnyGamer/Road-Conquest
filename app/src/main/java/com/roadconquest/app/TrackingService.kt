@@ -320,13 +320,13 @@ class TrackingService : Service(), LocationListener {
             // the same road may be revisited after new town boundaries are crossed.
             val savePlaceCandidate = (lastPlaceCandidate?.distanceTo(visited) ?: Float.POSITIVE_INFINITY) >=
                 PLACE_CANDIDATE_MIN_DISTANCE_M
-            if (savePlaceCandidate) lastPlaceCandidate = visited
+            // Candidate collection is restricted to validated driving below.
             val exploredCell = TrackingRepository.exploredCellKey(visited.latitude, visited.longitude)
             if (exploredCell != null && exploredCellsThisSession.size >= MAX_EXPLORED_CELL_CACHE) {
                 exploredCellsThisSession.clear()
             }
             val saveExplored = exploredCell != null && exploredCellsThisSession.add(exploredCell)
-            if (savePlaceCandidate || saveExplored) {
+            if (saveExplored) {
                 storageExecutor.execute {
                     // Independent writes: a failed optional municipal candidate must never
                     // prevent an accurate 50 m exploration sample from being persisted.
@@ -340,13 +340,7 @@ class TrackingService : Service(), LocationListener {
                             Log.e("RoadConquest", "Could not save explored place", error)
                         }
                     }
-                    if (savePlaceCandidate && ::progressionRepository.isInitialized) {
-                        try {
-                            progressionRepository.recordPlaceCandidate(visited)
-                        } catch (error: Exception) {
-                            Log.e("RoadConquest", "Could not save municipal discovery candidate", error)
-                        }
-                    }
+
                 }
             }
         }
@@ -384,6 +378,11 @@ class TrackingService : Service(), LocationListener {
 
         val accepted = requireNotNull(lastObserved)
         lastAccepted = accepted
+        val placeCandidate = if (!accepted.isMock && accepted.hasAccuracy() &&
+            accepted.accuracy in 0.01f..25f &&
+            (lastPlaceCandidate?.distanceTo(accepted) ?: Float.POSITIVE_INFINITY) >= PLACE_CANDIDATE_MIN_DISTANCE_M
+        ) Location(accepted) else null
+        if (placeCandidate != null) lastPlaceCandidate = placeCandidate
         storageExecutor.execute {
             try {
                 if (startAnchor == null) {
@@ -391,6 +390,7 @@ class TrackingService : Service(), LocationListener {
                 } else {
                     repository.insertLocations(listOf(startAnchor, accepted))
                 }
+                if (placeCandidate != null) progressionRepository.recordPlaceCandidate(placeCandidate)
                 persistedDrivingFixThisSession.set(true)
                 sendUiBroadcast(ACTION_STATS_UPDATED)
                 maybeRunMatching()
