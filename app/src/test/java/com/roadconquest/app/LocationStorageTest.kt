@@ -51,6 +51,43 @@ class LocationStorageTest {
         assertTrue(repo.loadMatchingWindow().points.isEmpty())
     }
 
+    @Test fun stationaryGpsScatterDoesNotUnlockFogOrGenerateDrivingHistory() {
+        val app = RuntimeEnvironment.getApplication()
+        val repo = TrackingRepository(app)
+        for (table in listOf("track_points", "roads", "explored_places", "explored_grid")) {
+            repo.readableDatabase().execSQL("DELETE FROM $table")
+        }
+        val controller = Robolectric.buildService(TrackingService::class.java)
+        val service = controller.get()
+        fun field(name: String) = TrackingService::class.java.getDeclaredField(name).apply {
+            isAccessible = true
+        }
+        field("repository").set(service, repo)
+        field("verifiedDriving").set(service, VerifiedDriving(app))
+        field("ready").setBoolean(service, true)
+        try {
+            repeat(4) { i ->
+                ShadowSystemClock.advanceBy(Duration.ofSeconds(20))
+                service.onLocationChanged(Location("gps").apply {
+                    latitude = 40.0 + i * 0.000025
+                    longitude = -74.0
+                    accuracy = 5f
+                    speed = 0f
+                    time = System.currentTimeMillis()
+                    elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
+                })
+            }
+        } finally {
+            field("ready").setBoolean(service, false)
+            controller.destroy()
+        }
+        assertTrue((field("storageExecutor").get(service) as ExecutorService)
+            .awaitTermination(5, TimeUnit.SECONDS))
+        assertTrue(repo.getExploredGridInBounds(41.0, -73.0, 39.0, -75.0).isEmpty())
+        assertTrue(repo.getExploredPlacesInBounds(41.0, -73.0, 39.0, -75.0).isEmpty())
+        assertEquals(0L, repo.getSummary().trackPointCount)
+    }
+
     @Test fun blockedDatabaseDoesNotBlockCallbacksAndAcceptedSamplesDrainAfterStop() {
         val repo = TrackingRepository(RuntimeEnvironment.getApplication())
         repo.readableDatabase().execSQL("DELETE FROM track_points")
