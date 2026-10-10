@@ -60,7 +60,7 @@ object PlaceOverlayCache {
     // Leave valid state and country caches in place; only municipal
     // outlines need the stricter verification rules.
     private const val DIRECTORY = "place-overlays-v3"
-    private const val TOWN_DIRECTORY = "place-overlays-v4-towns"
+    private const val TOWN_DIRECTORY = "place-overlays-v5-world-admin"
     // Keep official NJ town geometry in its OWN cache. The discovery resolver
     // stores Nominatim polygons separately and must never overwrite our single
     // statewide municipal topology with unrelated OpenStreetMap search results.
@@ -366,10 +366,25 @@ class PlaceOverlayClient(
                     // contain an identically named town and incorrectly fill it.
                     if (category != "boundary" || type != "administrative") continue
                     val adminLevel = candidate.optJSONObject("extratags")
-                        ?.optString("admin_level").orEmpty()
-                    if (canonical(place.countryName) == "united states" &&
-                        adminLevel.isNotBlank() && adminLevel != "8"
-                    ) continue
+                        ?.optString("admin_level")?.toIntOrNull()
+                    val country = canonical(place.countryName)
+                    // Administrative levels vary worldwide. Constrain them by
+                    // country so district/county/state polygons cannot masquerade
+                    // as towns merely because a nearby locality shares a name.
+                    val allowedLevels = when (country) {
+                        "united states", "united states of america", "usa" -> 8..8
+                        "australia", "mexico", "new zealand" -> 6..10
+                        "japan" -> 7..9
+                        "united kingdom", "great britain", "uk" -> 8..11
+                        "canada" -> 8..10
+                        else -> 7..11
+                    }
+                    if (adminLevel != null && adminLevel !in allowedLevels) continue
+                    // Native OSM boundary relations form the most consistent
+                    // worldwide source. Some small places are ways rather than
+                    // relations; permit those, but never a labeled POI node.
+                    val osmType = candidate.optString("osm_type")
+                    if (osmType.isNotBlank() && osmType !in setOf("relation", "way")) continue
                     // A boundary can contain the GPS point but still represent a
                     // different nearby town or county. Require the actual name
                     // and available parent jurisdiction to agree before rewarding.
