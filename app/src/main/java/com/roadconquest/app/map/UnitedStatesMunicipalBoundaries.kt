@@ -9,14 +9,16 @@ import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
+import kotlin.math.cos
+import kotlin.math.hypot
 
 /**
  * Official nationwide U.S. Census TIGERweb administrative geography.
  *
- * Census incorporated places (layer 4) cover municipalities such as cities,
- * boroughs, and villages. County subdivisions (layer 1) cover minor civil
- * divisions including townships and New England towns. The former takes
- * precedence for incorporated cities, the latter for explicit townships.
+ * All states, INCLUDING NEW JERSEY, use the same Census incorporated-place
+ * (layer 4) and county-subdivision (layer 1) features and identical checks.
+ * Incorporated cities/boroughs are in layer 4; townships and New England
+ * towns usually appear in layer 1. There are no state-specific providers.
  *
  * A Census Designated Place (CDP) is NOT an incorporated municipality and
  * must not create a green polygon simply because its name matches a postal town.
@@ -58,8 +60,7 @@ internal object UnitedStatesMunicipalBoundaries {
         place.kind == PlaceKind.TOWN &&
             place.countryName.trim().lowercase(Locale.ROOT) in setOf(
                 "united states", "united states of america", "usa", "us"
-            ) && !NewJerseyMunicipalBoundaries.applies(place) &&
-            stateFips.containsKey(place.parentName.trim().lowercase(Locale.ROOT))
+            ) && stateFips.containsKey(place.parentName.trim().lowercase(Locale.ROOT))
 
     /**
      * Layer selection is conservative. A township should not be replaced by
@@ -165,7 +166,7 @@ internal object UnitedStatesMunicipalBoundaries {
             if (wanted.second != null && actualType != null && wanted.second != actualType) continue
             if (wanted.second == "township" && layer != 1) continue
             if (wanted.second in setOf("city", "borough", "village") && layer != 4) continue
-            val nearest = NewJerseyMunicipalBoundaries.distanceToPolygonMeters(
+            val nearest = distanceToPolygonMeters(
                 geometry, place.latitude, place.longitude
             )
             if (!nearest.isFinite() || nearest > MAX_SAVED_ERROR_METERS || nearest >= distance) {
@@ -183,6 +184,53 @@ internal object UnitedStatesMunicipalBoundaries {
             )
         }
         return selected
+    }
+
+    /**
+     * Distance from a saved first-visit position to the actual Census polygon,
+     * including holes. Early versions saved a rounded cell center rather than
+     * the exact GPS fix, so a small positional tolerance is necessary.
+     */
+    private fun distanceToPolygonMeters(
+        polygon: JSONObject, latitude: Double, longitude: Double
+    ): Double {
+        if (!latitude.isFinite() || !longitude.isFinite()) return Double.POSITIVE_INFINITY
+        if (PlaceGeometry.contains(polygon, latitude, longitude)) return 0.0
+        val polygons = polygon.optJSONArray("coordinates") ?: return Double.POSITIVE_INFINITY
+        val scale = 111_195.0
+        var closest = Double.POSITIVE_INFINITY
+        fun ringDistance(rings: org.json.JSONArray) {
+            for (r in 0 until rings.length()) {
+                val ring = rings.optJSONArray(r) ?: continue
+                if (ring.length() < 2) continue
+                var previous = ring.optJSONArray(ring.length() - 1) ?: continue
+                for (i in 0 until ring.length()) {
+                    val current = ring.optJSONArray(i) ?: continue
+                    fun x(point: org.json.JSONArray) =
+                        (point.optDouble(0, Double.NaN) - longitude) *
+                            cos(Math.toRadians(latitude)) * scale
+                    fun y(point: org.json.JSONArray) =
+                        (point.optDouble(1, Double.NaN) - latitude) * scale
+                    val ax = x(previous); val ay = y(previous)
+                    val bx = x(current); val by = y(current)
+                    if (ax.isFinite() && ay.isFinite() && bx.isFinite() && by.isFinite()) {
+                        val dx = bx - ax; val dy = by - ay
+                        val lengthSquared = dx * dx + dy * dy
+                        val t = if (lengthSquared <= 0.0) 0.0 else
+                            (-(ax * dx + ay * dy) / lengthSquared).coerceIn(0.0, 1.0)
+                        closest = minOf(closest, hypot(ax + t * dx, ay + t * dy))
+                    }
+                    previous = current
+                }
+            }
+        }
+        when (polygon.optString("type")) {
+            "Polygon" -> ringDistance(polygons)
+            "MultiPolygon" -> for (i in 0 until polygons.length()) {
+                polygons.optJSONArray(i)?.let(::ringDistance)
+            }
+        }
+        return closest
     }
 
     private fun municipalityIdentity(raw: String): Pair<String, String?> {
