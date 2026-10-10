@@ -8,6 +8,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.io.IOException
+import org.json.JSONObject
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31], manifest = Config.NONE)
@@ -64,6 +65,54 @@ class NjMunicipalityClientTest {
             displayName = "East Greenwich Township"
         )
         assertNotNull(NjMunicipalityClient.asOverlay(correct,actual))
+    }
+
+    @Test fun visualBoundaryMatchesNamedOfficialMunicipalityEvenIfOldVisitPointIsOutside() {
+        val place = PlaceDiscovery(
+            PlaceKind.TOWN, "us|new jersey|gloucester city", "Gloucester City",
+            "New Jersey", "United States", 1L, 39.8, -75.10
+        )
+        val official = response(
+            "Gloucester City",
+            rectangle(-75.15, 39.86, -75.10, 39.92)
+        )
+        // An old saved discovery coordinate near—but outside—the town must
+        // not shrink the border or prevent the official polygon from drawing.
+        val result = NjMunicipalityClient.selectByOfficialName(official, place)
+        assertNotNull(result)
+        assertEquals("Gloucester City", result!!.officialName)
+        val overlay = NjMunicipalityClient.asOverlay(place, result)!!
+        assertTrue(overlay.authoritativeNjBoundary)
+        assertEquals(result.geometryJson, overlay.geometryJson)
+    }
+
+    @Test fun adjacentOfficialTownPolygonCannotBeSubstitutedForDifferentVisitedTown() {
+        val place = PlaceDiscovery(
+            PlaceKind.TOWN, "us|new jersey|gloucester township", "Gloucester Township",
+            "New Jersey", "United States", 1L, 39.8, -75.10
+        )
+        val wrong = response("Gloucester City",
+            rectangle(-75.20, 39.75, -75.05, 39.92), type = "City")
+        assertNull(NjMunicipalityClient.selectByOfficialName(wrong, place))
+    }
+
+    @Test fun sameNamedMunicipalitiesRequireRealGpsAnchorToDisambiguate() {
+        val place = PlaceDiscovery(
+            PlaceKind.TOWN, "us|nj|washington township", "Washington Township",
+            "New Jersey", "United States", 1L, 39.8, -75.1
+        )
+        val first = JSONObject(response("Washington Township",
+            rectangle(-75.3,39.6,-75.1,39.7))).getJSONArray("features").getJSONObject(0)
+        val second = JSONObject(response("Washington Township",
+            rectangle(-75.2,39.8,-75.0,39.9))).getJSONArray("features").getJSONObject(0)
+        val collection = JSONObject().put("type", "FeatureCollection")
+            .put("features", org.json.JSONArray().put(first).put(second)).toString()
+        assertEquals(
+            rectangle(-75.2,39.8,-75.0,39.9).replace("\\s+".toRegex(), ""),
+            NjMunicipalityClient.selectByOfficialName(
+                collection, place, listOf(39.85 to -75.10)
+            )!!.geometryJson.replace("\\s+".toRegex(), "")
+        )
     }
 
     @Test fun invalidOrMissingGeoJsonDoesNotCreateAFalseBoundary() {
