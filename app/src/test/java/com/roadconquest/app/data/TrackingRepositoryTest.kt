@@ -32,6 +32,44 @@ class TrackingRepositoryTest {
             this.time = time
         })
 
+    @Test fun wholeRoadVisitsUseSeparateJourneysAcrossDistinctTinySegments() {
+        // Real exports split each named road into hundreds of little fragments,
+        // each recorded only once. Four fragments spanning two journeys are TWO
+        // visits to the road, never "about one" nor four.
+        val geometries = listOf(
+            "[[-74.0000,40.0],[-73.9999,40.0]]",
+            "[[-73.9999,40.0],[-73.9998,40.0]]",
+            "[[-73.9998,40.0],[-73.9997,40.0]]",
+            "[[-73.9997,40.0],[-73.9996,40.0]]"
+        )
+        val timestamps = listOf(
+            1_000_000L, 1_003_000L, 1_800_000L, 1_803_000L
+        )
+        for (i in geometries.indices) {
+            repository.upsertRoads(listOf(MatchedRoad(
+                "Repeated Road", geometries[i], timestamps[i], timestamps[i] + 3_000L, 0.99
+            )))
+        }
+        val roads = repository.getRoadsInBounds(41.0, -73.0, 39.0, -75.0)
+        assertEquals(4, roads.size)
+        assertEquals(1, roads.minOf { it.timesDriven })
+        // The stored visits remain a single occurrence on every individual
+        // segment, but road-wide estimation groups them by route identity.
+        for (road in roads) assertEquals(2, repository.estimatedWholeRoadVisitCount(road))
+    }
+
+    @Test fun similarlyNamedDisconnectedRoadsDoNotShareDriveCounts() {
+        repository.upsertRoads(listOf(
+            MatchedRoad("Washington Avenue",
+                "[[-74.0,40.0],[-73.9999,40.0]]", 1_000_000L, 1_003_000L, 1.0),
+            MatchedRoad("Washington Avenue",
+                "[[-74.5,40.4],[-74.4999,40.4]]", 2_000_000L, 2_003_000L, 1.0)
+        ))
+        val roads = repository.getRoadsInBounds(41.0, -73.0, 39.0, -75.0)
+        assertEquals(2, roads.size)
+        for (road in roads) assertEquals(1, repository.estimatedWholeRoadVisitCount(road))
+    }
+
     @Test fun individualRoadVisitsRemainAvailableForVisualTurnRepair() {
         val geometry = "[[-74.001,40.0],[-74.0,40.0002]]"
         val first = MatchedRoad("Visit test", geometry, 1_000_000L, 1_005_000L, 0.99)
