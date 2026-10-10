@@ -49,6 +49,11 @@ internal object UnitedStatesMunicipalBoundaries {
         "puerto rico" to "72"
     )
 
+    fun isUnitedStatesKey(key: String): Boolean =
+        key.substringBefore('|').trim().lowercase(Locale.ROOT) in setOf(
+            "us", "usa", "united states", "united states of america"
+        )
+
     fun applies(place: PlaceDiscovery): Boolean =
         place.kind == PlaceKind.TOWN &&
             place.countryName.trim().lowercase(Locale.ROOT) in setOf(
