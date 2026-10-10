@@ -16,7 +16,11 @@ BASE = (
     "Framework/Government_Boundaries/MapServer/2/query"
 )
 QUERY = {
-    "where": "MUN LIKE 'Gloucester%' OR NAME LIKE 'Gloucester%'",
+    "where": "1=1",
+    "geometry": "-75.15,39.84,-75.06,39.93",
+    "geometryType": "esriGeometryEnvelope",
+    "inSR": "4326",
+    "spatialRel": "esriSpatialRelIntersects",
     "outFields": "NAME,MUN,MUN_LABEL,MUN_TYPE,COUNTY,SQ_MILES,POP2020",
     "returnGeometry": "true",
     "outSR": "4326",
