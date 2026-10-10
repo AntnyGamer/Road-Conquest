@@ -76,6 +76,38 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Check real New Jersey municipal polygon service
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Unit tests use synthetic polygons; verify that the actual official
+          # ArcGIS layer accepts the SAME geoJSON/name/distance query as the app.
+          endpoint="https://maps.nj.gov/arcgis/rest/services/Framework/Government_Boundaries/MapServer/2/query"
+          response="$RUNNER_TEMP/nj-municipality.json"
+          curl --fail --silent --show-error --location --retry 3 --retry-delay 3 \\
+            --get "$endpoint" \\
+            --data-urlencode "f=geojson" \\
+            --data-urlencode "where=(UPPER(NAME) LIKE '%GLOUCESTER%' OR UPPER(MUN_LABEL) LIKE '%GLOUCESTER%')" \\
+            --data-urlencode "geometry=-75.12,39.89" \\
+            --data-urlencode "geometryType=esriGeometryPoint" \\
+            --data-urlencode "inSR=4326" \\
+            --data-urlencode "spatialRel=esriSpatialRelIntersects" \\
+            --data-urlencode "distance=5000" \\
+            --data-urlencode "units=esriSRUnit_Meter" \\
+            --data-urlencode "outFields=NAME,MUN,MUN_LABEL,MUN_TYPE,COUNTY,SQ_MILES,POP2020" \\
+            --data-urlencode "outSR=4326" \\
+            --data-urlencode "returnGeometry=true" \\
+            --output "$response"
+          python3 - "$response" <<'PY'
+          import json, sys
+          data = json.load(open(sys.argv[1], encoding="utf-8"))
+          assert data.get("type") == "FeatureCollection", data.get("error", data.get("type"))
+          results = data.get("features", [])
+          matching = [x for x in results if x.get("properties", {}).get("NAME") == "Gloucester City"]
+          assert matching, f"Official NJ GIS did not return Gloucester City municipality: {len(results)} results"
+          assert any(x.get("geometry", {}).get("type") in ("Polygon", "MultiPolygon") for x in matching)
+          print(f"Live official NJ GIS polygons verified: {len(results)} features")
+          PY
       - name: Set up JDK 21
         uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
