@@ -272,7 +272,7 @@ class ProgressionRepository(context: Context) {
         nowMillis: Long = System.currentTimeMillis()
     ): List<PendingPlaceCandidate> {
         require(limit in 1..50)
-        val db = dbHelper.writableDatabase
+        val db = dbHelper.readableDatabase
 
         // Before the first live baseline exists, stale/sparse candidates cannot become the
         // starting place. Once the sentinel exists, it is an ordering barrier: ordinary
@@ -308,22 +308,6 @@ class ProgressionRepository(context: Context) {
         }
         if (!hasKnownPlace) return emptyList()
 
-        // Old releases queued candidates from stationary fixes. Only process a
-        // candidate if accepted driving history corroborates its location and time.
-        // Keep the baseline exception above: starting at rest is legitimate.
-        db.execSQL(
-            """DELETE FROM place_candidates
-               WHERE NOT (cell_x = ? AND cell_y = ?)
-               AND NOT EXISTS (
-                 SELECT 1 FROM track_points t
-                 WHERE t.timestamp_ms BETWEEN place_candidates.first_seen_at - 15000
-                                           AND place_candidates.first_seen_at + 15000
-                   AND t.accuracy_m BETWEEN 0.01 AND 25
-                   AND ABS(t.latitude - place_candidates.latitude) < 0.00045
-                   AND ABS(t.longitude - place_candidates.longitude) < 0.00065
-               )""",
-            arrayOf(BASELINE_CANDIDATE_X, BASELINE_CANDIDATE_Y)
-        )
         val result = ArrayList<PendingPlaceCandidate>(limit)
         db.query(
             "place_candidates",
