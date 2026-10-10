@@ -272,7 +272,7 @@ class ProgressionRepository(context: Context) {
         nowMillis: Long = System.currentTimeMillis()
     ): List<PendingPlaceCandidate> {
         require(limit in 1..50)
-        val db = dbHelper.readableDatabase
+        val db = dbHelper.writableDatabase
 
         // Before the first live baseline exists, stale/sparse candidates cannot become the
         // starting place. Once the sentinel exists, it is an ordering barrier: ordinary
