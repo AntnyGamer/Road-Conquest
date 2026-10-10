@@ -1050,6 +1050,112 @@ class TrackingRepository(context: Context) {
         return if (count == 0) road.timesDriven else count
     }
 
+    data class RoadPassEstimate(
+        val count: Int,
+        val firstSeenAt: Long,
+        val lastSeenAt: Long
+    )
+
+    /**
+     * A road pass is NOT the same as an OSRM segment-ID visit. The matcher can
+     * save a new overlapping geometry for every drive, so all 2,546 historical
+     * segments in an actual export had drive_count=1. Estimate passes from ALL
+     * geometries of the same connected road group near the tapped location.
+     *
+     * Exclude distant portions of a long road; they do not prove the car drove
+     * THIS section. This is read-only and does not change roads, scoring, or GPS.
+     */
+    @Synchronized
+    fun estimatedRoadPassesAt(
+        road: RoadRecord,
+        latitude: Double,
+        longitude: Double
+    ): RoadPassEstimate {
+        val fallback = RoadPassEstimate(
+            estimatedRoadVisitCount(road), road.firstUnlockedAt, road.lastDrivenAt
+        )
+        if (!latitude.isFinite() || !longitude.isFinite() ||
+            latitude !in -90.0..90.0 || longitude !in -180.0..180.0
+        ) return fallback
+        val db = dbHelper.readableDatabase
+        val group = db.rawQuery(
+            "SELECT road_group_id FROM roads WHERE segment_id = ?",
+            arrayOf(road.segmentId)
+        ).use { cursor ->
+            if (!cursor.moveToFirst()) return fallback
+            cursor.getString(0)
+        }
+        if (group.isBlank() || isExcludedRoadGroup(group)) return fallback
+        val distanceToTappedSegment = distanceToRoadMeters(
+            latitude, longitude, road.geometryJson
+        )
+        if (!distanceToTappedSegment.isFinite()) return fallback
+        val tolerance = (distanceToTappedSegment + 25.0).coerceIn(30.0, 70.0)
+        val latPad = tolerance / METERS_PER_DEGREE
+        val candidates = ArrayList<Pair<Long, Long>>()
+        db.rawQuery(
+            """SELECT v.started_at, v.ended_at, r.geometry_json
+               FROM road_visits v
+               JOIN roads r ON r.segment_id = v.segment_id
+               WHERE r.road_group_id = ?
+                 AND r.min_lat <= ? AND r.max_lat >= ?
+               ORDER BY v.started_at""",
+            arrayOf(group, (latitude + latPad).toString(), (latitude - latPad).toString())
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                if (distanceToRoadMeters(latitude, longitude, cursor.getString(2)) <= tolerance) {
+                    candidates += cursor.getLong(0) to cursor.getLong(1)
+                }
+            }
+        }
+        if (candidates.isEmpty()) return fallback
+        var count = 0
+        var first = Long.MAX_VALUE
+        var last = Long.MIN_VALUE
+        var currentEnd = Long.MIN_VALUE
+        for ((start, end) in candidates) {
+            first = minOf(first, start)
+            last = maxOf(last, end)
+            val gap = if (count == 0) Long.MAX_VALUE else start - currentEnd
+            val newPass = count == 0 || gap > VISIT_CONTINUATION_MS ||
+                (gap in 15_000L..VISIT_CONTINUATION_MS &&
+                    confirmedLeftTappedLocation(db, latitude, longitude, currentEnd, start))
+            if (newPass) count++
+            currentEnd = if (newPass) end else maxOf(currentEnd, end)
+        }
+        return RoadPassEstimate(count, first, last)
+    }
+
+    /**
+     * A quick U-turn can revisit the same road within the usual 2-minute
+     * continuation window. Split it only with recorded evidence that the
+     * vehicle actually departed the tapped area between two nearby passes.
+     */
+    private fun confirmedLeftTappedLocation(
+        db: SQLiteDatabase,
+        latitude: Double,
+        longitude: Double,
+        after: Long,
+        before: Long
+    ): Boolean {
+        if (before <= after) return false
+        db.rawQuery(
+            """SELECT latitude, longitude FROM track_points
+               WHERE timestamp_ms > ? AND timestamp_ms < ?
+                 AND accuracy_m BETWEEN 0.01 AND 25
+               ORDER BY timestamp_ms LIMIT 120""",
+            arrayOf(after.toString(), before.toString())
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                if (metersBetween(
+                        latitude, longitude, cursor.getDouble(0), cursor.getDouble(1)
+                    ) > 90.0
+                ) return true
+            }
+        }
+        return false
+    }
+
     /**
      * Extra observed visit intervals for display-only corner repair. On busy map views,
      * stay with the existing first/last repair instead of querying unbounded history.
