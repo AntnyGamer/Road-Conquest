@@ -423,7 +423,11 @@ class MainActivity : Activity() {
                         }
                         // Baseline places are zero-point progress, but resolving them can still
                         // make a selected place overlay renderable.
-                        if (Prefs.placeOverlayMode(this) != PlaceOverlayMode.NONE) {
+                        // Do not cancel in-flight Census downloads for every
+                        // GPS batch that merely revisits known places.
+                        if (resolved != null && resolved.added > 0 &&
+                            Prefs.placeOverlayMode(this) != PlaceOverlayMode.NONE
+                        ) {
                             renderer?.refreshPlaceOverlays()
                         }
                         if (resolved != null && resolved.added > 0) {
