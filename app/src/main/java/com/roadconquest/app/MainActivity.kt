@@ -39,6 +39,7 @@ import com.roadconquest.app.map.MapRenderer
 import com.roadconquest.app.map.FogBitmapRenderer
 import com.roadconquest.app.map.PlaceOverlayInfo
 import com.roadconquest.app.map.PlaceOverlayMode
+import com.roadconquest.app.matching.SavedTurnRepair
 import com.roadconquest.app.progression.ProgressionManager
 import com.roadconquest.app.util.LocationProviders
 import com.roadconquest.app.util.Prefs
@@ -93,6 +94,11 @@ class MainActivity : Activity() {
     @Volatile private var roadDetailsGeneration = 0
     private val statsHandler = Handler(Looper.getMainLooper())
     private var statsRefreshScheduled = false
+    private val openSavedTurnRepair = Runnable {
+        // Opening the map can repair previously saved turns without live GPS,
+        // including when Android Location is off on current Android versions.
+        if (resumed && !isDestroyed) SavedTurnRepair.onMapOpened(applicationContext)
+    }
     private val statsRefresh = Runnable {
         statsRefreshScheduled = false
         if (resumed && !isDestroyed) {
@@ -354,6 +360,10 @@ class MainActivity : Activity() {
         showFreshCachedOrStartingLocation()
         if (!TrackingService.isRunning) startPreviewLocation()
         resolvePendingPlaces()
+        // Let an automatically starting location service finish its startup first.
+        // Otherwise the saved-only worker repairs without a location foreground service.
+        statsHandler.removeCallbacks(openSavedTurnRepair)
+        statsHandler.postDelayed(openSavedTurnRepair, 1_200L)
     }
 
     private fun captureStartingPlace(location: Location) {
@@ -415,6 +425,7 @@ class MainActivity : Activity() {
 
     override fun onPause() {
         resumed = false
+        statsHandler.removeCallbacks(openSavedTurnRepair)
         statsHandler.removeCallbacks(statsRefresh)
         statsRefreshScheduled = false
         stopPreviewLocation()
