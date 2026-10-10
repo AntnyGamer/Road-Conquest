@@ -384,7 +384,15 @@ class TrackingService : Service(), LocationListener {
                 } else {
                     repository.insertLocations(listOf(startAnchor, accepted))
                 }
-                if (placeCandidate != null) progressionRepository.recordPlaceCandidate(placeCandidate)
+                if (placeCandidate != null && ::progressionRepository.isInitialized) {
+                    try {
+                        progressionRepository.recordPlaceCandidate(placeCandidate)
+                    } catch (error: Exception) {
+                        // Optional municipal lookups must never interrupt recorded
+                        // driving, distance, road matching, or fog persistence.
+                        Log.e("RoadConquest", "Could not queue place discovery", error)
+                    }
+                }
                 persistedDrivingFixThisSession.set(true)
                 sendUiBroadcast(ACTION_STATS_UPDATED)
                 maybeRunMatching()
