@@ -794,7 +794,7 @@ class MainActivity : Activity() {
                 repository.findRoadNear(latitude, longitude, radiusMeters)?.let { road ->
                     // Normalize legacy visit windows only for the tapped road, off the UI
                     // thread. No visit records are deleted or changed by this estimate.
-                    val estimated = repository.estimatedRoadVisitCount(road)
+                    val estimated = repository.estimatedWholeRoadVisitCount(road)
                     road.copy(timesDriven = estimated, timesDrivenExact = false) to
                         repository.roadLengthMeters(road)
                 }
@@ -815,19 +815,16 @@ class MainActivity : Activity() {
         } else {
             String.format(Locale.getDefault(), "%.2f mi", lengthMeters / 1609.344)
         }
-        val driven = if (road.timesDrivenExact) {
-            if (road.timesDriven == 1) "1 time" else "${road.timesDriven} times"
-        } else {
-            // GPS interruptions and short repeat journeys make traversal counts estimates,
-            // not guaranteed lower bounds. Avoid an inaccurate "At least" label.
-            if (road.timesDriven == 1) "About 1 time" else "About ${road.timesDriven} times"
-        }
+        // Count road-wide journeys from all connected matched segments.
+        // This is based on recorded GPS evidence, not a promise that every
+        // journey was tracked through a complete GPS outage.
+        val driven = "${road.timesDriven} ${if (road.timesDriven == 1) "visit" else "visits"} (estimated)"
         AlertDialog.Builder(this)
             .setTitle(road.name)
             .setMessage(
                 "First unlocked: " + dateTime.format(Date(road.firstUnlockedAt)) + "\n" +
                     "Last driven: " + dateTime.format(Date(road.lastDrivenAt)) + "\n" +
-                    "Times driven: " + driven + "\n" +
+                    "Times driven on road: " + driven + "\n" +
                     "Section length: " + length
             )
             .setPositiveButton("Close", null)
