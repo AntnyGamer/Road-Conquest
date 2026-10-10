@@ -637,7 +637,11 @@ class MapRenderer(
                     // Keep the built-in antialiased edge subtle; the dedicated 1.25 px line
                     // below supplies the visible separator without making borders look heavy.
                     fillOutlineColor(color),
-                    fillAntialias(true)
+                    // Town polygons already share exact boundaries in the
+                    // statewide GIS source. Independent transparent AA edges
+                    // can reveal a false hairline strip between neighbors.
+                    // The dedicated border layer supplies smooth edges.
+                    fillAntialias(mode != PlaceOverlayMode.TOWN)
                 )
             )
             // A dedicated boundary layer gives neighboring places a stable, thin separator.
