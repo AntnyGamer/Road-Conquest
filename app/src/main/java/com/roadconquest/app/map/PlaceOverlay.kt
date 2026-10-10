@@ -163,13 +163,23 @@ class PlaceOverlayClient(
 ) {
     private var resolvedEndpoint: String? = null
 
-    fun fetch(place: PlaceDiscovery, requireContainment: Boolean = true): PlaceOverlayData? {
-        // In New Jersey, only official NJOGIS municipality polygons may unlock
-        // town boundaries. Do not silently fall back to ambiguous OSM place labels.
-        // The NJ GIS point query always checks containment regardless of caller.
+    fun fetch(
+        place: PlaceDiscovery,
+        requireContainment: Boolean = true,
+        verifiedLocations: List<Pair<Double, Double>> = emptyList()
+    ): PlaceOverlayData? {
+        // NJ GIS polygons are identified with real persisted GPS evidence, not
+        // rounded historical visited-place grid centers. Never fall back to
+        // a nearby postal/OSM polygon when the official result disagrees.
         if (NjMunicipalityClient.applies(place)) {
-            return NjMunicipalityClient.at(place.latitude, place.longitude)
-                ?.let { NjMunicipalityClient.asOverlay(place, it) }
+            val locations = verifiedLocations.ifEmpty {
+                listOf(place.latitude to place.longitude)
+            }
+            for ((latitude, longitude) in locations) {
+                val municipality = NjMunicipalityClient.at(latitude, longitude) ?: continue
+                NjMunicipalityClient.asOverlay(place, municipality)?.let { return it }
+            }
+            return null
         }
         val base = resolveEndpoint()
         throttle()
