@@ -643,7 +643,10 @@ class MapRenderer(
                     // Keep the built-in antialiased edge subtle; the dedicated 1.25 px line
                     // below supplies the visible separator without making borders look heavy.
                     fillOutlineColor(color),
-                    fillAntialias(true)
+                    // Antialiased translucent town fills render a second faded
+                    // fringe on shared edges. Dedicated dissolved border lines
+                    // handle these interfaces without dark overlap seams.
+                    fillAntialias(mode != PlaceOverlayMode.TOWN)
                 )
             )
             // A dedicated boundary layer gives neighboring places a stable, thin separator.
