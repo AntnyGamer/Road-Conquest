@@ -32,7 +32,14 @@ internal object TownOverlayPartition {
 
     fun render(data: List<PlaceOverlayData>): Result {
         data class Candidate(val overlay: PlaceOverlayData, val geometry: Geometry)
-        val candidates = data.distinctBy(PlaceOverlayData::key).mapNotNull { overlay ->
+        // Every NJOGIS municipality comes from one coherent statewide topology.
+        // Clipping these separately is what can manufacture artificial slivers
+        // or gaps. Draw their official coordinates unchanged. Only independently
+        // sourced OSM polygons need the legacy visual overlap-repair logic.
+        val official = data.filter(PlaceOverlayData::authoritativeNjBoundary)
+            .distinctBy(PlaceOverlayData::key)
+        val candidates = data.filterNot(PlaceOverlayData::authoritativeNjBoundary)
+            .distinctBy(PlaceOverlayData::key).mapNotNull { overlay ->
             val geometry = runCatching {
                 polygonal(GeometryFixer.fix(decode(JSONObject(overlay.geometryJson))))
             }.getOrNull()
@@ -64,6 +71,15 @@ internal object TownOverlayPartition {
             fills.put(overlay.featureJson())
             shown += overlay
             outlines += candidate.geometry.boundary
+        }
+        for (overlay in official) {
+            val originalShape = runCatching {
+                decode(JSONObject(overlay.geometryJson))
+            }.getOrNull() ?: continue
+            // No difference, union, snapping or other polygon mutation on NJ GIS.
+            fills.put(overlay.featureJson())
+            shown += overlay
+            outlines += originalShape.boundary
         }
 
         // Node and dissolve coincident shared borders: adjacent towns have only
