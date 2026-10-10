@@ -32,7 +32,11 @@ object PlaceResolver {
                 .filter(UnitedStatesMunicipalBoundaries::applies)
                 .mapNotNull { place ->
                     PlaceOverlayCache.readOfficialUs(appContext, place).data?.let { overlay ->
-                        runCatching { place to JSONObject(overlay.geometryJson) }.getOrNull()
+                        try {
+                            place to JSONObject(overlay.geometryJson)
+                        } catch (_: org.json.JSONException) {
+                            null
+                        }
                     }
                 }
                 .toMutableList()
