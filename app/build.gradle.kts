@@ -86,6 +86,7 @@ dependencies {
     implementation("com.google.android.play:integrity:1.6.0")
     implementation("androidx.core:core:1.19.1")
     implementation("org.maplibre.gl:android-sdk-opengl:13.6.1")
+    implementation("org.locationtech.jts:jts-core:1.20.0")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.17")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
