@@ -63,14 +63,21 @@ def check(layer, place, state, envelope):
         lon, lat = ring[0][:2]
         assert -180 < lon < 180 and -90 < lat < 90, (lat, lon)
         return
-    raise AssertionError("No matching Census municipality found")
+    sampled_names = [
+        (feat.get("properties", {}).get("NAME"), feat.get("properties", {}).get("BASENAME"))
+        for feat in features[:10]
+    ]
+    raise AssertionError(
+        f"No matching Census municipality {place!r} in state {state}, "
+        f"layer {layer}, bbox {envelope}; returned {sampled_names}"
+    )
 
 
 if __name__ == "__main__":
     try:
         check(4, "Philadelphia", "42", (-75.19, 39.93, -75.12, 39.98))  # PA city
         check(1, "Upper Darby", "42", (-75.30, 39.94, -75.24, 39.98))  # PA township
-        check(4, "Gloucester", "34", (-75.14, 39.88, -75.11, 39.92))  # NJ city
+        check(4, "Gloucester City", "34", (-75.14, 39.88, -75.11, 39.92))  # NJ city
         check(1, "Gloucester", "34", (-75.07, 39.81, -75.02, 39.85))  # NJ township
         print("Census official city + township GeoJSON contract verified for PA and NJ.")
     except Exception as error:
