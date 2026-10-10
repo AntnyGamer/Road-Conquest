@@ -150,7 +150,7 @@ class PlaceOverlayClient(
         val threshold = when (place.kind) {
             PlaceKind.COUNTRY -> "0.02"
             PlaceKind.STATE -> "0.005"
-            PlaceKind.TOWN -> "0.001"
+            PlaceKind.TOWN -> "0"
         }
         val url = Uri.parse("$base/search").buildUpon()
             .appendQueryParameter("format", "jsonv2")
