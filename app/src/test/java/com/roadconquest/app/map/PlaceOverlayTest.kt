@@ -391,4 +391,25 @@ class PlaceOverlayTest {
         assertNotNull(PlaceOverlayClient.parseResponse(place, borough))
     }
 
+    @Test fun redundantCityOfGloucesterCityNameStillMatchesGloucesterCity() {
+        val place = PlaceDiscovery(
+            PlaceKind.TOWN, "us|new jersey|gloucester city",
+            "Gloucester City", "New Jersey", "United States",
+            1L, 39.89, -75.11
+        )
+        val polygon = """
+            [{
+              "name":"City of Gloucester City",
+              "category":"boundary","type":"administrative",
+              "addresstype":"administrative",
+              "address":{"city":"Gloucester City","state":"New Jersey","country":"United States"},
+              "lat":"39.89","lon":"-75.11",
+              "geojson":{"type":"Polygon","coordinates":[[
+                [-75.2,39.8],[-75.0,39.8],[-75.0,39.9],[-75.2,39.9],[-75.2,39.8]
+              ]]}
+            }]
+        """.trimIndent()
+        assertNotNull(PlaceOverlayClient.parseResponse(place, polygon))
+    }
+
 }
