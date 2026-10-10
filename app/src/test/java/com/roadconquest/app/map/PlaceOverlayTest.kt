@@ -60,7 +60,7 @@ class PlaceOverlayTest {
         }
     }
 
-    @Test fun previouslySavedOverlayCacheRetainsItsExactFilename() {
+    @Test fun legacyV3CacheCannotReintroduceBadTownOutlines() {
         val context = RuntimeEnvironment.getApplication()
         val place = PlaceDiscovery(
             PlaceKind.TOWN, "us|new jersey|cache-compatibility", "Cached Town",
@@ -79,7 +79,7 @@ class PlaceOverlayTest {
                     .put("fetched_at", System.currentTimeMillis()).toString()
             )
             val cached = PlaceOverlayCache.read(context, place)
-            assertTrue(cached.cached)
+            assertFalse(cached.cached)
             assertNull(cached.data)
         } finally {
             PlaceOverlayCache.clear(context)
@@ -129,6 +129,7 @@ class PlaceOverlayTest {
             [
               {
                 "name":"Washington Township",
+                "category":"boundary","type":"administrative",
                 "lat":"41.0000",
                 "lon":"-74.0000",
                 "addresstype":"administrative",
@@ -144,6 +145,7 @@ class PlaceOverlayTest {
               },
               {
                 "name":"Washington Township",
+                "category":"boundary","type":"administrative",
                 "lat":"40.0100",
                 "lon":"-75.0100",
                 "addresstype":"administrative",
@@ -321,6 +323,72 @@ class PlaceOverlayTest {
         } finally {
             PlaceOverlayCache.clear(context)
         }
+    }
+
+    @Test fun townshipBoundaryNeverMatchesAdjacentCityWithSameBaseName() {
+        val place = PlaceDiscovery(
+            PlaceKind.TOWN, "us|new jersey|gloucester township",
+            "Gloucester Township", "New Jersey", "United States",
+            1L, 39.86, -75.10
+        )
+        val wrongCity = """
+            [{
+              "name":"Gloucester City",
+              "category":"boundary","type":"administrative",
+              "addresstype":"administrative",
+              "address":{"city":"Gloucester City","state":"New Jersey","country":"United States"},
+              "lat":"39.86","lon":"-75.10",
+              "geojson":{"type":"Polygon","coordinates":[[
+                [-75.2,39.8],[-75.0,39.8],[-75.0,39.9],[-75.2,39.9],[-75.2,39.8]
+              ]]}
+            }]
+        """.trimIndent()
+        assertNull(PlaceOverlayClient.parseResponse(place, wrongCity))
+        assertNull(PlaceOverlayClient.parseResponse(place, wrongCity, requireContainment = false))
+    }
+
+    @Test fun townCannotUseCountyAdministrativeBoundary() {
+        val place = PlaceDiscovery(
+            PlaceKind.TOWN, "us|new jersey|gloucester",
+            "Gloucester", "New Jersey", "United States",
+            1L, 39.86, -75.10
+        )
+        val county = """
+            [{
+              "name":"Gloucester",
+              "category":"boundary","type":"administrative",
+              "addresstype":"administrative",
+              "extratags":{"admin_level":"6"},
+              "address":{"county":"Gloucester","state":"New Jersey","country":"United States"},
+              "lat":"39.86","lon":"-75.10",
+              "geojson":{"type":"Polygon","coordinates":[[
+                [-75.2,39.8],[-75.0,39.8],[-75.0,39.9],[-75.2,39.9],[-75.2,39.8]
+              ]]}
+            }]
+        """.trimIndent()
+        assertNull(PlaceOverlayClient.parseResponse(place, county))
+    }
+
+    @Test fun boroughPrefixAndSuffixRemainEquivalent() {
+        val place = PlaceDiscovery(
+            PlaceKind.TOWN, "us|new jersey|pine hill borough",
+            "Pine Hill Borough", "New Jersey", "United States",
+            1L, 39.79, -75.03
+        )
+        val borough = """
+            [{
+              "name":"Borough of Pine Hill",
+              "category":"boundary","type":"administrative",
+              "addresstype":"administrative",
+              "address":{"town":"Pine Hill","state":"New Jersey","country":"United States"},
+              "lat":"39.79","lon":"-75.03",
+              "geojson":{"type":"Polygon","coordinates":[[
+                [-75.1,39.7],[-75.0,39.7],[-75.0,39.9],
+                [-75.1,39.9],[-75.1,39.7]
+              ]]}
+            }]
+        """.trimIndent()
+        assertNotNull(PlaceOverlayClient.parseResponse(place, borough))
     }
 
 }
