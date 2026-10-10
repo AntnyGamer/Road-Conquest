@@ -294,7 +294,8 @@ internal object NjMunicipalityClient {
         if (!equivalent(place.displayName, municipality.officialName)) return null
         return PlaceOverlayData(
             place.key, municipality.officialName, place.kind, municipality.population,
-            municipality.areaSquareKilometers, municipality.geometryJson
+            municipality.areaSquareKilometers, municipality.geometryJson,
+            authoritativeNjBoundary = true
         )
     }
 }
