@@ -73,8 +73,17 @@ internal object UnitedStatesMunicipalBoundaries {
             ?: return null
         val name = normalized.first
         if (name.length !in 2..90) return null
-        val sqlName = name.replace("'", "''")
-        val where = "STATE = '$state' AND (BASENAME = '$sqlName' OR NAME = '$sqlName')"
+        // Limit a query by the actual geographic neighborhood instead of
+        // relying on case-sensitive DB string comparisons across whole states.
+        // The saved first-visit position in older builds can be off by ~1km.
+        val latitudePad = 2_500.0 / 111_195.0
+        val longitudePad = latitudePad /
+            kotlin.math.cos(Math.toRadians(place.latitude)).coerceAtLeast(0.05)
+        val envelope = listOf(
+            place.longitude - longitudePad, place.latitude - latitudePad,
+            place.longitude + longitudePad, place.latitude + latitudePad
+        ).joinToString(",")
+        val where = "STATE = '$state'"
         val layerOrder = if (normalized.second == "township" ||
             normalized.second == "town" &&
             place.parentName.trim().lowercase(Locale.ROOT) in setOf(
@@ -85,6 +94,10 @@ internal object UnitedStatesMunicipalBoundaries {
         for (layer in layerOrder) {
             val url = Uri.parse("$BASE/$layer/query").buildUpon()
                 .appendQueryParameter("where", where)
+                .appendQueryParameter("geometry", envelope)
+                .appendQueryParameter("geometryType", "esriGeometryEnvelope")
+                .appendQueryParameter("inSR", "4326")
+                .appendQueryParameter("spatialRel", "esriSpatialRelIntersects")
                 .appendQueryParameter("outFields",
                     "BASENAME,NAME,STATE,LSADC,FUNCSTAT,AREALAND,AREAWATER")
                 .appendQueryParameter("returnGeometry", "true")
