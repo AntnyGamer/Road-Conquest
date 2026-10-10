@@ -175,6 +175,121 @@ internal object NjMunicipalityClient {
         return text to kind
     }
 
+    /**
+     * The overlay is a MUNICIPAL OUTLINE lookup, not a visit detector.
+     * Retrieve the actual NJ municipal geometry by its official name. Using a
+     * single stored visit coordinate can leave a blank hole if an older app
+     * saved an approximate grid-cell center just across a municipal line.
+     *
+     * A 5 km GIS search around that older coordinate reduces ambiguous names.
+     * Never use a postal locality polygon or infer geometry from visited roads.
+     */
+    @Throws(IOException::class)
+    fun forOverlay(
+        place: PlaceDiscovery,
+        gpsEvidence: List<Pair<Double, Double>> = emptyList()
+    ): Municipality? {
+        if (!applies(place)) return null
+        val coreName = identity(place.displayName).first
+        if (coreName.length !in 2..80) return null
+        // SQL-escape literal input and keep a bounded nearby official layer query.
+        val likeName = coreName.uppercase(Locale.ROOT)
+            .replace("'", "''").replace("%", "").replace("_", "")
+        val where = "UPPER(NAME) LIKE '%$likeName%' OR UPPER(MUN_LABEL) LIKE '%$likeName%'"
+        val request = android.net.Uri.parse(SERVICE).buildUpon()
+            .appendQueryParameter("f", "geojson")
+            .appendQueryParameter("where", "($where)")
+            .appendQueryParameter("geometry", "${place.longitude},${place.latitude}")
+            .appendQueryParameter("geometryType", "esriGeometryPoint")
+            .appendQueryParameter("inSR", "4326")
+            .appendQueryParameter("spatialRel", "esriSpatialRelIntersects")
+            .appendQueryParameter("distance", "5000")
+            .appendQueryParameter("units", "esriSRUnit_Meter")
+            .appendQueryParameter("outFields", "NAME,MUN,MUN_LABEL,MUN_TYPE,COUNTY,SQ_MILES,POP2020")
+            .appendQueryParameter("outSR", "4326")
+            .appendQueryParameter("returnGeometry", "true")
+            .build().toString()
+
+        val body = requestBody(request)
+        return selectByOfficialName(body, place, gpsEvidence)
+    }
+
+    internal fun selectByOfficialName(
+        body: String,
+        place: PlaceDiscovery,
+        gpsEvidence: List<Pair<Double, Double>> = emptyList()
+    ): Municipality? {
+        val document = JSONObject(body)
+        if (document.has("error")) throw IOException("NJ GIS query failed")
+        if (document.optString("type") != "FeatureCollection") {
+            throw IOException("Expected municipality FeatureCollection")
+        }
+        val candidates = document.optJSONArray("features") ?: return null
+        val matches = ArrayList<Municipality>()
+        for (i in 0 until candidates.length()) {
+            val feature = candidates.optJSONObject(i) ?: continue
+            val properties = feature.optJSONObject("properties") ?: continue
+            val geometry = feature.optJSONObject("geometry") ?: continue
+            if (geometry.optString("type") !in listOf("Polygon", "MultiPolygon")) continue
+            val officialName = sequenceOf("NAME", "MUN_LABEL")
+                .map { properties.optString(it).trim() }
+                .firstOrNull(String::isNotBlank) ?: continue
+            if (!equivalent(officialName, place.displayName)) continue
+            val areaMiles = properties.optDouble("SQ_MILES", Double.NaN)
+            val areaKm = if (areaMiles.isFinite() && areaMiles > 0)
+                areaMiles * 2.589988110336
+            else PlaceOverlayClient.areaSquareKilometers(geometry)
+            if (!areaKm.isFinite() || areaKm <= 0.0) continue
+            matches += Municipality(
+                officialName, geometry.toString(), areaKm,
+                properties.optLong("POP2020", 0L).takeIf { it > 0 }
+            )
+        }
+        if (matches.isEmpty()) return null
+        // Several New Jersey counties contain identically named municipalities.
+        // Prefer a polygon supported by original GPS evidence, otherwise
+        // don't guess between multiple official municipalities.
+        val anchors = gpsEvidence + (place.latitude to place.longitude)
+        return matches.firstOrNull { municipality ->
+            val polygon = JSONObject(municipality.geometryJson)
+            anchors.any { (lat, lon) -> PlaceGeometry.contains(polygon, lat, lon) }
+        } ?: matches.singleOrNull()
+    }
+
+    private fun requestBody(url: String): String {
+        val connection = URL(url).openConnection() as HttpURLConnection
+        try {
+            connection.requestMethod = "GET"
+            connection.connectTimeout = 8_000
+            connection.readTimeout = 15_000
+            connection.setRequestProperty("Accept", "application/geo+json, application/json")
+            connection.setRequestProperty(
+                "User-Agent",
+                "RoadConquest/municipality-boundaries (+https://github.com/AntnyGamer/RoadConquest-Beta)"
+            )
+            if (connection.responseCode !in 200..299) {
+                throw IOException("NJ GIS returned HTTP ${connection.responseCode}")
+            }
+            val response = StringBuilder()
+            connection.inputStream.bufferedReader().use { stream ->
+                val chars = CharArray(8192)
+                while (true) {
+                    val n = stream.read(chars)
+                    if (n < 0) break
+                    if (response.length + n > MAX_RESPONSE_CHARS) {
+                        throw IOException("NJ polygon response is too large")
+                    }
+                    response.append(chars, 0, n)
+                }
+            }
+            return response.toString()
+        } catch (e: org.json.JSONException) {
+            throw IOException("Malformed NJ GIS response", e)
+        } finally {
+            connection.disconnect()
+        }
+    }
+
     fun asOverlay(place: PlaceDiscovery, municipality: Municipality): PlaceOverlayData? {
         if (!equivalent(place.displayName, municipality.officialName)) return null
         return PlaceOverlayData(
