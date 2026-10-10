@@ -703,8 +703,8 @@ class MapRenderer(
         }
         val boundaries = when {
             officialNj.isNotEmpty() && otherPartition != null ->
-                mergeOverlayCollections(overlayBoundaryFeatureCollection(officialNj), otherPartition.outlines)
-            officialNj.isNotEmpty() -> overlayBoundaryFeatureCollection(officialNj)
+                mergeOverlayCollections(TownOverlayPartition.authoritativeOutlines(officialNj), otherPartition.outlines)
+            officialNj.isNotEmpty() -> TownOverlayPartition.authoritativeOutlines(officialNj)
             else -> otherPartition?.outlines ?: overlayBoundaryFeatureCollection(snapshot)
         }
         mainHandler.post {
