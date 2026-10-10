@@ -90,8 +90,8 @@ class UnitedStatesMunicipalBoundariesTest {
             JSONObject(result!!.geometryJson), 40.00,-75.10))
     }
 
-    @Test fun sourceDoesNotHandleNewJerseyOrForeignMunicipalities() {
-        assertFalse(UnitedStatesMunicipalBoundaries.applies(
+    @Test fun sourceHandlesNewJerseyExactlyLikeOtherStatesButNotForeignCountries() {
+        assertTrue(UnitedStatesMunicipalBoundaries.applies(
             place("Camden City", "New Jersey", 39.95,-75.05)
         ))
         assertFalse(UnitedStatesMunicipalBoundaries.applies(
@@ -105,4 +105,35 @@ class UnitedStatesMunicipalBoundariesTest {
             "gb|england|london"
         ))
     }
+    @Test fun newJerseyCityAndTownshipUseSameNationwideCensusProvider() {
+        val city = place("Gloucester City", "New Jersey", 39.89, -75.12)
+        val township = place("Gloucester Township", "New Jersey", 39.89, -75.06)
+        val cityShape = item("Gloucester city", "Gloucester", "34",
+            box(-75.14, 39.87, -75.10, 39.92))
+        val townshipShape = item("Gloucester township", "Gloucester", "34",
+            box(-75.10, 39.87, -75.05, 39.92))
+        assertTrue(UnitedStatesMunicipalBoundaries.applies(city))
+        assertTrue(UnitedStatesMunicipalBoundaries.applies(township))
+        val a = UnitedStatesMunicipalBoundaries.parseResponse(city, response(cityShape), 4)
+        val b = UnitedStatesMunicipalBoundaries.parseResponse(township, response(townshipShape), 1)
+        assertNotNull(a)
+        assertNotNull(b)
+        assertNull(UnitedStatesMunicipalBoundaries.parseResponse(township, response(cityShape), 4))
+        assertNull(UnitedStatesMunicipalBoundaries.parseResponse(city, response(townshipShape), 1))
+        val officialBorders = TownOverlayPartition.authoritativeOutlines(listOf(a!!, b!!))
+        assertEquals(1, JSONObject(officialBorders).getJSONArray("features").length())
+    }
+
+    @Test fun californiaAndTexasHaveTheSameEligibilityAsNewJersey() {
+        assertTrue(UnitedStatesMunicipalBoundaries.applies(
+            place("Los Angeles City", "California", 34.05, -118.24)
+        ))
+        assertTrue(UnitedStatesMunicipalBoundaries.applies(
+            place("Austin City", "Texas", 30.27, -97.74)
+        ))
+        assertTrue(UnitedStatesMunicipalBoundaries.applies(
+            place("Pine Hill Borough", "New Jersey", 39.79, -75.02)
+        ))
+    }
+
 }
