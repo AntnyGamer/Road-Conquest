@@ -260,7 +260,7 @@ class AppDatabase private constructor(context: Context) :
             // Once-only correction for candidates collected by old versions from
             // stationary GPS wander and grid-center guesses. Keep the zero-point
             // baseline; preserve other candidates only when a timestamped accurate
-            // moving GPS track sample supports the same physical position.
+            // accepted driving track sample supports the same physical position.
             db.execSQL(
                 """DELETE FROM place_candidates
                    WHERE NOT (cell_x = -9223372036854775808 AND cell_y = -9223372036854775808)
@@ -269,7 +269,8 @@ class AppDatabase private constructor(context: Context) :
                      WHERE t.timestamp_ms BETWEEN place_candidates.first_seen_at - 10000
                                                AND place_candidates.first_seen_at + 10000
                        AND t.accuracy_m BETWEEN 0.01 AND 25
-                       AND t.speed_mps >= 2.0
+                       -- Accepted driving fixes need not expose measured speed.
+                       -- The service can accept reliable inferred displacement.
                        AND ABS(t.latitude - place_candidates.latitude) < 0.00027
                        AND ABS(t.longitude - place_candidates.longitude) < 0.00036
                    )"""
