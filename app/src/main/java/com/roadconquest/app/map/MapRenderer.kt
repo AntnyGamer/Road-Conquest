@@ -1159,10 +1159,10 @@ class MapRenderer(
                 mapView.width, mapView.height, mercatorMetersPerPixel
             )
         }
-        val savedCorners = savedGridCoordinates
-        val fix = liveLocation.current(SystemClock.elapsedRealtime())
-        val currentCorners = fix?.let { FogGrid.corners(it.latitude, it.longitude) } ?: doubleArrayOf()
-        val corners = if (currentCorners.isEmpty()) savedCorners else savedCorners + currentCorners
+        // The live marker is not authoritative exploration: its current preview
+        // can wander while parked or immediately after reopening the app.
+        // Only persisted, driving-validated mile cells may clear the fog.
+        val corners = savedGridCoordinates
         val screen = raster.project(corners)
         val geographic = raster.corners()
         val quad = LatLngQuad(
@@ -1171,10 +1171,9 @@ class MapRenderer(
             LatLng(geographic[4], geographic[5]),
             LatLng(geographic[6], geographic[7])
         )
-        val liveTile = fix?.let { FogGrid.cell(it.latitude, it.longitude)?.key }
         val key = FogKey(
             styleGeneration, world, raster.westMeters, raster.northMeters,
-            raster.metersPerPixel, size, placeDataRevision, liveTile
+            raster.metersPerPixel, size, placeDataRevision, null
         )
         return FogCapture(styleGeneration, quad, FogBitmapRenderer.Request(
             bitmapWidth = size,
