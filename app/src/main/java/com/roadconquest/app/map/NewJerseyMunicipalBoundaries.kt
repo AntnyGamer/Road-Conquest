@@ -11,8 +11,6 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
 import kotlin.math.cos
-import kotlin.math.max
-import kotlin.math.min
 
 /**
  * New Jersey municipal overlays use ONE statewide topology, not Nominatim
@@ -134,8 +132,9 @@ internal object NewJerseyMunicipalBoundaries {
     ): Boolean {
         if (requested.first != returned.first) return false
         val officialType = returned.second ?: kind(rawType)
-        return requested.second == null || officialType == null ||
-            requested.second == officialType
+        // If a saved name explicitly says Township/City/Borough, reject an
+        // official feature whose type disagrees OR cannot be determined.
+        return requested.second == null || requested.second == officialType
     }
 
     private fun municipalityIdentity(value: String): Pair<String, String?> {
