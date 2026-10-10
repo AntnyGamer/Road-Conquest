@@ -16,11 +16,11 @@ BASE = (
 )
 
 
-def request(layer, place, state, envelope):
+def request(layer, place, state, envelope, is_point=False):
     params = {
         "where": f"STATE = '{state}'",
         "geometry": ",".join(str(value) for value in envelope),
-        "geometryType": "esriGeometryEnvelope",
+        "geometryType": "esriGeometryPoint" if is_point else "esriGeometryEnvelope",
         "inSR": "4326",
         "spatialRel": "esriSpatialRelIntersects",
         "outFields": "BASENAME,NAME,STATE,LSADC,FUNCSTAT,AREALAND,AREAWATER",
@@ -73,13 +73,29 @@ def check(layer, place, state, envelope):
     )
 
 
+def check_point(layer, place, state, longitude, latitude):
+    """Verify the exact GPS point lookup used by visited-town discovery."""
+    data = request(layer, place, state, (longitude, latitude), is_point=True)
+    assert data.get("type") == "FeatureCollection", data
+    matches = [
+        feature for feature in data.get("features", [])
+        if feature.get("properties", {}).get("STATE") == state
+        and feature.get("properties", {}).get("BASENAME", "").lower() == place.lower()
+        and feature.get("geometry", {}).get("type") in ("Polygon", "MultiPolygon")
+    ]
+    assert matches, f"Point lookup missed {place} in Census layer {layer}"
+
+
 if __name__ == "__main__":
     try:
         check(4, "Philadelphia", "42", (-75.19, 39.93, -75.12, 39.98))  # PA city
         check(1, "Upper Darby", "42", (-75.30, 39.94, -75.24, 39.98))  # PA township
         check(4, "Gloucester City", "34", (-75.14, 39.88, -75.11, 39.92))  # NJ city
         check(1, "Gloucester", "34", (-75.07, 39.81, -75.02, 39.85))  # NJ township
-        print("Census official city + township GeoJSON contract verified for PA and NJ.")
+        check_point(4, "Philadelphia", "42", -75.163, 39.952)
+        check_point(1, "Upper Darby", "42", -75.28, 39.956)
+        check_point(4, "Gloucester City", "34", -75.12, 39.897)
+        print("Census official polygon and GPS point contracts verified for PA and NJ.")
     except Exception as error:
         print("::error::" + str(error), file=sys.stderr)
         sys.exit(1)
