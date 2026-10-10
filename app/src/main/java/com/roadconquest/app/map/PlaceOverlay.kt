@@ -276,6 +276,16 @@ class PlaceOverlayClient(
                 val candidate = results.optJSONObject(i) ?: continue
                 val geometry = candidate.optJSONObject("geojson") ?: continue
                 if (geometry.optString("type") !in POLYGON_TYPES) continue
+                // Ignore polygons for postal districts, neighborhoods, attractions,
+                // or place labels. A town reward needs an administrative boundary.
+                if (place.kind == PlaceKind.TOWN) {
+                    val category = candidate.optString("category", candidate.optString("class"))
+                    val type = candidate.optString("type")
+                    val addressType = candidate.optString("addresstype")
+                    if (!(category == "boundary" && type == "administrative") &&
+                        addressType != "administrative"
+                    ) continue
+                }
                 // A name or nearby postal address is not evidence of entering a town.
                 // Require the GPS point to be inside this exact municipal polygon.
                 if (place.kind == PlaceKind.TOWN &&
