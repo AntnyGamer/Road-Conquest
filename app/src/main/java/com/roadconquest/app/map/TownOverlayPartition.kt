@@ -36,7 +36,7 @@ internal object TownOverlayPartition {
             val geometry = runCatching {
                 polygonal(GeometryFixer.fix(decode(JSONObject(overlay.geometryJson))))
             }.getOrNull()
-            geometry?.takeUnless(Geometry::isEmpty)?.let { Candidate(overlay, it) }
+            geometry?.takeUnless { it.isEmpty }?.let { Candidate(overlay, it) }
         }.sortedWith(compareBy<Candidate> { it.geometry.area }.thenBy { it.overlay.key })
 
         val placed = ArrayList<Candidate>(candidates.size)
