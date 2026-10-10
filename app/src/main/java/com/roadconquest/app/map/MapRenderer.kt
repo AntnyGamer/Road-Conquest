@@ -878,30 +878,31 @@ class MapRenderer(
         val regionalLayer = map.style?.getLayer(REGIONAL_FOG_LAYER_ID) as? RasterLayer
         showingDetailedFog = detailed
         showingRegionalFog = regional
-        // Switch all layer opacities together in one UI callback. The previous
-        // two-rendered-frame handoff displayed TWO 80%-opaque fog layers at once,
-        // producing a 96%-dark band that visibly changed color while zooming.
-        // No overlapping transition may outlive this callback.
+        // MapLibre submits each native property change separately. Revealing the
+        // replacement *before* hiding the old raster prevents one uncovered frame
+        // during rapid animated zooms (observed on Android 12). All raster fade
+        // durations and transitions are zero so any temporary overlap is bounded
+        // to the same UI callback, not an animated double-darkened handoff.
         if (!fogEnabled) {
             worldLayer?.setProperties(rasterOpacity(0f))
             regionalLayer?.setProperties(rasterOpacity(0f))
             detail?.setProperties(rasterOpacity(0f))
             inactive?.setProperties(rasterOpacity(0f))
         } else if (detailed) {
+            detail?.setProperties(rasterOpacity(1f))
             inactive?.setProperties(rasterOpacity(0f))
             regionalLayer?.setProperties(rasterOpacity(0f))
-            detail?.setProperties(rasterOpacity(1f))
             worldLayer?.setProperties(rasterOpacity(0f))
         } else if (regional) {
+            regionalLayer?.setProperties(rasterOpacity(1f))
             detail?.setProperties(rasterOpacity(0f))
             inactive?.setProperties(rasterOpacity(0f))
             worldLayer?.setProperties(rasterOpacity(0f))
-            regionalLayer?.setProperties(rasterOpacity(1f))
         } else {
+            worldLayer?.setProperties(rasterOpacity(1f))
             detail?.setProperties(rasterOpacity(0f))
             inactive?.setProperties(rasterOpacity(0f))
             regionalLayer?.setProperties(rasterOpacity(0f))
-            worldLayer?.setProperties(rasterOpacity(1f))
         }
     }
 
@@ -1161,7 +1162,7 @@ class MapRenderer(
         }
         // The live marker is not authoritative exploration: its current preview
         // can wander while parked or immediately after reopening the app.
-        // Only persisted, driving-validated mile cells may clear the fog.
+        // Only persisted, movement-validated mile cells may clear the fog.
         val corners = savedGridCoordinates
         val screen = raster.project(corners)
         val geographic = raster.corners()
