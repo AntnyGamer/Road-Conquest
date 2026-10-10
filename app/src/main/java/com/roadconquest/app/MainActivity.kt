@@ -124,7 +124,7 @@ class MainActivity : Activity() {
             if (!LocationProviders.isBetterFix(location, lastPreviewLocation)) return
             lastPreviewLocation = Location(location)
             if (!baselinePreviewCapturedForRegistration && !location.isMock &&
-                location.accuracy in 0.01f..MAX_PREVIEW_ACCURACY_M &&
+                location.accuracy in 0.01f..MAX_BASELINE_ACCURACY_M &&
                 LocationProviders.isFixSince(
                     location,
                     baselinePreviewRequestElapsedNanos,
@@ -1110,6 +1110,7 @@ class MainActivity : Activity() {
         // Stationary fixes keep the car and nearby clearing fresh without recording a drive.
         private const val PREVIEW_MIN_DISTANCE_M = 0f
         private const val MAX_PREVIEW_ACCURACY_M = 100f
+        private const val MAX_BASELINE_ACCURACY_M = 25f
         private const val MAX_PREVIEW_LOCATION_AGE_MS = 60_000L
         private const val MAX_PREVIEW_LOCATION_AGE_NANOS = MAX_PREVIEW_LOCATION_AGE_MS * 1_000_000L
     }
