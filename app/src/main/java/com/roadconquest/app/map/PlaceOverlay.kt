@@ -158,7 +158,7 @@ class PlaceOverlayClient(
 ) {
     private var resolvedEndpoint: String? = null
 
-    fun fetch(place: PlaceDiscovery): PlaceOverlayData? {
+    fun fetch(place: PlaceDiscovery, requireContainment: Boolean = true): PlaceOverlayData? {
         val base = resolveEndpoint()
         throttle()
         val threshold = when (place.kind) {
@@ -180,7 +180,7 @@ class PlaceOverlayClient(
         return try {
             val status = connection.responseCode
             if (status !in 200..299) throw IOException("Place overlay service returned HTTP $status")
-            parseResponse(place, readLimited(connection))
+            parseResponse(place, readLimited(connection), requireContainment)
         } finally {
             connection.disconnect()
         }
@@ -282,7 +282,7 @@ class PlaceOverlayClient(
             "city", "town", "village", "municipality", "township", "locality", "administrative"
         )
 
-        internal fun parseResponse(place: PlaceDiscovery, body: String): PlaceOverlayData? {
+        internal fun parseResponse(place: PlaceDiscovery, body: String, requireContainment: Boolean = true): PlaceOverlayData? {
             val results = runCatching { JSONArray(body) }.getOrNull() ?: return null
             var best: JSONObject? = null
             var bestScore = Int.MIN_VALUE
@@ -317,7 +317,7 @@ class PlaceOverlayClient(
                 }
                 // A name or nearby postal address is not evidence of entering a town.
                 // Require the GPS point to be inside this exact municipal polygon.
-                if (place.kind == PlaceKind.TOWN &&
+                if (place.kind == PlaceKind.TOWN && requireContainment &&
                     !PlaceGeometry.contains(geometry, place.latitude, place.longitude)
                 ) continue
                 val score = score(place, candidate)
