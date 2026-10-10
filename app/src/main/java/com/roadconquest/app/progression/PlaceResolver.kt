@@ -22,9 +22,11 @@ object PlaceResolver {
      * A new verified town is immediately available to later fixes in the batch.
      * No location, town matching, or reward criteria are changed.
      */
-    internal class VerifiedMunicipalCache(context: Context) {
-        private val appContext = context.applicationContext
-        private val polygons by lazy {
+    internal class VerifiedMunicipalCache(
+        private val load: () -> MutableList<Pair<PlaceDiscovery, JSONObject>>
+    ) {
+        constructor(context: Context) : this({
+            val appContext = context.applicationContext
             ProgressionRepository(appContext).visitedPlaces(PlaceKind.TOWN)
                 .asSequence()
                 .filter(UnitedStatesMunicipalBoundaries::applies)
@@ -34,7 +36,9 @@ object PlaceResolver {
                     }
                 }
                 .toMutableList()
-        }
+        })
+
+        private val polygons by lazy(load)
 
         fun find(seed: PlaceDiscovery): PlaceDiscovery? =
             polygons.firstOrNull { (place, polygon) ->
