@@ -290,4 +290,30 @@ class PlaceOverlayTest {
         assertNotNull(PlaceOverlayClient.parseResponse(place, body))
     }
 
+    @Test fun legacyOverlayCacheNeverAuthorizesNewTownRewards() {
+        val context = RuntimeEnvironment.getApplication()
+        val place = PlaceDiscovery(
+            PlaceKind.TOWN, "us|new jersey|legacy", "Legacy Borough",
+            "New Jersey", "United States", 1L, 39.5, -75.5
+        )
+        val polygon = PlaceOverlayData(
+            place.key, place.displayName, place.kind, null, 1.0,
+            """{"type":"Polygon","coordinates":[[
+                [-75.6,39.4],[-75.4,39.4],[-75.4,39.6],[-75.6,39.6],[-75.6,39.4]
+            ]]}"""
+        )
+        PlaceOverlayCache.clear(context)
+        try {
+            assertTrue(PlaceOverlayCache.write(context, place, polygon))
+            assertNotNull(PlaceOverlayCache.read(context, place).data)
+            assertNull(PlaceOverlayCache.readVerifiedForDiscovery(context, place))
+            assertTrue(PlaceOverlayCache.write(
+                context, place, polygon, verifiedForDiscovery = true
+            ))
+            assertNotNull(PlaceOverlayCache.readVerifiedForDiscovery(context, place))
+        } finally {
+            PlaceOverlayCache.clear(context)
+        }
+    }
+
 }
