@@ -124,7 +124,7 @@ class MainActivity : Activity() {
             if (!LocationProviders.isBetterFix(location, lastPreviewLocation)) return
             lastPreviewLocation = Location(location)
             if (!baselinePreviewCapturedForRegistration && !location.isMock &&
-                location.accuracy in 0.01f..MAX_PREVIEW_ACCURACY_M &&
+                location.accuracy in 0.01f..MAX_BASELINE_ACCURACY_M &&
                 LocationProviders.isFixSince(
                     location,
                     baselinePreviewRequestElapsedNanos,
@@ -389,7 +389,9 @@ class MainActivity : Activity() {
     private fun resolvePendingPlaces() {
         if (!placeResolutionInFlight.compareAndSet(false, true)) return
         discoveryExecutor.execute {
-            val added = runCatching { ProgressionManager.resolvePendingPlaces(this, 6) }.getOrDefault(0)
+            val resolved = runCatching {
+                ProgressionManager.resolvePendingPlacesWithDetails(this, 6)
+            }.getOrNull()
             placeResolutionInFlight.set(false)
             if (!isDestroyed) {
                 runOnUiThread {
@@ -399,13 +401,18 @@ class MainActivity : Activity() {
                         if (Prefs.placeOverlayMode(this) != PlaceOverlayMode.NONE) {
                             renderer?.refreshPlaceOverlays()
                         }
-                        if (added > 0) {
+                        if (resolved != null && resolved.added > 0) {
                             refreshControls()
-                            Toast.makeText(
-                                this,
-                                if (added == 1) "New place discovered" else "$added new places discovered",
-                                Toast.LENGTH_SHORT
-                            ).show()
+                            // Late geocoding of a prior drive does not mean the
+                            // user has entered a new town on app launch.
+                            val ageMs = System.currentTimeMillis() - resolved.newestVisitAt
+                            if (ageMs in 0..120_000L) {
+                                Toast.makeText(
+                                    this,
+                                    if (resolved.added == 1) "Place visited" else "${resolved.added} places visited",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
                         }
                     }
                 }
@@ -1103,6 +1110,7 @@ class MainActivity : Activity() {
         // Stationary fixes keep the car and nearby clearing fresh without recording a drive.
         private const val PREVIEW_MIN_DISTANCE_M = 0f
         private const val MAX_PREVIEW_ACCURACY_M = 100f
+        private const val MAX_BASELINE_ACCURACY_M = 25f
         private const val MAX_PREVIEW_LOCATION_AGE_MS = 60_000L
         private const val MAX_PREVIEW_LOCATION_AGE_NANOS = MAX_PREVIEW_LOCATION_AGE_MS * 1_000_000L
     }

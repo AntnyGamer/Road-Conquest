@@ -97,11 +97,22 @@ object PlaceOverlayCache {
         }
     }
 
+    /** Only polygons fetched using the strict municipal verification rules can earn town points. */
+    fun readVerifiedForDiscovery(context: Context, place: PlaceDiscovery): PlaceOverlayData? {
+        if (place.kind != PlaceKind.TOWN) return null
+        val cached = read(context, place).data ?: return null
+        val verified = runCatching {
+            JSONObject(file(context, place).readText()).optBoolean("discovery_verified", false)
+        }.getOrDefault(false)
+        return cached.takeIf { verified }
+    }
+
     fun write(
         context: Context,
         place: PlaceDiscovery,
         data: PlaceOverlayData?,
-        expectedGeneration: Long? = null
+        expectedGeneration: Long? = null,
+        verifiedForDiscovery: Boolean = false
     ): Boolean = synchronized(mutationLock) {
         if (expectedGeneration != null && generation.get() != expectedGeneration) return@synchronized false
         val directory = File(context.applicationContext.filesDir, DIRECTORY)
@@ -110,6 +121,9 @@ object PlaceOverlayCache {
             .put("found", data != null)
             .put("fetched_at", System.currentTimeMillis())
         if (data != null) {
+            if (verifiedForDiscovery && place.kind == PlaceKind.TOWN) {
+                json.put("discovery_verified", true)
+            }
             json.put("name", data.name)
                 .put("kind", data.kind.name)
                 .put("population", data.population ?: JSONObject.NULL)
@@ -144,13 +158,13 @@ class PlaceOverlayClient(
 ) {
     private var resolvedEndpoint: String? = null
 
-    fun fetch(place: PlaceDiscovery): PlaceOverlayData? {
+    fun fetch(place: PlaceDiscovery, requireContainment: Boolean = true): PlaceOverlayData? {
         val base = resolveEndpoint()
         throttle()
         val threshold = when (place.kind) {
             PlaceKind.COUNTRY -> "0.02"
             PlaceKind.STATE -> "0.005"
-            PlaceKind.TOWN -> "0.001"
+            PlaceKind.TOWN -> "0"
         }
         val url = Uri.parse("$base/search").buildUpon()
             .appendQueryParameter("format", "jsonv2")
@@ -166,7 +180,7 @@ class PlaceOverlayClient(
         return try {
             val status = connection.responseCode
             if (status !in 200..299) throw IOException("Place overlay service returned HTTP $status")
-            parseResponse(place, readLimited(connection))
+            parseResponse(place, readLimited(connection), requireContainment)
         } finally {
             connection.disconnect()
         }
@@ -268,7 +282,7 @@ class PlaceOverlayClient(
             "city", "town", "village", "municipality", "township", "locality", "administrative"
         )
 
-        internal fun parseResponse(place: PlaceDiscovery, body: String): PlaceOverlayData? {
+        internal fun parseResponse(place: PlaceDiscovery, body: String, requireContainment: Boolean = true): PlaceOverlayData? {
             val results = runCatching { JSONArray(body) }.getOrNull() ?: return null
             var best: JSONObject? = null
             var bestScore = Int.MIN_VALUE
@@ -276,6 +290,36 @@ class PlaceOverlayClient(
                 val candidate = results.optJSONObject(i) ?: continue
                 val geometry = candidate.optJSONObject("geojson") ?: continue
                 if (geometry.optString("type") !in POLYGON_TYPES) continue
+                // Ignore polygons for postal districts, neighborhoods, attractions,
+                // or place labels. A town reward needs an administrative boundary.
+                if (place.kind == PlaceKind.TOWN) {
+                    val category = candidate.optString("category", candidate.optString("class"))
+                    val type = candidate.optString("type")
+                    val addressType = candidate.optString("addresstype")
+                    if (!(category == "boundary" && type == "administrative") &&
+                        addressType != "administrative"
+                    ) continue
+                    // A boundary can contain the GPS point but still represent a
+                    // different nearby town or county. Require the actual name
+                    // and available parent jurisdiction to agree before rewarding.
+                    if (municipalityName(candidate.optString("name")) !=
+                        municipalityName(place.displayName)
+                    ) continue
+                    val address = candidate.optJSONObject("address") ?: continue
+                    val state = canonical(address.optString("state"))
+                    val country = canonical(address.optString("country"))
+                    if (state.isNotBlank() && canonical(place.parentName).isNotBlank() &&
+                        state != canonical(place.parentName)
+                    ) continue
+                    if (country.isNotBlank() && canonical(place.countryName).isNotBlank() &&
+                        country != canonical(place.countryName)
+                    ) continue
+                }
+                // A name or nearby postal address is not evidence of entering a town.
+                // Require the GPS point to be inside this exact municipal polygon.
+                if (place.kind == PlaceKind.TOWN && requireContainment &&
+                    !PlaceGeometry.contains(geometry, place.latitude, place.longitude)
+                ) continue
                 val score = score(place, candidate)
                 if (score > bestScore) {
                     best = candidate
@@ -430,7 +474,81 @@ class PlaceOverlayClient(
             return sum * EARTH_RADIUS_M * EARTH_RADIUS_M / 2.0
         }
 
+        private fun municipalityName(value: String): String {
+            var name = canonical(value).removePrefix("the ")
+            for (prefix in listOf("township of ", "borough of ", "city of ", "town of ", "village of ")) {
+                name = name.removePrefix(prefix)
+            }
+            for (suffix in listOf(" township", " borough", " municipality", " city", " town", " village")) {
+                name = name.removeSuffix(suffix)
+            }
+            return name
+        }
+
         private fun canonical(value: String): String =
             value.trim().lowercase(Locale.ROOT).replace(WHITESPACE_RE, " ")
+    }
+}
+
+/** Geographic containment for GeoJSON Polygon and MultiPolygon boundaries.
+ * Coordinates are [longitude, latitude]. Interior holes must remain unexplored.
+ */
+internal object PlaceGeometry {
+    fun contains(geometry: JSONObject, latitude: Double, longitude: Double): Boolean {
+        if (!latitude.isFinite() || !longitude.isFinite() ||
+            latitude !in -90.0..90.0 || longitude !in -180.0..180.0
+        ) return false
+        val coordinates = geometry.optJSONArray("coordinates") ?: return false
+        return when (geometry.optString("type")) {
+            "Polygon" -> polygonContains(coordinates, latitude, longitude)
+            "MultiPolygon" -> (0 until coordinates.length()).any { i ->
+                coordinates.optJSONArray(i)?.let { polygonContains(it, latitude, longitude) } == true
+            }
+            else -> false
+        }
+    }
+
+    private fun polygonContains(rings: JSONArray, latitude: Double, longitude: Double): Boolean {
+        val outer = rings.optJSONArray(0) ?: return false
+        if (!ringContains(outer, latitude, longitude)) return false
+        for (i in 1 until rings.length()) {
+            val hole = rings.optJSONArray(i) ?: continue
+            if (ringContains(hole, latitude, longitude)) return false
+        }
+        return true
+    }
+
+    private fun ringContains(ring: JSONArray, latitude: Double, longitude: Double): Boolean {
+        if (ring.length() < 3) return false
+        var inside = false
+        var previous = ring.optJSONArray(ring.length() - 1) ?: return false
+        for (i in 0 until ring.length()) {
+            val current = ring.optJSONArray(i) ?: return false
+            val y1 = previous.optDouble(1, Double.NaN)
+            val y2 = current.optDouble(1, Double.NaN)
+            val x1 = relativeLongitude(previous.optDouble(0, Double.NaN), longitude)
+            val x2 = relativeLongitude(current.optDouble(0, Double.NaN), longitude)
+            if (!x1.isFinite() || !x2.isFinite() || !y1.isFinite() || !y2.isFinite()) return false
+            // Exact boundary points count as contained to avoid disappearing towns
+            // when a recorded fix lands precisely on a shared boundary.
+            val cross = x1 * (y2 - latitude) - x2 * (y1 - latitude)
+            if (kotlin.math.abs(cross) < 1e-10 &&
+                0.0 >= minOf(x1, x2) - 1e-10 &&
+                0.0 <= maxOf(x1, x2) + 1e-10 &&
+                latitude >= minOf(y1, y2) - 1e-10 &&
+                latitude <= maxOf(y1, y2) + 1e-10
+            ) return true
+            if ((y1 > latitude) != (y2 > latitude)) {
+                val crossingX = x1 + (x2 - x1) * ((latitude - y1) / (y2 - y1))
+                if (crossingX > 0.0) inside = !inside
+            }
+            previous = current
+        }
+        return inside
+    }
+
+    private fun relativeLongitude(lon: Double, anchor: Double): Double {
+        if (!lon.isFinite()) return Double.NaN
+        return ((lon - anchor + 540.0) % 360.0) - 180.0
     }
 }

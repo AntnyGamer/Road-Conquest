@@ -255,7 +255,7 @@ class TrackingService : Service(), LocationListener {
         // never from a later sparse discovery candidate. If Location was off, this naturally
         // waits until the first good fix after the user turns it back on.
         if (!baselineCandidateCaptured && !location.isMock &&
-            location.hasAccuracy() && location.accuracy in 0.01f..MAX_PREVIEW_ACCURACY_M &&
+            location.hasAccuracy() && location.accuracy in 0.01f..MAX_BASELINE_ACCURACY_M &&
             LocationProviders.isFixSince(location, baselineRequestElapsedNanos, baselineRequestWallMillis)
         ) {
             baselineCandidateCaptured = true
@@ -286,10 +286,12 @@ class TrackingService : Service(), LocationListener {
         if (elapsedFromPrevious in 1..MAX_MOTION_SAMPLE_AGE_MS &&
             distanceFromPrevious / (elapsedFromPrevious / 1_000f) > MAX_PLAUSIBLE_SPEED_MPS
         ) return
-        // A mile cell unlocks on the first accepted accurate GPS fix within its
-        // boundaries, even when it is only a few feet across a cell edge. Never
-        // apply the older 20 m legacy sampling gate to the actual fog unlock.
-        if (!location.isMock && location.hasAccuracy() && location.accuracy in 0.01f..25f) {
+        val explorationMotionConfirmed = isReliableExplorationMovement(
+            location, previous, elapsedFromPrevious, distanceFromPrevious
+        )
+        // Fog and 50-m exploration follow corroborated walking OR driving movement.
+        // A single stationary GPS fix does not reveal a square or count as a visit.
+        if (explorationMotionConfirmed) {
             FogGrid.cell(location.latitude, location.longitude)?.let { cell ->
                 if (exploredMileCellsThisSession.size >= MAX_EXPLORED_CELL_CACHE) {
                     exploredMileCellsThisSession.clear()
@@ -309,27 +311,22 @@ class TrackingService : Service(), LocationListener {
                 }
             }
         }
-        if (!location.isMock && location.hasAccuracy() && location.accuracy in 0.01f..25f &&
+        if (explorationMotionConfirmed &&
             (lastExplored?.distanceTo(location) ?: Float.POSITIVE_INFINITY) >= 20f
         ) {
             // Keep the original 20 m acceptance gate exactly: the optimization only suppresses
             // duplicate database work after a location would already have been processed.
             val visited = Location(location)
             lastExplored = visited
-            // Geocoding must not be tied to the first write to a 50-m explored cell:
-            // the same road may be revisited after new town boundaries are crossed.
-            val savePlaceCandidate = (lastPlaceCandidate?.distanceTo(visited) ?: Float.POSITIVE_INFINITY) >=
-                PLACE_CANDIDATE_MIN_DISTANCE_M
-            if (savePlaceCandidate) lastPlaceCandidate = visited
+            // Fine-grained samples also capture genuine walking, without adding road miles.
             val exploredCell = TrackingRepository.exploredCellKey(visited.latitude, visited.longitude)
             if (exploredCell != null && exploredCellsThisSession.size >= MAX_EXPLORED_CELL_CACHE) {
                 exploredCellsThisSession.clear()
             }
             val saveExplored = exploredCell != null && exploredCellsThisSession.add(exploredCell)
-            if (savePlaceCandidate || saveExplored) {
+            if (saveExplored) {
                 storageExecutor.execute {
-                    // Independent writes: a failed optional municipal candidate must never
-                    // prevent an accurate 50 m exploration sample from being persisted.
+                    // Persist confirmed exploration without affecting road matching.
                     if (saveExplored && exploredCell != null) {
                         try {
                             if (repository.recordExploredPlace(visited, exploredCell)) {
@@ -340,13 +337,7 @@ class TrackingService : Service(), LocationListener {
                             Log.e("RoadConquest", "Could not save explored place", error)
                         }
                     }
-                    if (savePlaceCandidate && ::progressionRepository.isInitialized) {
-                        try {
-                            progressionRepository.recordPlaceCandidate(visited)
-                        } catch (error: Exception) {
-                            Log.e("RoadConquest", "Could not save municipal discovery candidate", error)
-                        }
-                    }
+
                 }
             }
         }
@@ -384,12 +375,26 @@ class TrackingService : Service(), LocationListener {
 
         val accepted = requireNotNull(lastObserved)
         lastAccepted = accepted
+        val placeCandidate = if (!accepted.isMock && accepted.hasAccuracy() &&
+            accepted.accuracy in 0.01f..25f &&
+            (lastPlaceCandidate?.distanceTo(accepted) ?: Float.POSITIVE_INFINITY) >= PLACE_CANDIDATE_MIN_DISTANCE_M
+        ) Location(accepted) else null
+        if (placeCandidate != null) lastPlaceCandidate = placeCandidate
         storageExecutor.execute {
             try {
                 if (startAnchor == null) {
                     repository.insertLocation(accepted)
                 } else {
                     repository.insertLocations(listOf(startAnchor, accepted))
+                }
+                if (placeCandidate != null && ::progressionRepository.isInitialized) {
+                    try {
+                        progressionRepository.recordPlaceCandidate(placeCandidate)
+                    } catch (error: Exception) {
+                        // Optional municipal lookups must never interrupt recorded
+                        // driving, distance, road matching, or fog persistence.
+                        Log.e("RoadConquest", "Could not queue place discovery", error)
+                    }
                 }
                 persistedDrivingFixThisSession.set(true)
                 sendUiBroadcast(ACTION_STATS_UPDATED)
@@ -559,6 +564,35 @@ class TrackingService : Service(), LocationListener {
     private fun sendUiBroadcast(action: String) {
         if (!MainActivity.trackingReceiverRegistered) return
         sendBroadcast(Intent(action).setPackage(packageName))
+    }
+
+    /**
+     * Exploration may be earned by genuine movement on foot as well as driving,
+     * but never by a single first fix or location drift while standing still.
+     * Leave the stricter driving acceptance and road-matching rules unchanged.
+     */
+    private fun isReliableExplorationMovement(
+        location: Location,
+        previous: Location?,
+        ageMs: Long,
+        distanceMeters: Float
+    ): Boolean {
+        if (previous == null || location.isMock || previous.isMock ||
+            !location.hasAccuracy() || !previous.hasAccuracy() ||
+            !location.accuracy.isFinite() || !previous.accuracy.isFinite() ||
+            location.accuracy !in 0.01f..25f || previous.accuracy !in 0.01f..25f ||
+            ageMs !in 1..MAX_MOTION_SAMPLE_AGE_MS || !distanceMeters.isFinite()
+        ) return false
+        val speedMetersPerSecond = distanceMeters / (ageMs / 1_000f)
+        if (speedMetersPerSecond !in 0.5f..MAX_PLAUSIBLE_SPEED_MPS) return false
+        // Require displacement greater than the combined horizontal GPS
+        // uncertainty. GPS scatter across a mile-cell edge cannot unlock it.
+        if (distanceMeters <= maxOf(8f, previous.accuracy + location.accuracy)) return false
+        val measuredSpeed = maxOf(
+            LocationProviders.reliableMeasuredSpeed(previous),
+            LocationProviders.reliableMeasuredSpeed(location)
+        )
+        return measuredSpeed >= 0.5f || speedMetersPerSecond >= 1.5f
     }
 
     private fun isUsableDrivingLocation(location: Location, previous: Location?): Boolean {
@@ -874,6 +908,7 @@ class TrackingService : Service(), LocationListener {
                 now - lastRecovery >= LOCATION_RECOVERY_COOLDOWN_MS
         private const val MAX_ACCURACY_M = 50f
         private const val MAX_PREVIEW_ACCURACY_M = 100f
+        private const val MAX_BASELINE_ACCURACY_M = 25f
         private const val MIN_DRIVING_SPEED_MPS = 2.2f
         private const val MAX_PLAUSIBLE_SPEED_MPS = 100f
         private const val MIN_BEARING_SPEED_MPS = 0.5f

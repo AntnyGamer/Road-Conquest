@@ -216,7 +216,7 @@ class AppDatabase private constructor(context: Context) :
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        if (oldVersion !in 10..11 || newVersion !in 11..12 || newVersion <= oldVersion) {
+        if (oldVersion !in 10..12 || newVersion !in 11..13 || newVersion <= oldVersion) {
             error("Database upgrade $oldVersion -> $newVersion is unsupported")
         }
         if (oldVersion == 10) {
@@ -250,16 +250,85 @@ class AppDatabase private constructor(context: Context) :
                 insert.close()
             }
         }
-        if (newVersion >= 12) {
+        if (oldVersion < 12 && newVersion >= 12) {
             // Older releases marked inferred traversal counts as mathematically exact.
             // Preserve every visit and road, but display historic counts as estimates.
             db.execSQL("UPDATE roads SET drive_count_exact = 0")
+        }
+        if (oldVersion < 13 && newVersion >= 13) {
+            pruneHistoricalFogDrift(db)
+            // Once-only correction for candidates collected by old versions from
+            // stationary GPS wander and grid-center guesses. Keep the zero-point
+            // baseline; preserve other candidates only when a timestamped accurate
+            // accepted driving track sample supports the same physical position.
+            db.execSQL(
+                """DELETE FROM place_candidates
+                   WHERE NOT (cell_x = -9223372036854775808 AND cell_y = -9223372036854775808)
+                   AND NOT EXISTS (
+                     SELECT 1 FROM track_points t
+                     WHERE t.timestamp_ms BETWEEN place_candidates.first_seen_at - 10000
+                                               AND place_candidates.first_seen_at + 10000
+                       AND t.accuracy_m BETWEEN 0.01 AND 25
+                       -- Accepted driving fixes need not expose measured speed.
+                       -- The service can accept reliable inferred displacement.
+                       AND ABS(t.latitude - place_candidates.latitude) < 0.00027
+                       AND ABS(t.longitude - place_candidates.longitude) < 0.00036
+                   )"""
+            )
+        }
+    }
+
+    /**
+     * Older builds unlocked mile tiles from every seemingly accurate fix, even
+     * while parked. Discard only tiles with NO persisted evidence of either a
+     * recorded drive OR actual 50-m exploration. Genuine walking must remain.
+     * Roads and raw driving history are untouched.
+     */
+    private fun pruneHistoricalFogDrift(db: SQLiteDatabase) {
+        val oldCells = HashSet<Long>()
+        db.rawQuery("SELECT grid_row, grid_col FROM explored_grid", null).use { cursor ->
+            while (cursor.moveToNext()) {
+                val key = (cursor.getLong(0) shl 32) or (cursor.getLong(1) and 0xffff_ffffL)
+                oldCells.add(key)
+            }
+        }
+        if (oldCells.isEmpty()) return
+        db.rawQuery(
+            "SELECT latitude, longitude FROM track_points WHERE accuracy_m BETWEEN 0.01 AND 25",
+            null
+        ).use { cursor ->
+            while (cursor.moveToNext() && oldCells.isNotEmpty()) {
+                val tile = FogGrid.cell(cursor.getDouble(0), cursor.getDouble(1)) ?: continue
+                oldCells.remove(tile.key)
+            }
+        }
+        // Walking legitimately revealed fog in older versions without recording
+        // road miles. Preserve its explored 50-m samples instead of incorrectly
+        // deleting all walking-only squares during this one-time cleanup.
+        db.rawQuery("SELECT latitude, longitude FROM explored_places", null).use { cursor ->
+            while (cursor.moveToNext() && oldCells.isNotEmpty()) {
+                val tile = FogGrid.cell(cursor.getDouble(0), cursor.getDouble(1)) ?: continue
+                oldCells.remove(tile.key)
+            }
+        }
+        val delete = db.compileStatement(
+            "DELETE FROM explored_grid WHERE grid_row = ? AND grid_col = ?"
+        )
+        try {
+            for (key in oldCells) {
+                delete.bindLong(1, key shr 32)
+                delete.bindLong(2, key.toInt().toLong())
+                delete.executeUpdateDelete()
+                delete.clearBindings()
+            }
+        } finally {
+            delete.close()
         }
     }
 
     companion object {
         private const val DB_NAME = "roadconquest.db"
-        private const val DB_VERSION = 12
+        private const val DB_VERSION = 13
 
         @Volatile
         private var instance: AppDatabase? = null

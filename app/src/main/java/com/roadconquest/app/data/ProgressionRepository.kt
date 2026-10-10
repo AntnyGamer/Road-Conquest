@@ -117,11 +117,12 @@ class ProgressionRepository(context: Context) {
         val db = dbHelper.writableDatabase
         db.beginTransaction()
         try {
-            val inserted = insertVisitedPlace(db, discovery)
+            val canonicalVisit = alignTownWithExistingPlace(db, discovery)
+            val inserted = insertVisitedPlace(db, canonicalVisit)
             if (inserted) {
                 awardOnce(
                     db,
-                    "place:${discovery.kind.name.lowercase()}:${discovery.key}",
+                    "place:${canonicalVisit.kind.name.lowercase()}:${canonicalVisit.key}",
                     discovery.kind.points
                 )
             }
@@ -346,7 +347,8 @@ class ProgressionRepository(context: Context) {
             db.beginTransaction()
             try {
                 var added = 0
-                for (discovery in discoveries) {
+                for (unverifiedAlias in discoveries) {
+                    val discovery = alignTownWithExistingPlace(db, unverifiedAlias)
                     if (baseline) {
                         // The exact first live fix after install/reset defines the zero-point
                         // town/state/country. It is visible to overlays but earns no points.
@@ -653,6 +655,53 @@ class ProgressionRepository(context: Context) {
         } finally {
             db.endTransaction()
         }
+    }
+
+    /**
+     * Android's geocoder can use "Pine Hill" and "Pine Hill Borough"
+     * for the same verified municipality. Reuse its stored key so that
+     * changing place-name variants cannot award it twice.
+     * Explicitly different municipal types are not treated as aliases.
+     */
+    private fun alignTownWithExistingPlace(db: SQLiteDatabase, discovery: PlaceDiscovery): PlaceDiscovery {
+        if (discovery.kind != PlaceKind.TOWN) return discovery
+        val proposed = municipalityIdentity(discovery.displayName)
+        db.query(
+            "visited_places",
+            arrayOf("place_key", "display_name", "latitude", "longitude"),
+            "kind = ? AND parent_name = ? AND country_name = ?",
+            arrayOf(PlaceKind.TOWN.name, discovery.parentName, discovery.countryName),
+            null, null, null
+        ).use { rows ->
+            val distances = FloatArray(1)
+            while (rows.moveToNext()) {
+                val existing = municipalityIdentity(rows.getString(1))
+                if (existing.first != proposed.first ||
+                    (existing.second.isNotEmpty() && proposed.second.isNotEmpty() &&
+                        existing.second != proposed.second)
+                ) continue
+                Location.distanceBetween(
+                    discovery.latitude, discovery.longitude,
+                    rows.getDouble(2), rows.getDouble(3), distances
+                )
+                if (distances[0] <= 15_000f) {
+                    return discovery.copy(key = rows.getString(0))
+                }
+            }
+        }
+        return discovery
+    }
+
+    private fun municipalityIdentity(value: String): Pair<String, String> {
+        val text = value.trim().lowercase(java.util.Locale.ROOT)
+            .replace(Regex("\\s+"), " ").removePrefix("the ")
+        for (kind in listOf("township", "borough", "municipality", "village", "town", "city")) {
+            val prefix = "${kind} of "
+            if (text.startsWith(prefix)) return text.removePrefix(prefix) to kind
+            val suffix = " $kind"
+            if (text.endsWith(suffix)) return text.removeSuffix(suffix) to kind
+        }
+        return text to ""
     }
 
     private fun insertVisitedPlace(db: SQLiteDatabase, discovery: PlaceDiscovery): Boolean {

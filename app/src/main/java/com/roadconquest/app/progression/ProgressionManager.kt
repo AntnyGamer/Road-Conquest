@@ -10,6 +10,8 @@ import com.roadconquest.app.data.ProgressionSnapshot
 import com.roadconquest.app.map.PlaceOverlayCache
 import java.util.UUID
 
+data class PlaceResolutionResult(val added: Int, val newestVisitAt: Long)
+
 object ProgressionManager {
     fun sync(context: Context, summary: DataSummary): ProgressionSnapshot {
         val repository = ProgressionRepository(context)
@@ -74,13 +76,15 @@ object ProgressionManager {
         LauncherIcon.apply(context, false)
     }
 
-    fun resolvePendingPlaces(context: Context, limit: Int = 6): Int {
+    fun resolvePendingPlaces(context: Context, limit: Int = 6): Int =
+        resolvePendingPlacesWithDetails(context, limit).added
+
+    fun resolvePendingPlacesWithDetails(context: Context, limit: Int = 6): PlaceResolutionResult {
         require(limit > 0)
         val repository = ProgressionRepository(context)
-        // Recover real GPS visits from older builds before resolving towns. The
-        // replay is bounded and records no rewards without reverse geocoding.
-        repository.backfillPlaceCandidates()
+        // Do not manufacture new discovery notifications from replaying historical drives.
         var added = 0
+        var newestVisitAt = 0L
         var processed = 0
         while (processed < limit) {
             val candidates = repository.pendingPlaceCandidates(limit - processed)
@@ -90,13 +94,15 @@ object ProgressionManager {
                 if (discoveries.isNullOrEmpty()) {
                     repository.deferCandidate(candidate)
                 } else {
-                    added += repository.resolveCandidate(candidate, discoveries)
+                    val newPlaces = repository.resolveCandidate(candidate, discoveries)
+                    added += newPlaces
+                    if (newPlaces > 0) newestVisitAt = maxOf(newestVisitAt, candidate.visitedAt)
                 }
                 processed++
                 if (processed >= limit) break
             }
         }
-        return added
+        return PlaceResolutionResult(added, newestVisitAt)
     }
 
     fun metrics(snapshot: ProgressionSnapshot) = AchievementMetrics(

@@ -65,6 +65,25 @@ class ProgressionRepositoryTest {
         assertEquals(150L, progression.snapshot().balance)
     }
 
+    @Test fun municipalityNameAliasesCannotRewardTheSameTownTwice() {
+        val progression = ProgressionRepository(context)
+        val first = PlaceDiscovery(
+            PlaceKind.TOWN, "us|new jersey|pine hill", "Pine Hill",
+            "New Jersey", "United States", 1000L, 39.791, -75.032
+        )
+        val alias = first.copy(
+            key = "us|new jersey|pine hill borough",
+            displayName = "Borough of Pine Hill",
+            visitedAt = 2000L,
+            latitude = 39.793
+        )
+        assertTrue(progression.recordPlace(first))
+        assertFalse(progression.recordPlace(alias))
+        assertEquals(1L, progression.snapshot().towns)
+        assertEquals(100L, progression.snapshot().balance)
+        assertEquals(1, progression.visitedPlaces(PlaceKind.TOWN).size)
+    }
+
     @Test fun newPlacesPayOnceAndPurchasesCannotOverspend() {
         val progression = ProgressionRepository(context)
         val town = PlaceDiscovery(
