@@ -285,6 +285,21 @@ class PlaceOverlayClient(
                     if (!(category == "boundary" && type == "administrative") &&
                         addressType != "administrative"
                     ) continue
+                    // A boundary can contain the GPS point but still represent a
+                    // different nearby town or county. Require the actual name
+                    // and available parent jurisdiction to agree before rewarding.
+                    if (municipalityName(candidate.optString("name")) !=
+                        municipalityName(place.displayName)
+                    ) continue
+                    val address = candidate.optJSONObject("address") ?: continue
+                    val state = canonical(address.optString("state"))
+                    val country = canonical(address.optString("country"))
+                    if (state.isNotBlank() && canonical(place.parentName).isNotBlank() &&
+                        state != canonical(place.parentName)
+                    ) continue
+                    if (country.isNotBlank() && canonical(place.countryName).isNotBlank() &&
+                        country != canonical(place.countryName)
+                    ) continue
                 }
                 // A name or nearby postal address is not evidence of entering a town.
                 // Require the GPS point to be inside this exact municipal polygon.
@@ -443,6 +458,17 @@ class PlaceOverlayClient(
                 sum += delta * (2 + sin(lat1) + sin(lat2))
             }
             return sum * EARTH_RADIUS_M * EARTH_RADIUS_M / 2.0
+        }
+
+        private fun municipalityName(value: String): String {
+            var name = canonical(value).removePrefix("the ")
+            for (prefix in listOf("township of ", "borough of ", "city of ", "town of ", "village of ")) {
+                name = name.removePrefix(prefix)
+            }
+            for (suffix in listOf(" township", " borough", " municipality", " city", " town", " village")) {
+                name = name.removeSuffix(suffix)
+            }
+            return name
         }
 
         private fun canonical(value: String): String =
