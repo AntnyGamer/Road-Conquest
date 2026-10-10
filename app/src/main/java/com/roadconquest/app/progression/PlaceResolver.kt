@@ -30,8 +30,9 @@ object PlaceResolver {
         val parsed = resolveAddresses(candidate, addresses)
         val state = parsed.firstOrNull { it.kind == PlaceKind.STATE }
         val country = parsed.firstOrNull { it.kind == PlaceKind.COUNTRY }
-        if (state?.displayName.equals("New Jersey", ignoreCase = true) &&
-            country?.displayName.equals("United States", ignoreCase = true)
+        if (state != null && country != null &&
+            state.displayName.equals("New Jersey", ignoreCase = true) &&
+            country.displayName.equals("United States", ignoreCase = true)
         ) {
             // The correct NJ town comes from the STATE GIS polygon containing
             // this GPS coordinate. A postal locality (e.g. Clarksboro) is not
