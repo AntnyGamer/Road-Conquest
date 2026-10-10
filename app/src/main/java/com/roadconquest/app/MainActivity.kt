@@ -89,6 +89,8 @@ class MainActivity : Activity() {
     private val summaryExecutor = Executors.newSingleThreadExecutor()
     private val discoveryExecutor = Executors.newSingleThreadExecutor()
     private val placeResolutionInFlight = AtomicBoolean(false)
+    private var lastPlaceBackfillElapsed = -1L
+    private val queuedPlaceResolution = Runnable { if (resumed) resolvePendingPlaces() }
     @Volatile private var summaryGeneration = 0
     @Volatile private var roadDetailsGeneration = 0
     private val statsHandler = Handler(Looper.getMainLooper())
@@ -389,13 +391,36 @@ class MainActivity : Activity() {
     private fun resolvePendingPlaces() {
         if (!placeResolutionInFlight.compareAndSet(false, true)) return
         discoveryExecutor.execute {
+            var backfilled = 0
             val resolved = runCatching {
+                val now = SystemClock.elapsedRealtime()
+                if (lastPlaceBackfillElapsed < 0L ||
+                    now - lastPlaceBackfillElapsed >= 20_000L
+                ) {
+                    // Recover actual saved GPS crossings of short municipalities.
+                    // Only points after the current progression baseline are eligible.
+                    backfilled = ProgressionRepository(applicationContext)
+                        .backfillPlaceCandidates(3_000)
+                    lastPlaceBackfillElapsed = now
+                }
                 ProgressionManager.resolvePendingPlacesWithDetails(this, 6)
             }.getOrNull()
+            val more = resolved != null && runCatching {
+                ProgressionRepository(applicationContext)
+                    .pendingPlaceCandidates(1).isNotEmpty()
+            }.getOrDefault(false)
             placeResolutionInFlight.set(false)
             if (!isDestroyed) {
                 runOnUiThread {
                     if (!isDestroyed) {
+                        statsHandler.removeCallbacks(queuedPlaceResolution)
+                        if (resumed && more) {
+                            // Drain ready candidates while the app remains open,
+                            // rather than waiting for another GPS update.
+                            statsHandler.postDelayed(queuedPlaceResolution, 500L)
+                        } else if (resumed && backfilled > 0) {
+                            statsHandler.postDelayed(queuedPlaceResolution, 20_000L)
+                        }
                         // Baseline places are zero-point progress, but resolving them can still
                         // make a selected place overlay renderable.
                         if (Prefs.placeOverlayMode(this) != PlaceOverlayMode.NONE) {
@@ -423,6 +448,7 @@ class MainActivity : Activity() {
     override fun onPause() {
         resumed = false
         statsHandler.removeCallbacks(statsRefresh)
+        statsHandler.removeCallbacks(queuedPlaceResolution)
         statsRefreshScheduled = false
         stopPreviewLocation()
         mapView.onPause()
