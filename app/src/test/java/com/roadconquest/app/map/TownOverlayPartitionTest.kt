@@ -89,6 +89,39 @@ class TownOverlayPartitionTest {
         assertTrue(JSONObject(result.outlines).getJSONArray("features").length() > 0)
     }
 
+    @Test fun officialNeighboringMunicipalitiesKeepTheirExactGeometryAndShareBoundary() {
+        val west = town("West Borough", "us|nj|west", 2.0,
+            square(-75.15, 39.80, -75.10, 39.86))
+            .copy(authoritativeNjBoundary = true)
+        val east = town("East Township", "us|nj|east", 3.0,
+            square(-75.10, 39.80, -75.05, 39.86))
+            .copy(authoritativeNjBoundary = true)
+        val rendered = TownOverlayPartition.render(listOf(west, east))
+        assertEquals(2, rendered.shown.size)
+        // Official GIS coordinates must NOT be modified by the overlap
+        // partitioner; separate clipped town polygons caused visual gaps.
+        assertEquals(west.geometryJson, rendered.shown.first { it.key == west.key }.geometryJson)
+        assertEquals(east.geometryJson, rendered.shown.first { it.key == east.key }.geometryJson)
+        assertEquals(1, fillsAt(rendered, 39.83, -75.12))
+        assertEquals(1, fillsAt(rendered, 39.83, -75.07))
+        assertEquals(0, fillsAt(rendered, 39.83, -75.16))
+        assertTrue(JSONObject(rendered.outlines).getJSONArray("features").length() > 0)
+    }
+
+    @Test fun officialAndLegacyMunicipalShapesCanCoexistWithoutMutatingOfficialGeometry() {
+        val official = town("NJ Municipality", "nj", 1.0,
+            square(-75.15, 39.80, -75.10, 39.86))
+            .copy(authoritativeNjBoundary = true)
+        val legacy = town("Other State", "non-nj", 3.0,
+            square(-76.20, 39.80, -76.10, 39.90))
+        val rendered = TownOverlayPartition.render(listOf(legacy, official))
+        assertEquals(2, rendered.shown.size)
+        assertEquals(official.geometryJson,
+            rendered.shown.single { it.key == official.key }.geometryJson)
+        assertEquals(1, fillsAt(rendered, 39.83, -75.12))
+        assertEquals(1, fillsAt(rendered, 39.85, -76.15))
+    }
+
     @Test fun badLegacyPolygonDoesNotBreakOtherValidTownOverlays() {
         val result = TownOverlayPartition.render(listOf(
             town("Broken", "broken", 1.0, """{"type":"Point","coordinates":[0,0]}"""),
