@@ -1,13 +1,16 @@
-# Road Conquest 1.0 Beta 37
+# Road Conquest 1.0 Beta 38
 
-- Fix town overlay fills darkening where municipal polygons intersect. Overlapping map shapes are clipped into mutually exclusive visible regions, with smaller boroughs taking precedence. Shared boundaries are dissolved into single thin lines instead of being drawn multiple times.
-- Correct town-boundary matching so Gloucester City and Gloucester Township (and other different municipal legal types) are NEVER treated as the same municipality. Accept equivalent labels such as Borough of Pine Hill / Pine Hill Borough.
-- Rebuild town overlay caches under stricter municipal-boundary matching. Older cached town outlines are replaced once; valid cached state and country outlines are preserved. This affects visuals, not historical visits.
-- Reject non-administrative places and, where available, U.S. county-level polygons mistakenly returned for municipality searches.
-- Add regression tests for adjacent and intersecting municipalities, duplicate areas, boroughs surrounded by townships, disjoint islands, polygon holes and different legal municipal names.
+- **Correct town overlay topology across the U.S.:** All 50 states, including New Jersey, use the **same U.S. Census TIGERweb** incorporated-place and county-subdivision layers. No state receives a separate provider or different validation logic. New official boundaries are not clipped or altered to hide incorrect search results.
+- **Fix overlapping green polygons and unexplained map slivers:** Draw official municipal polygons as supplied, dissolving only repeated shared border strokes. Source identity and separate municipal types determine which layer to use; we do not fill genuinely unvisited municipalities.
+- **Worldwide support:** Where no official U.S. source is available, use administrative OpenStreetMap boundary polygons, restricted by region-appropriate administrative levels and verified country/state identity. Worldwide coverage depends on available OSM municipal polygons; neighborhood/place-label outlines are rejected, and no fabricated outlines are drawn.
+- **Choose the proper municipality:** Match Census municipality names and legal types (Gloucester City versus Gloucester Township), and use geographic proximity to distinguish same-named townships in different counties.
+- **Independent overlay caches:** Rebuild town outlines in two caches: one nationwide U.S. Census cache and one worldwide administrative OSM cache. Place-discovery caches, saved visit records, and existing state/country overlays remain separate.
+- **Road visit display:** Use recorded driving episodes across all connected pieces of a road instead of reporting "About 1 time" for each of hundreds of tiny OSRM segments. Counts remain explicitly identified as GPS-based estimates.
 
-**All saved roads, locations, visited towns, points, rewards, account data and purchases remain unchanged.** This update only corrects polygon display and verification. Previously earned town rewards are not retroactively removed. Town overlays may take time to reload once from the boundary provider after installation.
+**Unvisited towns remain unshaded.** If a third municipality lies between two visited towns, its legitimate unvisited area is intentionally not colored; the app no longer creates gaps or overlaps through inconsistent source boundaries.
 
-Version code **63**, minimum Android 12. Install the signed Beta 37 APK over Beta 36 without uninstalling or clearing app data.
+U.S. Census geographic datasets are reference boundaries, not legal land surveys. In places where municipalities overlap as separate types of jurisdiction, the source may legitimately contain different administrative layers; the app avoids pretending these are one municipality. Global OSM data is best-effort and may be incomplete.
 
-For Play Store, upload only the signed `RoadConquest-1.0-beta.37.aab` from the matching GitHub release after all Android checks pass.
+No tracking, fog, roads, raw GPS history, visits, points or purchases are altered by this update. Existing history remains intact.
+
+**Version code 64, Android 12+.** Install the signed Beta 38 APK over your existing installation without uninstalling or clearing data.

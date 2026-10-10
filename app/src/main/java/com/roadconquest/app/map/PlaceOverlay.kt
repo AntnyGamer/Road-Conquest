@@ -60,7 +60,9 @@ object PlaceOverlayCache {
     // Leave valid state and country caches in place; only municipal
     // outlines need the stricter verification rules.
     private const val DIRECTORY = "place-overlays-v3"
-    private const val TOWN_DIRECTORY = "place-overlays-v4-towns"
+    private const val TOWN_DIRECTORY = "place-overlays-v5-world-admin"
+    // All states use one Census cache, independent of the worldwide OSM cache.
+    private const val US_OFFICIAL_DIRECTORY = "place-overlays-us-census-v1"
     private const val NEGATIVE_CACHE_MS = 15L * 60L * 1000L
     private const val HEX_DIGITS = "0123456789abcdef"
     private val generation = AtomicLong()
@@ -68,8 +70,39 @@ object PlaceOverlayCache {
 
     fun generation(): Long = generation.get()
 
-    fun read(context: Context, place: PlaceDiscovery): PlaceOverlayCacheResult {
-        val file = file(context, place)
+    fun read(context: Context, place: PlaceDiscovery): PlaceOverlayCacheResult =
+        readCacheFile(file(context, place), place)
+
+    /** Census municipalities for all 50 states are cached separately from OSM. */
+    fun readOfficialUs(context: Context, place: PlaceDiscovery): PlaceOverlayCacheResult =
+        readCacheFile(officialUsFile(context, place), place)
+
+    fun writeOfficialUs(
+        context: Context, place: PlaceDiscovery, data: PlaceOverlayData?,
+        expectedGeneration: Long? = null
+    ): Boolean = synchronized(mutationLock) {
+        if (expectedGeneration != null && expectedGeneration != generation.get()) return@synchronized false
+        val target = officialUsFile(context, place)
+        val directory = target.parentFile ?: return@synchronized false
+        if (!directory.exists() && !directory.mkdirs()) return@synchronized false
+        val json = JSONObject()
+            .put("found", data != null)
+            .put("fetched_at", System.currentTimeMillis())
+        if (data != null) {
+            json.put("name", data.name).put("kind", data.kind.name)
+                .put("population", data.population ?: JSONObject.NULL)
+                .put("area_sq_km", data.areaSquareKilometers)
+                .put("geometry", JSONObject(data.geometryJson))
+        }
+        runCatching { target.writeText(json.toString()) }.isSuccess
+    }
+
+    private fun officialUsFile(context: Context, place: PlaceDiscovery): File {
+        val path = file(context, place)
+        return File(File(context.applicationContext.filesDir, US_OFFICIAL_DIRECTORY), path.name)
+    }
+
+    private fun readCacheFile(file: File, place: PlaceDiscovery): PlaceOverlayCacheResult {
         if (!file.isFile) return PlaceOverlayCacheResult(false, null)
         return runCatching {
             val json = JSONObject(file.readText())
@@ -78,22 +111,17 @@ object PlaceOverlayCache {
                 if (fetchedAt <= 0L || System.currentTimeMillis() - fetchedAt > NEGATIVE_CACHE_MS) {
                     file.delete()
                     PlaceOverlayCacheResult(false, null)
-                } else {
-                    PlaceOverlayCacheResult(true, null)
-                }
-            } else {
-                PlaceOverlayCacheResult(
-                    true,
-                    PlaceOverlayData(
-                        key = place.key,
-                        name = json.getString("name"),
-                        kind = PlaceKind.valueOf(json.getString("kind")),
-                        population = if (json.isNull("population")) null else json.getLong("population"),
-                        areaSquareKilometers = json.getDouble("area_sq_km"),
-                        geometryJson = json.getJSONObject("geometry").toString()
-                    )
+                } else PlaceOverlayCacheResult(true, null)
+            } else PlaceOverlayCacheResult(
+                true,
+                PlaceOverlayData(
+                    key = place.key, name = json.getString("name"),
+                    kind = PlaceKind.valueOf(json.getString("kind")),
+                    population = if (json.isNull("population")) null else json.getLong("population"),
+                    areaSquareKilometers = json.getDouble("area_sq_km"),
+                    geometryJson = json.getJSONObject("geometry").toString()
                 )
-            }
+            )
         }.getOrElse {
             file.delete()
             PlaceOverlayCacheResult(false, null)
@@ -140,6 +168,7 @@ object PlaceOverlayCache {
         generation.incrementAndGet()
         File(context.applicationContext.filesDir, DIRECTORY).deleteRecursively()
         File(context.applicationContext.filesDir, TOWN_DIRECTORY).deleteRecursively()
+        File(context.applicationContext.filesDir, US_OFFICIAL_DIRECTORY).deleteRecursively()
         Unit
     }
 
@@ -304,10 +333,25 @@ class PlaceOverlayClient(
                     // contain an identically named town and incorrectly fill it.
                     if (category != "boundary" || type != "administrative") continue
                     val adminLevel = candidate.optJSONObject("extratags")
-                        ?.optString("admin_level").orEmpty()
-                    if (canonical(place.countryName) == "united states" &&
-                        adminLevel.isNotBlank() && adminLevel != "8"
-                    ) continue
+                        ?.optString("admin_level")?.toIntOrNull()
+                    val requestedCountry = canonical(place.countryName)
+                    // Administrative levels vary worldwide. Constrain them by
+                    // country so district/county/state polygons cannot masquerade
+                    // as towns merely because a nearby locality shares a name.
+                    val allowedLevels = when (requestedCountry) {
+                        "united states", "united states of america", "usa" -> 8..8
+                        "australia", "mexico", "new zealand" -> 6..10
+                        "japan" -> 7..9
+                        "united kingdom", "great britain", "uk" -> 8..11
+                        "canada" -> 8..10
+                        else -> 7..11
+                    }
+                    if (adminLevel != null && adminLevel !in allowedLevels) continue
+                    // Native OSM boundary relations form the most consistent
+                    // worldwide source. Some small places are ways rather than
+                    // relations; permit those, but never a labeled POI node.
+                    val osmType = candidate.optString("osm_type")
+                    if (osmType.isNotBlank() && osmType !in setOf("relation", "way")) continue
                     // A boundary can contain the GPS point but still represent a
                     // different nearby town or county. Require the actual name
                     // and available parent jurisdiction to agree before rewarding.

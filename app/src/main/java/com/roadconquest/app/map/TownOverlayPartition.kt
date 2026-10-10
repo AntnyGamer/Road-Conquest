@@ -85,6 +85,33 @@ internal object TownOverlayPartition {
         return Result(collection(fills), collection(boundaryFeatures), shown)
     }
 
+    /**
+     * Official NJ municipal geometry must never be clipped or partitioned.
+     * Only dissolve coincident outline strokes (shared municipal borders).
+     */
+    fun authoritativeOutlines(data: List<PlaceOverlayData>): String {
+        val edges = data.mapNotNull { overlay ->
+            runCatching {
+                polygonal(GeometryFixer.fix(decode(JSONObject(overlay.geometryJson)))).boundary
+            }.getOrNull()?.takeUnless { it.isEmpty }
+        }
+        val lines = JSONArray()
+        if (edges.isNotEmpty()) {
+            runCatching { collectLines(UnaryUnionOp.union(edges), lines) }
+                .onFailure { edges.forEach { collectLines(it, lines) } }
+        }
+        val features = JSONArray()
+        if (lines.length() > 0) {
+            features.put(JSONObject()
+                .put("type", "Feature")
+                .put("properties", JSONObject())
+                .put("geometry", JSONObject()
+                    .put("type", "MultiLineString")
+                    .put("coordinates", lines)))
+        }
+        return collection(features)
+    }
+
     private fun decode(json: JSONObject): Geometry {
         val polygons = json.getJSONArray("coordinates")
         return when (json.getString("type")) {

@@ -224,7 +224,9 @@ class MapRenderer(
             val loaded = ArrayList<PlaceOverlayData>(places.size)
             val missing = ArrayList<com.roadconquest.app.data.PlaceDiscovery>()
             for (place in places) {
-                val cached = PlaceOverlayCache.read(context, place)
+                val cached = if (UnitedStatesMunicipalBoundaries.applies(place)) {
+                    PlaceOverlayCache.readOfficialUs(context, place)
+                } else PlaceOverlayCache.read(context, place)
                 if (!cached.cached) missing += place
                 cached.data?.let(loaded::add)
             }
@@ -232,14 +234,24 @@ class MapRenderer(
             for (place in missing) {
                 if (destroyed || generation != overlayGeneration ||
                     cacheGeneration != PlaceOverlayCache.generation()) return@execute
-                val result = runCatching { overlayClient.fetch(place) }
+                // Every US state uses the SAME Census municipal source.
+                // Do not fall back to Nominatim for U.S. municipalities:
+                // mixing boundary datasets causes overlaps and artificial gaps.
+                val us = UnitedStatesMunicipalBoundaries.applies(place)
+                val result = runCatching {
+                    if (us) UnitedStatesMunicipalBoundaries.fetch(place)
+                    else overlayClient.fetch(place)
+                }
                 if (result.isFailure) {
                     Log.w("RoadConquest", "Could not load place boundary", result.exceptionOrNull())
                     continue
                 }
                 if (cacheGeneration != PlaceOverlayCache.generation()) return@execute
                 val data = result.getOrNull()
-                if (!PlaceOverlayCache.write(context, place, data, cacheGeneration)) return@execute
+                val written = if (us) {
+                    PlaceOverlayCache.writeOfficialUs(context, place, data, cacheGeneration)
+                } else PlaceOverlayCache.write(context, place, data, cacheGeneration)
+                if (!written) return@execute
                 if (data != null) {
                     loaded += data
                     // The public boundary service is deliberately rate-limited. Show
@@ -631,7 +643,10 @@ class MapRenderer(
                     // Keep the built-in antialiased edge subtle; the dedicated 1.25 px line
                     // below supplies the visible separator without making borders look heavy.
                     fillOutlineColor(color),
-                    fillAntialias(true)
+                    // Antialiased translucent town fills render a second faded
+                    // fringe on shared edges. Dedicated dissolved border lines
+                    // handle these interfaces without dark overlap seams.
+                    fillAntialias(mode != PlaceOverlayMode.TOWN)
                 )
             )
             // A dedicated boundary layer gives neighboring places a stable, thin separator.
@@ -669,12 +684,32 @@ class MapRenderer(
         // Existing boundaries can overlap due to mismatched or historical OSM
         // polygons. Partition only town shapes so their translucent fills never
         // stack or paint an overlapping boundary twice.
-        val townPartition = if (kind == com.roadconquest.app.data.PlaceKind.TOWN) {
-            TownOverlayPartition.render(snapshot)
-        } else null
+        // Official US Census boundaries are used as supplied.
+        // Clipping individual municipalities invents slivers and gaps; only
+        // shared boundary linework is dissolved. Other countries retain
+        // the verified administrative OpenStreetMap fallback.
+        val officialUs = if (kind == com.roadconquest.app.data.PlaceKind.TOWN) {
+            snapshot.filter { UnitedStatesMunicipalBoundaries.isUnitedStatesKey(it.key) }
+        } else emptyList()
+        val other = if (officialUs.isNotEmpty()) {
+            snapshot.filterNot { UnitedStatesMunicipalBoundaries.isUnitedStatesKey(it.key) }
+        } else snapshot
+        val otherPartition = if (kind == com.roadconquest.app.data.PlaceKind.TOWN &&
+            other.isNotEmpty()
+        ) TownOverlayPartition.render(other) else null
         val keys = snapshot.map { "${it.key}:${it.geometryJson.hashCode()}" }
-        val fillFeatures = townPartition?.fills ?: overlayFeatureCollection(snapshot)
-        val boundaries = townPartition?.outlines ?: overlayBoundaryFeatureCollection(snapshot)
+        val fillFeatures = when {
+            officialUs.isNotEmpty() && otherPartition != null ->
+                mergeOverlayCollections(overlayFeatureCollection(officialUs), otherPartition.fills)
+            officialUs.isNotEmpty() -> overlayFeatureCollection(officialUs)
+            else -> otherPartition?.fills ?: overlayFeatureCollection(snapshot)
+        }
+        val boundaries = when {
+            officialUs.isNotEmpty() && otherPartition != null ->
+                mergeOverlayCollections(TownOverlayPartition.authoritativeOutlines(officialUs), otherPartition.outlines)
+            officialUs.isNotEmpty() -> TownOverlayPartition.authoritativeOutlines(officialUs)
+            else -> otherPartition?.outlines ?: overlayBoundaryFeatureCollection(snapshot)
+        }
         mainHandler.post {
             if (destroyed || generation != overlayGeneration || overlayMode.kind != kind) return@post
             val mode = when (kind) {
@@ -691,6 +726,15 @@ class MapRenderer(
             shownOverlayKeys = keys
             shownOverlayCacheGeneration = cacheGeneration
         }
+    }
+
+    private fun mergeOverlayCollections(first: String, second: String): String {
+        val features = JSONArray()
+        for (source in listOf(first, second)) {
+            val items = JSONObject(source).getJSONArray("features")
+            for (index in 0 until items.length()) features.put(items.getJSONObject(index))
+        }
+        return JSONObject().put("type", "FeatureCollection").put("features", features).toString()
     }
 
     private fun overlayFeatureCollection(data: List<PlaceOverlayData>): String {
