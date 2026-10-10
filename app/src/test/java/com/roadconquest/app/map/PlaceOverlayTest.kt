@@ -182,4 +182,68 @@ class PlaceOverlayTest {
         """.trimIndent()
         assertEquals(null, PlaceOverlayClient.parseResponse(place, body))
     }
+    @Test fun municipalityPolygonRejectsNearbyPostalTown() {
+        val place = PlaceDiscovery(
+            PlaceKind.TOWN, "us|new jersey|woodbury", "Woodbury",
+            "New Jersey", "United States", 1L, 39.83, -75.11
+        )
+        val body = """
+            [{
+              "name":"Woodbury", "category":"boundary", "type":"administrative",
+              "addresstype":"town",
+              "address":{"town":"Woodbury","state":"New Jersey","country":"United States"},
+              "lat":"39.84","lon":"-75.11",
+              "geojson":{"type":"Polygon","coordinates":[[
+                [-75.15,39.84],[-75.10,39.84],[-75.10,39.86],
+                [-75.15,39.86],[-75.15,39.84]
+              ]]}
+            }]
+        """.trimIndent()
+        assertNull(PlaceOverlayClient.parseResponse(place, body))
+    }
+
+    @Test fun neighborhoodPolygonNeverQualifiesForTownReward() {
+        val place = PlaceDiscovery(
+            PlaceKind.TOWN, "us|new jersey|fake", "Fake",
+            "New Jersey", "United States", 1L, 39.5, -75.5
+        )
+        val body = """
+            [{
+              "name":"Fake","category":"place","type":"neighbourhood",
+              "addresstype":"locality",
+              "address":{"locality":"Fake","state":"New Jersey","country":"United States"},
+              "lat":"39.5","lon":"-75.5",
+              "geojson":{"type":"Polygon","coordinates":[[
+                [-76,39],[-75,39],[-75,40],[-76,40],[-76,39]
+              ]]}
+            }]
+        """.trimIndent()
+        assertNull(PlaceOverlayClient.parseResponse(place, body))
+    }
+
+    @Test fun polygonContainmentHandlesHolesAndDisjointMunicipalities() {
+        val geometry = JSONObject(
+            """{"type":"MultiPolygon","coordinates":[
+                [[[-75.2,39.8],[-75,39.8],[-75,40],[-75.2,40],[-75.2,39.8]],
+                 [[-75.15,39.85],[-75.05,39.85],[-75.05,39.95],[-75.15,39.95],[-75.15,39.85]]],
+                [[[-74.8,39.8],[-74.7,39.8],[-74.7,39.9],[-74.8,39.9],[-74.8,39.8]]]
+            ]}"""
+        )
+        assertTrue(PlaceGeometry.contains(geometry, 39.82, -75.18))
+        assertFalse(PlaceGeometry.contains(geometry, 39.90, -75.10))
+        assertTrue(PlaceGeometry.contains(geometry, 39.85, -74.75))
+        assertFalse(PlaceGeometry.contains(geometry, 39.85, -74.60))
+    }
+
+    @Test fun municipalityBoundaryEdgeIsRecognized() {
+        val geometry = JSONObject(
+            """{"type":"Polygon","coordinates":[[
+                [-75.0,40.0],[-74.0,40.0],[-74.0,41.0],[-75.0,41.0],[-75.0,40.0]
+            ]]}"""
+        )
+        assertTrue(PlaceGeometry.contains(geometry, 40.0, -75.0))
+        assertTrue(PlaceGeometry.contains(geometry, 40.5, -74.5))
+        assertFalse(PlaceGeometry.contains(geometry, 39.99, -74.5))
+    }
+
 }
