@@ -602,7 +602,7 @@ class MainActivity : Activity() {
             .setTitle("Location use")
             .setMessage(
                 "Road Conquest collects precise location data to record driven roads and reveal visited places, including in the background when automatic tracking is enabled and the app is closed or not in use. " +
-                    "It also uses location to show your position. Road matching sends small GPS batches to the configured OSRM service. Verified scoring sends live GPS and app-integrity evidence only if you explicitly enable it."
+                    "It also uses location to show your position. Road matching sends GPS batches to OSRM; foreground U.S. town discovery sends individual saved GPS coordinates to Census TIGERweb. Verified scoring sends live GPS and app-integrity evidence only if you explicitly enable it."
             )
             .setPositiveButton("Continue") { _, _ ->
                 Prefs.setLocationDisclosureShown(this, true)
