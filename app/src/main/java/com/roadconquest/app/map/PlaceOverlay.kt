@@ -60,7 +60,7 @@ object PlaceOverlayCache {
     // Leave valid state and country caches in place; only municipal
     // outlines need the stricter verification rules.
     private const val DIRECTORY = "place-overlays-v3"
-    private const val TOWN_DIRECTORY = "place-overlays-v4-towns"
+    private const val TOWN_DIRECTORY = "place-overlays-v5-towns"
     private const val NEGATIVE_CACHE_MS = 15L * 60L * 1000L
     private const val HEX_DIGITS = "0123456789abcdef"
     private val generation = AtomicLong()
@@ -164,6 +164,13 @@ class PlaceOverlayClient(
     private var resolvedEndpoint: String? = null
 
     fun fetch(place: PlaceDiscovery, requireContainment: Boolean = true): PlaceOverlayData? {
+        // In New Jersey, only official NJOGIS municipality polygons may unlock
+        // town boundaries. Do not silently fall back to ambiguous OSM place labels.
+        // The NJ GIS point query always checks containment regardless of caller.
+        if (NjMunicipalityClient.applies(place)) {
+            return NjMunicipalityClient.at(place.latitude, place.longitude)
+                ?.let { NjMunicipalityClient.asOverlay(place, it) }
+        }
         val base = resolveEndpoint()
         throttle()
         val threshold = when (place.kind) {
