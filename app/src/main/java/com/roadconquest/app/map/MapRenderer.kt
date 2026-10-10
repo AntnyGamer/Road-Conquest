@@ -234,9 +234,9 @@ class MapRenderer(
             for (place in missing) {
                 if (destroyed || generation != overlayGeneration ||
                     cacheGeneration != PlaceOverlayCache.generation()) return@execute
-                // All NJ municipalities are selected from ONE NJOGIS topology.
-                // Do not fall back to Nominatim: mixing sources creates the
-                // overlaps and unexplained holes reported by users.
+                // Every US state uses the SAME Census municipal source.
+                // Do not fall back to Nominatim for U.S. municipalities:
+                // mixing boundary datasets causes overlaps and artificial gaps.
                 val us = UnitedStatesMunicipalBoundaries.applies(place)
                 val result = runCatching {
                     if (us) UnitedStatesMunicipalBoundaries.fetch(place)
