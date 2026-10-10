@@ -60,7 +60,11 @@ object PlaceOverlayCache {
     // Leave valid state and country caches in place; only municipal
     // outlines need the stricter verification rules.
     private const val DIRECTORY = "place-overlays-v3"
-    private const val TOWN_DIRECTORY = "place-overlays-v5-verified-towns"
+    private const val TOWN_DIRECTORY = "place-overlays-v4-towns"
+    // Keep official NJ town geometry in its OWN cache. The discovery resolver
+    // stores Nominatim polygons separately and must never overwrite our single
+    // statewide municipal topology with unrelated OpenStreetMap search results.
+    private const val NJ_OFFICIAL_DIRECTORY = "place-overlays-njogis-v1"
     private const val NEGATIVE_CACHE_MS = 15L * 60L * 1000L
     private const val HEX_DIGITS = "0123456789abcdef"
     private val generation = AtomicLong()
@@ -68,8 +72,39 @@ object PlaceOverlayCache {
 
     fun generation(): Long = generation.get()
 
-    fun read(context: Context, place: PlaceDiscovery): PlaceOverlayCacheResult {
-        val file = file(context, place)
+    fun read(context: Context, place: PlaceDiscovery): PlaceOverlayCacheResult =
+        readCacheFile(file(context, place), place)
+
+    /** NJOGIS polygons never share cache files with Nominatim discoveries. */
+    fun readOfficialNj(context: Context, place: PlaceDiscovery): PlaceOverlayCacheResult =
+        readCacheFile(officialNjFile(context, place), place)
+
+    fun writeOfficialNj(
+        context: Context, place: PlaceDiscovery, data: PlaceOverlayData?,
+        expectedGeneration: Long? = null
+    ): Boolean = synchronized(mutationLock) {
+        if (expectedGeneration != null && expectedGeneration != generation.get()) return@synchronized false
+        val target = officialNjFile(context, place)
+        val directory = target.parentFile ?: return@synchronized false
+        if (!directory.exists() && !directory.mkdirs()) return@synchronized false
+        val json = JSONObject()
+            .put("found", data != null)
+            .put("fetched_at", System.currentTimeMillis())
+        if (data != null) {
+            json.put("name", data.name).put("kind", data.kind.name)
+                .put("population", data.population ?: JSONObject.NULL)
+                .put("area_sq_km", data.areaSquareKilometers)
+                .put("geometry", JSONObject(data.geometryJson))
+        }
+        runCatching { target.writeText(json.toString()) }.isSuccess
+    }
+
+    private fun officialNjFile(context: Context, place: PlaceDiscovery): File {
+        val path = file(context, place)
+        return File(File(context.applicationContext.filesDir, NJ_OFFICIAL_DIRECTORY), path.name)
+    }
+
+    private fun readCacheFile(file: File, place: PlaceDiscovery): PlaceOverlayCacheResult {
         if (!file.isFile) return PlaceOverlayCacheResult(false, null)
         return runCatching {
             val json = JSONObject(file.readText())
@@ -78,22 +113,17 @@ object PlaceOverlayCache {
                 if (fetchedAt <= 0L || System.currentTimeMillis() - fetchedAt > NEGATIVE_CACHE_MS) {
                     file.delete()
                     PlaceOverlayCacheResult(false, null)
-                } else {
-                    PlaceOverlayCacheResult(true, null)
-                }
-            } else {
-                PlaceOverlayCacheResult(
-                    true,
-                    PlaceOverlayData(
-                        key = place.key,
-                        name = json.getString("name"),
-                        kind = PlaceKind.valueOf(json.getString("kind")),
-                        population = if (json.isNull("population")) null else json.getLong("population"),
-                        areaSquareKilometers = json.getDouble("area_sq_km"),
-                        geometryJson = json.getJSONObject("geometry").toString()
-                    )
+                } else PlaceOverlayCacheResult(true, null)
+            } else PlaceOverlayCacheResult(
+                true,
+                PlaceOverlayData(
+                    key = place.key, name = json.getString("name"),
+                    kind = PlaceKind.valueOf(json.getString("kind")),
+                    population = if (json.isNull("population")) null else json.getLong("population"),
+                    areaSquareKilometers = json.getDouble("area_sq_km"),
+                    geometryJson = json.getJSONObject("geometry").toString()
                 )
-            }
+            )
         }.getOrElse {
             file.delete()
             PlaceOverlayCacheResult(false, null)
@@ -140,6 +170,7 @@ object PlaceOverlayCache {
         generation.incrementAndGet()
         File(context.applicationContext.filesDir, DIRECTORY).deleteRecursively()
         File(context.applicationContext.filesDir, TOWN_DIRECTORY).deleteRecursively()
+        File(context.applicationContext.filesDir, NJ_OFFICIAL_DIRECTORY).deleteRecursively()
         Unit
     }
 
@@ -163,11 +194,7 @@ class PlaceOverlayClient(
 ) {
     private var resolvedEndpoint: String? = null
 
-    fun fetch(
-        place: PlaceDiscovery,
-        requireContainment: Boolean = true,
-        townBoundaryEvidence: ((JSONObject) -> Boolean)? = null
-    ): PlaceOverlayData? {
+    fun fetch(place: PlaceDiscovery, requireContainment: Boolean = true): PlaceOverlayData? {
         val base = resolveEndpoint()
         throttle()
         val threshold = when (place.kind) {
@@ -189,7 +216,7 @@ class PlaceOverlayClient(
         return try {
             val status = connection.responseCode
             if (status !in 200..299) throw IOException("Place overlay service returned HTTP $status")
-            parseResponse(place, readLimited(connection), requireContainment, townBoundaryEvidence)
+            parseResponse(place, readLimited(connection), requireContainment)
         } finally {
             connection.disconnect()
         }
@@ -291,12 +318,7 @@ class PlaceOverlayClient(
             "city", "town", "village", "municipality", "township", "locality", "administrative"
         )
 
-        internal fun parseResponse(
-            place: PlaceDiscovery,
-            body: String,
-            requireContainment: Boolean = true,
-            townBoundaryEvidence: ((JSONObject) -> Boolean)? = null
-        ): PlaceOverlayData? {
+        internal fun parseResponse(place: PlaceDiscovery, body: String, requireContainment: Boolean = true): PlaceOverlayData? {
             val results = runCatching { JSONArray(body) }.getOrNull() ?: return null
             var best: JSONObject? = null
             var bestScore = Int.MIN_VALUE
@@ -312,22 +334,11 @@ class PlaceOverlayClient(
                     // Address classification alone is not enough: a county can
                     // contain an identically named town and incorrectly fill it.
                     if (category != "boundary" || type != "administrative") continue
-                    val adminLevel = candidate.optString("admin_level").ifBlank {
-                        candidate.optJSONObject("extratags")?.optString("admin_level").orEmpty()
-                    }
-                    if (canonical(place.countryName) == "united states") {
-                        // In New Jersey the municipality is an OSM admin_level=8
-                        // boundary; counties and CDPs must not substitute for one.
-                        // Nominatim may omit admin_level from extratags, in which
-                        // case its municipality place_rank (16-22) is a fallback.
-                        val rank = candidate.optInt("place_rank", -1)
-                        if (canonical(place.parentName) == "new jersey") {
-                            if (adminLevel.isNotBlank() && adminLevel != "8") continue
-                            if (adminLevel.isBlank() && rank !in 16..22) continue
-                        } else if (adminLevel.isNotBlank() && adminLevel != "8") {
-                            continue
-                        }
-                    }
+                    val adminLevel = candidate.optJSONObject("extratags")
+                        ?.optString("admin_level").orEmpty()
+                    if (canonical(place.countryName) == "united states" &&
+                        adminLevel.isNotBlank() && adminLevel != "8"
+                    ) continue
                     // A boundary can contain the GPS point but still represent a
                     // different nearby town or county. Require the actual name
                     // and available parent jurisdiction to agree before rewarding.
@@ -346,12 +357,6 @@ class PlaceOverlayClient(
                 // Require the GPS point to be inside this exact municipal polygon.
                 if (place.kind == PlaceKind.TOWN && requireContainment &&
                     !PlaceGeometry.contains(geometry, place.latitude, place.longitude)
-                ) continue
-                // For historical visits, an old sampled grid center is NOT
-                // authoritative proof. Evaluate the polygon against actual
-                // accepted GPS fixes around the recorded visit instead.
-                if (place.kind == PlaceKind.TOWN &&
-                    townBoundaryEvidence != null && !townBoundaryEvidence(geometry)
                 ) continue
                 val score = score(place, candidate)
                 if (score > bestScore) {
