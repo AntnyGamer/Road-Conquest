@@ -25,6 +25,29 @@ internal object NjMunicipalityClient {
     private const val MAX_RESPONSE_CHARS = 12 * 1024 * 1024
     private val rateLock = Any()
     private var lastCallMillis = 0L
+    // Frequent fixes on the same drive must NOT download the same town outline
+    // every ~50 meters. Full geometry is kept only for a small bounded set.
+    private val boundaryCache = object : LinkedHashMap<String, Municipality>(32, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Municipality>): Boolean =
+            size > 24
+    }
+    private val cacheLock = Any()
+
+    private fun cachedAt(latitude: Double, longitude: Double): Municipality? =
+        synchronized(cacheLock) {
+            val snapshot = boundaryCache.entries.toList().asReversed()
+            for ((key, municipality) in snapshot) {
+                val contains = runCatching {
+                    PlaceGeometry.contains(
+                        JSONObject(municipality.geometryJson), latitude, longitude
+                    )
+                }.getOrDefault(false)
+                if (contains) {
+                    return@synchronized boundaryCache[key]
+                }
+            }
+            null
+        }
 
     data class Municipality(
         val officialName: String,
@@ -45,6 +68,7 @@ internal object NjMunicipalityClient {
         if (!latitude.isFinite() || !longitude.isFinite() ||
             latitude !in -90.0..90.0 || longitude !in -180.0..180.0
         ) return null
+        cachedAt(latitude, longitude)?.let { return it }
         synchronized(rateLock) {
             val now = android.os.SystemClock.elapsedRealtime()
             val waitMs = 800L - (now - lastCallMillis)
@@ -86,7 +110,11 @@ internal object NjMunicipalityClient {
                     body.append(buffer, 0, size)
                 }
             }
-            return parse(body.toString(), latitude, longitude)
+            return parse(body.toString(), latitude, longitude)?.also { municipality ->
+                synchronized(cacheLock) {
+                    boundaryCache["${municipality.officialName}|${latitude}|${longitude}"] = municipality
+                }
+            }
         } catch (error: org.json.JSONException) {
             throw IOException("Malformed NJ municipality response", error)
         } finally {
