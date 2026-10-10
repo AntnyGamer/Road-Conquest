@@ -286,61 +286,6 @@ class TrackingService : Service(), LocationListener {
         if (elapsedFromPrevious in 1..MAX_MOTION_SAMPLE_AGE_MS &&
             distanceFromPrevious / (elapsedFromPrevious / 1_000f) > MAX_PLAUSIBLE_SPEED_MPS
         ) return
-        // A mile cell unlocks on the first accepted accurate GPS fix within its
-        // boundaries, even when it is only a few feet across a cell edge. Never
-        // apply the older 20 m legacy sampling gate to the actual fog unlock.
-        if (!location.isMock && location.hasAccuracy() && location.accuracy in 0.01f..25f) {
-            FogGrid.cell(location.latitude, location.longitude)?.let { cell ->
-                if (exploredMileCellsThisSession.size >= MAX_EXPLORED_CELL_CACHE) {
-                    exploredMileCellsThisSession.clear()
-                }
-                if (exploredMileCellsThisSession.add(cell.key)) {
-                    val accepted = Location(location)
-                    storageExecutor.execute {
-                        try {
-                            if (repository.recordExploredGridCell(accepted)) {
-                                sendUiBroadcast(ACTION_EXPLORATION_UPDATED)
-                            }
-                        } catch (error: Exception) {
-                            exploredMileCellsThisSession.remove(cell.key)
-                            Log.e("RoadConquest", "Could not persist explored mile cell", error)
-                        }
-                    }
-                }
-            }
-        }
-        if (!location.isMock && location.hasAccuracy() && location.accuracy in 0.01f..25f &&
-            (lastExplored?.distanceTo(location) ?: Float.POSITIVE_INFINITY) >= 20f
-        ) {
-            // Keep the original 20 m acceptance gate exactly: the optimization only suppresses
-            // duplicate database work after a location would already have been processed.
-            val visited = Location(location)
-            lastExplored = visited
-            // Geocoding must not be tied to the first write to a 50-m explored cell:
-            // the same road may be revisited after new town boundaries are crossed.
-            val exploredCell = TrackingRepository.exploredCellKey(visited.latitude, visited.longitude)
-            if (exploredCell != null && exploredCellsThisSession.size >= MAX_EXPLORED_CELL_CACHE) {
-                exploredCellsThisSession.clear()
-            }
-            val saveExplored = exploredCell != null && exploredCellsThisSession.add(exploredCell)
-            if (saveExplored) {
-                storageExecutor.execute {
-                    // Independent writes: a failed optional municipal candidate must never
-                    // prevent an accurate 50 m exploration sample from being persisted.
-                    if (saveExplored && exploredCell != null) {
-                        try {
-                            if (repository.recordExploredPlace(visited, exploredCell)) {
-                                sendUiBroadcast(ACTION_EXPLORATION_UPDATED)
-                            }
-                        } catch (error: Exception) {
-                            exploredCellsThisSession.remove(exploredCell)
-                            Log.e("RoadConquest", "Could not save explored place", error)
-                        }
-                    }
-
-                }
-            }
-        }
         // Do not let a coarse, duplicate, or out-of-order fix poison the next driving-speed
         // comparison. It may still update the live car below when current, but only a newer
         // road-quality fix becomes the motion baseline.
@@ -374,6 +319,58 @@ class TrackingService : Service(), LocationListener {
         ) previous else null
 
         val accepted = requireNotNull(lastObserved)
+        // Fog and 50-m exploration represent confirmed drives, not stationary GPS
+        // wander. This remains independent of road matching and route interpolation.
+        if (!location.isMock && location.hasAccuracy() && location.accuracy in 0.01f..25f) {
+            FogGrid.cell(location.latitude, location.longitude)?.let { cell ->
+                if (exploredMileCellsThisSession.size >= MAX_EXPLORED_CELL_CACHE) {
+                    exploredMileCellsThisSession.clear()
+                }
+                if (exploredMileCellsThisSession.add(cell.key)) {
+                    val accepted = Location(location)
+                    storageExecutor.execute {
+                        try {
+                            if (repository.recordExploredGridCell(accepted)) {
+                                sendUiBroadcast(ACTION_EXPLORATION_UPDATED)
+                            }
+                        } catch (error: Exception) {
+                            exploredMileCellsThisSession.remove(cell.key)
+                            Log.e("RoadConquest", "Could not persist explored mile cell", error)
+                        }
+                    }
+                }
+            }
+        }
+        if (!location.isMock && location.hasAccuracy() && location.accuracy in 0.01f..25f &&
+            (lastExplored?.distanceTo(location) ?: Float.POSITIVE_INFINITY) >= 20f
+        ) {
+            // Keep the original 20 m acceptance gate exactly: the optimization only suppresses
+            // duplicate database work after a location would already have been processed.
+            val visited = Location(location)
+            lastExplored = visited
+            // Fine-grained exploration samples are taken from validated driving fixes.
+            val exploredCell = TrackingRepository.exploredCellKey(visited.latitude, visited.longitude)
+            if (exploredCell != null && exploredCellsThisSession.size >= MAX_EXPLORED_CELL_CACHE) {
+                exploredCellsThisSession.clear()
+            }
+            val saveExplored = exploredCell != null && exploredCellsThisSession.add(exploredCell)
+            if (saveExplored) {
+                storageExecutor.execute {
+                    // Persist confirmed exploration without affecting road matching.
+                    if (saveExplored && exploredCell != null) {
+                        try {
+                            if (repository.recordExploredPlace(visited, exploredCell)) {
+                                sendUiBroadcast(ACTION_EXPLORATION_UPDATED)
+                            }
+                        } catch (error: Exception) {
+                            exploredCellsThisSession.remove(exploredCell)
+                            Log.e("RoadConquest", "Could not save explored place", error)
+                        }
+                    }
+
+                }
+            }
+        }
         lastAccepted = accepted
         val placeCandidate = if (!accepted.isMock && accepted.hasAccuracy() &&
             accepted.accuracy in 0.01f..25f &&
