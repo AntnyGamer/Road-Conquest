@@ -318,9 +318,6 @@ class TrackingService : Service(), LocationListener {
             lastExplored = visited
             // Geocoding must not be tied to the first write to a 50-m explored cell:
             // the same road may be revisited after new town boundaries are crossed.
-            val savePlaceCandidate = (lastPlaceCandidate?.distanceTo(visited) ?: Float.POSITIVE_INFINITY) >=
-                PLACE_CANDIDATE_MIN_DISTANCE_M
-            // Candidate collection is restricted to validated driving below.
             val exploredCell = TrackingRepository.exploredCellKey(visited.latitude, visited.longitude)
             if (exploredCell != null && exploredCellsThisSession.size >= MAX_EXPLORED_CELL_CACHE) {
                 exploredCellsThisSession.clear()
