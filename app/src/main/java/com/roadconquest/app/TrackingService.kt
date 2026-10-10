@@ -341,8 +341,6 @@ class TrackingService : Service(), LocationListener {
                 }
             }
         }
-        lastAccepted = accepted
-
         // Do not let a coarse, duplicate, or out-of-order fix poison the next driving-speed
         // comparison. It may still update the live car below when current, but only a newer
         // road-quality fix becomes the motion baseline.
@@ -376,6 +374,7 @@ class TrackingService : Service(), LocationListener {
         ) previous else null
 
         val accepted = requireNotNull(lastObserved)
+        lastAccepted = accepted
         val placeCandidate = if (!accepted.isMock && accepted.hasAccuracy() &&
             accepted.accuracy in 0.01f..25f &&
             (lastPlaceCandidate?.distanceTo(accepted) ?: Float.POSITIVE_INFINITY) >= PLACE_CANDIDATE_MIN_DISTANCE_M
