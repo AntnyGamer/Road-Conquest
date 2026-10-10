@@ -1051,6 +1051,53 @@ class TrackingRepository(context: Context) {
     }
 
     /**
+     * A displayed road is one connected road GROUP composed of many small OSRM
+     * segments. Counting only the tapped segment makes virtually every road
+     * appear to have been driven once, even when separate journeys used another
+     * section of the same road.
+     *
+     * Merge time-overlapping and close-together matched fragments into driving
+     * episodes. Read-only, works for existing histories without migrations,
+     * and never alters road matching or stored visit intervals.
+     */
+    @Synchronized
+    fun estimatedWholeRoadVisitCount(road: RoadRecord): Int {
+        val db = dbHelper.readableDatabase
+        val groupId = db.rawQuery(
+            "SELECT road_group_id FROM roads WHERE segment_id = ?",
+            arrayOf(road.segmentId)
+        ).use { cursor ->
+            if (cursor.moveToFirst()) cursor.getString(0).orEmpty() else ""
+        }
+        if (groupId.isBlank() || isExcludedRoadGroup(groupId)) {
+            return estimatedRoadVisitCount(road)
+        }
+        var episodes = 0
+        var lastEnd = Long.MIN_VALUE
+        db.rawQuery(
+            """SELECT v.started_at, v.ended_at
+               FROM road_visits v
+               INNER JOIN roads r ON v.segment_id = r.segment_id
+               WHERE r.road_group_id = ?
+               ORDER BY v.started_at, v.ended_at""",
+            arrayOf(groupId)
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                val start = cursor.getLong(0)
+                val end = cursor.getLong(1)
+                if (episodes == 0 || start > lastEnd &&
+                    start - lastEnd > VISIT_CONTINUATION_MS
+                ) {
+                    episodes++
+                }
+                lastEnd = max(lastEnd, end)
+            }
+        }
+        // Some legacy records have only a stored count but no visit windows.
+        return maxOf(road.timesDriven, episodes)
+    }
+
+    /**
      * Extra observed visit intervals for display-only corner repair. On busy map views,
      * stay with the existing first/last repair instead of querying unbounded history.
      */
