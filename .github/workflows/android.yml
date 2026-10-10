@@ -84,19 +84,19 @@ jobs:
           # ArcGIS layer accepts the SAME geoJSON/name/distance query as the app.
           endpoint="https://maps.nj.gov/arcgis/rest/services/Framework/Government_Boundaries/MapServer/2/query"
           response="$RUNNER_TEMP/nj-municipality.json"
-          curl --fail --silent --show-error --location --retry 3 --retry-delay 3 \\
-            --get "$endpoint" \\
-            --data-urlencode "f=geojson" \\
-            --data-urlencode "where=(UPPER(NAME) LIKE '%GLOUCESTER%' OR UPPER(MUN_LABEL) LIKE '%GLOUCESTER%')" \\
-            --data-urlencode "geometry=-75.12,39.89" \\
-            --data-urlencode "geometryType=esriGeometryPoint" \\
-            --data-urlencode "inSR=4326" \\
-            --data-urlencode "spatialRel=esriSpatialRelIntersects" \\
-            --data-urlencode "distance=5000" \\
-            --data-urlencode "units=esriSRUnit_Meter" \\
-            --data-urlencode "outFields=NAME,MUN,MUN_LABEL,MUN_TYPE,COUNTY,SQ_MILES,POP2020" \\
-            --data-urlencode "outSR=4326" \\
-            --data-urlencode "returnGeometry=true" \\
+          curl --fail --silent --show-error --location --retry 3 --retry-delay 3 \
+            --get "$endpoint" \
+            --data-urlencode "f=geojson" \
+            --data-urlencode "where=(UPPER(NAME) LIKE '%GLOUCESTER%' OR UPPER(MUN_LABEL) LIKE '%GLOUCESTER%')" \
+            --data-urlencode "geometry=-75.12,39.89" \
+            --data-urlencode "geometryType=esriGeometryPoint" \
+            --data-urlencode "inSR=4326" \
+            --data-urlencode "spatialRel=esriSpatialRelIntersects" \
+            --data-urlencode "distance=5000" \
+            --data-urlencode "units=esriSRUnit_Meter" \
+            --data-urlencode "outFields=NAME,MUN,MUN_LABEL,MUN_TYPE,COUNTY,SQ_MILES,POP2020" \
+            --data-urlencode "outSR=4326" \
+            --data-urlencode "returnGeometry=true" \
             --output "$response"
           python3 - "$response" <<'PY'
           import json, sys
