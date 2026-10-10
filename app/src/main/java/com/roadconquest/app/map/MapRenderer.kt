@@ -225,14 +225,31 @@ class MapRenderer(
             val missing = ArrayList<com.roadconquest.app.data.PlaceDiscovery>()
             for (place in places) {
                 val cached = PlaceOverlayCache.read(context, place)
-                if (!cached.cached) missing += place
-                cached.data?.let(loaded::add)
+                val validated = cached.data?.takeIf { data ->
+                    kind != com.roadconquest.app.data.PlaceKind.TOWN ||
+                        runCatching {
+                            TownBoundaryEvidence.supports(context, place, JSONObject(data.geometryJson))
+                        }.getOrDefault(false)
+                }
+                if (cached.data != null && validated == null) {
+                    // A discovery may have cached a coarse or inaccurate town
+                    // boundary. Never display it before GPS proof is available.
+                    PlaceOverlayCache.write(context, place, null, cacheGeneration)
+                }
+                if (!cached.cached || (cached.data != null && validated == null)) missing += place
+                validated?.let(loaded::add)
             }
             postPlaceOverlay(generation, kind, loaded)
             for (place in missing) {
                 if (destroyed || generation != overlayGeneration ||
                     cacheGeneration != PlaceOverlayCache.generation()) return@execute
-                val result = runCatching { overlayClient.fetch(place) }
+                val result = runCatching {
+                    if (kind == com.roadconquest.app.data.PlaceKind.TOWN) {
+                        overlayClient.fetch(place, requireContainment = false) { geometry ->
+                            TownBoundaryEvidence.supports(context, place, geometry)
+                        }
+                    } else overlayClient.fetch(place)
+                }
                 if (result.isFailure) {
                     Log.w("RoadConquest", "Could not load place boundary", result.exceptionOrNull())
                     continue
