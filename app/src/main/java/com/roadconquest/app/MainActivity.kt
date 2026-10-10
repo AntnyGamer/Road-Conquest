@@ -818,7 +818,7 @@ class MainActivity : Activity() {
         // Count road-wide journeys from all connected matched segments.
         // This is based on recorded GPS evidence, not a promise that every
         // journey was tracked through a complete GPS outage.
-        val driven = "${road.timesDriven} ${if (road.timesDriven == 1) "visit" else "visits"} (estimated)"
+        val driven = "${road.timesDriven} (estimated)"
         AlertDialog.Builder(this)
             .setTitle(road.name)
             .setMessage(
