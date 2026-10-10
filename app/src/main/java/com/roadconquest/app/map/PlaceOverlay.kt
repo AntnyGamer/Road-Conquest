@@ -57,7 +57,10 @@ data class PlaceOverlayData(
 data class PlaceOverlayCacheResult(val cached: Boolean, val data: PlaceOverlayData?)
 
 object PlaceOverlayCache {
-    private const val DIRECTORY = "place-overlays-v4"
+    // Leave valid state and country caches in place; only municipal
+    // outlines need the stricter verification rules.
+    private const val DIRECTORY = "place-overlays-v3"
+    private const val TOWN_DIRECTORY = "place-overlays-v4-towns"
     private const val NEGATIVE_CACHE_MS = 15L * 60L * 1000L
     private const val HEX_DIGITS = "0123456789abcdef"
     private val generation = AtomicLong()
@@ -115,7 +118,7 @@ object PlaceOverlayCache {
         verifiedForDiscovery: Boolean = false
     ): Boolean = synchronized(mutationLock) {
         if (expectedGeneration != null && generation.get() != expectedGeneration) return@synchronized false
-        val directory = File(context.applicationContext.filesDir, DIRECTORY)
+        val directory = file(context, place).parentFile ?: return@synchronized false
         if (!directory.exists() && !directory.mkdirs()) return@synchronized false
         val json = JSONObject()
             .put("found", data != null)
@@ -136,6 +139,7 @@ object PlaceOverlayCache {
     fun clear(context: Context) = synchronized(mutationLock) {
         generation.incrementAndGet()
         File(context.applicationContext.filesDir, DIRECTORY).deleteRecursively()
+        File(context.applicationContext.filesDir, TOWN_DIRECTORY).deleteRecursively()
         Unit
     }
 
@@ -149,7 +153,8 @@ object PlaceOverlayCache {
             hex[i * 2] = HEX_DIGITS[byte ushr 4]
             hex[i * 2 + 1] = HEX_DIGITS[byte and 0x0f]
         }
-        return File(File(context.applicationContext.filesDir, DIRECTORY), "${String(hex)}.json")
+        val directory = if (place.kind == PlaceKind.TOWN) TOWN_DIRECTORY else DIRECTORY
+        return File(File(context.applicationContext.filesDir, directory), "${String(hex)}.json")
     }
 }
 
