@@ -32,13 +32,19 @@ class ExplorationUpgradeTest {
         )
         val real = FogGrid.cell(39.7, -75.1)!!
         val ghost = FogGrid.cell(39.9, -75.3)!!
-        for (tile in listOf(real, ghost)) {
+        val walked = FogGrid.cell(40.2, -75.1)!!
+        for (tile in listOf(real, ghost, walked)) {
             val center = FogGrid.center(tile)
             db.execSQL(
                 "INSERT INTO explored_grid VALUES (?, ?, ?, ?)",
                 arrayOf(tile.row, tile.column, center.first, center.second)
             )
         }
+        val walkedCenter = FogGrid.center(walked)
+        db.execSQL(
+            "INSERT INTO explored_places(cell_x, cell_y, latitude, longitude) VALUES (10, 20, ?, ?)",
+            arrayOf(walkedCenter.first, walkedCenter.second)
+        )
         fun candidate(x: Long, y: Long, lat: Double, lon: Double) {
             db.execSQL(
                 """INSERT INTO place_candidates
@@ -54,10 +60,13 @@ class ExplorationUpgradeTest {
         helper.onUpgrade(db, 12, 13)
 
         db.rawQuery("SELECT grid_row, grid_col FROM explored_grid", null).use { cursor ->
-            assertTrue(cursor.moveToFirst())
-            assertEquals(real.row, cursor.getInt(0))
-            assertEquals(real.column, cursor.getInt(1))
-            assertFalse(cursor.moveToNext())
+            val kept = mutableSetOf<Pair<Int, Int>>()
+            while (cursor.moveToNext()) kept += cursor.getInt(0) to cursor.getInt(1)
+            assertEquals(
+                setOf(real.row to real.column, walked.row to walked.column),
+                kept
+            )
+            assertFalse(ghost.row to ghost.column in kept)
         }
         db.rawQuery("SELECT cell_x FROM place_candidates ORDER BY cell_x", null).use { cursor ->
             val kept = mutableListOf<Long>()
