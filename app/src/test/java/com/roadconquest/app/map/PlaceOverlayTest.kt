@@ -246,4 +246,48 @@ class PlaceOverlayTest {
         assertFalse(PlaceGeometry.contains(geometry, 39.99, -74.5))
     }
 
+    @Test fun wrongNamedBoundaryCannotUnlockTownEvenIfItContainsGps() {
+        val place = PlaceDiscovery(
+            PlaceKind.TOWN, "us|new jersey|pine hill", "Pine Hill",
+            "New Jersey", "United States", 1L, 39.79, -75.03
+        )
+        val body = """
+            [{
+              "name":"Gloucester County",
+              "category":"boundary",
+              "type":"administrative",
+              "addresstype":"administrative",
+              "address":{"locality":"Pine Hill","state":"New Jersey","country":"United States"},
+              "lat":"39.79","lon":"-75.03",
+              "geojson":{"type":"Polygon","coordinates":[[
+                [-75.1,39.7],[-75.0,39.7],[-75.0,39.9],
+                [-75.1,39.9],[-75.1,39.7]
+              ]]}
+            }]
+        """.trimIndent()
+        assertNull(PlaceOverlayClient.parseResponse(place, body))
+    }
+
+    @Test fun namedBoroughBoundaryContainsActualTownGps() {
+        val place = PlaceDiscovery(
+            PlaceKind.TOWN, "us|new jersey|pine hill", "Pine Hill",
+            "New Jersey", "United States", 1L, 39.79, -75.03
+        )
+        val body = """
+            [{
+              "name":"Borough of Pine Hill",
+              "category":"boundary",
+              "type":"administrative",
+              "addresstype":"administrative",
+              "address":{"town":"Pine Hill","state":"New Jersey","country":"United States"},
+              "lat":"39.79","lon":"-75.03",
+              "geojson":{"type":"Polygon","coordinates":[[
+                [-75.1,39.7],[-75.0,39.7],[-75.0,39.9],
+                [-75.1,39.9],[-75.1,39.7]
+              ]]}
+            }]
+        """.trimIndent()
+        assertNotNull(PlaceOverlayClient.parseResponse(place, body))
+    }
+
 }
