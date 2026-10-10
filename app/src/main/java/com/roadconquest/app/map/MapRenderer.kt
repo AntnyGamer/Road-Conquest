@@ -224,13 +224,9 @@ class MapRenderer(
             val loaded = ArrayList<PlaceOverlayData>(places.size)
             val missing = ArrayList<com.roadconquest.app.data.PlaceDiscovery>()
             for (place in places) {
-                val cached = when {
-                    NewJerseyMunicipalBoundaries.applies(place) ->
-                        PlaceOverlayCache.readOfficialNj(context, place)
-                    UnitedStatesMunicipalBoundaries.applies(place) ->
-                        PlaceOverlayCache.readOfficialUs(context, place)
-                    else -> PlaceOverlayCache.read(context, place)
-                }
+                val cached = if (UnitedStatesMunicipalBoundaries.applies(place)) {
+                    PlaceOverlayCache.readOfficialUs(context, place)
+                } else PlaceOverlayCache.read(context, place)
                 if (!cached.cached) missing += place
                 cached.data?.let(loaded::add)
             }
@@ -241,14 +237,10 @@ class MapRenderer(
                 // All NJ municipalities are selected from ONE NJOGIS topology.
                 // Do not fall back to Nominatim: mixing sources creates the
                 // overlaps and unexplained holes reported by users.
-                val nj = NewJerseyMunicipalBoundaries.applies(place)
                 val us = UnitedStatesMunicipalBoundaries.applies(place)
                 val result = runCatching {
-                    when {
-                        nj -> NewJerseyMunicipalBoundaries.fetch(place)
-                        us -> UnitedStatesMunicipalBoundaries.fetch(place)
-                        else -> overlayClient.fetch(place)
-                    }
+                    if (us) UnitedStatesMunicipalBoundaries.fetch(place)
+                    else overlayClient.fetch(place)
                 }
                 if (result.isFailure) {
                     Log.w("RoadConquest", "Could not load place boundary", result.exceptionOrNull())
@@ -256,11 +248,9 @@ class MapRenderer(
                 }
                 if (cacheGeneration != PlaceOverlayCache.generation()) return@execute
                 val data = result.getOrNull()
-                val written = when {
-                    nj -> PlaceOverlayCache.writeOfficialNj(context, place, data, cacheGeneration)
-                    us -> PlaceOverlayCache.writeOfficialUs(context, place, data, cacheGeneration)
-                    else -> PlaceOverlayCache.write(context, place, data, cacheGeneration)
-                }
+                val written = if (us) {
+                    PlaceOverlayCache.writeOfficialUs(context, place, data, cacheGeneration)
+                } else PlaceOverlayCache.write(context, place, data, cacheGeneration)
                 if (!written) return@execute
                 if (data != null) {
                     loaded += data
@@ -694,7 +684,7 @@ class MapRenderer(
         // Existing boundaries can overlap due to mismatched or historical OSM
         // polygons. Partition only town shapes so their translucent fills never
         // stack or paint an overlapping boundary twice.
-        // Official US Census and NJOGIS boundaries are used as supplied.
+        // Official US Census boundaries are used as supplied.
         // Clipping individual municipalities invents slivers and gaps; only
         // shared boundary linework is dissolved. Other countries retain
         // the verified administrative OpenStreetMap fallback.
