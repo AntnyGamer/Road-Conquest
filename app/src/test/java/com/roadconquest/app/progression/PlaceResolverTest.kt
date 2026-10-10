@@ -34,11 +34,11 @@ class PlaceResolverTest {
         assertEquals("New Jersey", places.single { it.kind == PlaceKind.STATE }.displayName)
     }
 
-    @Test fun countyDoesNotBecomeTown() {
+    @Test fun postalLocalityDoesNotBecomeTown() {
         val places = PlaceResolver.resolveAddresses(
             candidate, listOf(address("Pitman", "Gloucester County"))
         )
-        assertEquals("Pitman", places.single { it.kind == PlaceKind.TOWN }.displayName)
+        assertTrue(places.none { it.kind == PlaceKind.TOWN })
     }
 
     @Test fun missingMunicipalityDoesNotAccidentallyRewardCounty() {
