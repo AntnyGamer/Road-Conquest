@@ -108,6 +108,25 @@ class TownOverlayPartitionTest {
         assertTrue(JSONObject(rendered.outlines).getJSONArray("features").length() > 0)
     }
 
+    @Test fun twoHistoricalTownAliasesCannotDoubleShadeOneOfficialMunicipality() {
+        val polygon = square(-75.10, 39.80, -75.02, 39.90)
+        val first = town("Pine Hill Borough", "nj|pine hill", 3.0, polygon)
+            .copy(authoritativeNjBoundary = true)
+        val second = town("Borough of Pine Hill", "nj|pine hill borough", 3.0, polygon)
+            .copy(authoritativeNjBoundary = true)
+        val render = TownOverlayPartition.render(listOf(first, second))
+        assertEquals(1, render.shown.size)
+        assertEquals(1, JSONObject(render.fills).getJSONArray("features").length())
+        assertEquals(1, fillsAt(render, 39.85, -75.06))
+        // Different municipalities with the same common name must NOT be
+        // deduplicated merely by their labels.
+        val another = first.copy(
+            key = "nj|pine hill another county",
+            geometryJson = square(-74.90,39.80,-74.80,39.90)
+        )
+        assertEquals(2, TownOverlayPartition.render(listOf(first, another)).shown.size)
+    }
+
     @Test fun officialAndLegacyMunicipalShapesCanCoexistWithoutMutatingOfficialGeometry() {
         val official = town("NJ Municipality", "nj", 1.0,
             square(-75.15, 39.80, -75.10, 39.86))
