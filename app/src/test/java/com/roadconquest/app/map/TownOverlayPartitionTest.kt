@@ -86,7 +86,7 @@ class TownOverlayPartitionTest {
         assertEquals(1, fillsAt(result, 3.0, 3.0))
         assertEquals(0, fillsAt(result, 1.5, 1.5))
         assertEquals(1, fillsAt(result, 0.5, 5.5))
-        assertFalse(JSONObject(result.outlines).getJSONArray("features").isEmpty)
+        assertTrue(JSONObject(result.outlines).getJSONArray("features").length() > 0)
     }
 
     @Test fun badLegacyPolygonDoesNotBreakOtherValidTownOverlays() {
