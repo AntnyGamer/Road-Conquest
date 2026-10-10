@@ -276,6 +276,11 @@ class PlaceOverlayClient(
                 val candidate = results.optJSONObject(i) ?: continue
                 val geometry = candidate.optJSONObject("geojson") ?: continue
                 if (geometry.optString("type") !in POLYGON_TYPES) continue
+                // A name or nearby postal address is not evidence of entering a town.
+                // Require the GPS point to be inside this exact municipal polygon.
+                if (place.kind == PlaceKind.TOWN &&
+                    !PlaceGeometry.contains(geometry, place.latitude, place.longitude)
+                ) continue
                 val score = score(place, candidate)
                 if (score > bestScore) {
                     best = candidate
@@ -432,5 +437,68 @@ class PlaceOverlayClient(
 
         private fun canonical(value: String): String =
             value.trim().lowercase(Locale.ROOT).replace(WHITESPACE_RE, " ")
+    }
+}
+
+/** Geographic containment for GeoJSON Polygon and MultiPolygon boundaries.
+ * Coordinates are [longitude, latitude]. Interior holes must remain unexplored.
+ */
+internal object PlaceGeometry {
+    fun contains(geometry: JSONObject, latitude: Double, longitude: Double): Boolean {
+        if (!latitude.isFinite() || !longitude.isFinite() ||
+            latitude !in -90.0..90.0 || longitude !in -180.0..180.0
+        ) return false
+        val coordinates = geometry.optJSONArray("coordinates") ?: return false
+        return when (geometry.optString("type")) {
+            "Polygon" -> polygonContains(coordinates, latitude, longitude)
+            "MultiPolygon" -> (0 until coordinates.length()).any { i ->
+                coordinates.optJSONArray(i)?.let { polygonContains(it, latitude, longitude) } == true
+            }
+            else -> false
+        }
+    }
+
+    private fun polygonContains(rings: JSONArray, latitude: Double, longitude: Double): Boolean {
+        val outer = rings.optJSONArray(0) ?: return false
+        if (!ringContains(outer, latitude, longitude)) return false
+        for (i in 1 until rings.length()) {
+            val hole = rings.optJSONArray(i) ?: continue
+            if (ringContains(hole, latitude, longitude)) return false
+        }
+        return true
+    }
+
+    private fun ringContains(ring: JSONArray, latitude: Double, longitude: Double): Boolean {
+        if (ring.length() < 3) return false
+        var inside = false
+        var previous = ring.optJSONArray(ring.length() - 1) ?: return false
+        for (i in 0 until ring.length()) {
+            val current = ring.optJSONArray(i) ?: return false
+            val y1 = previous.optDouble(1, Double.NaN)
+            val y2 = current.optDouble(1, Double.NaN)
+            val x1 = relativeLongitude(previous.optDouble(0, Double.NaN), longitude)
+            val x2 = relativeLongitude(current.optDouble(0, Double.NaN), longitude)
+            if (!x1.isFinite() || !x2.isFinite() || !y1.isFinite() || !y2.isFinite()) return false
+            // Exact boundary points count as contained to avoid disappearing towns
+            // when a recorded fix lands precisely on a shared boundary.
+            val cross = x1 * (y2 - latitude) - x2 * (y1 - latitude)
+            if (kotlin.math.abs(cross) < 1e-10 &&
+                0.0 >= minOf(x1, x2) - 1e-10 &&
+                0.0 <= maxOf(x1, x2) + 1e-10 &&
+                latitude >= minOf(y1, y2) - 1e-10 &&
+                latitude <= maxOf(y1, y2) + 1e-10
+            ) return true
+            if ((y1 > latitude) != (y2 > latitude)) {
+                val crossingX = x1 + (x2 - x1) * ((latitude - y1) / (y2 - y1))
+                if (crossingX > 0.0) inside = !inside
+            }
+            previous = current
+        }
+        return inside
+    }
+
+    private fun relativeLongitude(lon: Double, anchor: Double): Double {
+        if (!lon.isFinite()) return Double.NaN
+        return ((lon - anchor + 540.0) % 360.0) - 180.0
     }
 }
