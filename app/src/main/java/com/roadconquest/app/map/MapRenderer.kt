@@ -224,31 +224,23 @@ class MapRenderer(
             val loaded = ArrayList<PlaceOverlayData>(places.size)
             val missing = ArrayList<com.roadconquest.app.data.PlaceDiscovery>()
             for (place in places) {
-                val cached = PlaceOverlayCache.read(context, place)
-                val validated = cached.data?.takeIf { data ->
-                    kind != com.roadconquest.app.data.PlaceKind.TOWN ||
-                        runCatching {
-                            TownBoundaryEvidence.supports(context, place, JSONObject(data.geometryJson))
-                        }.getOrDefault(false)
-                }
-                if (cached.data != null && validated == null) {
-                    // A discovery may have cached a coarse or inaccurate town
-                    // boundary. Never display it before GPS proof is available.
-                    PlaceOverlayCache.write(context, place, null, cacheGeneration)
-                }
-                if (!cached.cached || (cached.data != null && validated == null)) missing += place
-                validated?.let(loaded::add)
+                val cached = if (NewJerseyMunicipalBoundaries.applies(place)) {
+                    PlaceOverlayCache.readOfficialNj(context, place)
+                } else PlaceOverlayCache.read(context, place)
+                if (!cached.cached) missing += place
+                cached.data?.let(loaded::add)
             }
             postPlaceOverlay(generation, kind, loaded)
             for (place in missing) {
                 if (destroyed || generation != overlayGeneration ||
                     cacheGeneration != PlaceOverlayCache.generation()) return@execute
+                // All NJ municipalities are selected from ONE NJOGIS topology.
+                // Do not fall back to Nominatim: mixing sources creates the
+                // overlaps and unexplained holes reported by users.
+                val nj = NewJerseyMunicipalBoundaries.applies(place)
                 val result = runCatching {
-                    if (kind == com.roadconquest.app.data.PlaceKind.TOWN) {
-                        overlayClient.fetch(place, requireContainment = false) { geometry ->
-                            TownBoundaryEvidence.supports(context, place, geometry)
-                        }
-                    } else overlayClient.fetch(place)
+                    if (nj) NewJerseyMunicipalBoundaries.fetch(place)
+                    else overlayClient.fetch(place)
                 }
                 if (result.isFailure) {
                     Log.w("RoadConquest", "Could not load place boundary", result.exceptionOrNull())
@@ -256,7 +248,10 @@ class MapRenderer(
                 }
                 if (cacheGeneration != PlaceOverlayCache.generation()) return@execute
                 val data = result.getOrNull()
-                if (!PlaceOverlayCache.write(context, place, data, cacheGeneration)) return@execute
+                val written = if (nj) {
+                    PlaceOverlayCache.writeOfficialNj(context, place, data, cacheGeneration)
+                } else PlaceOverlayCache.write(context, place, data, cacheGeneration)
+                if (!written) return@execute
                 if (data != null) {
                     loaded += data
                     // The public boundary service is deliberately rate-limited. Show
@@ -686,12 +681,32 @@ class MapRenderer(
         // Existing boundaries can overlap due to mismatched or historical OSM
         // polygons. Partition only town shapes so their translucent fills never
         // stack or paint an overlapping boundary twice.
-        val townPartition = if (kind == com.roadconquest.app.data.PlaceKind.TOWN) {
-            TownOverlayPartition.render(snapshot)
-        } else null
+        // NJOGIS already defines coincident, shared municipal edges. Clipping
+        // those polygons against one another can introduce slivers and gaps.
+        // Keep official NJ rings verbatim. Retain the legacy partition ONLY for
+        // non-NJ sources, which don't necessarily share the same topology.
+        val officialNj = if (kind == com.roadconquest.app.data.PlaceKind.TOWN) {
+            snapshot.filter { NewJerseyMunicipalBoundaries.isNewJerseyKey(it.key) }
+        } else emptyList()
+        val other = if (officialNj.isNotEmpty()) {
+            snapshot.filterNot { NewJerseyMunicipalBoundaries.isNewJerseyKey(it.key) }
+        } else snapshot
+        val otherPartition = if (kind == com.roadconquest.app.data.PlaceKind.TOWN &&
+            other.isNotEmpty()
+        ) TownOverlayPartition.render(other) else null
         val keys = snapshot.map { "${it.key}:${it.geometryJson.hashCode()}" }
-        val fillFeatures = townPartition?.fills ?: overlayFeatureCollection(snapshot)
-        val boundaries = townPartition?.outlines ?: overlayBoundaryFeatureCollection(snapshot)
+        val fillFeatures = when {
+            officialNj.isNotEmpty() && otherPartition != null ->
+                mergeOverlayCollections(overlayFeatureCollection(officialNj), otherPartition.fills)
+            officialNj.isNotEmpty() -> overlayFeatureCollection(officialNj)
+            else -> otherPartition?.fills ?: overlayFeatureCollection(snapshot)
+        }
+        val boundaries = when {
+            officialNj.isNotEmpty() && otherPartition != null ->
+                mergeOverlayCollections(overlayBoundaryFeatureCollection(officialNj), otherPartition.outlines)
+            officialNj.isNotEmpty() -> overlayBoundaryFeatureCollection(officialNj)
+            else -> otherPartition?.outlines ?: overlayBoundaryFeatureCollection(snapshot)
+        }
         mainHandler.post {
             if (destroyed || generation != overlayGeneration || overlayMode.kind != kind) return@post
             val mode = when (kind) {
@@ -708,6 +723,15 @@ class MapRenderer(
             shownOverlayKeys = keys
             shownOverlayCacheGeneration = cacheGeneration
         }
+    }
+
+    private fun mergeOverlayCollections(first: String, second: String): String {
+        val features = JSONArray()
+        for (source in listOf(first, second)) {
+            val items = JSONObject(source).getJSONArray("features")
+            for (index in 0 until items.length()) features.put(items.getJSONObject(index))
+        }
+        return JSONObject().put("type", "FeatureCollection").put("features", features).toString()
     }
 
     private fun overlayFeatureCollection(data: List<PlaceOverlayData>): String {
