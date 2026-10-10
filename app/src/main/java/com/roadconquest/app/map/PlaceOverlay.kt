@@ -41,7 +41,8 @@ data class PlaceOverlayData(
     val kind: PlaceKind,
     val population: Long?,
     val areaSquareKilometers: Double,
-    val geometryJson: String
+    val geometryJson: String,
+    val authoritativeNjBoundary: Boolean = false
 ) {
     fun featureJson(): JSONObject = JSONObject()
         .put("type", "Feature")
@@ -60,7 +61,7 @@ object PlaceOverlayCache {
     // Leave valid state and country caches in place; only municipal
     // outlines need the stricter verification rules.
     private const val DIRECTORY = "place-overlays-v3"
-    private const val TOWN_DIRECTORY = "place-overlays-v5-towns"
+    private const val TOWN_DIRECTORY = "place-overlays-v6-towns"
     private const val NEGATIVE_CACHE_MS = 15L * 60L * 1000L
     private const val HEX_DIGITS = "0123456789abcdef"
     private val generation = AtomicLong()
@@ -90,7 +91,8 @@ object PlaceOverlayCache {
                         kind = PlaceKind.valueOf(json.getString("kind")),
                         population = if (json.isNull("population")) null else json.getLong("population"),
                         areaSquareKilometers = json.getDouble("area_sq_km"),
-                        geometryJson = json.getJSONObject("geometry").toString()
+                        geometryJson = json.getJSONObject("geometry").toString(),
+                        authoritativeNjBoundary = json.optBoolean("nj_official_municipality", false)
                     )
                 )
             }
@@ -126,6 +128,9 @@ object PlaceOverlayCache {
         if (data != null) {
             if (verifiedForDiscovery && place.kind == PlaceKind.TOWN) {
                 json.put("discovery_verified", true)
+            }
+            if (data.authoritativeNjBoundary) {
+                json.put("nj_official_municipality", true)
             }
             json.put("name", data.name)
                 .put("kind", data.kind.name)
@@ -172,14 +177,11 @@ class PlaceOverlayClient(
         // rounded historical visited-place grid centers. Never fall back to
         // a nearby postal/OSM polygon when the official result disagrees.
         if (NjMunicipalityClient.applies(place)) {
-            val locations = verifiedLocations.ifEmpty {
-                listOf(place.latitude to place.longitude)
-            }
-            for ((latitude, longitude) in locations) {
-                val municipality = NjMunicipalityClient.at(latitude, longitude) ?: continue
-                NjMunicipalityClient.asOverlay(place, municipality)?.let { return it }
-            }
-            return null
+            // Drawing a municipality means looking up its ACTUAL named polygon.
+            // Do not substitute the municipality containing a road/GPS sample:
+            // older saved visit coordinates were approximate cell centers.
+            return NjMunicipalityClient.forOverlay(place, verifiedLocations)
+                ?.let { NjMunicipalityClient.asOverlay(place, it) }
         }
         val base = resolveEndpoint()
         throttle()
