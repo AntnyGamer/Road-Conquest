@@ -57,7 +57,7 @@ data class PlaceOverlayData(
 data class PlaceOverlayCacheResult(val cached: Boolean, val data: PlaceOverlayData?)
 
 object PlaceOverlayCache {
-    private const val DIRECTORY = "place-overlays-v3"
+    private const val DIRECTORY = "place-overlays-v4"
     private const val NEGATIVE_CACHE_MS = 15L * 60L * 1000L
     private const val HEX_DIGITS = "0123456789abcdef"
     private val generation = AtomicLong()
@@ -295,9 +295,13 @@ class PlaceOverlayClient(
                 if (place.kind == PlaceKind.TOWN) {
                     val category = candidate.optString("category", candidate.optString("class"))
                     val type = candidate.optString("type")
-                    val addressType = candidate.optString("addresstype")
-                    if (!(category == "boundary" && type == "administrative") &&
-                        addressType != "administrative"
+                    // Address classification alone is not enough: a county can
+                    // contain an identically named town and incorrectly fill it.
+                    if (category != "boundary" || type != "administrative") continue
+                    val adminLevel = candidate.optJSONObject("extratags")
+                        ?.optString("admin_level").orEmpty()
+                    if (canonical(place.countryName) == "united states" &&
+                        adminLevel.isNotBlank() && adminLevel != "8"
                     ) continue
                     // A boundary can contain the GPS point but still represent a
                     // different nearby town or county. Require the actual name
