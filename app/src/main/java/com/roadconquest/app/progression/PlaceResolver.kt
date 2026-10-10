@@ -50,7 +50,8 @@ object PlaceResolver {
         // Android often supplies the county in subAdminArea. Never award a county
         // as a town; only override locality when the administrative value clearly
         // identifies a municipality (such as a named NJ township).
-        val townName = namedMunicipality.ifBlank { firstValue { it.locality } }
+        // Postal locality may name a nearby town, not the municipality at this GPS fix.
+        val townName = namedMunicipality
         val result = ArrayList<PlaceDiscovery>(3)
 
         if (countryKey.isNotBlank() && countryName.isNotBlank()) {
