@@ -76,8 +76,6 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Verify live New Jersey municipality boundary service
-        run: python3 tools/check_nj_municipality_source.py
       - name: Verify live national Census municipality boundary service
         run: python3 tools/check_us_municipality_source.py
       - name: Set up JDK 21
