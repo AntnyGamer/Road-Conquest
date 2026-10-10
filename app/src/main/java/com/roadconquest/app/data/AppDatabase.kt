@@ -279,8 +279,9 @@ class AppDatabase private constructor(context: Context) :
 
     /**
      * Older builds unlocked mile tiles from every seemingly accurate fix, even
-     * while parked. Keep historical fog only where actual persisted driving GPS
-     * corroborates the same tile. Roads and raw driving history are untouched.
+     * while parked. Discard only tiles with NO persisted evidence of either a
+     * recorded drive OR actual 50-m exploration. Genuine walking must remain.
+     * Roads and raw driving history are untouched.
      */
     private fun pruneHistoricalFogDrift(db: SQLiteDatabase) {
         val oldCells = HashSet<Long>()
@@ -295,6 +296,15 @@ class AppDatabase private constructor(context: Context) :
             "SELECT latitude, longitude FROM track_points WHERE accuracy_m BETWEEN 0.01 AND 25",
             null
         ).use { cursor ->
+            while (cursor.moveToNext() && oldCells.isNotEmpty()) {
+                val tile = FogGrid.cell(cursor.getDouble(0), cursor.getDouble(1)) ?: continue
+                oldCells.remove(tile.key)
+            }
+        }
+        // Walking legitimately revealed fog in older versions without recording
+        // road miles. Preserve its explored 50-m samples instead of incorrectly
+        // deleting all walking-only squares during this one-time cleanup.
+        db.rawQuery("SELECT latitude, longitude FROM explored_places", null).use { cursor ->
             while (cursor.moveToNext() && oldCells.isNotEmpty()) {
                 val tile = FogGrid.cell(cursor.getDouble(0), cursor.getDouble(1)) ?: continue
                 oldCells.remove(tile.key)
