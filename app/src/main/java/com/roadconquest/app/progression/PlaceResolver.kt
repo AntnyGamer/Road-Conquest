@@ -7,6 +7,7 @@ import com.roadconquest.app.data.PlaceDiscovery
 import com.roadconquest.app.data.PlaceKind
 import com.roadconquest.app.map.PlaceOverlayCache
 import com.roadconquest.app.map.PlaceOverlayClient
+import com.roadconquest.app.map.NjMunicipalityClient
 import com.roadconquest.app.map.PlaceGeometry
 import org.json.JSONObject
 import java.io.IOException
@@ -27,6 +28,40 @@ object PlaceResolver {
         }
         if (addresses.isEmpty()) return null
         val parsed = resolveAddresses(candidate, addresses)
+        val state = parsed.firstOrNull { it.kind == PlaceKind.STATE }
+        val country = parsed.firstOrNull { it.kind == PlaceKind.COUNTRY }
+        if (state?.displayName.equals("New Jersey", ignoreCase = true) &&
+            country?.displayName.equals("United States", ignoreCase = true)
+        ) {
+            // The correct NJ town comes from the STATE GIS polygon containing
+            // this GPS coordinate. A postal locality (e.g. Clarksboro) is not
+            // a municipality and must not generate a town reward.
+            val official = try {
+                NjMunicipalityClient.at(candidate.latitude, candidate.longitude)
+            } catch (_: IOException) {
+                return null // Retry later without awarding a nearby postal place.
+            }
+            val town = official?.let { municipality ->
+                val key = "${state.key}|${canonical(municipality.officialName)}"
+                PlaceDiscovery(
+                    kind = PlaceKind.TOWN, key = key,
+                    displayName = municipality.officialName,
+                    parentName = state.displayName,
+                    countryName = country.displayName,
+                    visitedAt = candidate.visitedAt,
+                    latitude = candidate.latitude,
+                    longitude = candidate.longitude
+                ).also { verified ->
+                    PlaceOverlayCache.write(
+                        context, verified,
+                        NjMunicipalityClient.asOverlay(verified, municipality),
+                        verifiedForDiscovery = true
+                    )
+                }
+            }
+            return parsed.filterNot { it.kind == PlaceKind.TOWN } +
+                listOfNotNull(town)
+        }
         val originalTown = parsed.firstOrNull { it.kind == PlaceKind.TOWN }
             ?: return parsed
         // The locality field is frequently a postal city across the town line.
