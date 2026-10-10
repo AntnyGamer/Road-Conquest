@@ -198,7 +198,7 @@ PLAY_SERVICE_ACCOUNT_FILE=/run/secrets/play-integrity.json
 # or PLAY_SERVICE_ACCOUNT_JSON=<service-account JSON stored as a secret env var>
 PLAY_CLOUD_PROJECT_NUMBER=<numeric linked Google Cloud project>
 PLAY_CERTIFICATES=<base64url SHA256 app-signing certificate, without padding>
-PLAY_VERSION_CODES=26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62
+PLAY_VERSION_CODES=26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63
 ```
 
 Configure and authorize the Google Cloud project for Play Integrity token decoding. Play-installed

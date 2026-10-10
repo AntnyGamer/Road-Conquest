@@ -666,9 +666,15 @@ class MapRenderer(
         // Polygon conversion can be expensive for many visited municipalities.
         // Build immutable GeoJSON on overlayExecutor instead of blocking the map's UI thread.
         val snapshot = data.toList()
-        val keys = snapshot.map(PlaceOverlayData::key)
-        val fillFeatures = overlayFeatureCollection(snapshot)
-        val boundaries = overlayBoundaryFeatureCollection(snapshot)
+        // Existing boundaries can overlap due to mismatched or historical OSM
+        // polygons. Partition only town shapes so their translucent fills never
+        // stack or paint an overlapping boundary twice.
+        val townPartition = if (kind == com.roadconquest.app.data.PlaceKind.TOWN) {
+            TownOverlayPartition.render(snapshot)
+        } else null
+        val keys = snapshot.map { "${it.key}:${it.geometryJson.hashCode()}" }
+        val fillFeatures = townPartition?.fills ?: overlayFeatureCollection(snapshot)
+        val boundaries = townPartition?.outlines ?: overlayBoundaryFeatureCollection(snapshot)
         mainHandler.post {
             if (destroyed || generation != overlayGeneration || overlayMode.kind != kind) return@post
             val mode = when (kind) {

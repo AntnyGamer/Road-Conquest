@@ -57,7 +57,10 @@ data class PlaceOverlayData(
 data class PlaceOverlayCacheResult(val cached: Boolean, val data: PlaceOverlayData?)
 
 object PlaceOverlayCache {
+    // Leave valid state and country caches in place; only municipal
+    // outlines need the stricter verification rules.
     private const val DIRECTORY = "place-overlays-v3"
+    private const val TOWN_DIRECTORY = "place-overlays-v4-towns"
     private const val NEGATIVE_CACHE_MS = 15L * 60L * 1000L
     private const val HEX_DIGITS = "0123456789abcdef"
     private val generation = AtomicLong()
@@ -115,7 +118,7 @@ object PlaceOverlayCache {
         verifiedForDiscovery: Boolean = false
     ): Boolean = synchronized(mutationLock) {
         if (expectedGeneration != null && generation.get() != expectedGeneration) return@synchronized false
-        val directory = File(context.applicationContext.filesDir, DIRECTORY)
+        val directory = file(context, place).parentFile ?: return@synchronized false
         if (!directory.exists() && !directory.mkdirs()) return@synchronized false
         val json = JSONObject()
             .put("found", data != null)
@@ -136,6 +139,7 @@ object PlaceOverlayCache {
     fun clear(context: Context) = synchronized(mutationLock) {
         generation.incrementAndGet()
         File(context.applicationContext.filesDir, DIRECTORY).deleteRecursively()
+        File(context.applicationContext.filesDir, TOWN_DIRECTORY).deleteRecursively()
         Unit
     }
 
@@ -149,7 +153,8 @@ object PlaceOverlayCache {
             hex[i * 2] = HEX_DIGITS[byte ushr 4]
             hex[i * 2 + 1] = HEX_DIGITS[byte and 0x0f]
         }
-        return File(File(context.applicationContext.filesDir, DIRECTORY), "${String(hex)}.json")
+        val directory = if (place.kind == PlaceKind.TOWN) TOWN_DIRECTORY else DIRECTORY
+        return File(File(context.applicationContext.filesDir, directory), "${String(hex)}.json")
     }
 }
 
@@ -295,16 +300,18 @@ class PlaceOverlayClient(
                 if (place.kind == PlaceKind.TOWN) {
                     val category = candidate.optString("category", candidate.optString("class"))
                     val type = candidate.optString("type")
-                    val addressType = candidate.optString("addresstype")
-                    if (!(category == "boundary" && type == "administrative") &&
-                        addressType != "administrative"
+                    // Address classification alone is not enough: a county can
+                    // contain an identically named town and incorrectly fill it.
+                    if (category != "boundary" || type != "administrative") continue
+                    val adminLevel = candidate.optJSONObject("extratags")
+                        ?.optString("admin_level").orEmpty()
+                    if (canonical(place.countryName) == "united states" &&
+                        adminLevel.isNotBlank() && adminLevel != "8"
                     ) continue
                     // A boundary can contain the GPS point but still represent a
                     // different nearby town or county. Require the actual name
                     // and available parent jurisdiction to agree before rewarding.
-                    if (municipalityName(candidate.optString("name")) !=
-                        municipalityName(place.displayName)
-                    ) continue
+                    if (!sameMunicipalityName(candidate.optString("name"), place.displayName)) continue
                     val address = candidate.optJSONObject("address") ?: continue
                     val state = canonical(address.optString("state"))
                     val country = canonical(address.optString("country"))
@@ -474,15 +481,34 @@ class PlaceOverlayClient(
             return sum * EARTH_RADIUS_M * EARTH_RADIUS_M / 2.0
         }
 
-        private fun municipalityName(value: String): String {
+        private fun sameMunicipalityName(first: String, second: String): Boolean {
+            val a = municipalityIdentity(first)
+            val b = municipalityIdentity(second)
+            // The legal municipal type is part of the identity, not decoration:
+            // Gloucester City must NEVER match Gloucester Township. Bare names
+            // can still match "Borough of Pine Hill" when the type is omitted.
+            return a.first.isNotBlank() && a.first == b.first &&
+                (a.second == null || b.second == null || a.second == b.second)
+        }
+
+        private fun municipalityIdentity(value: String): Pair<String, String?> {
             var name = canonical(value).removePrefix("the ")
-            for (prefix in listOf("township of ", "borough of ", "city of ", "town of ", "village of ")) {
-                name = name.removePrefix(prefix)
+            var legalType: String? = null
+            // Some providers redundantly say "City of Gloucester City".
+            // Strip equivalent prefix/suffix types, but never equate a CITY to
+            // a TOWNSHIP or BOROUGH of the same base name.
+            repeat(3) {
+                for (kind in listOf("township", "borough", "municipality", "city", "town", "village")) {
+                    val prefix = "${kind} of "
+                    val suffix = " $kind"
+                    if (name.startsWith(prefix) || name.endsWith(suffix)) {
+                        if (legalType != null && legalType != kind) return canonical(value) to null
+                        name = if (name.startsWith(prefix)) name.removePrefix(prefix) else name.removeSuffix(suffix)
+                        legalType = kind
+                    }
+                }
             }
-            for (suffix in listOf(" township", " borough", " municipality", " city", " town", " village")) {
-                name = name.removeSuffix(suffix)
-            }
-            return name
+            return name to legalType
         }
 
         private fun canonical(value: String): String =
