@@ -367,11 +367,11 @@ class PlaceOverlayClient(
                     if (category != "boundary" || type != "administrative") continue
                     val adminLevel = candidate.optJSONObject("extratags")
                         ?.optString("admin_level")?.toIntOrNull()
-                    val country = canonical(place.countryName)
+                    val requestedCountry = canonical(place.countryName)
                     // Administrative levels vary worldwide. Constrain them by
                     // country so district/county/state polygons cannot masquerade
                     // as towns merely because a nearby locality shares a name.
-                    val allowedLevels = when (country) {
+                    val allowedLevels = when (requestedCountry) {
                         "united states", "united states of america", "usa" -> 8..8
                         "australia", "mexico", "new zealand" -> 6..10
                         "japan" -> 7..9
