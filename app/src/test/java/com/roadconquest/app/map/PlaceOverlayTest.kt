@@ -412,4 +412,47 @@ class PlaceOverlayTest {
         assertNotNull(PlaceOverlayClient.parseResponse(place, polygon))
     }
 
+    @Test fun worldwideTownOverlayAcceptsOnlyAppropriateAdministrativeLevel() {
+        fun town(name: String, country: String) = PlaceDiscovery(
+            PlaceKind.TOWN, "global|state|${name.lowercase()}", name,
+            "Region", country, 1L, 21.0, -101.0
+        )
+        fun record(name: String, level: Int, relation: String = "relation") = """
+            [{
+              "name":"$name","category":"boundary","type":"administrative",
+              "osm_type":"$relation",
+              "addresstype":"administrative",
+              "extratags":{"admin_level":"$level"},
+              "address":{"state":"Region","country":"Mexico","town":"$name"},
+              "lat":"21.0","lon":"-101.0",
+              "geojson":{"type":"Polygon","coordinates":[[
+                [-101.5,20.5],[-100.5,20.5],[-100.5,21.5],
+                [-101.5,21.5],[-101.5,20.5]
+              ]]}
+            }]
+        """.trimIndent()
+        assertNotNull(PlaceOverlayClient.parseResponse(town("Guanajuato", "Mexico"),
+            record("Guanajuato", 6)))
+        assertNull(PlaceOverlayClient.parseResponse(town("Guanajuato", "Mexico"),
+            record("Guanajuato", 4)))
+        assertNull(PlaceOverlayClient.parseResponse(town("Guanajuato", "Mexico"),
+            record("Guanajuato", 8, "node")))
+    }
+
+    @Test fun worldwideOsmDoesNotAcceptPostalNeighborhoodAsMunicipalBoundary() {
+        val place = PlaceDiscovery(
+            PlaceKind.TOWN, "gb|england|sample", "Sample",
+            "England", "United Kingdom", 1L, 52.0, -1.0
+        )
+        val body = """
+            [{"name":"Sample", "category":"place", "type":"neighbourhood",
+              "addresstype":"locality","address":{"country":"United Kingdom"},
+              "geojson":{"type":"Polygon","coordinates":[[
+                [-1.5,51.5],[-0.5,51.5],[-0.5,52.5],
+                [-1.5,52.5],[-1.5,51.5]
+              ]]}}]
+        """.trimIndent()
+        assertNull(PlaceOverlayClient.parseResponse(place, body))
+    }
+
 }
