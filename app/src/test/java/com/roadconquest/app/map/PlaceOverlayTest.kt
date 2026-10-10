@@ -200,6 +200,13 @@ class PlaceOverlayTest {
             }]
         """.trimIndent()
         assertNull(PlaceOverlayClient.parseResponse(place, body))
+        // An outside candidate may cache the correctly named administrative
+        // boundary, but must NOT earn a visit until its own point is inside.
+        val trustedShape = PlaceOverlayClient.parseResponse(place, body, requireContainment = false)
+        assertNotNull(trustedShape)
+        assertFalse(PlaceGeometry.contains(
+            JSONObject(trustedShape!!.geometryJson), place.latitude, place.longitude
+        ))
     }
 
     @Test fun neighborhoodPolygonNeverQualifiesForTownReward() {
