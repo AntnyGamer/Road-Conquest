@@ -49,7 +49,7 @@ object PlaceResolver {
     }
 
     @Suppress("DEPRECATION")
-    fun resolve(
+    internal fun resolve(
         context: Context, candidate: PendingPlaceCandidate,
         municipalCache: VerifiedMunicipalCache? = null
     ): List<PlaceDiscovery>? {
