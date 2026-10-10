@@ -47,13 +47,14 @@ object PlaceResolver {
         }.distinctBy { it.key }.take(4)
         val client by lazy { PlaceOverlayClient() }
         for (town in townCandidates) {
-            val cached = PlaceOverlayCache.readVerifiedForDiscovery(context, town)?.takeIf {
-                PlaceGeometry.contains(JSONObject(it.geometryJson), candidate.latitude, candidate.longitude)
-            }
-            // A previously cached same-named town may refer to a different
-            // municipality. Retry the lookup for THIS GPS point in that case.
+            // Cache the authenticated municipal polygon by its town identity,
+            // even when the current GPS fix falls OUTSIDE it. A nearby postal
+            // town must not cause the same polygon to be fetched on every drive.
+            val cached = PlaceOverlayCache.readVerifiedForDiscovery(context, town)
             val boundary = if (cached != null) cached else try {
-                client.fetch(town)?.also { PlaceOverlayCache.write(context, town, it, verifiedForDiscovery = true) }
+                client.fetch(town, requireContainment = false)?.also {
+                    PlaceOverlayCache.write(context, town, it, verifiedForDiscovery = true)
+                }
             } catch (_: Exception) {
                 // Preserve the candidate for retry when the boundary provider is offline.
                 return null
