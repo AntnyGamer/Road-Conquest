@@ -174,7 +174,7 @@ internal object NewJerseyMunicipalBoundaries {
      * Nearest official polygon edge in meters, including hole boundaries. A point
      * inside the polygon has distance zero. No centroid or bounding-box guessing.
      */
-    private fun distanceToPolygonMeters(polygon: JSONObject, latitude: Double, longitude: Double): Double {
+    internal fun distanceToPolygonMeters(polygon: JSONObject, latitude: Double, longitude: Double): Double {
         if (!latitude.isFinite() || !longitude.isFinite()) return Double.POSITIVE_INFINITY
         if (PlaceGeometry.contains(polygon, latitude, longitude)) return 0.0
         val polygons = polygon.optJSONArray("coordinates") ?: return Double.POSITIVE_INFINITY
