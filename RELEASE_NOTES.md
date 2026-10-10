@@ -1,13 +1,13 @@
-# Road Conquest 1.0 Beta 37
+# Road Conquest 1.0 Beta 38
 
-- Fix town overlay fills darkening where municipal polygons intersect. Overlapping map shapes are clipped into mutually exclusive visible regions, with smaller boroughs taking precedence. Shared boundaries are dissolved into single thin lines instead of being drawn multiple times.
-- Correct town-boundary matching so Gloucester City and Gloucester Township (and other different municipal legal types) are NEVER treated as the same municipality. Accept equivalent labels such as Borough of Pine Hill / Pine Hill Borough.
-- Rebuild town overlay caches under stricter municipal-boundary matching. Older cached town outlines are replaced once; valid cached state and country outlines are preserved. This affects visuals, not historical visits.
-- Reject non-administrative places and, where available, U.S. county-level polygons mistakenly returned for municipality searches.
-- Add regression tests for adjacent and intersecting municipalities, duplicate areas, boroughs surrounded by townships, disjoint islands, polygon holes and different legal municipal names.
+- **Road visit counts:** Count separate GPS-supported visits across all stored segments of a connected road group. Earlier releases split an ordinary road into hundreds of separate OSRM segments, most with exactly one visit. The road details panel no longer forces every tap to show “About 1 time”; it now shows the estimated whole-road visit count explicitly.
+- **Municipality overlay correctness:** Reject inaccurate historic town outlines whose saved grid-center location is inconsistent with accurate raw GPS fixes around first or last visit. Unlike earlier visual clipping alone, every displayed town polygon must correspond to recorded location evidence or the initial exact zero-point.
+- **Municipal identity:** For New Jersey, restrict overlays to municipality-level administrative boundaries (OSM admin level 8, or municipality place rank when admin level is unavailable) and reject county/settlement substitutes. Choose between same-named townships using actual GPS containment, not merely text or nearest search centroid.
+- **Fresh town overlay cache:** Invalidate the old cached town shapes from Beta 37. State and country caches remain untouched. When a trustworthy municipality boundary cannot be confirmed, skip its outline instead of drawing the wrong one.
+- Add regression tests for true road-wide revisit counts, similarly named disconnected roads, inaccurate historical grid centers, later genuine town visits and duplicate Nominatim search results.
 
-**All saved roads, locations, visited towns, points, rewards, account data and purchases remain unchanged.** This update only corrects polygon display and verification. Previously earned town rewards are not retroactively removed. Town overlays may take time to reload once from the boundary provider after installation.
+**Data safety:** No change to roads, raw GPS history, road visit windows, town-visit records, points or purchases. The new calculations are read-only.
 
-Version code **63**, minimum Android 12. Install the signed Beta 37 APK over Beta 36 without uninstalling or clearing app data.
+**Note:** Whole-road visits are still estimates based on saved GPS and matching data. Missing GPS cannot be reconstructed as a verified extra trip. Some unconfirmed town outlines may remain hidden until usable boundary evidence is available.
 
-For Play Store, upload only the signed `RoadConquest-1.0-beta.37.aab` from the matching GitHub release after all Android checks pass.
+Version code **64**; Android 12+. Install the signed Beta 38 APK over your existing app without uninstalling or clearing data.
