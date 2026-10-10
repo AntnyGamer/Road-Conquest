@@ -36,8 +36,13 @@ internal object TownOverlayPartition {
         // Clipping these separately is what can manufacture artificial slivers
         // or gaps. Draw their official coordinates unchanged. Only independently
         // sourced OSM polygons need the legacy visual overlap-repair logic.
+        // Historical records may contain both "Pine Hill" and "Pine Hill
+        // Borough" as different keys. The state GIS returns the SAME official
+        // polygon for both; painting it twice makes an apparent dark overlap.
+        // Deduplicate by authoritative geometry, not just by history key.
+        // Different Washington Townships retain distinct geometries.
         val official = data.filter(PlaceOverlayData::authoritativeNjBoundary)
-            .distinctBy(PlaceOverlayData::key)
+            .distinctBy(PlaceOverlayData::geometryJson)
         val candidates = data.filterNot(PlaceOverlayData::authoritativeNjBoundary)
             .distinctBy(PlaceOverlayData::key).mapNotNull { overlay ->
             val geometry = runCatching {
