@@ -544,6 +544,71 @@ class TrackingRepositoryTest {
         assertEquals(2, repository.getRoadsInBounds(41.0, -73.0, 39.0, -75.0).single().timesDriven)
     }
 
+    @Test fun repeatedPassesWithDifferentMatcherGeometriesCountAtSamePhysicalRoad() {
+        // Every historic segment may have drive_count=1 even after four real
+        // traversals. The tapped point belongs to the SAME road group across
+        // four slightly different OSRM route geometries.
+        val passes = listOf(
+            "[[-74.001,40.00000],[-74.000,40.00000]]",
+            "[[-74.00098,40.00004],[-74.00002,40.00004]]",
+            "[[-74.00101,39.99997],[-73.99999,39.99997]]",
+            "[[-74.00099,40.00002],[-74.00001,40.00002]]"
+        )
+        passes.forEachIndexed { i, shape ->
+            repository.upsertRoads(listOf(MatchedRoad(
+                "Repeated Street", shape, 1_000_000L + i * 800_000L,
+                1_010_000L + i * 800_000L, 0.99
+            )))
+        }
+        val roads = repository.getRoadsInBounds(40.1, -73.9, 39.9, -74.1)
+        assertEquals(4, roads.size)
+        assertTrue(roads.all { it.timesDriven == 1 })
+        val tap = repository.findRoadNear(40.0, -74.0005, 20.0)!!
+        val estimate = repository.estimatedRoadPassesAt(tap, 40.0, -74.0005)
+        assertEquals(4, estimate.count)
+        assertEquals(1_000_000L, estimate.firstSeenAt)
+        assertEquals(3_410_000L, estimate.lastSeenAt)
+    }
+
+    @Test fun oneMatcherPassWithOverlappingFragmentsAndNearbyDifferentRoadCountsOnce() {
+        val shapes = listOf(
+            "[[-74.001,40.0],[-74.000,40.0]]",
+            "[[-74.00095,40.00002],[-74.00005,40.00002]]",
+            "[[-74.0009,39.99999],[-74.0001,39.99999]]"
+        )
+        shapes.forEachIndexed { index, shape ->
+            repository.upsertRoads(listOf(MatchedRoad(
+                "Main Street", shape, 1_000_000L + index * 4_000L,
+                1_005_000L + index * 4_000L, 0.99
+            )))
+        }
+        repository.upsertRoads(listOf(MatchedRoad(
+            "Cross Street", "[[-74.0005,39.999],[-74.0005,40.001]]",
+            2_000_000L, 2_010_000L, 0.99
+        )))
+        val road = repository.getRoadsInBounds(40.1,-73.9,39.9,-74.1)
+            .first { it.name == "Main Street" }
+        assertEquals(1, repository.estimatedRoadPassesAt(road,40.0,-74.0005).count)
+    }
+
+    @Test fun nearTapRecountDoesNotCountDistantPortionsOfTheSameLongRoad() {
+        repository.upsertRoads(listOf(
+            MatchedRoad("Long Road", "[[-74.001,40.0],[-74.000,40.0]]",
+                1_000_000L,1_010_000L,0.99),
+            MatchedRoad("Long Road", "[[-74.008,40.0],[-74.007,40.0]]",
+                2_000_000L,2_010_000L,0.99)
+        ))
+        val roads = repository.getRoadsInBounds(40.1,-73.9,39.9,-74.1)
+        val near = roads.first { it.minLongitude > -74.002 }
+        val far = roads.first { it.minLongitude < -74.005 }
+        // Simulate a connected route grouping from a longer drive.
+        repository.readableDatabase().execSQL(
+            "UPDATE roads SET road_group_id = (SELECT road_group_id FROM roads WHERE segment_id = ?) WHERE segment_id = ?",
+            arrayOf(near.segmentId, far.segmentId)
+        )
+        assertEquals(1, repository.estimatedRoadPassesAt(near,40.0,-74.0005).count)
+    }
+
     @Test fun tappingHistoricRoadEstimatesMergedPassesWithoutModifyingSavedVisits() {
         val geometry = "[[-74,40],[-74.001,40]]"
         repository.upsertRoads(listOf(MatchedRoad("Legacy St", geometry, 1_000_000, 1_010_000, 0.99)))
