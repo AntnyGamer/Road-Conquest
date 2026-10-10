@@ -256,6 +256,7 @@ class AppDatabase private constructor(context: Context) :
             db.execSQL("UPDATE roads SET drive_count_exact = 0")
         }
         if (oldVersion < 13 && newVersion >= 13) {
+            pruneHistoricalFogDrift(db)
             // Once-only correction for candidates collected by old versions from
             // stationary GPS wander and grid-center guesses. Keep the zero-point
             // baseline; preserve other candidates only when a timestamped accurate
@@ -273,6 +274,44 @@ class AppDatabase private constructor(context: Context) :
                        AND ABS(t.longitude - place_candidates.longitude) < 0.00036
                    )"""
             )
+        }
+    }
+
+    /**
+     * Older builds unlocked mile tiles from every seemingly accurate fix, even
+     * while parked. Keep historical fog only where actual persisted driving GPS
+     * corroborates the same tile. Roads and raw driving history are untouched.
+     */
+    private fun pruneHistoricalFogDrift(db: SQLiteDatabase) {
+        val oldCells = HashSet<Long>()
+        db.rawQuery("SELECT grid_row, grid_col FROM explored_grid", null).use { cursor ->
+            while (cursor.moveToNext()) {
+                val key = (cursor.getLong(0) shl 32) or (cursor.getLong(1) and 0xffff_ffffL)
+                oldCells.add(key)
+            }
+        }
+        if (oldCells.isEmpty()) return
+        db.rawQuery(
+            "SELECT latitude, longitude FROM track_points WHERE accuracy_m BETWEEN 0.01 AND 25",
+            null
+        ).use { cursor ->
+            while (cursor.moveToNext() && oldCells.isNotEmpty()) {
+                val tile = FogGrid.cell(cursor.getDouble(0), cursor.getDouble(1)) ?: continue
+                oldCells.remove(tile.key)
+            }
+        }
+        val delete = db.compileStatement(
+            "DELETE FROM explored_grid WHERE grid_row = ? AND grid_col = ?"
+        )
+        try {
+            for (key in oldCells) {
+                delete.bindLong(1, key shr 32)
+                delete.bindLong(2, key.toInt().toLong())
+                delete.executeUpdateDelete()
+                delete.clearBindings()
+            }
+        } finally {
+            delete.close()
         }
     }
 
