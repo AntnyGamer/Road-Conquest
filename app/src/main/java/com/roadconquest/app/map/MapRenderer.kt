@@ -214,7 +214,8 @@ class MapRenderer(
         val kind = overlayMode.kind ?: return
         val cacheGeneration = PlaceOverlayCache.generation()
         overlayExecutor.execute {
-            val places = runCatching { ProgressionRepository(context).visitedPlaces(kind) }
+            val progression = ProgressionRepository(context)
+            val places = runCatching { progression.visitedPlaces(kind) }
                 .getOrElse {
                     Log.e("RoadConquest", "Could not load discovered places for overlay", it)
                     return@execute
@@ -232,7 +233,12 @@ class MapRenderer(
             for (place in missing) {
                 if (destroyed || generation != overlayGeneration ||
                     cacheGeneration != PlaceOverlayCache.generation()) return@execute
-                val result = runCatching { overlayClient.fetch(place) }
+                val result = runCatching {
+                    val evidence = if (NjMunicipalityClient.applies(place)) {
+                        progression.gpsEvidenceNearFirstVisit(place)
+                    } else emptyList()
+                    overlayClient.fetch(place, verifiedLocations = evidence)
+                }
                 if (result.isFailure) {
                     Log.w("RoadConquest", "Could not load place boundary", result.exceptionOrNull())
                     continue
