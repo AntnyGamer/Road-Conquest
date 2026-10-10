@@ -62,6 +62,15 @@ internal object UnitedStatesMunicipalBoundaries {
                 "united states", "united states of america", "usa", "us"
             ) && stateFips.containsKey(place.parentName.trim().lowercase(Locale.ROOT))
 
+    /** State lookup shared by all U.S. municipality discovery and rendering. */
+    internal fun stateCode(countryName: String, stateName: String): String? {
+        if (countryName.trim().lowercase(Locale.ROOT) !in setOf(
+                "united states", "united states of america", "usa", "us"
+            )
+        ) return null
+        return stateFips[stateName.trim().lowercase(Locale.ROOT)]
+    }
+
     /**
      * Layer selection is conservative. A township should not be replaced by
      * an overlapping incorporated city. When a city has no county subdivision
