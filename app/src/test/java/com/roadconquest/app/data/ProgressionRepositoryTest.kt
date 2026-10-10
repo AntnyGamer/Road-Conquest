@@ -84,6 +84,40 @@ class ProgressionRepositoryTest {
         assertEquals(1, progression.visitedPlaces(PlaceKind.TOWN).size)
     }
 
+    @Test fun historicTownOverlayUsesRealTrackPointsNotGridCenter() {
+        val repo = ProgressionRepository(context)
+        val db = AppDatabase.get(context).writableDatabase
+        val time = 75_000_000L
+        db.execSQL("DELETE FROM track_points")
+        db.execSQL(
+            """INSERT INTO track_points
+               (latitude, longitude, accuracy_m, speed_mps, bearing_deg, timestamp_ms)
+               VALUES (39.805, -75.105, 4, 10, 90, ?)""",
+            arrayOf(time)
+        )
+        db.execSQL(
+            """INSERT INTO track_points
+               (latitude, longitude, accuracy_m, speed_mps, bearing_deg, timestamp_ms)
+               VALUES (39.806, -75.106, 4, 10, 90, ?)""",
+            arrayOf(time + 10_000L)
+        )
+        val historic = PlaceDiscovery(
+            PlaceKind.TOWN, "us|new jersey|gloucester city", "Gloucester City",
+            "New Jersey", "United States", time,
+            39.800, -75.100 // Old cell center roughly 700m away.
+        )
+        val anchors = repo.gpsEvidenceNearFirstVisit(historic)
+        assertEquals(2, anchors.size)
+        assertEquals(39.805, anchors[0].first, 0.000001)
+        assertEquals(-75.105, anchors[0].second, 0.000001)
+        assertFalse(anchors.contains(historic.latitude to historic.longitude))
+        // No raw evidence before tracking began: baseline can use saved origin.
+        assertEquals(
+            listOf(historic.latitude to historic.longitude),
+            repo.gpsEvidenceNearFirstVisit(historic.copy(visitedAt = 200_000_000L))
+        )
+    }
+
     @Test fun newPlacesPayOnceAndPurchasesCannotOverspend() {
         val progression = ProgressionRepository(context)
         val town = PlaceDiscovery(
