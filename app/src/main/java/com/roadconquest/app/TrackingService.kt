@@ -286,6 +286,63 @@ class TrackingService : Service(), LocationListener {
         if (elapsedFromPrevious in 1..MAX_MOTION_SAMPLE_AGE_MS &&
             distanceFromPrevious / (elapsedFromPrevious / 1_000f) > MAX_PLAUSIBLE_SPEED_MPS
         ) return
+        val explorationMotionConfirmed = isReliableExplorationMovement(
+            location, previous, elapsedFromPrevious, distanceFromPrevious
+        )
+        // Fog and 50-m exploration follow corroborated walking OR driving movement.
+        // A single stationary GPS fix does not reveal a square or count as a visit.
+        if (explorationMotionConfirmed) {
+            FogGrid.cell(location.latitude, location.longitude)?.let { cell ->
+                if (exploredMileCellsThisSession.size >= MAX_EXPLORED_CELL_CACHE) {
+                    exploredMileCellsThisSession.clear()
+                }
+                if (exploredMileCellsThisSession.add(cell.key)) {
+                    val accepted = Location(location)
+                    storageExecutor.execute {
+                        try {
+                            if (repository.recordExploredGridCell(accepted)) {
+                                sendUiBroadcast(ACTION_EXPLORATION_UPDATED)
+                            }
+                        } catch (error: Exception) {
+                            exploredMileCellsThisSession.remove(cell.key)
+                            Log.e("RoadConquest", "Could not persist explored mile cell", error)
+                        }
+                    }
+                }
+            }
+        }
+        if (explorationMotionConfirmed &&
+            (lastExplored?.distanceTo(location) ?: Float.POSITIVE_INFINITY) >= 20f
+        ) {
+            // Keep the original 20 m acceptance gate exactly: the optimization only suppresses
+            // duplicate database work after a location would already have been processed.
+            val visited = Location(location)
+            lastExplored = visited
+            // Fine-grained samples also capture genuine walking, without adding road miles.
+            val exploredCell = TrackingRepository.exploredCellKey(visited.latitude, visited.longitude)
+            if (exploredCell != null && exploredCellsThisSession.size >= MAX_EXPLORED_CELL_CACHE) {
+                exploredCellsThisSession.clear()
+            }
+            val saveExplored = exploredCell != null && exploredCellsThisSession.add(exploredCell)
+            if (saveExplored) {
+                storageExecutor.execute {
+                    // Persist confirmed exploration without affecting road matching.
+                    if (saveExplored && exploredCell != null) {
+                        try {
+                            if (repository.recordExploredPlace(visited, exploredCell)) {
+                                sendUiBroadcast(ACTION_EXPLORATION_UPDATED)
+                            }
+                        } catch (error: Exception) {
+                            exploredCellsThisSession.remove(exploredCell)
+                            Log.e("RoadConquest", "Could not save explored place", error)
+                        }
+                    }
+
+                }
+            }
+        }
+        lastAccepted = accepted
+
         // Do not let a coarse, duplicate, or out-of-order fix poison the next driving-speed
         // comparison. It may still update the live car below when current, but only a newer
         // road-quality fix becomes the motion baseline.
@@ -319,59 +376,6 @@ class TrackingService : Service(), LocationListener {
         ) previous else null
 
         val accepted = requireNotNull(lastObserved)
-        // Fog and 50-m exploration represent confirmed drives, not stationary GPS
-        // wander. This remains independent of road matching and route interpolation.
-        if (!location.isMock && location.hasAccuracy() && location.accuracy in 0.01f..25f) {
-            FogGrid.cell(location.latitude, location.longitude)?.let { cell ->
-                if (exploredMileCellsThisSession.size >= MAX_EXPLORED_CELL_CACHE) {
-                    exploredMileCellsThisSession.clear()
-                }
-                if (exploredMileCellsThisSession.add(cell.key)) {
-                    val accepted = Location(location)
-                    storageExecutor.execute {
-                        try {
-                            if (repository.recordExploredGridCell(accepted)) {
-                                sendUiBroadcast(ACTION_EXPLORATION_UPDATED)
-                            }
-                        } catch (error: Exception) {
-                            exploredMileCellsThisSession.remove(cell.key)
-                            Log.e("RoadConquest", "Could not persist explored mile cell", error)
-                        }
-                    }
-                }
-            }
-        }
-        if (!location.isMock && location.hasAccuracy() && location.accuracy in 0.01f..25f &&
-            (lastExplored?.distanceTo(location) ?: Float.POSITIVE_INFINITY) >= 20f
-        ) {
-            // Keep the original 20 m acceptance gate exactly: the optimization only suppresses
-            // duplicate database work after a location would already have been processed.
-            val visited = Location(location)
-            lastExplored = visited
-            // Fine-grained exploration samples are taken from validated driving fixes.
-            val exploredCell = TrackingRepository.exploredCellKey(visited.latitude, visited.longitude)
-            if (exploredCell != null && exploredCellsThisSession.size >= MAX_EXPLORED_CELL_CACHE) {
-                exploredCellsThisSession.clear()
-            }
-            val saveExplored = exploredCell != null && exploredCellsThisSession.add(exploredCell)
-            if (saveExplored) {
-                storageExecutor.execute {
-                    // Persist confirmed exploration without affecting road matching.
-                    if (saveExplored && exploredCell != null) {
-                        try {
-                            if (repository.recordExploredPlace(visited, exploredCell)) {
-                                sendUiBroadcast(ACTION_EXPLORATION_UPDATED)
-                            }
-                        } catch (error: Exception) {
-                            exploredCellsThisSession.remove(exploredCell)
-                            Log.e("RoadConquest", "Could not save explored place", error)
-                        }
-                    }
-
-                }
-            }
-        }
-        lastAccepted = accepted
         val placeCandidate = if (!accepted.isMock && accepted.hasAccuracy() &&
             accepted.accuracy in 0.01f..25f &&
             (lastPlaceCandidate?.distanceTo(accepted) ?: Float.POSITIVE_INFINITY) >= PLACE_CANDIDATE_MIN_DISTANCE_M
@@ -561,6 +565,35 @@ class TrackingService : Service(), LocationListener {
     private fun sendUiBroadcast(action: String) {
         if (!MainActivity.trackingReceiverRegistered) return
         sendBroadcast(Intent(action).setPackage(packageName))
+    }
+
+    /**
+     * Exploration may be earned by genuine movement on foot as well as driving,
+     * but never by a single first fix or location drift while standing still.
+     * Leave the stricter driving acceptance and road-matching rules unchanged.
+     */
+    private fun isReliableExplorationMovement(
+        location: Location,
+        previous: Location?,
+        ageMs: Long,
+        distanceMeters: Float
+    ): Boolean {
+        if (previous == null || location.isMock || previous.isMock ||
+            !location.hasAccuracy() || !previous.hasAccuracy() ||
+            !location.accuracy.isFinite() || !previous.accuracy.isFinite() ||
+            location.accuracy !in 0.01f..25f || previous.accuracy !in 0.01f..25f ||
+            ageMs !in 1..MAX_MOTION_SAMPLE_AGE_MS || !distanceMeters.isFinite()
+        ) return false
+        val speedMetersPerSecond = distanceMeters / (ageMs / 1_000f)
+        if (speedMetersPerSecond !in 0.5f..MAX_PLAUSIBLE_SPEED_MPS) return false
+        // Require displacement greater than the combined horizontal GPS
+        // uncertainty. GPS scatter across a mile-cell edge cannot unlock it.
+        if (distanceMeters <= maxOf(8f, previous.accuracy + location.accuracy)) return false
+        val measuredSpeed = maxOf(
+            LocationProviders.reliableMeasuredSpeed(previous),
+            LocationProviders.reliableMeasuredSpeed(location)
+        )
+        return measuredSpeed >= 0.5f || speedMetersPerSecond >= 1.5f
     }
 
     private fun isUsableDrivingLocation(location: Location, previous: Location?): Boolean {
