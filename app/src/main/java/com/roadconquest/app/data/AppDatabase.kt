@@ -216,7 +216,7 @@ class AppDatabase private constructor(context: Context) :
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        if (oldVersion !in 10..11 || newVersion !in 11..12 || newVersion <= oldVersion) {
+        if (oldVersion !in 10..12 || newVersion !in 11..13 || newVersion <= oldVersion) {
             error("Database upgrade $oldVersion -> $newVersion is unsupported")
         }
         if (oldVersion == 10) {
@@ -250,16 +250,35 @@ class AppDatabase private constructor(context: Context) :
                 insert.close()
             }
         }
-        if (newVersion >= 12) {
+        if (oldVersion < 12 && newVersion >= 12) {
             // Older releases marked inferred traversal counts as mathematically exact.
             // Preserve every visit and road, but display historic counts as estimates.
             db.execSQL("UPDATE roads SET drive_count_exact = 0")
+        }
+        if (oldVersion < 13 && newVersion >= 13) {
+            // Once-only correction for candidates collected by old versions from
+            // stationary GPS wander and grid-center guesses. Keep the zero-point
+            // baseline; preserve other candidates only when a timestamped accurate
+            // moving GPS track sample supports the same physical position.
+            db.execSQL(
+                """DELETE FROM place_candidates
+                   WHERE NOT (cell_x = -9223372036854775808 AND cell_y = -9223372036854775808)
+                   AND NOT EXISTS (
+                     SELECT 1 FROM track_points t
+                     WHERE t.timestamp_ms BETWEEN place_candidates.first_seen_at - 10000
+                                               AND place_candidates.first_seen_at + 10000
+                       AND t.accuracy_m BETWEEN 0.01 AND 25
+                       AND t.speed_mps >= 2.0
+                       AND ABS(t.latitude - place_candidates.latitude) < 0.00027
+                       AND ABS(t.longitude - place_candidates.longitude) < 0.00036
+                   )"""
+            )
         }
     }
 
     companion object {
         private const val DB_NAME = "roadconquest.db"
-        private const val DB_VERSION = 12
+        private const val DB_VERSION = 13
 
         @Volatile
         private var instance: AppDatabase? = null
