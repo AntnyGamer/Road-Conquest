@@ -46,10 +46,22 @@ internal object NewJerseyMunicipalBoundaries {
         require(applies(place))
         val base = municipalityIdentity(place.displayName).first
         if (base.length < 2 || base.length > 70) return null
-        val safe = base.replace("'", "''")
-        val where = "MUN LIKE '$safe%' OR NAME LIKE '$safe%'"
+        // Spatially retrieve ALL nearby official municipality polygons, then
+        // select only the correctly named and typed one. A name-only SQL query
+        // can miss boundaries when the GIS database uses different capitalization.
+        val latitudePad = 2_500.0 / METERS_PER_DEGREE
+        val longitudePad = latitudePad / cos(Math.toRadians(place.latitude))
+            .coerceAtLeast(0.05)
+        val envelope = listOf(
+            place.longitude - longitudePad, place.latitude - latitudePad,
+            place.longitude + longitudePad, place.latitude + latitudePad
+        ).joinToString(",")
         val url = Uri.parse(QUERY_URL).buildUpon()
-            .appendQueryParameter("where", where)
+            .appendQueryParameter("where", "1=1")
+            .appendQueryParameter("geometry", envelope)
+            .appendQueryParameter("geometryType", "esriGeometryEnvelope")
+            .appendQueryParameter("inSR", "4326")
+            .appendQueryParameter("spatialRel", "esriSpatialRelIntersects")
             .appendQueryParameter("outFields", "NAME,MUN,MUN_LABEL,MUN_TYPE,COUNTY,SQ_MILES,POP2020")
             .appendQueryParameter("returnGeometry", "true")
             .appendQueryParameter("outSR", "4326")
