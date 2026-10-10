@@ -1,0 +1,108 @@
+package com.roadconquest.app.map
+
+import com.roadconquest.app.data.PlaceDiscovery
+import com.roadconquest.app.data.PlaceKind
+import org.json.JSONObject
+import org.junit.Assert.*
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [31], manifest = Config.NONE)
+class UnitedStatesMunicipalBoundariesTest {
+    private fun place(name: String, state: String, lat: Double, lon: Double) =
+        PlaceDiscovery(
+            PlaceKind.TOWN, "us|${state.lowercase()}|${name.lowercase()}",
+            name, state, "United States", 1_000L, lat, lon
+        )
+
+    private fun box(west: Double, south: Double, east: Double, north: Double) =
+        """{"type":"Polygon","coordinates":[[
+            [$west,$south],[$east,$south],[$east,$north],[$west,$north],[$west,$south]
+        ]]}"""
+
+    private fun item(name: String, basename: String, fips: String, geo: String) =
+        """{"type":"Feature","properties":{
+            "NAME":"$name","BASENAME":"$basename","STATE":"$fips",
+            "LSADC":"25","AREALAND":1000000,"AREAWATER":10000
+        },"geometry":$geo}"""
+
+    private fun response(vararg features: String) =
+        """{"type":"FeatureCollection","features":[${features.joinToString(",")}]}"""
+
+    @Test fun pennsylvaniaCityIsRetrievedFromOfficialIncorporatedPlaces() {
+        val p = place("Philadelphia City", "Pennsylvania", 39.95, -75.15)
+        assertTrue(UnitedStatesMunicipalBoundaries.applies(p))
+        val data = UnitedStatesMunicipalBoundaries.parseResponse(
+            p, response(
+                item("Philadelphia city", "Philadelphia", "42",
+                    box(-75.20,39.90,-75.10,40.00))
+            ), 4
+        )
+        assertNotNull(data)
+        assertTrue(PlaceGeometry.contains(
+            JSONObject(data!!.geometryJson), 39.95, -75.15))
+        assertEquals(1.01, data.areaSquareKilometers, 0.00001)
+    }
+
+    @Test fun cannotBorrowMunicipalityFromAnotherState() {
+        val p = place("Springfield City", "Pennsylvania", 39.95, -75.15)
+        assertNull(UnitedStatesMunicipalBoundaries.parseResponse(
+            p, response(
+                item("Springfield city", "Springfield", "25",
+                    box(-75.20,39.90,-75.10,40.00))
+            ), 4
+        ))
+    }
+
+    @Test fun townshipAndIncorporatedCityMustNotBeInterchanged() {
+        val p = place("Washington Township", "Pennsylvania", 40.00, -75.10)
+        val township = item("Washington township", "Washington", "42",
+            box(-75.20,39.90,-75.00,40.10))
+        assertNull(UnitedStatesMunicipalBoundaries.parseResponse(
+            p, response(township), 4
+        ))
+        assertNotNull(UnitedStatesMunicipalBoundaries.parseResponse(
+            p, response(township), 1
+        ))
+        val city = place("Washington City", "Pennsylvania", 40.00, -75.10)
+        assertNull(UnitedStatesMunicipalBoundaries.parseResponse(
+            city, response(township), 1
+        ))
+        assertNull(UnitedStatesMunicipalBoundaries.parseResponse(
+            city, response(township), 4
+        ))
+    }
+
+    @Test fun duplicateNamesChooseClosestGeographicMunicipality() {
+        val p = place("Washington Township", "Pennsylvania", 40.0, -75.10)
+        val close = item("Washington township", "Washington", "42",
+            box(-75.2,39.90,-75.00,40.1))
+        val far = item("Washington township", "Washington", "42",
+            box(-79.0,40.8,-78.8,41.0))
+        val result = UnitedStatesMunicipalBoundaries.parseResponse(
+            p, response(far, close), 1
+        )
+        assertNotNull(result)
+        assertTrue(PlaceGeometry.contains(
+            JSONObject(result!!.geometryJson), 40.00,-75.10))
+    }
+
+    @Test fun sourceDoesNotHandleNewJerseyOrForeignMunicipalities() {
+        assertFalse(UnitedStatesMunicipalBoundaries.applies(
+            place("Camden City", "New Jersey", 39.95,-75.05)
+        ))
+        assertFalse(UnitedStatesMunicipalBoundaries.applies(
+            place("London", "England", 51.50,-0.10)
+                .copy(countryName = "United Kingdom")
+        ))
+        assertTrue(UnitedStatesMunicipalBoundaries.isUnitedStatesKey(
+            "us|pennsylvania|philadelphia city"
+        ))
+        assertFalse(UnitedStatesMunicipalBoundaries.isUnitedStatesKey(
+            "gb|england|london"
+        ))
+    }
+}
