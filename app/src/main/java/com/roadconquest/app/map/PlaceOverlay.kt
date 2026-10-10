@@ -97,11 +97,22 @@ object PlaceOverlayCache {
         }
     }
 
+    /** Only polygons fetched using the strict municipal verification rules can earn town points. */
+    fun readVerifiedForDiscovery(context: Context, place: PlaceDiscovery): PlaceOverlayData? {
+        if (place.kind != PlaceKind.TOWN) return null
+        val cached = read(context, place).data ?: return null
+        val verified = runCatching {
+            JSONObject(file(context, place).readText()).optBoolean("discovery_verified", false)
+        }.getOrDefault(false)
+        return cached.takeIf { verified }
+    }
+
     fun write(
         context: Context,
         place: PlaceDiscovery,
         data: PlaceOverlayData?,
-        expectedGeneration: Long? = null
+        expectedGeneration: Long? = null,
+        verifiedForDiscovery: Boolean = false
     ): Boolean = synchronized(mutationLock) {
         if (expectedGeneration != null && generation.get() != expectedGeneration) return@synchronized false
         val directory = File(context.applicationContext.filesDir, DIRECTORY)
@@ -110,6 +121,9 @@ object PlaceOverlayCache {
             .put("found", data != null)
             .put("fetched_at", System.currentTimeMillis())
         if (data != null) {
+            if (verifiedForDiscovery && place.kind == PlaceKind.TOWN) {
+                json.put("discovery_verified", true)
+            }
             json.put("name", data.name)
                 .put("kind", data.kind.name)
                 .put("population", data.population ?: JSONObject.NULL)
