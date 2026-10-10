@@ -61,10 +61,7 @@ object PlaceOverlayCache {
     // outlines need the stricter verification rules.
     private const val DIRECTORY = "place-overlays-v3"
     private const val TOWN_DIRECTORY = "place-overlays-v5-world-admin"
-    // Keep official NJ town geometry in its OWN cache. The discovery resolver
-    // stores Nominatim polygons separately and must never overwrite our single
-    // statewide municipal topology with unrelated OpenStreetMap search results.
-    private const val NJ_OFFICIAL_DIRECTORY = "place-overlays-njogis-v1"
+    // All states use one Census cache, independent of the worldwide OSM cache.
     private const val US_OFFICIAL_DIRECTORY = "place-overlays-us-census-v1"
     private const val NEGATIVE_CACHE_MS = 15L * 60L * 1000L
     private const val HEX_DIGITS = "0123456789abcdef"
@@ -76,31 +73,7 @@ object PlaceOverlayCache {
     fun read(context: Context, place: PlaceDiscovery): PlaceOverlayCacheResult =
         readCacheFile(file(context, place), place)
 
-    /** NJOGIS polygons never share cache files with Nominatim discoveries. */
-    fun readOfficialNj(context: Context, place: PlaceDiscovery): PlaceOverlayCacheResult =
-        readCacheFile(officialNjFile(context, place), place)
-
-    fun writeOfficialNj(
-        context: Context, place: PlaceDiscovery, data: PlaceOverlayData?,
-        expectedGeneration: Long? = null
-    ): Boolean = synchronized(mutationLock) {
-        if (expectedGeneration != null && expectedGeneration != generation.get()) return@synchronized false
-        val target = officialNjFile(context, place)
-        val directory = target.parentFile ?: return@synchronized false
-        if (!directory.exists() && !directory.mkdirs()) return@synchronized false
-        val json = JSONObject()
-            .put("found", data != null)
-            .put("fetched_at", System.currentTimeMillis())
-        if (data != null) {
-            json.put("name", data.name).put("kind", data.kind.name)
-                .put("population", data.population ?: JSONObject.NULL)
-                .put("area_sq_km", data.areaSquareKilometers)
-                .put("geometry", JSONObject(data.geometryJson))
-        }
-        runCatching { target.writeText(json.toString()) }.isSuccess
-    }
-
-    /** Federal Census TIGERweb boundaries are separate from NJOGIS and OSM. */
+    /** Census municipalities for all 50 states are cached separately from OSM. */
     fun readOfficialUs(context: Context, place: PlaceDiscovery): PlaceOverlayCacheResult =
         readCacheFile(officialUsFile(context, place), place)
 
@@ -127,11 +100,6 @@ object PlaceOverlayCache {
     private fun officialUsFile(context: Context, place: PlaceDiscovery): File {
         val path = file(context, place)
         return File(File(context.applicationContext.filesDir, US_OFFICIAL_DIRECTORY), path.name)
-    }
-
-    private fun officialNjFile(context: Context, place: PlaceDiscovery): File {
-        val path = file(context, place)
-        return File(File(context.applicationContext.filesDir, NJ_OFFICIAL_DIRECTORY), path.name)
     }
 
     private fun readCacheFile(file: File, place: PlaceDiscovery): PlaceOverlayCacheResult {
@@ -200,7 +168,6 @@ object PlaceOverlayCache {
         generation.incrementAndGet()
         File(context.applicationContext.filesDir, DIRECTORY).deleteRecursively()
         File(context.applicationContext.filesDir, TOWN_DIRECTORY).deleteRecursively()
-        File(context.applicationContext.filesDir, NJ_OFFICIAL_DIRECTORY).deleteRecursively()
         File(context.applicationContext.filesDir, US_OFFICIAL_DIRECTORY).deleteRecursively()
         Unit
     }
