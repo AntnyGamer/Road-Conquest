@@ -620,6 +620,54 @@ class ProgressionRepository(context: Context) {
     }
 
     /**
+     * Historic town discoveries in early builds recorded a rounded grid-cell
+     * center, sometimes 600+ meters from the GPS position actually visited.
+     * Return REAL stored accurate driving fixes near the original visit time so
+     * a municipality overlay can be checked against genuine track evidence.
+     * This is read-only. Do not rewrite historic visits, points or timestamps.
+     */
+    fun gpsEvidenceNearFirstVisit(place: PlaceDiscovery, limit: Int = 8): List<Pair<Double, Double>> {
+        require(limit in 1..32)
+        val result = ArrayList<Pair<Double, Double>>(limit)
+        val start = (place.visitedAt - 120_000L).coerceAtLeast(0L)
+        val end = (place.visitedAt + 120_000L).coerceAtLeast(start)
+        val samples = ArrayList<Triple<Double, Double, Long>>()
+        dbHelper.readableDatabase.rawQuery(
+            """SELECT latitude, longitude, timestamp_ms FROM track_points
+               WHERE timestamp_ms BETWEEN ? AND ?
+                 AND accuracy_m BETWEEN 0.01 AND 25
+               ORDER BY ABS(timestamp_ms - ?)
+               LIMIT 160""",
+            arrayOf(start.toString(), end.toString(), place.visitedAt.toString())
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                val latitude = cursor.getDouble(0)
+                val longitude = cursor.getDouble(1)
+                val distance = FloatArray(1)
+                Location.distanceBetween(
+                    place.latitude, place.longitude, latitude, longitude, distance
+                )
+                if (distance[0] <= 2_500f) {
+                    samples += Triple(latitude, longitude, cursor.getLong(2))
+                }
+            }
+        }
+        for ((lat, lon, _) in samples) {
+            val disjoint = result.none { (prevLat, prevLon) ->
+                val distance = FloatArray(1)
+                Location.distanceBetween(prevLat, prevLon, lat, lon, distance)
+                distance[0] < 65f
+            }
+            if (disjoint) result += lat to lon
+            if (result.size >= limit) break
+        }
+        // A baseline starting location can precede the first persisted drive.
+        // Only then use the original position without raw GPS corroboration.
+        if (result.isEmpty()) result += place.latitude to place.longitude
+        return result
+    }
+
+    /**
      * First visit is stored with the place; latest resolved GPS visit is recorded
      * separately in existing counters to avoid a schema change or losing old data.
      * Legacy discoveries display the first timestamp for both values until revisited.
