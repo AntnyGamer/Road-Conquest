@@ -47,7 +47,11 @@ object PlaceResolver {
         }.distinctBy { it.key }.take(4)
         val client by lazy { PlaceOverlayClient() }
         for (town in townCandidates) {
-            val cached = PlaceOverlayCache.read(context, town).data
+            val cached = PlaceOverlayCache.read(context, town).data?.takeIf {
+                PlaceGeometry.contains(JSONObject(it.geometryJson), candidate.latitude, candidate.longitude)
+            }
+            // A previously cached same-named town may refer to a different
+            // municipality. Retry the lookup for THIS GPS point in that case.
             val boundary = if (cached != null) cached else try {
                 client.fetch(town)?.also { PlaceOverlayCache.write(context, town, it) }
             } catch (_: Exception) {
