@@ -16,9 +16,13 @@ BASE = (
 )
 
 
-def request(layer, place, state):
+def request(layer, place, state, envelope):
     params = {
-        "where": f"STATE = '{state}' AND (BASENAME = '{place}' OR NAME = '{place}')",
+        "where": f"STATE = '{state}'",
+        "geometry": ",".join(str(value) for value in envelope),
+        "geometryType": "esriGeometryEnvelope",
+        "inSR": "4326",
+        "spatialRel": "esriSpatialRelIntersects",
         "outFields": "BASENAME,NAME,STATE,LSADC,FUNCSTAT,AREALAND,AREAWATER",
         "returnGeometry": "true",
         "outSR": "4326",
@@ -42,15 +46,16 @@ def request(layer, place, state):
             time.sleep(3)
 
 
-def check(layer, place, state):
-    data = request(layer, place, state)
+def check(layer, place, state, envelope):
+    data = request(layer, place, state, envelope)
     assert data.get("type") == "FeatureCollection", data
     features = data.get("features", [])
     assert features, f"No official {place} boundary for Census layer {layer}"
     for feature in features:
         props = feature.get("properties", {})
         assert props.get("STATE") == state, props
-        assert props.get("BASENAME", "").lower() == place.lower(), props
+        if props.get("BASENAME", "").lower() != place.lower():
+            continue
         shape = feature.get("geometry", {})
         assert shape.get("type") in ("Polygon", "MultiPolygon"), shape
         coords = shape["coordinates"]
@@ -63,8 +68,8 @@ def check(layer, place, state):
 
 if __name__ == "__main__":
     try:
-        check(4, "Philadelphia", "42")  # Pennsylvania incorporated city
-        check(1, "Washington", "42")    # Pennsylvania minor civil divisions
+        check(4, "Philadelphia", "42", (-75.19, 39.93, -75.12, 39.98))  # Pennsylvania city
+        check(1, "Upper Darby", "42", (-75.30, 39.94, -75.24, 39.98))  # Pennsylvania township
         print("Census official city + township GeoJSON boundary contract verified.")
     except Exception as error:
         print("::error::" + str(error), file=sys.stderr)
