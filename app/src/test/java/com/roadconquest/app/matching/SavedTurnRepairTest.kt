@@ -2,7 +2,7 @@ package com.roadconquest.app.matching
 
 import android.content.Context
 import android.location.Location
-import androidx.test.core.app.ApplicationProvider
+import org.robolectric.RuntimeEnvironment
 import com.roadconquest.app.data.MatchedRoad
 import com.roadconquest.app.data.TrackPoint
 import com.roadconquest.app.data.TrackingRepository
@@ -19,7 +19,7 @@ class SavedTurnRepairTest {
     private lateinit var repository: TrackingRepository
 
     @Before fun prepare() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
+        val context: Context = RuntimeEnvironment.getApplication()
         repository = TrackingRepository(context)
         repository.readableDatabase().execSQL("DELETE FROM track_points")
         repository.readableDatabase().execSQL("DELETE FROM road_visits")
