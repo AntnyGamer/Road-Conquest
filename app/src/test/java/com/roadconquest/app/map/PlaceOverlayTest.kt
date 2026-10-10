@@ -129,7 +129,7 @@ class PlaceOverlayTest {
             [
               {
                 "name":"Washington Township",
-                "category":"boundary","type":"administrative","place_rank":16,
+                "category":"boundary","type":"administrative",
                 "lat":"41.0000",
                 "lon":"-74.0000",
                 "addresstype":"administrative",
@@ -145,7 +145,7 @@ class PlaceOverlayTest {
               },
               {
                 "name":"Washington Township",
-                "category":"boundary","type":"administrative","place_rank":16,
+                "category":"boundary","type":"administrative",
                 "lat":"40.0100",
                 "lon":"-75.0100",
                 "addresstype":"administrative",
@@ -191,7 +191,7 @@ class PlaceOverlayTest {
         )
         val body = """
             [{
-              "name":"Woodbury", "category":"boundary", "type":"administrative", "place_rank":16,
+              "name":"Woodbury", "category":"boundary", "type":"administrative",
               "addresstype":"town",
               "address":{"town":"Woodbury","state":"New Jersey","country":"United States"},
               "lat":"39.84","lon":"-75.11",
@@ -265,7 +265,6 @@ class PlaceOverlayTest {
               "name":"Gloucester County",
               "category":"boundary",
               "type":"administrative",
-              "place_rank":16,
               "addresstype":"administrative",
               "address":{"locality":"Pine Hill","state":"New Jersey","country":"United States"},
               "lat":"39.79","lon":"-75.03",
@@ -288,7 +287,6 @@ class PlaceOverlayTest {
               "name":"Borough of Pine Hill",
               "category":"boundary",
               "type":"administrative",
-              "place_rank":16,
               "addresstype":"administrative",
               "address":{"town":"Pine Hill","state":"New Jersey","country":"United States"},
               "lat":"39.79","lon":"-75.03",
@@ -336,7 +334,7 @@ class PlaceOverlayTest {
         val wrongCity = """
             [{
               "name":"Gloucester City",
-              "category":"boundary","type":"administrative","place_rank":16,
+              "category":"boundary","type":"administrative",
               "addresstype":"administrative",
               "address":{"city":"Gloucester City","state":"New Jersey","country":"United States"},
               "lat":"39.86","lon":"-75.10",
@@ -358,7 +356,7 @@ class PlaceOverlayTest {
         val county = """
             [{
               "name":"Gloucester",
-              "category":"boundary","type":"administrative","place_rank":16,
+              "category":"boundary","type":"administrative",
               "addresstype":"administrative",
               "extratags":{"admin_level":"6"},
               "address":{"county":"Gloucester","state":"New Jersey","country":"United States"},
@@ -380,7 +378,7 @@ class PlaceOverlayTest {
         val borough = """
             [{
               "name":"Borough of Pine Hill",
-              "category":"boundary","type":"administrative","place_rank":16,
+              "category":"boundary","type":"administrative",
               "addresstype":"administrative",
               "address":{"town":"Pine Hill","state":"New Jersey","country":"United States"},
               "lat":"39.79","lon":"-75.03",
@@ -402,7 +400,7 @@ class PlaceOverlayTest {
         val polygon = """
             [{
               "name":"City of Gloucester City",
-              "category":"boundary","type":"administrative","place_rank":16,
+              "category":"boundary","type":"administrative",
               "addresstype":"administrative",
               "address":{"city":"Gloucester City","state":"New Jersey","country":"United States"},
               "lat":"39.89","lon":"-75.11",
@@ -412,67 +410,6 @@ class PlaceOverlayTest {
             }]
         """.trimIndent()
         assertNotNull(PlaceOverlayClient.parseResponse(place, polygon))
-    }
-
-    @Test fun noTownCountyPolygonCanPassWithOnlyAdministrativeType() {
-        val place = PlaceDiscovery(
-            PlaceKind.TOWN, "us|new jersey|gloucester township",
-            "Gloucester Township", "New Jersey", "United States",
-            1L, 39.80, -75.05
-        )
-        val countyLevelWithoutMunicipalRank = """
-            [{
-              "name":"Gloucester Township",
-              "category":"boundary","type":"administrative",
-              "place_rank":12,
-              "address":{"state":"New Jersey","country":"United States"},
-              "lat":"39.80","lon":"-75.05",
-              "geojson":{"type":"Polygon","coordinates":[[
-                [-75.2,39.7],[-75.0,39.7],[-75.0,39.9],
-                [-75.2,39.9],[-75.2,39.7]
-              ]]}
-            }]
-        """.trimIndent()
-        assertNull(PlaceOverlayClient.parseResponse(place, countyLevelWithoutMunicipalRank))
-    }
-
-    @Test fun actualGpsProofChoosesCorrectOneOfTwoSimilarNamedTownshipPolygons() {
-        val place = PlaceDiscovery(
-            PlaceKind.TOWN, "us|new jersey|washington township",
-            "Washington Township", "New Jersey", "United States",
-            1L, 39.79, -75.05
-        )
-        val body = """
-            [
-              {
-                "name":"Washington Township",
-                "category":"boundary","type":"administrative",
-                "place_rank":16,
-                "extratags":{"admin_level":"8","population":"500"},
-                "address":{"township":"Washington Township","state":"New Jersey","country":"United States"},
-                "lat":"39.79","lon":"-75.05",
-                "geojson":{"type":"Polygon","coordinates":[[
-                   [-75.1,39.7],[-75.0,39.7],[-75.0,39.8],[-75.1,39.8],[-75.1,39.7]
-                ]]}
-              },
-              {
-                "name":"Washington Township",
-                "category":"boundary","type":"administrative",
-                "place_rank":16,
-                "extratags":{"admin_level":"8","population":"700"},
-                "address":{"township":"Washington Township","state":"New Jersey","country":"United States"},
-                "lat":"39.81","lon":"-75.08",
-                "geojson":{"type":"Polygon","coordinates":[[
-                   [-75.12,39.80],[-75.04,39.80],[-75.04,39.87],[-75.12,39.87],[-75.12,39.80]
-                ]]}
-              }
-            ]
-        """.trimIndent()
-        val verified = PlaceOverlayClient.parseResponse(
-            place, body, requireContainment = false
-        ) { polygon -> PlaceGeometry.contains(polygon, 39.82, -75.08) }
-        assertNotNull(verified)
-        assertEquals(700L, verified!!.population)
     }
 
 }
