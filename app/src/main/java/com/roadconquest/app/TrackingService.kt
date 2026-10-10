@@ -227,6 +227,19 @@ class TrackingService : Service(), LocationListener {
             return START_NOT_STICKY
         }
         if (!ready) return START_NOT_STICKY
+        if (intent?.action == ACTION_RETRY_SAVED_TURNS) {
+            // The app has returned to the foreground. Retry stored turns immediately,
+            // without restarting an already active location subscription.
+            runCatching {
+                matchingExecutor.execute {
+                    if (ready && !Prefs.isDeviceDataDeletionPending(this)) {
+                        repository.makePendingMatchingEligibleNow()
+                        maybeRunMatching(force = true)
+                    }
+                }
+            }.onFailure { Log.w("RoadConquest", "Could not queue saved-turn retry", it) }
+            return START_STICKY
+        }
         requestLocations()
         if (!locationMonitorStarted) {
             locationMonitorStarted = true
@@ -853,6 +866,7 @@ class TrackingService : Service(), LocationListener {
         const val ACTION_EXPLORATION_UPDATED = "com.roadconquest.app.EXPLORATION_UPDATED"
         const val ACTION_TRACKING_STATE_CHANGED = "com.roadconquest.app.TRACKING_STATE_CHANGED"
         const val ACTION_STOP_UNTIL_OPEN = "com.roadconquest.app.STOP_UNTIL_OPEN"
+        const val ACTION_RETRY_SAVED_TURNS = "com.roadconquest.app.RETRY_SAVED_TURNS"
         const val EXTRA_LATITUDE = "latitude"
         const val EXTRA_LONGITUDE = "longitude"
         const val EXTRA_BEARING = "bearing"
