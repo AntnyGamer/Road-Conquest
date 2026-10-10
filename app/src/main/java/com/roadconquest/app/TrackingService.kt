@@ -255,7 +255,7 @@ class TrackingService : Service(), LocationListener {
         // never from a later sparse discovery candidate. If Location was off, this naturally
         // waits until the first good fix after the user turns it back on.
         if (!baselineCandidateCaptured && !location.isMock &&
-            location.hasAccuracy() && location.accuracy in 0.01f..MAX_PREVIEW_ACCURACY_M &&
+            location.hasAccuracy() && location.accuracy in 0.01f..MAX_BASELINE_ACCURACY_M &&
             LocationProviders.isFixSince(location, baselineRequestElapsedNanos, baselineRequestWallMillis)
         ) {
             baselineCandidateCaptured = true
@@ -868,6 +868,7 @@ class TrackingService : Service(), LocationListener {
                 now - lastRecovery >= LOCATION_RECOVERY_COOLDOWN_MS
         private const val MAX_ACCURACY_M = 50f
         private const val MAX_PREVIEW_ACCURACY_M = 100f
+        private const val MAX_BASELINE_ACCURACY_M = 25f
         private const val MIN_DRIVING_SPEED_MPS = 2.2f
         private const val MAX_PLAUSIBLE_SPEED_MPS = 100f
         private const val MIN_BEARING_SPEED_MPS = 0.5f
