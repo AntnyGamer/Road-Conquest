@@ -2,8 +2,10 @@ package com.roadconquest.app.util
 
 /** Counts all app screens so shade dismissals, internal navigation and recreation are not app reopens. */
 class ForegroundSession {
-    private var started = 0
+    @Volatile private var started = 0
     private var recreating = 0
+
+    fun isForeground(): Boolean = started > 0
 
     fun onStart(): Boolean {
         val reopened = started == 0 && recreating == 0
