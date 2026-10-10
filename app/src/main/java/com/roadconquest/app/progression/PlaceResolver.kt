@@ -39,7 +39,7 @@ object PlaceResolver {
                 val alternate = address.locality?.trim().orEmpty()
                 if (alternate.isNotBlank()) add(
                     originalTown.copy(
-                        key = "$" + "{parentKey}|" + "$" + "{canonical(alternate)}",
+                        key = "${parentKey}|${canonical(alternate)}",
                         displayName = alternate
                     )
                 )
@@ -50,7 +50,7 @@ object PlaceResolver {
             val cached = PlaceOverlayCache.read(context, town).data
             val boundary = if (cached != null) cached else try {
                 client.fetch(town)?.also { PlaceOverlayCache.write(context, town, it) }
-            } catch (_: IOException) {
+            } catch (_: Exception) {
                 // Preserve the candidate for retry when the boundary provider is offline.
                 return null
             }
