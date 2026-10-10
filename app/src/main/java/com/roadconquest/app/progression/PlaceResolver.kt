@@ -5,8 +5,11 @@ import android.location.Geocoder
 import com.roadconquest.app.data.PendingPlaceCandidate
 import com.roadconquest.app.data.PlaceDiscovery
 import com.roadconquest.app.data.PlaceKind
+import com.roadconquest.app.data.ProgressionRepository
 import com.roadconquest.app.map.PlaceOverlayCache
 import com.roadconquest.app.map.PlaceOverlayClient
+import com.roadconquest.app.map.UnitedStatesMunicipalBoundaries
+import com.roadconquest.app.map.UnitedStatesMunicipalityAtPoint
 import com.roadconquest.app.map.PlaceGeometry
 import org.json.JSONObject
 import java.io.IOException
@@ -27,6 +30,45 @@ object PlaceResolver {
         }
         if (addresses.isEmpty()) return null
         val parsed = resolveAddresses(candidate, addresses)
+        // U.S. postal localities can differ from actual incorporated municipalities,
+        // particularly on short crossings. Resolve by GPS coordinate using the SAME
+        // official Census dataset that draws the green polygon, in every U.S. state.
+        val state = parsed.firstOrNull { it.kind == PlaceKind.STATE }
+        val country = parsed.firstOrNull { it.kind == PlaceKind.COUNTRY }
+        if (state != null && country != null &&
+            UnitedStatesMunicipalBoundaries.stateCode(country.displayName, state.displayName) != null
+        ) {
+            val seed = parsed.firstOrNull { it.kind == PlaceKind.TOWN } ?:
+                PlaceDiscovery(
+                    PlaceKind.TOWN, state.key + "|gps", "", state.displayName,
+                    country.displayName, candidate.visitedAt,
+                    candidate.latitude, candidate.longitude
+                )
+            val known = ProgressionRepository(context).visitedPlaces(PlaceKind.TOWN)
+            for (place in known) {
+                if (place.parentName != state.displayName ||
+                    !UnitedStatesMunicipalBoundaries.applies(place)
+                ) continue
+                val polygon = PlaceOverlayCache.readOfficialUs(context, place).data ?: continue
+                if (PlaceGeometry.contains(
+                        JSONObject(polygon.geometryJson), candidate.latitude, candidate.longitude
+                    )
+                ) return parsed.filterNot { it.kind == PlaceKind.TOWN } +
+                    place.copy(visitedAt = candidate.visitedAt)
+            }
+            val result = try {
+                UnitedStatesMunicipalityAtPoint.fetch(seed)
+            } catch (_: IOException) {
+                // Retry an unreachable provider rather than permanently discard a town.
+                return null
+            }
+            if (result != null && !PlaceOverlayCache.writeOfficialUs(
+                    context, result.place, result.overlay
+                )
+            ) return null
+            return parsed.filterNot { it.kind == PlaceKind.TOWN } +
+                listOfNotNull(result?.place)
+        }
         val originalTown = parsed.firstOrNull { it.kind == PlaceKind.TOWN }
             ?: return parsed
         // The locality field is frequently a postal city across the town line.
