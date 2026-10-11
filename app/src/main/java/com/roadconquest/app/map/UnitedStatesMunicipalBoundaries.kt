@@ -30,6 +30,15 @@ internal object UnitedStatesMunicipalBoundaries {
     private const val MAX_CHARS = 16 * 1024 * 1024
     private const val MAX_SAVED_ERROR_METERS = 1_800.0
     private val WHITESPACE_RE = Regex("\\s+")
+    private val MUNICIPAL_SUFFIXES = listOf(
+        " township" to "township", " twp" to "township",
+        " borough" to "borough", " boro" to "borough",
+        " city" to "city", " village" to "village", " town" to "town"
+    )
+    private val MUNICIPAL_PREFIXES = listOf(
+        "township of " to "township", "borough of " to "borough",
+        "city of " to "city", "village of " to "village", "town of " to "town"
+    )
 
     private val stateFips = mapOf(
         "alabama" to "01", "alaska" to "02", "arizona" to "04",
@@ -244,21 +253,14 @@ internal object UnitedStatesMunicipalBoundaries {
         var name = raw.lowercase(Locale.ROOT).trim()
             .replace(WHITESPACE_RE, " ").removePrefix("the ")
         var type: String? = null
-        for ((suffix, canonical) in listOf(
-            " township" to "township", " twp" to "township",
-            " borough" to "borough", " boro" to "borough",
-            " city" to "city", " village" to "village", " town" to "town"
-        )) {
+        for ((suffix, canonical) in MUNICIPAL_SUFFIXES) {
             if (name.endsWith(suffix)) {
                 name = name.removeSuffix(suffix)
                 type = canonical
                 break
             }
         }
-        for ((prefix, canonical) in listOf(
-            "township of " to "township", "borough of " to "borough",
-            "city of " to "city", "village of " to "village", "town of " to "town"
-        )) {
+        for ((prefix, canonical) in MUNICIPAL_PREFIXES) {
             if (name.startsWith(prefix)) {
                 name = name.removePrefix(prefix)
                 type = canonical
