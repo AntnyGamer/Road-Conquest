@@ -29,6 +29,7 @@ internal object UnitedStatesMunicipalBoundaries {
             "TIGERweb/Places_CouSub_ConCity_SubMCD/MapServer"
     private const val MAX_CHARS = 16 * 1024 * 1024
     private const val MAX_SAVED_ERROR_METERS = 1_800.0
+    private val WHITESPACE_RE = Regex("\\s+")
 
     private val stateFips = mapOf(
         "alabama" to "01", "alaska" to "02", "arizona" to "04",
@@ -241,7 +242,7 @@ internal object UnitedStatesMunicipalBoundaries {
 
     private fun municipalityIdentity(raw: String): Pair<String, String?> {
         var name = raw.lowercase(Locale.ROOT).trim()
-            .replace(Regex("\\s+"), " ").removePrefix("the ")
+            .replace(WHITESPACE_RE, " ").removePrefix("the ")
         var type: String? = null
         for ((suffix, canonical) in listOf(
             " township" to "township", " twp" to "township",
