@@ -83,7 +83,7 @@ class PlaceOverlayTest {
                 context, place, data, verifiedForDiscovery = true
             ))
             val verified = PlaceOverlayCache.readVerifiedForDiscovery(context, place)
-            assertEquals(data.geometryJson, verified?.geometryJson)
+            assertEquals(JSONObject(data.geometryJson).toString(), verified?.geometryJson)
         } finally {
             PlaceOverlayCache.clear(context)
         }
