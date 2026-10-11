@@ -47,7 +47,6 @@ object PlaceResolver {
         fun find(seed: PlaceDiscovery): PlaceDiscovery? =
             polygons.firstOrNull { (place, polygon) ->
                 place.parentName == seed.parentName &&
-                    place.countryName == seed.countryName &&
                     PlaceGeometry.contains(polygon, seed.latitude, seed.longitude)
             }?.first?.copy(visitedAt = seed.visitedAt)
 
