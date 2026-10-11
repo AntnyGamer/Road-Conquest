@@ -1,11 +1,11 @@
-# Road Conquest 1.0 Beta 39
+# Road Conquest 1.0 Beta 40
 
-- **Discover towns by where you actually drove:** In every U.S. state, identify the municipality containing each accepted GPS coordinate directly from the nationwide Census incorporated-place and active county-subdivision polygons. Postal-city labels and nearby town names cannot substitute for the actual municipality.
-- **Recover missed towns from genuine saved driving:** Automatically process the existing bounded historical GPS recheck after the current progression baseline, including previously missed brief town crossings, and continue draining eligible location candidates while the map is open.
-- **Faster and steadier green overlays:** Cache official GPS-verified boundaries for newly discovered towns and stop repeatedly cancelling polygon downloads when a discovery pass found nothing new.
-- **Road detail wording:** Display “Times driven on road: N (estimated)” without repeating the word “visits.”
-- **Worldwide coverage preserved:** Non-U.S. places continue to use the existing administrative OpenStreetMap fallback. No New Jersey-specific rules, no invented municipality fills, and no changes to road matching or fog.
+- **Less redundant town-discovery work:** Decode and reuse cached official municipality polygons once per foreground GPS discovery batch rather than reading and parsing all visited town boundaries repeatedly for each recorded fix. Newly confirmed polygons become available immediately within the same batch.
+- **Single-read verification:** Preserve strict verified-only town discovery and invalid-cache cleanup while eliminating a second read and JSON parse of a cached polygon.
+- **Faster municipality name checks:** Reuse compiled whitespace patterns, official U.S. country names, and unchanged legal-name lookup tables instead of allocating equivalent patterns and lists for every place.
+- **Lighter map processing:** Remove an unused camera read in fog scheduling and reuse each town's bounding envelope during overlay partitioning. Fog reveal, native camera transforms, and municipality clipping remain unchanged.
+- **Preserve driving accuracy:** No changes to GPS sampling intervals, accuracy checks, road matching, turn recovery, fog visibility calculations, score values, or existing history. The preexisting U.S./USA spelling compatibility is retained.
 
-Towns are highlighted only when backed by genuine accepted GPS evidence. Areas not verified as visited remain unshaded. Existing driving records, roads, points, purchases, and exploration history are retained.
+This update is a targeted reduction in CPU allocations, local file access, and repeated geometry work while processing discovery backlogs. Battery gains are expected to be small and have not been measured on a physical phone. Historic town awards, including South Harrison, are not automatically revoked.
 
-**Version code 65, Android 12+.** Install the signed Beta 39 APK as an update; do not uninstall the previous version or clear its data.
+**Version code 66, Android 12+.** Install the signed Beta 40 APK over your existing app. Do not uninstall or clear your data.
