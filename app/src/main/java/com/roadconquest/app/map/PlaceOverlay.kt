@@ -114,18 +114,22 @@ object PlaceOverlayCache {
                     file.delete()
                     PlaceOverlayCacheResult(false, null)
                 } else PlaceOverlayCacheResult(true, null)
-            } else if (verifiedOnly && !json.optBoolean("discovery_verified", false)) {
-                PlaceOverlayCacheResult(true, null)
-            } else PlaceOverlayCacheResult(
-                true,
-                PlaceOverlayData(
+            } else {
+                // Parse even unverified entries so malformed cache files are still
+                // deleted, exactly as before the single-read optimization.
+                val data = PlaceOverlayData(
                     key = place.key, name = json.getString("name"),
                     kind = PlaceKind.valueOf(json.getString("kind")),
                     population = if (json.isNull("population")) null else json.getLong("population"),
                     areaSquareKilometers = json.getDouble("area_sq_km"),
                     geometryJson = json.getJSONObject("geometry").toString()
                 )
-            )
+                PlaceOverlayCacheResult(
+                    true, data.takeUnless {
+                        verifiedOnly && !json.optBoolean("discovery_verified", false)
+                    }
+                )
+            }
         }.getOrElse {
             file.delete()
             PlaceOverlayCacheResult(false, null)
