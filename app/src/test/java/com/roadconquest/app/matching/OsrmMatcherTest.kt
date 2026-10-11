@@ -87,6 +87,62 @@ class OsrmMatcherTest {
         }
     }
 
+    @Test fun recordedSixFixTurnRetriesDespiteAdjacentSeparateUnmatchedFix() {
+        // Shifted synthetic reconstruction of an observed road-to-road corner. One
+        // previously unresolved fix precedes a matched approach anchor, then six
+        // consecutive unresolved turn fixes with matched exit anchors. The first
+        // unrelated hole must not suppress the safe retry of the actual turn.
+        val coords = listOf(
+            -74.00013 to 40.00011, -74.00028 to 40.00013,
+            -74.00043 to 40.00014, -74.00058 to 40.00015,
+            -74.00071 to 40.00017, -74.00082 to 40.00016,
+            -74.00090 to 40.00010, -74.00095 to 40.00001,
+            -74.00098 to 39.99991, -74.00101 to 39.99978
+        )
+        val points = coords.mapIndexed { index, (lon, lat) ->
+            TrackPoint(20_000L + index, lat, lon, 3.8f, 6f, 0f,
+                100_000L + index * 2_000L, index == 1 || index >= 8)
+        }
+        val locations = coords.map { (lon, lat) -> "[$lon,$lat]" }
+        val traces = locations.mapIndexed { index, point ->
+            """{"matchings_index":0,"waypoint_index":$index,"alternatives_count":0,"location":$point}"""
+        }
+        val legs = locations.zipWithNext().mapIndexed { index, (from, to) ->
+            val name = if (index < 5) "Approach Street" else "Exit Street"
+            """{"steps":[{"name":"$name","distance":15,"geometry":{"type":"LineString","coordinates":[$from,$to]}}]}"""
+        }
+        val fullResponse = """{"code":"Ok","tracepoints":[${traces.joinToString(",")}],
+            "matchings":[{"confidence":0.97,"legs":[${legs.joinToString(",")}]}]}"""
+
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody("""{"code":"NoMatch"}"""))
+            server.enqueue(MockResponse().setBody(fullResponse))
+            server.start()
+            val result = requireNotNull(OsrmMatcher(server.url("/").toString().trimEnd('/')).match(points))
+            assertEquals("The unrelated hole must not block the supported turn retry", 2, server.requestCount)
+            assertNotNull(server.takeRequest().requestUrl?.queryParameter("bearings"))
+            assertNull(server.takeRequest().requestUrl?.queryParameter("bearings"))
+            assertTrue((2..7).all {
+                (result.matchedPointConfidences[points[it].id] ?: 0.0) >=
+                    OsrmMatcher.MIN_ACCEPTABLE_CONFIDENCE
+            })
+            assertTrue(result.roads.isNotEmpty())
+        }
+    }
+
+    @Test fun separateUnmatchedStraightIslandDoesNotTriggerUnconstrainedRetry() {
+        val points = (0..9).map { i ->
+            TrackPoint(i + 30_000L, 40.0, -74.0 + i * 0.00013,
+                3.8f, 8f, 0f, 100_000L + 2_000L * i, i == 1 || i >= 8)
+        }
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody("""{"code":"NoMatch"}"""))
+            server.start()
+            assertNull(OsrmMatcher(server.url("/").toString().trimEnd('/')).match(points))
+            assertEquals(1, server.requestCount)
+        }
+    }
+
     @Test fun longStraightOrLowAccuracyHolesDoNotTriggerExtraTurnRequest() {
         val points = (0..9).map { i ->
             TrackPoint(i + 1L, 40.0, -74.0 + i * 0.00013,
