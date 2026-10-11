@@ -20,8 +20,8 @@ android {
         applicationId = "com.roadconquest.app"
         minSdk = 31
         targetSdk = 37
-        versionCode = 66
-        versionName = "1.0-beta.40"
+        versionCode = 67
+        versionName = "1.0-beta.41"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         testInstrumentationRunnerArguments["timeout_msec"] = "120000"
         val escapedAccountApiUrl = accountApiUrl.replace("\\", "\\\\").replace("\"", "\\\"")
