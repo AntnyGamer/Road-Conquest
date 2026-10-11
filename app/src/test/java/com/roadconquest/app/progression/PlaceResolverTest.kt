@@ -77,6 +77,9 @@ class PlaceResolverTest {
         assertEquals("Only one cache load for the entire discovery batch", 1, loads)
         assertNull(cache.find(town.copy(latitude = 39.90)))
         assertNull(cache.find(town.copy(parentName = "Pennsylvania")))
+        // Both labels identify the same U.S. country. The pre-optimization
+        // resolver reused this polygon without requiring exact country text.
+        assertEquals(town.key, cache.find(town.copy(countryName = "USA"))?.key)
     }
 
     @Test fun newTownBecomesReusableImmediatelyWithoutReloading() {
