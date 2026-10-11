@@ -137,7 +137,7 @@ class MapRenderer(
         val cameraPosition = map.cameraPosition
         updateCameraLimits(cameraPosition)
         updateFogCoverage(cameraPosition = cameraPosition)
-        scheduleFogRender(cameraPosition)
+        scheduleFogRender()
     }
 
     private val expireLocation = Runnable {
@@ -160,7 +160,7 @@ class MapRenderer(
         updateCameraLimits(cameraPosition)
         updateFogCoverage(cameraPosition = cameraPosition)
         if (cameraPosition.zoom >= FogBitmapRenderer.MIN_FOG_REVEAL_ZOOM) {
-            scheduleFogRender(cameraPosition)
+            scheduleFogRender()
         }
     }
     private val cameraIdleListener = MapLibreMap.OnCameraIdleListener {
@@ -169,7 +169,7 @@ class MapRenderer(
         val cameraPosition = map.cameraPosition
         updateFogCoverage(cameraPosition = cameraPosition)
         refreshViewport()
-        scheduleFogRender(cameraPosition)
+        scheduleFogRender()
     }
 
     fun initialize(onReady: () -> Unit) {
@@ -195,7 +195,7 @@ class MapRenderer(
         fogEnabled = enabled
         val cameraPosition = map.cameraPosition
         updateFogCoverage(force = true, cameraPosition = cameraPosition)
-        if (enabled) scheduleFogRender(cameraPosition)
+        if (enabled) scheduleFogRender()
     }
 
     fun placeOverlayMode(): PlaceOverlayMode = overlayMode
@@ -1055,10 +1055,9 @@ class MapRenderer(
         (style.getLayer(CAR_LAYER_ID) as? SymbolLayer)?.setProperties(iconRotate(fix.bearing.toFloat()))
     }
 
-    private fun scheduleFogRender(cameraPosition: CameraPosition? = null) {
+    private fun scheduleFogRender() {
         if (destroyed || !viewportActive || !fogEnabled) return
-        // Snapshot native camera state once when the caller did not already provide it.
-        val position = cameraPosition ?: map.cameraPosition
+        // captureFog() reads the current camera when a new bitmap is needed.
         // Overview uses a world-sized bitmap with its own explored-cell mask.
         // Never replace recorded exploration with fully opaque static fog.
         if (fogRunning) {
