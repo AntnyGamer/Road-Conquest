@@ -102,7 +102,9 @@ object PlaceOverlayCache {
         return File(File(context.applicationContext.filesDir, US_OFFICIAL_DIRECTORY), path.name)
     }
 
-    private fun readCacheFile(file: File, place: PlaceDiscovery): PlaceOverlayCacheResult {
+    private fun readCacheFile(
+        file: File, place: PlaceDiscovery, verifiedOnly: Boolean = false
+    ): PlaceOverlayCacheResult {
         if (!file.isFile) return PlaceOverlayCacheResult(false, null)
         return runCatching {
             val json = JSONObject(file.readText())
@@ -112,6 +114,8 @@ object PlaceOverlayCache {
                     file.delete()
                     PlaceOverlayCacheResult(false, null)
                 } else PlaceOverlayCacheResult(true, null)
+            } else if (verifiedOnly && !json.optBoolean("discovery_verified", false)) {
+                PlaceOverlayCacheResult(true, null)
             } else PlaceOverlayCacheResult(
                 true,
                 PlaceOverlayData(
@@ -131,11 +135,7 @@ object PlaceOverlayCache {
     /** Only polygons fetched using the strict municipal verification rules can earn town points. */
     fun readVerifiedForDiscovery(context: Context, place: PlaceDiscovery): PlaceOverlayData? {
         if (place.kind != PlaceKind.TOWN) return null
-        val cached = read(context, place).data ?: return null
-        val verified = runCatching {
-            JSONObject(file(context, place).readText()).optBoolean("discovery_verified", false)
-        }.getOrDefault(false)
-        return cached.takeIf { verified }
+        return readCacheFile(file(context, place), place, verifiedOnly = true).data
     }
 
     fun write(
