@@ -492,35 +492,49 @@ class OsrmMatcher(
         kotlin.math.abs(((a - b + 540.0) % 360.0) - 180.0)
 
     private fun supportedTurnGap(points: List<TrackPoint>): IntRange? {
-        // The exported October 10 intersections contain SIX and EIGHT contiguous
-        // accurate unmatched fixes. The previous three-fix maximum made those turns
-        // ineligible for the one safe bearing-free retry even with solid anchors.
-        val first = points.indexOfFirst { !it.matched }
-        if (first < 1) return null
-        val last = points.indexOfLast { !it.matched }
-        if (last >= points.lastIndex || last - first >= MAX_SUPPORTED_TURN_GAP_POINTS ||
-            (first..last).any { points[it].matched } ||
-            !points[first - 1].matched || !points[last + 1].matched
-        ) return null
+        // A retry window may include another, unrelated unmatched fix immediately before
+        // the turn. Check each contiguous pending island independently instead of treating
+        // the first and last pending fix in the entire window as one giant gap.
+        // Prefer the longest eligible turn when multiple gaps have confirmed anchors.
+        var best: IntRange? = null
+        var first = 0
+        while (first < points.size) {
+            if (points[first].matched) {
+                first++
+                continue
+            }
+            var last = first
+            while (last + 1 < points.size && !points[last + 1].matched) last++
+            if (isSupportedTurnGap(points, first, last) &&
+                (best == null || last - first > best.last - best.first)
+            ) best = first..last
+            first = last + 1
+        }
+        return best
+    }
 
+    private fun isSupportedTurnGap(points: List<TrackPoint>, first: Int, last: Int): Boolean {
         val length = last - first + 1
+        if (first < 1 || last >= points.lastIndex ||
+            length > MAX_SUPPORTED_TURN_GAP_POINTS ||
+            !points[first - 1].matched || !points[last + 1].matched
+        ) return false
+
         if (length <= 3) {
             // Preserve the established two-independent-fix anchor evidence for
             // short gaps, which are far more common than extended missing turns.
-            if (first < 2 || last >= points.size - 2) return null
+            if (first < 2 || last >= points.size - 2) return false
             val approachFrom = points[first - 2]
             val approachTo = points[first - 1]
             val exitFrom = points[last + 1]
             val exitTo = points[last + 2]
             if (pointDistanceMeters(approachFrom, approachTo) < MIN_BEARING_EVIDENCE_DISTANCE_M ||
                 pointDistanceMeters(exitFrom, exitTo) < MIN_BEARING_EVIDENCE_DISTANCE_M
-            ) return null
-            return (first..last).takeIf {
-                bearingDifferenceDegrees(
-                    initialBearingDegrees(approachFrom, approachTo),
-                    initialBearingDegrees(exitFrom, exitTo)
-                ) >= SHARP_TURN_DEGREES
-            }
+            ) return false
+            return bearingDifferenceDegrees(
+                initialBearingDegrees(approachFrom, approachTo),
+                initialBearingDegrees(exitFrom, exitTo)
+            ) >= SHARP_TURN_DEGREES
         }
 
         // Long holes require precise, continuous GPS and actual turn geometry.
@@ -536,7 +550,7 @@ class OsrmMatcher(
                 elapsed !in 1..MAX_LONG_TURN_SAMPLE_GAP_MS ||
                     pointDistanceMeters(points[i], points[i + 1]) > MAX_LONG_TURN_JUMP_M
             }
-        ) return null
+        ) return false
 
         val approachFrom = points[first - 1]
         val approachTo = points[first]
@@ -551,7 +565,7 @@ class OsrmMatcher(
                     initialBearingDegrees(approachFrom, approachTo),
                     initialBearingDegrees(exitFrom, exitTo)
                 ) >= SHARP_TURN_DEGREES)
-        return (first..last).takeIf { cornerCourse }
+        return cornerCourse
     }
 
     private fun isSharpTurn(points: List<TrackPoint>, index: Int): Boolean {
