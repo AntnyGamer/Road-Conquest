@@ -51,23 +51,20 @@ internal object UnitedStatesMunicipalBoundaries {
         "puerto rico" to "72"
     )
 
+    private val US_NAMES = setOf(
+        "us", "usa", "united states", "united states of america"
+    )
+
     fun isUnitedStatesKey(key: String): Boolean =
-        key.substringBefore('|').trim().lowercase(Locale.ROOT) in setOf(
-            "us", "usa", "united states", "united states of america"
-        )
+        key.substringBefore('|').trim().lowercase(Locale.ROOT) in US_NAMES
 
     fun applies(place: PlaceDiscovery): Boolean =
         place.kind == PlaceKind.TOWN &&
-            place.countryName.trim().lowercase(Locale.ROOT) in setOf(
-                "united states", "united states of america", "usa", "us"
-            ) && stateFips.containsKey(place.parentName.trim().lowercase(Locale.ROOT))
+            stateCode(place.countryName, place.parentName) != null
 
     /** State lookup shared by all U.S. municipality discovery and rendering. */
     internal fun stateCode(countryName: String, stateName: String): String? {
-        if (countryName.trim().lowercase(Locale.ROOT) !in setOf(
-                "united states", "united states of america", "usa", "us"
-            )
-        ) return null
+        if (countryName.trim().lowercase(Locale.ROOT) !in US_NAMES) return null
         return stateFips[stateName.trim().lowercase(Locale.ROOT)]
     }
 
