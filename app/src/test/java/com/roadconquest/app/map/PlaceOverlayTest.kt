@@ -60,6 +60,35 @@ class PlaceOverlayTest {
         }
     }
 
+    @Test fun verificationFlagIsReadWithTheCachedMunicipalPolygon() {
+        val context = RuntimeEnvironment.getApplication()
+        val place = PlaceDiscovery(
+            PlaceKind.TOWN, "us|new jersey|verified-cache-test", "Verified Cache Town",
+            "New Jersey", "United States", 1234L, 40.0, -74.0
+        )
+        val data = PlaceOverlayData(
+            place.key, place.displayName, place.kind, null, 1.0,
+            """{"type":"Polygon","coordinates":[[
+                [-74.02,39.99],[-73.98,39.99],[-73.98,40.01],
+                [-74.02,40.01],[-74.02,39.99]
+            ]]}"""
+        )
+        PlaceOverlayCache.clear(context)
+        try {
+            assertTrue(PlaceOverlayCache.write(context, place, data))
+            assertNotNull(PlaceOverlayCache.read(context, place).data)
+            assertNull(PlaceOverlayCache.readVerifiedForDiscovery(context, place))
+
+            assertTrue(PlaceOverlayCache.write(
+                context, place, data, verifiedForDiscovery = true
+            ))
+            val verified = PlaceOverlayCache.readVerifiedForDiscovery(context, place)
+            assertEquals(data.geometryJson, verified?.geometryJson)
+        } finally {
+            PlaceOverlayCache.clear(context)
+        }
+    }
+
     @Test fun legacyV3CacheCannotReintroduceBadTownOutlines() {
         val context = RuntimeEnvironment.getApplication()
         val place = PlaceDiscovery(
