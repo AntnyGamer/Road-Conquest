@@ -41,8 +41,11 @@ internal object TownOverlayPartition {
 
         val placed = ArrayList<Candidate>(candidates.size)
         for (candidate in candidates) {
+            // JTS constructs an Envelope for each getter call. The candidate
+            // bounds are invariant throughout this comparison loop.
+            val candidateBounds = candidate.geometry.envelopeInternal
             val overlapping = placed.asSequence().map(Candidate::geometry)
-                .filter { it.envelopeInternal.intersects(candidate.geometry.envelopeInternal) }
+                .filter { it.envelopeInternal.intersects(candidateBounds) }
                 .toList()
             val clipped = runCatching {
                 val remaining = if (overlapping.isEmpty()) candidate.geometry else {

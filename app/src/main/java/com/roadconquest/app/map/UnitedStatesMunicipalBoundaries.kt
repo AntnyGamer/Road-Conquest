@@ -29,6 +29,16 @@ internal object UnitedStatesMunicipalBoundaries {
             "TIGERweb/Places_CouSub_ConCity_SubMCD/MapServer"
     private const val MAX_CHARS = 16 * 1024 * 1024
     private const val MAX_SAVED_ERROR_METERS = 1_800.0
+    private val WHITESPACE_RE = Regex("\\s+")
+    private val MUNICIPAL_SUFFIXES = listOf(
+        " township" to "township", " twp" to "township",
+        " borough" to "borough", " boro" to "borough",
+        " city" to "city", " village" to "village", " town" to "town"
+    )
+    private val MUNICIPAL_PREFIXES = listOf(
+        "township of " to "township", "borough of " to "borough",
+        "city of " to "city", "village of " to "village", "town of " to "town"
+    )
 
     private val stateFips = mapOf(
         "alabama" to "01", "alaska" to "02", "arizona" to "04",
@@ -51,23 +61,20 @@ internal object UnitedStatesMunicipalBoundaries {
         "puerto rico" to "72"
     )
 
+    private val US_NAMES = setOf(
+        "us", "usa", "united states", "united states of america"
+    )
+
     fun isUnitedStatesKey(key: String): Boolean =
-        key.substringBefore('|').trim().lowercase(Locale.ROOT) in setOf(
-            "us", "usa", "united states", "united states of america"
-        )
+        key.substringBefore('|').trim().lowercase(Locale.ROOT) in US_NAMES
 
     fun applies(place: PlaceDiscovery): Boolean =
         place.kind == PlaceKind.TOWN &&
-            place.countryName.trim().lowercase(Locale.ROOT) in setOf(
-                "united states", "united states of america", "usa", "us"
-            ) && stateFips.containsKey(place.parentName.trim().lowercase(Locale.ROOT))
+            stateCode(place.countryName, place.parentName) != null
 
     /** State lookup shared by all U.S. municipality discovery and rendering. */
     internal fun stateCode(countryName: String, stateName: String): String? {
-        if (countryName.trim().lowercase(Locale.ROOT) !in setOf(
-                "united states", "united states of america", "usa", "us"
-            )
-        ) return null
+        if (countryName.trim().lowercase(Locale.ROOT) !in US_NAMES) return null
         return stateFips[stateName.trim().lowercase(Locale.ROOT)]
     }
 
@@ -244,23 +251,16 @@ internal object UnitedStatesMunicipalBoundaries {
 
     private fun municipalityIdentity(raw: String): Pair<String, String?> {
         var name = raw.lowercase(Locale.ROOT).trim()
-            .replace(Regex("\\s+"), " ").removePrefix("the ")
+            .replace(WHITESPACE_RE, " ").removePrefix("the ")
         var type: String? = null
-        for ((suffix, canonical) in listOf(
-            " township" to "township", " twp" to "township",
-            " borough" to "borough", " boro" to "borough",
-            " city" to "city", " village" to "village", " town" to "town"
-        )) {
+        for ((suffix, canonical) in MUNICIPAL_SUFFIXES) {
             if (name.endsWith(suffix)) {
                 name = name.removeSuffix(suffix)
                 type = canonical
                 break
             }
         }
-        for ((prefix, canonical) in listOf(
-            "township of " to "township", "borough of " to "borough",
-            "city of " to "city", "village of " to "village", "town of " to "town"
-        )) {
+        for ((prefix, canonical) in MUNICIPAL_PREFIXES) {
             if (name.startsWith(prefix)) {
                 name = name.removePrefix(prefix)
                 type = canonical

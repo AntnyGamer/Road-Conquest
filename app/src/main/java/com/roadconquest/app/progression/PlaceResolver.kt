@@ -16,8 +16,50 @@ import java.io.IOException
 import java.util.Locale
 
 object PlaceResolver {
+    /**
+     * The foreground worker processes up to six GPS candidates per batch.
+     * Parse official cached town geometry once per batch, not once per fix.
+     * A new verified town is immediately available to later fixes in the batch.
+     * No location, town matching, or reward criteria are changed.
+     */
+    internal class VerifiedMunicipalCache(
+        private val load: () -> MutableList<Pair<PlaceDiscovery, JSONObject>>
+    ) {
+        constructor(context: Context) : this({
+            val appContext = context.applicationContext
+            ProgressionRepository(appContext).visitedPlaces(PlaceKind.TOWN)
+                .asSequence()
+                .filter(UnitedStatesMunicipalBoundaries::applies)
+                .mapNotNull { place ->
+                    PlaceOverlayCache.readOfficialUs(appContext, place).data?.let { overlay ->
+                        try {
+                            place to JSONObject(overlay.geometryJson)
+                        } catch (_: org.json.JSONException) {
+                            null
+                        }
+                    }
+                }
+                .toMutableList()
+        })
+
+        private val polygons by lazy(load)
+
+        fun find(seed: PlaceDiscovery): PlaceDiscovery? =
+            polygons.firstOrNull { (place, polygon) ->
+                place.parentName == seed.parentName &&
+                    PlaceGeometry.contains(polygon, seed.latitude, seed.longitude)
+            }?.first?.copy(visitedAt = seed.visitedAt)
+
+        fun remember(result: UnitedStatesMunicipalityAtPoint.Result) {
+            polygons += result.place to JSONObject(result.overlay.geometryJson)
+        }
+    }
+
     @Suppress("DEPRECATION")
-    fun resolve(context: Context, candidate: PendingPlaceCandidate): List<PlaceDiscovery>? {
+    internal fun resolve(
+        context: Context, candidate: PendingPlaceCandidate,
+        municipalCache: VerifiedMunicipalCache? = null
+    ): List<PlaceDiscovery>? {
         if (!Geocoder.isPresent()) return null
         val addresses = try {
             Geocoder(context.applicationContext, Locale.US)
@@ -44,17 +86,9 @@ object PlaceResolver {
                     country.displayName, candidate.visitedAt,
                     candidate.latitude, candidate.longitude
                 )
-            val known = ProgressionRepository(context).visitedPlaces(PlaceKind.TOWN)
-            for (place in known) {
-                if (place.parentName != state.displayName ||
-                    !UnitedStatesMunicipalBoundaries.applies(place)
-                ) continue
-                val polygon = PlaceOverlayCache.readOfficialUs(context, place).data ?: continue
-                if (PlaceGeometry.contains(
-                        JSONObject(polygon.geometryJson), candidate.latitude, candidate.longitude
-                    )
-                ) return parsed.filterNot { it.kind == PlaceKind.TOWN } +
-                    place.copy(visitedAt = candidate.visitedAt)
+            val known = municipalCache ?: VerifiedMunicipalCache(context)
+            known.find(seed)?.let { town ->
+                return parsed.filterNot { it.kind == PlaceKind.TOWN } + town
             }
             val result = try {
                 UnitedStatesMunicipalityAtPoint.fetch(seed)
@@ -62,10 +96,13 @@ object PlaceResolver {
                 // Retry an unreachable provider rather than permanently discard a town.
                 return null
             }
-            if (result != null && !PlaceOverlayCache.writeOfficialUs(
-                    context, result.place, result.overlay
-                )
-            ) return null
+            if (result != null) {
+                if (!PlaceOverlayCache.writeOfficialUs(
+                        context, result.place, result.overlay
+                    )
+                ) return null
+                known.remember(result)
+            }
             return parsed.filterNot { it.kind == PlaceKind.TOWN } +
                 listOfNotNull(result?.place)
         }

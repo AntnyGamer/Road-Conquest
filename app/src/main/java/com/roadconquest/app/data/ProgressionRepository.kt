@@ -694,8 +694,8 @@ class ProgressionRepository(context: Context) {
 
     private fun municipalityIdentity(value: String): Pair<String, String> {
         val text = value.trim().lowercase(java.util.Locale.ROOT)
-            .replace(Regex("\\s+"), " ").removePrefix("the ")
-        for (kind in listOf("township", "borough", "municipality", "village", "town", "city")) {
+            .replace(MUNICIPALITY_WHITESPACE_RE, " ").removePrefix("the ")
+        for (kind in MUNICIPALITY_TYPES) {
             val prefix = "${kind} of "
             if (text.startsWith(prefix)) return text.removePrefix(prefix) to kind
             val suffix = " $kind"
@@ -845,6 +845,8 @@ class ProgressionRepository(context: Context) {
 
     companion object {
         const val POINTS_PER_ROAD = 5L
+        private val MUNICIPALITY_WHITESPACE_RE = Regex("\\s+")
+        private val MUNICIPALITY_TYPES = listOf("township", "borough", "municipality", "village", "town", "city")
         // 150 m real-fix cells preserve short municipal crossings missed by older 400 m sampling.
         // Retain the old cells separately; their pending lookups remain valid after an update.
         private const val PLACE_CANDIDATE_CELL_M = 150.0

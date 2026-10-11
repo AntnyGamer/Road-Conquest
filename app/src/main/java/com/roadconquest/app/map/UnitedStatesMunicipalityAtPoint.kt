@@ -22,6 +22,7 @@ internal object UnitedStatesMunicipalityAtPoint {
         "https://tigerweb.geo.census.gov/arcgis/rest/services/" +
             "TIGERweb/Places_CouSub_ConCity_SubMCD/MapServer"
     private const val MAX_RESPONSE_CHARS = 16 * 1024 * 1024
+    private val WHITESPACE_RE = Regex("\\s+")
 
     fun fetch(seed: PlaceDiscovery): Result? {
         val state = UnitedStatesMunicipalBoundaries.stateCode(
@@ -110,7 +111,7 @@ internal object UnitedStatesMunicipalityAtPoint {
             } else PlaceOverlayClient.areaSquareKilometers(geometry)
             if (!areaSqKm.isFinite() || areaSqKm <= 0.0) continue
             val canonical = name.trim().lowercase(Locale.ROOT)
-                .replace(Regex("\\s+"), " ")
+                .replace(WHITESPACE_RE, " ")
             val key = seed.key.substringBeforeLast('|') + "|" + canonical
             val place = seed.copy(key = key, displayName = name)
             return Result(

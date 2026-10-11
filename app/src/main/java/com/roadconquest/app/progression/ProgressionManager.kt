@@ -82,6 +82,8 @@ object ProgressionManager {
     fun resolvePendingPlacesWithDetails(context: Context, limit: Int = 6): PlaceResolutionResult {
         require(limit > 0)
         val repository = ProgressionRepository(context)
+        // Limit polygon parsing and database reads to one set per foreground batch.
+        val municipalCache by lazy { PlaceResolver.VerifiedMunicipalCache(context) }
         // Do not manufacture new discovery notifications from replaying historical drives.
         var added = 0
         var newestVisitAt = 0L
@@ -90,7 +92,7 @@ object ProgressionManager {
             val candidates = repository.pendingPlaceCandidates(limit - processed)
             if (candidates.isEmpty()) break
             for (candidate in candidates) {
-                val discoveries = PlaceResolver.resolve(context, candidate)
+                val discoveries = PlaceResolver.resolve(context, candidate, municipalCache)
                 if (discoveries.isNullOrEmpty()) {
                     repository.deferCandidate(candidate)
                 } else {

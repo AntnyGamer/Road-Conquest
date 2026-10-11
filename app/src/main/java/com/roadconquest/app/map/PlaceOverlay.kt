@@ -102,7 +102,9 @@ object PlaceOverlayCache {
         return File(File(context.applicationContext.filesDir, US_OFFICIAL_DIRECTORY), path.name)
     }
 
-    private fun readCacheFile(file: File, place: PlaceDiscovery): PlaceOverlayCacheResult {
+    private fun readCacheFile(
+        file: File, place: PlaceDiscovery, verifiedOnly: Boolean = false
+    ): PlaceOverlayCacheResult {
         if (!file.isFile) return PlaceOverlayCacheResult(false, null)
         return runCatching {
             val json = JSONObject(file.readText())
@@ -112,16 +114,22 @@ object PlaceOverlayCache {
                     file.delete()
                     PlaceOverlayCacheResult(false, null)
                 } else PlaceOverlayCacheResult(true, null)
-            } else PlaceOverlayCacheResult(
-                true,
-                PlaceOverlayData(
+            } else {
+                // Parse even unverified entries so malformed cache files are still
+                // deleted, exactly as before the single-read optimization.
+                val data = PlaceOverlayData(
                     key = place.key, name = json.getString("name"),
                     kind = PlaceKind.valueOf(json.getString("kind")),
                     population = if (json.isNull("population")) null else json.getLong("population"),
                     areaSquareKilometers = json.getDouble("area_sq_km"),
                     geometryJson = json.getJSONObject("geometry").toString()
                 )
-            )
+                PlaceOverlayCacheResult(
+                    true, data.takeUnless {
+                        verifiedOnly && !json.optBoolean("discovery_verified", false)
+                    }
+                )
+            }
         }.getOrElse {
             file.delete()
             PlaceOverlayCacheResult(false, null)
@@ -131,11 +139,7 @@ object PlaceOverlayCache {
     /** Only polygons fetched using the strict municipal verification rules can earn town points. */
     fun readVerifiedForDiscovery(context: Context, place: PlaceDiscovery): PlaceOverlayData? {
         if (place.kind != PlaceKind.TOWN) return null
-        val cached = read(context, place).data ?: return null
-        val verified = runCatching {
-            JSONObject(file(context, place).readText()).optBoolean("discovery_verified", false)
-        }.getOrDefault(false)
-        return cached.takeIf { verified }
+        return readCacheFile(file(context, place), place, verifiedOnly = true).data
     }
 
     fun write(
@@ -306,6 +310,7 @@ class PlaceOverlayClient(
         // These values are invariant across every Nominatim result. Reuse the compiled patterns
         // and immutable membership tables instead of rebuilding them for each candidate.
         private val WHITESPACE_RE = Regex("\\s+")
+        private val MUNICIPALITY_TYPES = listOf("township", "borough", "municipality", "city", "town", "village")
         private val POPULATION_RE = Regex("""\d[\d, .]*""")
         private val POLYGON_TYPES = setOf("Polygon", "MultiPolygon")
         private val STATE_ADDRESS_TYPES = setOf("state", "region", "state_district")
@@ -542,7 +547,7 @@ class PlaceOverlayClient(
             // Strip equivalent prefix/suffix types, but never equate a CITY to
             // a TOWNSHIP or BOROUGH of the same base name.
             repeat(3) {
-                for (kind in listOf("township", "borough", "municipality", "city", "town", "village")) {
+                for (kind in MUNICIPALITY_TYPES) {
                     val prefix = "${kind} of "
                     val suffix = " $kind"
                     if (name.startsWith(prefix) || name.endsWith(suffix)) {
