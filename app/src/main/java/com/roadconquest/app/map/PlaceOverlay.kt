@@ -306,6 +306,7 @@ class PlaceOverlayClient(
         // These values are invariant across every Nominatim result. Reuse the compiled patterns
         // and immutable membership tables instead of rebuilding them for each candidate.
         private val WHITESPACE_RE = Regex("\\s+")
+        private val MUNICIPALITY_TYPES = listOf("township", "borough", "municipality", "city", "town", "village")
         private val POPULATION_RE = Regex("""\d[\d, .]*""")
         private val POLYGON_TYPES = setOf("Polygon", "MultiPolygon")
         private val STATE_ADDRESS_TYPES = setOf("state", "region", "state_district")
@@ -542,7 +543,7 @@ class PlaceOverlayClient(
             // Strip equivalent prefix/suffix types, but never equate a CITY to
             // a TOWNSHIP or BOROUGH of the same base name.
             repeat(3) {
-                for (kind in listOf("township", "borough", "municipality", "city", "town", "village")) {
+                for (kind in MUNICIPALITY_TYPES) {
                     val prefix = "${kind} of "
                     val suffix = " $kind"
                     if (name.startsWith(prefix) || name.endsWith(suffix)) {
