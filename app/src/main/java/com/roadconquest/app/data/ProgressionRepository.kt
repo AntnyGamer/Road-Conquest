@@ -716,6 +716,18 @@ class ProgressionRepository(context: Context) {
      * Explicitly different municipal types are not treated as aliases.
      */
     private fun alignTownWithExistingPlace(db: SQLiteDatabase, discovery: PlaceDiscovery): PlaceDiscovery {
+        // Preserve country rewards from geocoders that supplied only a country
+        // name ("united states") before they started supplying ISO code "us".
+        if (discovery.kind == PlaceKind.COUNTRY) {
+            if (!UnitedStatesMunicipalBoundaries.isUnitedStatesCountry(discovery.key)) return discovery
+            db.query("visited_places", arrayOf("place_key"),
+                "kind = ? AND lower(place_key) IN ('us', 'usa', 'united states', 'united states of america')",
+                arrayOf(PlaceKind.COUNTRY.name), null, null, null
+            ).use { rows ->
+                if (rows.moveToFirst()) return discovery.copy(key = rows.getString(0))
+            }
+            return discovery
+        }
         // Older providers sometimes called the same state "NJ" and "New Jersey".
         // Keep the previously rewarded key instead of creating a duplicate state.
         if (discovery.kind == PlaceKind.STATE) {
@@ -723,8 +735,8 @@ class ProgressionRepository(context: Context) {
                 discovery.countryName, discovery.displayName
             ) ?: return discovery
             db.query("visited_places", arrayOf("place_key", "display_name"),
-                "kind = ? AND country_name = ?",
-                arrayOf(PlaceKind.STATE.name, discovery.countryName),
+                "kind = ? AND lower(country_name) IN ('us', 'usa', 'united states', 'united states of america')",
+                arrayOf(PlaceKind.STATE.name),
                 null, null, null
             ).use { existing ->
                 while (existing.moveToNext()) {
@@ -755,14 +767,24 @@ class ProgressionRepository(context: Context) {
         val parentName = UnitedStatesMunicipalBoundaries.normalizedStateName(
             discovery.countryName, discovery.parentName
         )
+        // A legacy geocoder may also have labeled the country "USA" or "US".
+        // Compare real U.S. municipality identities across those spelling changes.
+        val us = UnitedStatesMunicipalBoundaries.isUnitedStatesCountry(discovery.countryName)
+        val countryClause = if (us) {
+            "lower(country_name) IN ('us', 'usa', 'united states', 'united states of america')"
+        } else "country_name = ?"
+        val townSelection = if (postal == null) "kind = ? AND parent_name = ? AND $countryClause"
+            else "kind = ? AND (parent_name = ? COLLATE NOCASE OR parent_name = ? COLLATE NOCASE) AND $countryClause"
+        val townArgs = buildList {
+            add(PlaceKind.TOWN.name)
+            add(if (postal == null) discovery.parentName else parentName)
+            if (postal != null) add(postal)
+            if (!us) add(discovery.countryName)
+        }.toTypedArray()
         db.query(
             "visited_places",
             arrayOf("place_key", "display_name", "latitude", "longitude"),
-            if (postal == null) "kind = ? AND parent_name = ? AND country_name = ?"
-            else "kind = ? AND (parent_name = ? COLLATE NOCASE OR parent_name = ? COLLATE NOCASE) AND country_name = ?",
-            if (postal == null) arrayOf(PlaceKind.TOWN.name, discovery.parentName, discovery.countryName)
-            else arrayOf(PlaceKind.TOWN.name, parentName, postal, discovery.countryName),
-            null, null, null
+            townSelection, townArgs, null, null, null
         ).use { rows ->
             val distances = FloatArray(1)
             while (rows.moveToNext()) {
