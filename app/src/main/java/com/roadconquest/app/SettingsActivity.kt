@@ -300,6 +300,7 @@ class SettingsActivity : Activity() {
                 dialog.dismiss()
                 deletingDeviceData = true
                 deleteDeviceDataButton.isEnabled = false
+                findViewById<Switch>(R.id.verifyDrivesSwitch).isEnabled = false
                 dataExecutor.execute {
                     val result = runCatching {
                         // Persist the pending marker before local cleanup. If the process dies
@@ -381,7 +382,8 @@ class SettingsActivity : Activity() {
         val leaderboardsButton = findViewById<Button>(R.id.leaderboardsButton)
         verifySwitch.setOnCheckedChangeListener(null)
         verifySwitch.isChecked = Prefs.isDriveVerificationEnabled(this)
-        verifySwitch.isEnabled = session != null && accountConfigured
+        verifySwitch.isEnabled = session != null && accountConfigured &&
+            !deletingDeviceData && !Prefs.isDeviceDataDeletionPending(this)
         verifySwitch.setOnCheckedChangeListener { _, enabled ->
             Prefs.setDriveVerificationEnabled(this, enabled)
         }
