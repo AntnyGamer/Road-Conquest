@@ -474,7 +474,7 @@ class SettingsActivity : Activity() {
                     },
                     onFailure = { error ->
                         renderingAccountPrivacy = true
-                        leaderboardPrivacySwitch.isChecked = session.leaderboardVisible
+                        leaderboardPrivacySwitch.isChecked = AccountStore.load(this)?.leaderboardVisible == true
                         renderingAccountPrivacy = false
                         leaderboardPrivacySwitch.isEnabled = true
                         Toast.makeText(
