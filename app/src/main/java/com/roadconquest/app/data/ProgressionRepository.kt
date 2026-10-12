@@ -396,6 +396,44 @@ class ProgressionRepository(context: Context) {
             }
         }
 
+    /** A partially resolved zero-point baseline can lack its municipality. */
+    fun hasMissingStartingTown(): Boolean = synchronized(dbHelper.historyLock) {
+        isCurrentHistory() &&
+            counterOrNull(dbHelper.readableDatabase, baselineMissingKey(PlaceKind.TOWN)) == 1L
+    }
+
+    /**
+     * Used only after a verified municipal polygon contains the ORIGINAL start fix.
+     * Reconcile a late town identification with the zero-point baseline before
+     * the ordinary candidate is processed; never award points for the start town.
+     */
+    fun recordVerifiedStartingTown(discovery: PlaceDiscovery, start: StartingLocation): Boolean =
+        synchronized(dbHelper.historyLock) {
+            if (!isCurrentHistory() || discovery.kind != PlaceKind.TOWN ||
+                counterOrNull(dbHelper.readableDatabase, baselineMissingKey(PlaceKind.TOWN)) != 1L ||
+                startingLocation() != start
+            ) return@synchronized false
+            val db = dbHelper.writableDatabase
+            db.beginTransaction()
+            try {
+                val baselineDiscovery = alignTownWithExistingPlace(db, discovery.copy(
+                    visitedAt = start.recordedAt,
+                    latitude = start.latitude,
+                    longitude = start.longitude
+                ))
+                val inserted = insertVisitedPlace(db, baselineDiscovery)
+                if (inserted) {
+                    putCounter(db, baselineKey(baselineDiscovery), 1L)
+                    db.delete("progression_counters", "counter_key = ?",
+                        arrayOf(baselineMissingKey(PlaceKind.TOWN)))
+                }
+                db.setTransactionSuccessful()
+                inserted
+            } finally {
+                db.endTransaction()
+            }
+        }
+
     fun deferCandidate(candidate: PendingPlaceCandidate, nowMillis: Long = System.currentTimeMillis()) =
         synchronized(dbHelper.historyLock) {
             if (!isCurrentHistory()) return@synchronized
