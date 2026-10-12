@@ -539,6 +539,27 @@ class TrackingRepositoryTest {
         assertEquals(2, repository.getRoadsInBounds(41.0, -73.0, 39.0, -75.0).single().timesDriven)
     }
 
+    @Test fun offRoadEvidenceAfterFirst120FixesStillSeparatesRoadVisits() {
+        val geometry = "[[-74,40],[-74.001,40]]"
+        repository.upsertRoads(listOf(MatchedRoad(
+            "Long sample visit", geometry, 1_000_000L, 1_010_000L, 0.99
+        )))
+        // Older code looked at only the first 120 accurate fixes in the
+        // two-minute gap. Here all of those are on the road, while a later
+        // precise fix proves that the driver left before returning.
+        repeat(130) { index ->
+            point(1_011_000L + index * 500L, lat = 40.0, lon = -74.0005)
+        }
+        point(1_090_000L, lat = 40.004, lon = -74.003)
+        repository.upsertRoads(listOf(MatchedRoad(
+            "Long sample visit", geometry, 1_105_000L, 1_115_000L, 0.99
+        )))
+        val road = repository.getRoadsInBounds(41.0, -73.0, 39.0, -75.0).single()
+        assertEquals("A later GPS departure must not be hidden by a fixed scan cap",
+            2, road.timesDriven)
+        assertEquals(2, repository.estimatedRoadVisitCount(road))
+    }
+
     @Test fun longOutOfOrderMatchedWindowReconnectsEarlierLegacyFragments() {
         val geometry = "[[-74,40],[-74.001,40]]"
         repository.upsertRoads(listOf(MatchedRoad("Main St", geometry, 1_000_000, 1_010_000, 0.99)))
