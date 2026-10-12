@@ -995,10 +995,14 @@ class TrackingRepository(context: Context) {
         val geometry = db.rawQuery(
             "SELECT geometry_json FROM roads WHERE segment_id = ?", arrayOf(segmentId)
         ).use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else return false }
+        // The gap is bounded by VISIT_CONTINUATION_MS (two minutes). Scan
+        // all accurate fixes in that indexed time range, stopping at the first
+        // confirmed departure. A fixed first-120 cap can skip the only off-road
+        // fix and merge two real traversals incorrectly.
         db.rawQuery(
             "SELECT latitude, longitude FROM track_points " +
                 "WHERE timestamp_ms > ? AND timestamp_ms < ? AND accuracy_m BETWEEN 0.01 AND 25 " +
-                "ORDER BY timestamp_ms LIMIT 120",
+                "ORDER BY timestamp_ms",
             arrayOf(after.toString(), before.toString())
         ).use { cursor ->
             while (cursor.moveToNext()) {
