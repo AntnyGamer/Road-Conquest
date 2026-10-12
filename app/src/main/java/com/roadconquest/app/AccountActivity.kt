@@ -166,13 +166,9 @@ class AccountActivity : Activity() {
                 if (isDestroyed || AccountStore.load(this)?.token != session.token) return@runOnUiThread
                 result.fold(
                     onSuccess = { account ->
-                        val updated = AccountStore.updateIfToken(this, session.token) { current ->
-                            current.copy(
-                                username = if (current.username == session.username) account.username else current.username,
-                                leaderboardVisible = if (current.leaderboardVisible == session.leaderboardVisible)
-                                    account.leaderboardVisible else current.leaderboardVisible
-                            )
-                        } ?: return@runOnUiThread
+                        val updated = AccountStore.refreshIfUnchanged(
+                            this, session, account.username, account.leaderboardVisible
+                        ) ?: return@runOnUiThread
                         statusText.text = "Signed in."
                         render(updated)
                     },
