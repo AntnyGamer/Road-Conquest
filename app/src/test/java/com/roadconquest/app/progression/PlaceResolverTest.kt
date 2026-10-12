@@ -94,6 +94,24 @@ class PlaceResolverTest {
         assertEquals(town.key, cache.find(town.copy(countryName = "USA"))?.key)
     }
 
+    @Test fun cachedCensusTownAcceptsEquivalentPostalAndFullStateNames() {
+        val town = PlaceDiscovery(
+            PlaceKind.TOWN, "us|nj|census-4-3401234", "Sample borough",
+            "NJ", "United States", 1000L, 39.82, -75.03
+        )
+        val polygon = JSONObject("""{"type":"Polygon","coordinates":[[
+            [-75.04,39.81],[-75.02,39.81],[-75.02,39.83],
+            [-75.04,39.83],[-75.04,39.81]
+        ]]}""")
+        val cache = PlaceResolver.VerifiedMunicipalCache {
+            mutableListOf(town to polygon)
+        }
+        assertEquals(town.key, cache.find(town.copy(
+            parentName = "New Jersey", visitedAt = 2000L
+        ))?.key)
+        assertNull(cache.find(town.copy(parentName = "Pennsylvania")))
+    }
+
     @Test fun overlappingCachedMunicipalitiesRequireOfficialLookupInsteadOfVisitOrder() {
         val countySubdivision = PlaceDiscovery(
             PlaceKind.TOWN, "us|ohio|census-1-3900100123", "Sample township",
