@@ -426,11 +426,9 @@ class SettingsActivity : Activity() {
                 if (isDestroyed || AccountStore.load(this)?.token != session.token) return@runOnUiThread
                 result.fold(
                     onSuccess = { account ->
-                        val updated = session.copy(
-                            username = account.username,
-                            leaderboardVisible = account.leaderboardVisible
-                        )
-                        AccountStore.save(this, updated)
+                        val updated = AccountStore.refreshIfUnchanged(
+                            this, session, account.username, account.leaderboardVisible
+                        ) ?: return@runOnUiThread
                         renderingAccountPrivacy = true
                         accountSummaryText.text = "Signed in as " + updated.username
                         leaderboardPrivacySwitch.isChecked = updated.leaderboardVisible
@@ -465,7 +463,9 @@ class SettingsActivity : Activity() {
                 if (isDestroyed || AccountStore.load(this)?.token != session.token) return@runOnUiThread
                 result.fold(
                     onSuccess = { saved ->
-                        AccountStore.save(this, session.copy(leaderboardVisible = saved))
+                        AccountStore.updateIfToken(this, session.token) { current ->
+                            current.copy(leaderboardVisible = saved)
+                        } ?: return@runOnUiThread
                         renderingAccountPrivacy = true
                         leaderboardPrivacySwitch.isChecked = saved
                         renderingAccountPrivacy = false
