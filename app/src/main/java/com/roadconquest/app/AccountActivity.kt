@@ -269,7 +269,9 @@ class AccountActivity : Activity() {
                     val result = runCatching { AccountClient.changeUsername(session.token, name, currentPassword) }
                     result.onSuccess { account ->
                         AccountStore.updateIfToken(applicationContext, session.token) {
-                            it.copy(username = account.username, leaderboardVisible = account.leaderboardVisible)
+                            // Changing a username must not overwrite a newer privacy
+                            // toggle from Settings while this request was in flight.
+                            it.copy(username = account.username)
                         }
                     }
                     runOnUiThread {
