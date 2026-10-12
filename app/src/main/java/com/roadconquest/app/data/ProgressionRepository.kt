@@ -367,7 +367,16 @@ class ProgressionRepository(context: Context) {
                     }
                 }
                 if (baseline && !baselineComplete(db)) {
-                    if (candidate.attempts + 1 >= BASELINE_PARTIAL_RESOLUTION_LIMIT) {
+                    // Do not retire the only durable starting fix when geocoding has
+                    // produced no places at all. Without an initial visited place,
+                    // ordinary candidates remain gated forever and the next GPS fix
+                    // can incorrectly become a new zero-point baseline.
+                    val hasResolvedBaselinePlace = db.rawQuery(
+                        "SELECT 1 FROM visited_places LIMIT 1", null
+                    ).use { it.moveToFirst() }
+                    if (candidate.attempts + 1 >= BASELINE_PARTIAL_RESOLUTION_LIMIT &&
+                        hasResolvedBaselinePlace
+                    ) {
                         markMissingBaselineKinds(db)
                     } else {
                         scheduleCandidateRetry(db, candidate, System.currentTimeMillis())
