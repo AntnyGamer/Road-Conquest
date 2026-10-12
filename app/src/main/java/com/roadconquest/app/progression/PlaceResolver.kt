@@ -178,7 +178,9 @@ object PlaceResolver {
         val countryName = firstValue { it.countryName }
         val countryCode = firstValue { it.countryCode }
         val countryKey = canonical(countryCode.ifBlank { countryName })
-        val stateName = firstValue { it.adminArea }
+        val stateName = UnitedStatesMunicipalBoundaries.normalizedStateName(
+            countryName, firstValue { it.adminArea }
+        )
         val namedMunicipality = firstValue { address ->
             address.subAdminArea?.trim()?.takeIf { name ->
                 val lower = name.lowercase(Locale.ROOT)
