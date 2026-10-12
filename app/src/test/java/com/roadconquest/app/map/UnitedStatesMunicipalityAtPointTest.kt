@@ -79,6 +79,25 @@ class UnitedStatesMunicipalityAtPointTest {
     ) = feature(name, fips, west, east)
         .replace("\"FUNCSTAT\"", "\"GEOID\":\"$geoid\",\"FUNCSTAT\"")
 
+    @Test fun featureCollectionWithoutFeaturesIsRetryableNotProofOfNoTown() {
+        for (body in listOf(
+            """{"type":"FeatureCollection"}""",
+            """{"type":"FeatureCollection","features":null}""",
+            """{"type":"FeatureCollection","features":{}}"""
+        )) {
+            try {
+                UnitedStatesMunicipalityAtPoint.parseResponse(seed(), body, 4)
+                fail("Missing/non-array features must not retire a genuine GPS discovery")
+            } catch (_: java.io.IOException) {
+                // A valid but empty array is different: it proves no matching
+                // municipality on the queried layer.
+            }
+        }
+        assertNull(UnitedStatesMunicipalityAtPoint.parseResponse(
+            seed(), """{"type":"FeatureCollection","features":[]}""", 4
+        ))
+    }
+
     @Test fun malformedProviderBodyBecomesRetryableIoFailure() {
         try {
             UnitedStatesMunicipalityAtPoint.parseResponse(seed(), "<html>Service unavailable</html>", 4)
