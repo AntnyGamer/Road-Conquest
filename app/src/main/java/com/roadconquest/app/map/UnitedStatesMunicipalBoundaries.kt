@@ -61,6 +61,32 @@ internal object UnitedStatesMunicipalBoundaries {
         "puerto rico" to "72"
     )
 
+    // Android reverse-geocoders may provide USPS abbreviations rather than full
+    // state names. Normalize BOTH spellings before constructing visit keys or
+    // calling Census, so a service/provider change cannot create two identities.
+    private val stateNamesByPostal = mapOf(
+        "al" to "Alabama", "ak" to "Alaska", "az" to "Arizona",
+        "ar" to "Arkansas", "ca" to "California", "co" to "Colorado",
+        "ct" to "Connecticut", "de" to "Delaware", "dc" to "District of Columbia",
+        "fl" to "Florida", "ga" to "Georgia", "hi" to "Hawaii",
+        "id" to "Idaho", "il" to "Illinois", "in" to "Indiana",
+        "ia" to "Iowa", "ks" to "Kansas", "ky" to "Kentucky",
+        "la" to "Louisiana", "me" to "Maine", "md" to "Maryland",
+        "ma" to "Massachusetts", "mi" to "Michigan", "mn" to "Minnesota",
+        "ms" to "Mississippi", "mo" to "Missouri", "mt" to "Montana",
+        "ne" to "Nebraska", "nv" to "Nevada", "nh" to "New Hampshire",
+        "nj" to "New Jersey", "nm" to "New Mexico", "ny" to "New York",
+        "nc" to "North Carolina", "nd" to "North Dakota", "oh" to "Ohio",
+        "ok" to "Oklahoma", "or" to "Oregon", "pa" to "Pennsylvania",
+        "ri" to "Rhode Island", "sc" to "South Carolina",
+        "sd" to "South Dakota", "tn" to "Tennessee", "tx" to "Texas",
+        "ut" to "Utah", "vt" to "Vermont", "va" to "Virginia",
+        "wa" to "Washington", "wv" to "West Virginia", "wi" to "Wisconsin",
+        "wy" to "Wyoming", "pr" to "Puerto Rico"
+    )
+    private val officialStateNameByLowercase =
+        stateNamesByPostal.values.associateBy { it.lowercase(Locale.ROOT) }
+
     private val US_NAMES = setOf(
         "us", "usa", "united states", "united states of america"
     )
@@ -73,9 +99,16 @@ internal object UnitedStatesMunicipalBoundaries {
             stateCode(place.countryName, place.parentName) != null
 
     /** State lookup shared by all U.S. municipality discovery and rendering. */
+    internal fun normalizedStateName(countryName: String, stateName: String): String {
+        val trimmed = stateName.trim()
+        if (countryName.trim().lowercase(Locale.ROOT) !in US_NAMES) return trimmed
+        val lower = trimmed.lowercase(Locale.ROOT)
+        return stateNamesByPostal[lower] ?: officialStateNameByLowercase[lower] ?: trimmed
+    }
+
     internal fun stateCode(countryName: String, stateName: String): String? {
         if (countryName.trim().lowercase(Locale.ROOT) !in US_NAMES) return null
-        return stateFips[stateName.trim().lowercase(Locale.ROOT)]
+        return stateFips[normalizedStateName(countryName, stateName).lowercase(Locale.ROOT)]
     }
 
     /**
