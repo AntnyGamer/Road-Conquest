@@ -47,6 +47,11 @@ object PlaceResolver {
         fun find(seed: PlaceDiscovery): PlaceDiscovery? {
             var match: PlaceDiscovery? = null
             for ((place, polygon) in polygons) {
+                // Incorporated places have priority over county subdivisions in
+                // the authoritative point lookup. A cached subdivision may extend
+                // over an as-yet-unvisited city: never let it bypass that lookup.
+                // Legacy name-only keys have no recorded source layer either.
+                if (!place.key.substringAfterLast('|').startsWith("census-4-")) continue
                 if (place.parentName != seed.parentName ||
                     !PlaceGeometry.contains(polygon, seed.latitude, seed.longitude)
                 ) continue
