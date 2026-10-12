@@ -55,7 +55,7 @@ class PlaceResolverTest {
 
     @Test fun municipalCacheParsesKnownPolygonsOnceForManyFixes() {
         val town = PlaceDiscovery(
-            PlaceKind.TOWN, "us|new jersey|sample borough", "Sample borough",
+            PlaceKind.TOWN, "us|new jersey|census-4-3401234", "Sample borough",
             "New Jersey", "United States", 1000L, 39.82, -75.03
         )
         val rectangle = JSONObject("""{"type":"Polygon","coordinates":[[
@@ -84,11 +84,11 @@ class PlaceResolverTest {
 
     @Test fun overlappingCachedMunicipalitiesRequireOfficialLookupInsteadOfVisitOrder() {
         val countySubdivision = PlaceDiscovery(
-            PlaceKind.TOWN, "us|ohio|sample township", "Sample township",
+            PlaceKind.TOWN, "us|ohio|census-1-3900100123", "Sample township",
             "Ohio", "United States", 1000L, 40.0, -82.95
         )
         val incorporated = countySubdivision.copy(
-            key = "us|ohio|sample city", displayName = "Sample city", visitedAt = 2000L
+            key = "us|ohio|census-4-3905678", displayName = "Sample city", visitedAt = 2000L
         )
         val outer = JSONObject("""{"type":"Polygon","coordinates":[[
             [-83.0,39.9],[-82.9,39.9],[-82.9,40.1],[-83.0,40.1],[-83.0,39.9]
@@ -105,17 +105,36 @@ class PlaceResolverTest {
             mutableListOf(incorporated to inner, countySubdivision to outer)
         )) {
             val cache = PlaceResolver.VerifiedMunicipalCache { ordered }
-            assertNull("An overlapping cache must not decide the town by visit order",
-                cache.find(insideBoth))
-            val onlyCounty = cache.find(insideBoth.copy(longitude = -82.99))
-            assertEquals(countySubdivision.key, onlyCounty?.key)
-            assertEquals(3000L, onlyCounty?.visitedAt)
+            // An incorporated town always wins over overlapping county
+            // subdivisions, regardless of cache insertion order.
+            assertEquals(incorporated.key, cache.find(insideBoth)?.key)
+            // A cached subdivision alone is not authoritative: a different
+            // unvisited incorporated municipality may also cover this fix.
+            assertNull(cache.find(insideBoth.copy(longitude = -82.99)))
         }
+    }
+
+    @Test fun legacyAndSubdivisionOnlyCachesCannotSuppressOfficialPointLookup() {
+        val oldKey = PlaceDiscovery(
+            PlaceKind.TOWN, "us|ohio|sample township", "Sample township",
+            "Ohio", "United States", 1000L, 40.0, -82.95
+        )
+        val subdivision = oldKey.copy(key = "us|ohio|census-1-3900100123")
+        val polygon = JSONObject("""{"type":"Polygon","coordinates":[[
+            [-83.0,39.9],[-82.9,39.9],[-82.9,40.1],
+            [-83.0,40.1],[-83.0,39.9]
+        ]]}""")
+        assertNull(PlaceResolver.VerifiedMunicipalCache {
+            mutableListOf(oldKey to polygon)
+        }.find(oldKey))
+        assertNull(PlaceResolver.VerifiedMunicipalCache {
+            mutableListOf(subdivision to polygon)
+        }.find(subdivision))
     }
 
     @Test fun newTownBecomesReusableImmediatelyWithoutReloading() {
         val town = PlaceDiscovery(
-            PlaceKind.TOWN, "us|texas|actual city", "Actual city",
+            PlaceKind.TOWN, "us|texas|census-4-4801234", "Actual city",
             "Texas", "United States", 1000L, 30.27, -97.74
         )
         val shape = """{"type":"Polygon","coordinates":[[
