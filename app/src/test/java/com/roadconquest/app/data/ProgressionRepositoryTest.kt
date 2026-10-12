@@ -354,7 +354,19 @@ class ProgressionRepositoryTest {
             [-75.11,39.69],[-75.09,39.69],[-75.09,39.71],
             [-75.11,39.71],[-75.11,39.69]
         ]]}""")
-        ProgressionManager.reconcileMissingStartingTown(context, progression, listOf(town))
+        // Even containing geometry is insufficient when an incorporated
+        // place takes precedence over an overlapping county subdivision.
+        ProgressionManager.reconcileMissingStartingTown(
+            context, progression, listOf(town)
+        ) { unrelated }
+        assertTrue(progression.hasMissingStartingTown())
+        ProgressionManager.reconcileMissingStartingTown(
+            context, progression, listOf(town)
+        ) { pointAtStart ->
+            assertEquals(start.latitude, pointAtStart.latitude, 0.0)
+            assertEquals(start.longitude, pointAtStart.longitude, 0.0)
+            town
+        }
         assertFalse(progression.hasMissingStartingTown())
         assertEquals(0, progression.resolveCandidate(candidate, listOf(town)))
         assertEquals(0L, progression.snapshot().balance)
