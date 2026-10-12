@@ -84,6 +84,34 @@ class ProgressionRepositoryTest {
         assertEquals(1, progression.visitedPlaces(PlaceKind.TOWN).size)
     }
 
+    @Test fun legacyPostalStateAndOfficialTownKeysDoNotEarnDuplicateVisitPoints() {
+        val repository = ProgressionRepository(context)
+        val legacyState = PlaceDiscovery(
+            PlaceKind.STATE, "us|nj", "NJ", "United States", "United States",
+            1_000L, 39.8, -75.1
+        )
+        val normalizedState = legacyState.copy(
+            key = "us|new jersey", displayName = "New Jersey", visitedAt = 2_000L
+        )
+        assertTrue(repository.recordPlace(legacyState))
+        assertFalse(repository.recordPlace(normalizedState))
+        assertEquals(1L, repository.snapshot().states)
+
+        val old = PlaceDiscovery(
+            PlaceKind.TOWN, "us|nj|census-4-3401234", "Sample borough",
+            "NJ", "United States", 1_000L, 39.80, -75.1
+        )
+        val normalized = old.copy(
+            key = "us|new jersey|census-4-3401234",
+            parentName = "New Jersey", visitedAt = 2_000L, latitude = 39.81
+        )
+        assertTrue(repository.recordPlace(old))
+        assertFalse(repository.recordPlace(normalized))
+        assertEquals(1L, repository.snapshot().towns)
+        assertEquals(2, repository.visitedPlaces(PlaceKind.TOWN).count { it.key.contains("census-4-3401234") } +
+            repository.visitedPlaces(PlaceKind.STATE).count { it.displayName == "NJ" })
+    }
+
     @Test fun officialIdsPreventNearbySameNameMunicipalitiesBeingMerged() {
         val progression = ProgressionRepository(context)
         val first = PlaceDiscovery(
