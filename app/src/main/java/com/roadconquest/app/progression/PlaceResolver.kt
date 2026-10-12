@@ -44,11 +44,20 @@ object PlaceResolver {
 
         private val polygons by lazy(load)
 
-        fun find(seed: PlaceDiscovery): PlaceDiscovery? =
-            polygons.firstOrNull { (place, polygon) ->
-                place.parentName == seed.parentName &&
-                    PlaceGeometry.contains(polygon, seed.latitude, seed.longitude)
-            }?.first?.copy(visitedAt = seed.visitedAt)
+        fun find(seed: PlaceDiscovery): PlaceDiscovery? {
+            var match: PlaceDiscovery? = null
+            for ((place, polygon) in polygons) {
+                if (place.parentName != seed.parentName ||
+                    !PlaceGeometry.contains(polygon, seed.latitude, seed.longitude)
+                ) continue
+                // County subdivisions can overlap incorporated places. The cache
+                // is ordered by visit time, not by Census layer precedence, so
+                // different matching towns require a fresh authoritative lookup.
+                if (match != null && match.key != place.key) return null
+                match = place
+            }
+            return match?.copy(visitedAt = seed.visitedAt)
+        }
 
         fun remember(result: UnitedStatesMunicipalityAtPoint.Result) {
             polygons += result.place to JSONObject(result.overlay.geometryJson)
