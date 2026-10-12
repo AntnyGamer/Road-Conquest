@@ -114,9 +114,13 @@ class VerifiedDriving(context: Context) {
         if (SystemClock.elapsedRealtime() < retryAfter) return
         val mocked = location.isMock
         val age = (SystemClock.elapsedRealtimeNanos() - location.elapsedRealtimeNanos) / 1_000_000L
-        if (mocked || location.provider != "gps" || !location.hasAccuracy() || location.accuracy !in 0.01f..25f ||
-            !location.hasSpeed() || location.speed !in 0f..65f || location.elapsedRealtimeNanos <= 0 ||
-            age !in 0..MAX_BUFFERED_LOCATION_AGE_MS) return
+        val freshValidFix = !mocked && location.provider == "gps" && location.hasAccuracy() &&
+            location.accuracy in 0.01f..25f && location.hasSpeed() && location.speed in 0f..65f &&
+            location.elapsedRealtimeNanos > 0L && age in 0..MAX_BUFFERED_LOCATION_AGE_MS
+        // A failed submission queues the triggering fix for a 30-second retry. By then
+        // that fix is normally too old to contribute NEW evidence, but its previously
+        // prepared batch must still be acknowledged. Never let fix age discard the batch.
+        if (!canResumePreparedEvidence(pendingEvidence != null, freshValidFix)) return
         if (run == null || provider == null) {
             val status = AccountClient.competition()
             if (!status.optBoolean("available")) { reset(); retryAfter = SystemClock.elapsedRealtime() + 300_000L; return }
@@ -142,6 +146,9 @@ class VerifiedDriving(context: Context) {
             // preserved instead of creating an avoidable hole in verified mileage.
             submit(session.token)
         }
+        // An aged-out trigger may retry an existing batch, but may not be added
+        // as a newly captured live fix to another batch.
+        if (!freshValidFix) return
         val point = JSONObject().put("lat", location.latitude).put("lon", location.longitude)
             .put("accuracy", location.accuracy.toDouble()).put("speed", location.speed.toDouble())
             .put("time", location.time).put("elapsed", location.elapsedRealtimeNanos / 1_000_000L).put("mock", false)
@@ -222,6 +229,9 @@ class VerifiedDriving(context: Context) {
     }
 
     companion object {
+        internal fun canResumePreparedEvidence(hasPreparedEvidence: Boolean, freshValidFix: Boolean): Boolean =
+            hasPreparedEvidence || freshValidFix
+
         private const val MAX_BUFFERED_FIXES = 32
         private const val MAX_BUFFERED_LOCATION_AGE_MS = 30_000L
         private const val RETRY_AFTER_FAILURE_MS = 30_000L
