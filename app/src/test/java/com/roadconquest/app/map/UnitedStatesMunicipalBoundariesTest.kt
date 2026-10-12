@@ -76,6 +76,31 @@ class UnitedStatesMunicipalBoundariesTest {
         ))
     }
 
+    @Test fun officialIdSelectsExactSameNamedMunicipalityAndNeverFallsBackToNeighbor() {
+        val p = place("Washington Township", "Pennsylvania", 40.0, -75.1)
+            .copy(key = "us|pennsylvania|census-1-4200300123")
+        val correct = item("Washington township", "Washington", "42",
+            box(-75.2, 39.9, -75.0, 40.1))
+            .replace("\"LSADC\"", "\"GEOID\":\"4200300123\",\"LSADC\"")
+        val neighbor = item("Washington township", "Washington", "42",
+            box(-75.21, 39.91, -75.01, 40.11))
+            .replace("\"LSADC\"", "\"GEOID\":\"4200500456\",\"LSADC\"")
+        val chosen = UnitedStatesMunicipalBoundaries.parseResponse(
+            p, response(neighbor, correct), 1
+        )
+        assertNotNull(chosen)
+        assertTrue(PlaceGeometry.contains(
+            JSONObject(chosen!!.geometryJson), 40.0, -75.1
+        ))
+        // A nearby same-named feature does not prove the requested official ID.
+        assertNull(UnitedStatesMunicipalBoundaries.parseResponse(
+            p, response(neighbor), 1
+        ))
+        assertNull(UnitedStatesMunicipalBoundaries.parseResponse(
+            p, response(correct), 4
+        ))
+    }
+
     @Test fun duplicateNamesChooseClosestGeographicMunicipality() {
         val p = place("Washington Township", "Pennsylvania", 40.0, -75.10)
         val close = item("Washington township", "Washington", "42",
