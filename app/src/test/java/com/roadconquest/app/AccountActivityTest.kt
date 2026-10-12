@@ -61,6 +61,43 @@ class AccountActivityTest {
         assertFalse(Prefs.isDriveVerificationEnabled(context))
     }
 
+    @Test fun delayedAccountRefreshDoesNotRevertNewerPrivacyOrUsernameChanges() {
+        val before = AccountStore.Session("OldUser", "token", false)
+        val newLocal = before.copy(username = "NewUser", leaderboardVisible = true)
+
+        // A remote /me request started while both values were old. Before the
+        // result arrives, the user updates their username and privacy setting.
+        val merged = AccountStore.mergeServerRefresh(
+            newLocal, before, "OldUser", false
+        )
+        assertEquals("NewUser", merged.username)
+        assertTrue(merged.leaderboardVisible)
+        assertEquals(before.token, merged.token)
+
+        // When there were no competing edits, the refresh still updates both
+        // fields exactly as it did before the concurrency fix.
+        val refreshed = AccountStore.mergeServerRefresh(
+            before, before, "ServerRenamed", true
+        )
+        assertEquals("ServerRenamed", refreshed.username)
+        assertTrue(refreshed.leaderboardVisible)
+    }
+
+    @Test fun delayedRemoteFieldUpdatesPreserveOnlyTheLocallyModifiedField() {
+        val before = AccountStore.Session("Driver", "token", false)
+        val privacyChanged = AccountStore.mergeServerRefresh(
+            before.copy(leaderboardVisible = true), before, "RemoteDriver", false
+        )
+        assertEquals("RemoteDriver", privacyChanged.username)
+        assertTrue(privacyChanged.leaderboardVisible)
+
+        val usernameChanged = AccountStore.mergeServerRefresh(
+            before.copy(username = "LocalDriver"), before, "RemoteDriver", true
+        )
+        assertEquals("LocalDriver", usernameChanged.username)
+        assertTrue(usernameChanged.leaderboardVisible)
+    }
+
     @Test fun sessionStringNeverContainsBearerToken() {
         val token = "secret-bearer-token-that-must-not-be-logged"
         val text = AccountStore.Session("DriverOne", token, false).toString()
