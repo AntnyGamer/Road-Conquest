@@ -30,6 +30,18 @@ class PlaceResolverTest {
         this.subAdminArea = subAdminArea
     }
 
+    @Test fun abbreviatedAndFullStateNamesResolveToIdenticalUSVisitKeys() {
+        val abbreviated = address("Woodbury", "Deptford Township").apply { adminArea = "NJ" }
+        val full = address("Woodbury", "Deptford Township")
+        val a = PlaceResolver.resolveAddresses(candidate, listOf(abbreviated))
+        val b = PlaceResolver.resolveAddresses(candidate, listOf(full))
+        assertEquals(b, a)
+        assertEquals("New Jersey", a.single { it.kind == PlaceKind.STATE }.displayName)
+        assertEquals("us|new jersey", a.single { it.kind == PlaceKind.STATE }.key)
+        assertEquals(b.single { it.kind == PlaceKind.TOWN }.key,
+            a.single { it.kind == PlaceKind.TOWN }.key)
+    }
+
     @Test fun townshipNameOverridesNearbyPostalCity() {
         val places = PlaceResolver.resolveAddresses(
             candidate, listOf(address("Woodbury", "Deptford Township"))
