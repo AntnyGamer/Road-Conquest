@@ -64,10 +64,13 @@ enum class PurchaseResult { PURCHASED, OWNED, INSUFFICIENT_POINTS }
 class ProgressionRepository(context: Context) {
     private val dbHelper = AppDatabase.get(context.applicationContext)
     private val historyGeneration = synchronized(dbHelper.historyLock) { dbHelper.historyGeneration }
+    private val progressionGeneration = synchronized(dbHelper.historyLock) { dbHelper.progressionGeneration }
 
     fun isHistoryGenerationCurrent(expected: Long): Boolean =
         synchronized(dbHelper.historyLock) {
-            historyGeneration == dbHelper.historyGeneration && expected == dbHelper.historyGeneration
+            historyGeneration == dbHelper.historyGeneration &&
+                progressionGeneration == dbHelper.progressionGeneration &&
+                expected == dbHelper.historyGeneration
         }
 
     fun syncRoadRewards(
@@ -702,6 +705,9 @@ class ProgressionRepository(context: Context) {
         } finally {
             db.endTransaction()
         }
+        // Queued account/ad/location callbacks must not re-create erased progression.
+        // Do not change historyGeneration: an explicit points reset keeps driving data.
+        dbHelper.progressionGeneration++
     }
 
     /**
@@ -848,6 +854,7 @@ class ProgressionRepository(context: Context) {
 
     private fun isCurrentHistory(expectedHistoryGeneration: Long? = null): Boolean =
         historyGeneration == dbHelper.historyGeneration &&
+            progressionGeneration == dbHelper.progressionGeneration &&
             (expectedHistoryGeneration == null || expectedHistoryGeneration == dbHelper.historyGeneration)
 
     private fun currentBalance(db: SQLiteDatabase): Long {
