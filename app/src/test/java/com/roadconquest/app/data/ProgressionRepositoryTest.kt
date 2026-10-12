@@ -258,6 +258,35 @@ class ProgressionRepositoryTest {
         assertTrue(ProgressionRepository(context).pendingPlaceCandidates(nowMillis = 4_000L).isEmpty())
     }
 
+    @Test fun pointsOnlyResetInvalidatesPendingRewardsWithoutErasingDrivingHistory() {
+        val previous = ProgressionRepository(context)
+        assertTrue(previous.awardAchievement("earned-before-reset", 20L))
+        val driving = TrackingRepository(context)
+        val beforeHistory = driving.getSummary().historyGeneration
+
+        ProgressionRepository(context).clearProgression()
+
+        val late = android.location.Location("gps").apply {
+            latitude = 39.7; longitude = -75.1; accuracy = 5f; time = 2_000L
+        }
+        assertFalse(previous.awardAchievement("queued-after-reset", 30L))
+        assertFalse(previous.recordCompletedAd("late-ad", 10L))
+        assertFalse(previous.recordPlaceCandidate(late))
+        assertFalse(previous.recordBaselineCandidate(late))
+        assertFalse(previous.recordPlace(PlaceDiscovery(
+            PlaceKind.TOWN, "us|new jersey|late", "Late",
+            "New Jersey", "United States", late.time, late.latitude, late.longitude
+        )))
+        assertEquals(0L, ProgressionRepository(context).snapshot().balance)
+        assertEquals("A points-only reset must not invalidate driving repositories",
+            beforeHistory, driving.getSummary().historyGeneration)
+
+        val fresh = ProgressionRepository(context)
+        assertTrue("Fresh work after the reset must still be allowed",
+            fresh.recordBaselineCandidate(late))
+        assertEquals(late.time, fresh.startingLocation()!!.recordedAt)
+    }
+
     @Test fun emptyBaselineResolutionsCannotEraseTheFirstStartingFix() {
         val progression = ProgressionRepository(context)
         val first = android.location.Location("gps").apply {
