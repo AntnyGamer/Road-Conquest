@@ -93,8 +93,11 @@ internal object UnitedStatesMunicipalBoundaries {
         "us", "usa", "united states", "united states of america"
     )
 
+    internal fun isUnitedStatesCountry(value: String): Boolean =
+        value.trim().lowercase(Locale.ROOT) in US_NAMES
+
     fun isUnitedStatesKey(key: String): Boolean =
-        key.substringBefore('|').trim().lowercase(Locale.ROOT) in US_NAMES
+        isUnitedStatesCountry(key.substringBefore('|'))
 
     fun applies(place: PlaceDiscovery): Boolean =
         place.kind == PlaceKind.TOWN &&
