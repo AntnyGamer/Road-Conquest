@@ -53,6 +53,25 @@ class AccountActivityTest {
         assertTrue(collecting > initial)
     }
 
+    @Test fun verificationCannotBeEnabledDuringPendingDeviceDataDeletion() {
+        val context = RuntimeEnvironment.getApplication()
+        Prefs.setDeviceDataDeletionPending(context, false)
+        try {
+            Prefs.setDriveVerificationEnabled(context, true)
+            assertTrue(Prefs.isDriveVerificationEnabled(context))
+            val before = Prefs.driveVerificationConsentVersion(context)
+            Prefs.setDeviceDataDeletionPending(context, true)
+            // A stale Settings UI or in-flight callback must not restore
+            // consent after the local deletion marker becomes durable.
+            Prefs.setDriveVerificationEnabled(context, true)
+            assertFalse(Prefs.isDriveVerificationEnabled(context))
+            assertTrue(Prefs.driveVerificationConsentVersion(context) > before)
+        } finally {
+            Prefs.setDriveVerificationEnabled(context, false)
+            Prefs.setDeviceDataDeletionPending(context, false)
+        }
+    }
+
     @Test fun clearingAnySessionAlsoClearsVerifiedDriveConsent() {
         val context = RuntimeEnvironment.getApplication()
         Prefs.setDriveVerificationEnabled(context, true)
