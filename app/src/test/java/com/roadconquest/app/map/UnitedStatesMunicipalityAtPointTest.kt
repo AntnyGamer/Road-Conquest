@@ -44,6 +44,15 @@ class UnitedStatesMunicipalityAtPointTest {
         ))
     }
 
+    @Test fun malformedProviderBodyBecomesRetryableIoFailure() {
+        try {
+            UnitedStatesMunicipalityAtPoint.parseResponse(seed(), "<html>Service unavailable</html>", 4)
+            fail("Invalid JSON must be treated as an I/O failure for the existing retry path")
+        } catch (e: java.io.IOException) {
+            assertTrue(e.cause is org.json.JSONException)
+        }
+    }
+
     @Test fun neverUsesPolygonFromDifferentState() {
         assertNull(UnitedStatesMunicipalityAtPoint.parseResponse(
             seed(), response(feature("Wrong city", "42", -75.04, -75.01)), 4
