@@ -746,11 +746,9 @@ class ProgressionRepository(context: Context) {
                     (existing.second.isNotEmpty() && proposed.second.isNotEmpty() &&
                         existing.second != proposed.second)
                 ) continue
-                if (officialNewKey && (officialPolygon == null ||
-                        !PlaceGeometry.contains(
-                            officialPolygon, rows.getDouble(2), rows.getDouble(3)
-                        )
-                    )
+                if (officialNewKey && officialPolygon?.let {
+                        PlaceGeometry.contains(it, rows.getDouble(2), rows.getDouble(3))
+                    } != true
                 ) continue
                 Location.distanceBetween(
                     discovery.latitude, discovery.longitude,
