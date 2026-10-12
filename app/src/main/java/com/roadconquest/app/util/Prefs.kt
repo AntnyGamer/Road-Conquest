@@ -58,8 +58,19 @@ object Prefs {
     fun isDeviceDataDeletionPending(context: Context): Boolean =
         prefs(context).getBoolean(KEY_DEVICE_DATA_DELETION_PENDING, false)
 
+    @Synchronized
     fun setDeviceDataDeletionPending(context: Context, pending: Boolean) {
-        prefs(context).edit().putBoolean(KEY_DEVICE_DATA_DELETION_PENDING, pending).commit()
+        val preferences = prefs(context)
+        val editor = preferences.edit().putBoolean(KEY_DEVICE_DATA_DELETION_PENDING, pending)
+        if (pending) {
+            // Mark deletion and revoke precise-GPS consent in the SAME durable
+            // transaction. Other consent toggles take this object lock, so an
+            // opt-in that started before deletion cannot commit after the marker.
+            editor.putBoolean("verify_drives", false)
+                .putLong("verification_consent_version",
+                    preferences.getLong("verification_consent_version", 0L) + 1L)
+        }
+        check(editor.commit()) { "Could not persist local deletion state" }
     }
 
     fun shouldResumePausedTracking(context: Context): Boolean =
@@ -78,10 +89,17 @@ object Prefs {
 
     fun isDriveVerificationEnabled(context: Context): Boolean = prefs(context).getBoolean("verify_drives", false)
 
+    @Synchronized
     fun setDriveVerificationEnabled(context: Context, enabled: Boolean) {
-        // Precise-GPS sharing consent is security-sensitive; persist the opt-in/out before returning.
-        prefs(context).edit().putBoolean("verify_drives", enabled)
-            .putLong("verification_consent_version", driveVerificationConsentVersion(context) + 1L).commit()
+        // Deletion revokes consent. A Settings callback during an in-progress
+        // wipe must never opt the account back into precise-GPS sharing.
+        val permitted = enabled && !isDeviceDataDeletionPending(context)
+        // Serialize consent updates so successive toggles cannot reuse the same
+        // version and accidentally authorize already prepared location evidence.
+        val preferences = prefs(context)
+        preferences.edit().putBoolean("verify_drives", permitted)
+            .putLong("verification_consent_version",
+                preferences.getLong("verification_consent_version", 0L) + 1L).commit()
     }
 
     fun driveVerificationConsentVersion(context: Context): Long = prefs(context).getLong("verification_consent_version", 0L)

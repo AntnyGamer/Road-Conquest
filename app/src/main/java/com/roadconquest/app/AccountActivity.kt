@@ -166,13 +166,9 @@ class AccountActivity : Activity() {
                 if (isDestroyed || AccountStore.load(this)?.token != session.token) return@runOnUiThread
                 result.fold(
                     onSuccess = { account ->
-                        val updated = AccountStore.updateIfToken(this, session.token) { current ->
-                            current.copy(
-                                username = if (current.username == session.username) account.username else current.username,
-                                leaderboardVisible = if (current.leaderboardVisible == session.leaderboardVisible)
-                                    account.leaderboardVisible else current.leaderboardVisible
-                            )
-                        } ?: return@runOnUiThread
+                        val updated = AccountStore.refreshIfUnchanged(
+                            this, session, account.username, account.leaderboardVisible
+                        ) ?: return@runOnUiThread
                         statusText.text = "Signed in."
                         render(updated)
                     },
@@ -208,7 +204,7 @@ class AccountActivity : Activity() {
                     },
                     onFailure = { error ->
                         rendering = true
-                        leaderboardSwitch.isChecked = session.leaderboardVisible
+                        leaderboardSwitch.isChecked = AccountStore.load(this)?.leaderboardVisible == true
                         rendering = false
                         leaderboardSwitch.isEnabled = !busy
                         statusText.text = error.message ?: "Could not save leaderboard privacy."
@@ -273,7 +269,9 @@ class AccountActivity : Activity() {
                     val result = runCatching { AccountClient.changeUsername(session.token, name, currentPassword) }
                     result.onSuccess { account ->
                         AccountStore.updateIfToken(applicationContext, session.token) {
-                            it.copy(username = account.username, leaderboardVisible = account.leaderboardVisible)
+                            // Changing a username must not overwrite a newer privacy
+                            // toggle from Settings while this request was in flight.
+                            it.copy(username = account.username)
                         }
                     }
                     runOnUiThread {

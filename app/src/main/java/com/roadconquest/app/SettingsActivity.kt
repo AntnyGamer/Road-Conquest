@@ -300,6 +300,7 @@ class SettingsActivity : Activity() {
                 dialog.dismiss()
                 deletingDeviceData = true
                 deleteDeviceDataButton.isEnabled = false
+                findViewById<Switch>(R.id.verifyDrivesSwitch).isEnabled = false
                 dataExecutor.execute {
                     val result = runCatching {
                         // Persist the pending marker before local cleanup. If the process dies
@@ -381,7 +382,8 @@ class SettingsActivity : Activity() {
         val leaderboardsButton = findViewById<Button>(R.id.leaderboardsButton)
         verifySwitch.setOnCheckedChangeListener(null)
         verifySwitch.isChecked = Prefs.isDriveVerificationEnabled(this)
-        verifySwitch.isEnabled = session != null && accountConfigured
+        verifySwitch.isEnabled = session != null && accountConfigured &&
+            !deletingDeviceData && !Prefs.isDeviceDataDeletionPending(this)
         verifySwitch.setOnCheckedChangeListener { _, enabled ->
             Prefs.setDriveVerificationEnabled(this, enabled)
         }
@@ -426,11 +428,9 @@ class SettingsActivity : Activity() {
                 if (isDestroyed || AccountStore.load(this)?.token != session.token) return@runOnUiThread
                 result.fold(
                     onSuccess = { account ->
-                        val updated = session.copy(
-                            username = account.username,
-                            leaderboardVisible = account.leaderboardVisible
-                        )
-                        AccountStore.save(this, updated)
+                        val updated = AccountStore.refreshIfUnchanged(
+                            this, session, account.username, account.leaderboardVisible
+                        ) ?: return@runOnUiThread
                         renderingAccountPrivacy = true
                         accountSummaryText.text = "Signed in as " + updated.username
                         leaderboardPrivacySwitch.isChecked = updated.leaderboardVisible
@@ -465,7 +465,9 @@ class SettingsActivity : Activity() {
                 if (isDestroyed || AccountStore.load(this)?.token != session.token) return@runOnUiThread
                 result.fold(
                     onSuccess = { saved ->
-                        AccountStore.save(this, session.copy(leaderboardVisible = saved))
+                        AccountStore.updateIfToken(this, session.token) { current ->
+                            current.copy(leaderboardVisible = saved)
+                        } ?: return@runOnUiThread
                         renderingAccountPrivacy = true
                         leaderboardPrivacySwitch.isChecked = saved
                         renderingAccountPrivacy = false
@@ -474,7 +476,7 @@ class SettingsActivity : Activity() {
                     },
                     onFailure = { error ->
                         renderingAccountPrivacy = true
-                        leaderboardPrivacySwitch.isChecked = session.leaderboardVisible
+                        leaderboardPrivacySwitch.isChecked = AccountStore.load(this)?.leaderboardVisible == true
                         renderingAccountPrivacy = false
                         leaderboardPrivacySwitch.isEnabled = true
                         Toast.makeText(

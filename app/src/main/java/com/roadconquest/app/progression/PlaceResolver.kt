@@ -30,6 +30,9 @@ object PlaceResolver {
             ProgressionRepository(appContext).visitedPlaces(PlaceKind.TOWN)
                 .asSequence()
                 .filter(UnitedStatesMunicipalBoundaries::applies)
+                // Only incorporated (layer 4) keys are safe shortcut candidates.
+                // Avoid loading and parsing polygons we must validate online anyway.
+                .filter { it.key.substringAfterLast('|').startsWith("census-4-") }
                 .mapNotNull { place ->
                     PlaceOverlayCache.readOfficialUs(appContext, place).data?.let { overlay ->
                         try {
@@ -44,11 +47,33 @@ object PlaceResolver {
 
         private val polygons by lazy(load)
 
-        fun find(seed: PlaceDiscovery): PlaceDiscovery? =
-            polygons.firstOrNull { (place, polygon) ->
-                place.parentName == seed.parentName &&
-                    PlaceGeometry.contains(polygon, seed.latitude, seed.longitude)
-            }?.first?.copy(visitedAt = seed.visitedAt)
+        fun find(seed: PlaceDiscovery): PlaceDiscovery? {
+            var match: PlaceDiscovery? = null
+            val candidateState = UnitedStatesMunicipalBoundaries.stateCode(
+                seed.countryName, seed.parentName
+            )
+            for ((place, polygon) in polygons) {
+                // Incorporated places have priority over county subdivisions in
+                // the authoritative point lookup. A cached subdivision may extend
+                // over an as-yet-unvisited city: never let it bypass that lookup.
+                // Legacy name-only keys have no recorded source layer either.
+                if (!place.key.substringAfterLast('|').startsWith("census-4-")) continue
+                val sameState = place.parentName == seed.parentName ||
+                    (candidateState != null && candidateState ==
+                        UnitedStatesMunicipalBoundaries.stateCode(
+                            place.countryName, place.parentName
+                        ))
+                if (!sameState ||
+                    !PlaceGeometry.contains(polygon, seed.latitude, seed.longitude)
+                ) continue
+                // County subdivisions can overlap incorporated places. The cache
+                // is ordered by visit time, not by Census layer precedence, so
+                // different matching towns require a fresh authoritative lookup.
+                if (match != null && match.key != place.key) return null
+                match = place
+            }
+            return match?.copy(visitedAt = seed.visitedAt)
+        }
 
         fun remember(result: UnitedStatesMunicipalityAtPoint.Result) {
             polygons += result.place to JSONObject(result.overlay.geometryJson)
@@ -60,6 +85,10 @@ object PlaceResolver {
         context: Context, candidate: PendingPlaceCandidate,
         municipalCache: VerifiedMunicipalCache? = null
     ): List<PlaceDiscovery>? {
+        // Capture BEFORE geocoding and network I/O. Clearing local data changes
+        // this generation; older in-flight lookups must never recreate erased
+        // precise-location boundary caches when their responses finally arrive.
+        val cacheGeneration = PlaceOverlayCache.generation()
         if (!Geocoder.isPresent()) return null
         val addresses = try {
             Geocoder(context.applicationContext, Locale.US)
@@ -98,7 +127,7 @@ object PlaceResolver {
             }
             if (result != null) {
                 if (!PlaceOverlayCache.writeOfficialUs(
-                        context, result.place, result.overlay
+                        context, result.place, result.overlay, cacheGeneration
                     )
                 ) return null
                 known.remember(result)
@@ -132,7 +161,10 @@ object PlaceResolver {
             val cached = PlaceOverlayCache.readVerifiedForDiscovery(context, town)
             val boundary = if (cached != null) cached else try {
                 client.fetch(town, requireContainment = false)?.also {
-                    PlaceOverlayCache.write(context, town, it, verifiedForDiscovery = true)
+                    if (!PlaceOverlayCache.write(
+                            context, town, it, cacheGeneration, verifiedForDiscovery = true
+                        )
+                    ) return null
                 }
             } catch (_: Exception) {
                 // Preserve the candidate for retry when the boundary provider is offline.
@@ -158,10 +190,21 @@ object PlaceResolver {
         // Reverse geocoders sometimes return a road/address result first with incomplete
         // administrative fields. Combine only results for this same coordinate rather than
         // letting one sparse result permanently omit the zero-point state/town.
-        val countryName = firstValue { it.countryName }
-        val countryCode = firstValue { it.countryCode }
-        val countryKey = canonical(countryCode.ifBlank { countryName })
-        val stateName = firstValue { it.adminArea }
+        val reportedCountryName = firstValue { it.countryName }
+        val reportedCountryCode = firstValue { it.countryCode }
+        val isUnitedStates = reportedCountryCode.equals("US", ignoreCase = true) ||
+            canonical(reportedCountryName) in setOf(
+                "us", "usa", "united states", "united states of america"
+            )
+        // Reverse geocoders can omit either country field for the very same GPS
+        // position. Use one stable US key and display name regardless of which
+        // field was present, including during the zero-point baseline.
+        val countryName = if (isUnitedStates) "United States" else reportedCountryName
+        val countryKey = if (isUnitedStates) "us" else
+            canonical(reportedCountryCode.ifBlank { countryName })
+        val stateName = UnitedStatesMunicipalBoundaries.normalizedStateName(
+            countryName, firstValue { it.adminArea }
+        )
         val namedMunicipality = firstValue { address ->
             address.subAdminArea?.trim()?.takeIf { name ->
                 val lower = name.lowercase(Locale.ROOT)

@@ -84,6 +84,153 @@ class ProgressionRepositoryTest {
         assertEquals(1, progression.visitedPlaces(PlaceKind.TOWN).size)
     }
 
+    @Test fun missingGeocoderCountryFieldsDoNotDuplicateHistoricalUsRewards() {
+        val repository = ProgressionRepository(context)
+        val oldCountry = PlaceDiscovery(
+            PlaceKind.COUNTRY, "united states", "United States",
+            visitedAt = 1000L, latitude = 39.80, longitude = -75.1
+        )
+        assertTrue(repository.recordPlace(oldCountry))
+        assertFalse(repository.recordPlace(oldCountry.copy(
+            key = "us", visitedAt = 2000L
+        )))
+        assertEquals(1L, repository.snapshot().countries)
+
+        val oldState = PlaceDiscovery(
+            PlaceKind.STATE, "usa|nj", "NJ", "USA", "USA",
+            1000L, 39.80, -75.1
+        )
+        assertTrue(repository.recordPlace(oldState))
+        assertFalse(repository.recordPlace(oldState.copy(
+            key = "us|new jersey", displayName = "New Jersey",
+            parentName = "United States", countryName = "United States",
+            visitedAt = 2000L
+        )))
+        assertEquals(1L, repository.snapshot().states)
+
+        val oldTown = PlaceDiscovery(
+            PlaceKind.TOWN, "usa|nj|census-4-3401234", "Sample borough",
+            "NJ", "USA", 1000L, 39.80, -75.1
+        )
+        assertTrue(repository.recordPlace(oldTown))
+        assertFalse(repository.recordPlace(oldTown.copy(
+            key = "us|new jersey|census-4-3401234",
+            parentName = "New Jersey", countryName = "United States",
+            visitedAt = 2000L
+        )))
+        assertEquals(1L, repository.snapshot().towns)
+    }
+
+    @Test fun legacyPostalStateAndOfficialTownKeysDoNotEarnDuplicateVisitPoints() {
+        val repository = ProgressionRepository(context)
+        val legacyState = PlaceDiscovery(
+            PlaceKind.STATE, "us|nj", "NJ", "United States", "United States",
+            1_000L, 39.8, -75.1
+        )
+        val normalizedState = legacyState.copy(
+            key = "us|new jersey", displayName = "New Jersey", visitedAt = 2_000L
+        )
+        assertTrue(repository.recordPlace(legacyState))
+        assertFalse(repository.recordPlace(normalizedState))
+        assertEquals(1L, repository.snapshot().states)
+
+        val old = PlaceDiscovery(
+            PlaceKind.TOWN, "us|nj|census-4-3401234", "Sample borough",
+            "NJ", "United States", 1_000L, 39.80, -75.1
+        )
+        val normalized = old.copy(
+            key = "us|new jersey|census-4-3401234",
+            parentName = "New Jersey", visitedAt = 2_000L, latitude = 39.81
+        )
+        assertTrue(repository.recordPlace(old))
+        assertFalse(repository.recordPlace(normalized))
+        assertEquals(1L, repository.snapshot().towns)
+        assertEquals(2, repository.visitedPlaces(PlaceKind.TOWN).count { it.key.contains("census-4-3401234") } +
+            repository.visitedPlaces(PlaceKind.STATE).count { it.displayName == "NJ" })
+    }
+
+    @Test fun officialIdsPreventNearbySameNameMunicipalitiesBeingMerged() {
+        val progression = ProgressionRepository(context)
+        val first = PlaceDiscovery(
+            PlaceKind.TOWN, "us|pennsylvania|census-1-4200300123",
+            "Washington township", "Pennsylvania", "United States",
+            1_000L, 40.00, -75.10
+        )
+        val second = first.copy(
+            key = "us|pennsylvania|census-1-4200500456",
+            visitedAt = 2_000L, latitude = 40.003, longitude = -75.102
+        )
+        assertTrue(progression.recordPlace(first))
+        assertTrue(progression.recordPlace(second))
+        assertEquals(200L, progression.snapshot().balance)
+        assertEquals(2L, progression.snapshot().towns)
+        assertEquals(2, progression.visitedPlaces(PlaceKind.TOWN).size)
+        assertFalse(progression.recordPlace(first.copy(visitedAt = 3_000L)))
+        assertEquals(200L, progression.snapshot().balance)
+    }
+
+    @Test fun separateCensusGeoidsStaySeparateEvenWhenParentStateSpellingChanges() {
+        val repository = ProgressionRepository(context)
+        val first = PlaceDiscovery(
+            PlaceKind.TOWN, "us|nj|census-1-3400300012", "Washington township",
+            "NJ", "United States", 1_000L, 39.80, -75.1
+        )
+        val second = first.copy(
+            key = "us|new jersey|census-1-3400500034",
+            parentName = "New Jersey", visitedAt = 2_000L,
+            latitude = 39.805
+        )
+        assertTrue(repository.recordPlace(first))
+        assertTrue(repository.recordPlace(second))
+        assertEquals(2L, repository.snapshot().towns)
+        assertEquals(2, repository.visitedPlaces(PlaceKind.TOWN).size)
+    }
+
+    @Test fun legacyNameBasedVisitIsReusedOnlyIfInsideNewOfficialPolygon() {
+        val progression = ProgressionRepository(context)
+        val legacy = PlaceDiscovery(
+            PlaceKind.TOWN, "us|pennsylvania|sample borough",
+            "Sample borough", "Pennsylvania", "United States",
+            1_000L, 40.000, -75.100
+        )
+        val sameTown = legacy.copy(
+            key = "us|pennsylvania|census-4-4201234",
+            visitedAt = 2_000L, latitude = 40.003, longitude = -75.102
+        )
+        fun cache(place: PlaceDiscovery, coordinates: String) {
+            assertTrue(com.roadconquest.app.map.PlaceOverlayCache.writeOfficialUs(
+                context, place, com.roadconquest.app.map.PlaceOverlayData(
+                    place.key, place.displayName, place.kind, null, 1.0, coordinates
+                )
+            ))
+        }
+        assertTrue(progression.recordPlace(legacy))
+        val enclosing = """{"type":"Polygon","coordinates":[[
+            [-75.12,39.99],[-75.08,39.99],[-75.08,40.02],
+            [-75.12,40.02],[-75.12,39.99]
+        ]]}"""
+        cache(sameTown, enclosing)
+        assertFalse("Same verified town must not earn a second reward",
+            progression.recordPlace(sameTown))
+        assertEquals(listOf(legacy.key),
+            progression.visitedPlaces(PlaceKind.TOWN).map { it.key })
+        assertEquals(100L, progression.snapshot().balance)
+
+        val differentTown = sameTown.copy(
+            key = "us|pennsylvania|census-4-4205678",
+            visitedAt = 3_000L, latitude = 40.003, longitude = -75.102
+        )
+        val disjoint = """{"type":"Polygon","coordinates":[[
+            [-75.11,40.002],[-75.09,40.002],[-75.09,40.02],
+            [-75.11,40.02],[-75.11,40.002]
+        ]]}"""
+        cache(differentTown, disjoint)
+        assertTrue("New municipality must not be folded into nearby old same-name visit",
+            progression.recordPlace(differentTown))
+        assertEquals(200L, progression.snapshot().balance)
+        assertEquals(2L, progression.snapshot().towns)
+    }
+
     @Test fun newPlacesPayOnceAndPurchasesCannotOverspend() {
         val progression = ProgressionRepository(context)
         val town = PlaceDiscovery(
@@ -256,6 +403,126 @@ class ProgressionRepositoryTest {
         }
         assertFalse(staleProgression.recordBaselineCandidate(queuedLocation))
         assertTrue(ProgressionRepository(context).pendingPlaceCandidates(nowMillis = 4_000L).isEmpty())
+    }
+
+    @Test fun emptyBaselineResolutionsCannotEraseTheFirstStartingFix() {
+        val progression = ProgressionRepository(context)
+        val first = android.location.Location("gps").apply {
+            latitude = 39.7
+            longitude = -75.1
+            accuracy = 5f
+            time = 1_000L
+        }
+        assertTrue(progression.recordBaselineCandidate(first))
+        repeat(4) {
+            val pending = progression.pendingPlaceCandidates(nowMillis = Long.MAX_VALUE).single()
+            assertEquals(Long.MIN_VALUE, pending.cellX)
+            assertEquals(0, progression.resolveCandidate(pending, emptyList()))
+        }
+
+        // Unresolved geocoding must never let a restart redefine the initial fix.
+        val later = android.location.Location("gps").apply {
+            latitude = 40.0
+            longitude = -75.0
+            accuracy = 5f
+            time = 2_000L
+        }
+        assertFalse(progression.recordBaselineCandidate(later))
+        assertTrue(progression.recordPlaceCandidate(later))
+        assertEquals(first.latitude, progression.startingLocation()!!.latitude, 0.0)
+        assertEquals(first.longitude, progression.startingLocation()!!.longitude, 0.0)
+        assertEquals(first.time, progression.startingLocation()!!.recordedAt)
+        assertEquals(Long.MIN_VALUE,
+            progression.pendingPlaceCandidates(nowMillis = Long.MAX_VALUE).single().cellX)
+
+        // Once at least one place is resolved, the bounded partial-baseline
+        // fallback may release queued discoveries without losing their visits.
+        val baseline = progression.pendingPlaceCandidates(nowMillis = Long.MAX_VALUE).single()
+        assertEquals(0, progression.resolveCandidate(
+            baseline,
+            listOf(PlaceDiscovery(
+                PlaceKind.COUNTRY, "us", "United States",
+                visitedAt = baseline.visitedAt,
+                latitude = baseline.latitude, longitude = baseline.longitude
+            ))
+        ))
+        val queued = progression.pendingPlaceCandidates(nowMillis = Long.MAX_VALUE).single()
+        assertEquals(later.time, queued.visitedAt)
+        assertEquals(later.latitude, queued.latitude, 0.0)
+        assertEquals(first.time, progression.startingLocation()!!.recordedAt)
+        assertEquals(0L, progression.snapshot().balance)
+    }
+
+    @Test fun verifiedStartingTownResolvedLateCannotEarnItsOwnDiscoveryReward() {
+        val progression = ProgressionRepository(context)
+        val start = android.location.Location("gps").apply {
+            latitude = 39.7; longitude = -75.1; accuracy = 5f; time = 1_000L
+        }
+        assertTrue(progression.recordBaselineCandidate(start))
+        repeat(3) {
+            val baseline = progression.pendingPlaceCandidates(nowMillis = Long.MAX_VALUE).single()
+            val partial = listOf(
+                PlaceDiscovery(PlaceKind.COUNTRY, "us", "United States",
+                    visitedAt = start.time, latitude = start.latitude, longitude = start.longitude),
+                PlaceDiscovery(PlaceKind.STATE, "us|new jersey", "New Jersey",
+                    "United States", "United States", start.time, start.latitude, start.longitude)
+            )
+            assertEquals(0, progression.resolveCandidate(baseline, partial))
+        }
+        assertTrue(progression.hasMissingStartingTown())
+        val later = android.location.Location("gps").apply {
+            latitude = 39.705; longitude = -75.095; accuracy = 5f; time = 5_000L
+        }
+        assertTrue(progression.recordPlaceCandidate(later))
+        val candidate = progression.pendingPlaceCandidates(nowMillis = Long.MAX_VALUE).single()
+        val town = PlaceDiscovery(
+            PlaceKind.TOWN, "us|new jersey|starting borough", "Starting borough",
+            "New Jersey", "United States", later.time, later.latitude, later.longitude
+        )
+        fun cachedPolygon(place: PlaceDiscovery, json: String) {
+            val overlay = com.roadconquest.app.map.PlaceOverlayData(
+                place.key, place.displayName, place.kind, null, 1.0, json
+            )
+            assertTrue(com.roadconquest.app.map.PlaceOverlayCache.writeOfficialUs(context, place, overlay))
+        }
+        // A different verified municipality must NOT be mistaken for the start town.
+        val unrelated = town.copy(key = "us|new jersey|unrelated borough",
+            displayName = "Unrelated borough")
+        cachedPolygon(unrelated, """{"type":"Polygon","coordinates":[[
+            [-75.01,39.99],[-74.99,39.99],[-74.99,40.01],
+            [-75.01,40.01],[-75.01,39.99]
+        ]]}""")
+        ProgressionManager.reconcileMissingStartingTown(context, progression, listOf(unrelated))
+        assertTrue(progression.hasMissingStartingTown())
+        assertTrue(progression.visitedPlaces(PlaceKind.TOWN).isEmpty())
+
+        // This municipality really includes the original first live fix.
+        cachedPolygon(town, """{"type":"Polygon","coordinates":[[
+            [-75.11,39.69],[-75.09,39.69],[-75.09,39.71],
+            [-75.11,39.71],[-75.11,39.69]
+        ]]}""")
+        // Even containing geometry is insufficient when an incorporated
+        // place takes precedence over an overlapping county subdivision.
+        ProgressionManager.reconcileMissingStartingTown(
+            context, progression, listOf(town)
+        ) { unrelated }
+        assertTrue(progression.hasMissingStartingTown())
+        ProgressionManager.reconcileMissingStartingTown(
+            context, progression, listOf(town)
+        ) { pointAtStart ->
+            assertEquals(start.latitude, pointAtStart.latitude, 0.0)
+            assertEquals(start.longitude, pointAtStart.longitude, 0.0)
+            town
+        }
+        assertFalse(progression.hasMissingStartingTown())
+        assertEquals(0, progression.resolveCandidate(candidate, listOf(town)))
+        assertEquals(0L, progression.snapshot().balance)
+        assertEquals(0L, progression.snapshot().towns)
+        assertEquals(listOf(town.key),
+            progression.visitedPlaces(PlaceKind.TOWN).map { it.key })
+        assertEquals(PlaceVisitTimes(start.time, later.time),
+            progression.placeVisitTimes(PlaceKind.TOWN, town.key))
+        assertEquals(start.time, progression.startingLocation()!!.recordedAt)
     }
 
     @Test fun failedBaselineGeocodingRetriesPromptly() {

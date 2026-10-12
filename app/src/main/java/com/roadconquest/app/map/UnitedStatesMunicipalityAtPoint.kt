@@ -41,7 +41,7 @@ internal object UnitedStatesMunicipalityAtPoint {
                 .appendQueryParameter("inSR", "4326")
                 .appendQueryParameter("spatialRel", "esriSpatialRelIntersects")
                 .appendQueryParameter("outFields",
-                    "BASENAME,NAME,STATE,FUNCSTAT,AREALAND,AREAWATER")
+                    "BASENAME,NAME,STATE,GEOID,FUNCSTAT,AREALAND,AREAWATER")
                 .appendQueryParameter("returnGeometry", "true")
                 .appendQueryParameter("outSR", "4326")
                 .appendQueryParameter("resultRecordCount", "20")
@@ -85,12 +85,19 @@ internal object UnitedStatesMunicipalityAtPoint {
         val state = UnitedStatesMunicipalBoundaries.stateCode(
             seed.countryName, seed.parentName
         ) ?: return null
-        val doc = JSONObject(body)
+        val doc = try {
+            JSONObject(body)
+        } catch (e: org.json.JSONException) {
+            // A malformed/HTML response from the service is a retryable provider
+            // failure, not a reason to abort the foreground discovery worker.
+            throw IOException("Invalid Census municipality response", e)
+        }
         if (doc.has("error")) throw IOException("Census municipality service error")
         if (doc.optString("type") != "FeatureCollection") {
             throw IOException("Unexpected municipality GeoJSON")
         }
-        val features = doc.optJSONArray("features") ?: return null
+        val features = doc.optJSONArray("features")
+            ?: throw IOException("Census municipality GeoJSON lacks a features array")
         for (index in 0 until features.length()) {
             val feature = features.optJSONObject(index) ?: continue
             val properties = feature.optJSONObject("properties") ?: continue
@@ -112,7 +119,14 @@ internal object UnitedStatesMunicipalityAtPoint {
             if (!areaSqKm.isFinite() || areaSqKm <= 0.0) continue
             val canonical = name.trim().lowercase(Locale.ROOT)
                 .replace(WHITESPACE_RE, " ")
-            val key = seed.key.substringBeforeLast('|') + "|" + canonical
+            // Names repeat within a state (including same-named county subdivisions).
+            // The Census layer + GEOID identify the actual polygon, not its label.
+            // Preserve name keys as a fallback for older service responses.
+            val geoid = properties.optString("GEOID").trim()
+            val validGeoid = geoid.length == (if (layer == 4) 7 else 10) &&
+                geoid.startsWith(state) && geoid.all(Char::isDigit)
+            val identity = if (validGeoid) "census-$layer-$geoid" else canonical
+            val key = seed.key.substringBeforeLast('|') + "|" + identity
             val place = seed.copy(key = key, displayName = name)
             return Result(
                 place,

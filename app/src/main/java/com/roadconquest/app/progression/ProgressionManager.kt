@@ -7,10 +7,20 @@ import com.roadconquest.app.achievements.Achievements
 import com.roadconquest.app.data.DataSummary
 import com.roadconquest.app.data.ProgressionRepository
 import com.roadconquest.app.data.ProgressionSnapshot
+import com.roadconquest.app.data.PlaceDiscovery
+import com.roadconquest.app.data.PlaceKind
+import com.roadconquest.app.map.PlaceGeometry
 import com.roadconquest.app.map.PlaceOverlayCache
+import com.roadconquest.app.map.UnitedStatesMunicipalBoundaries
+import com.roadconquest.app.map.UnitedStatesMunicipalityAtPoint
+import org.json.JSONObject
 import java.util.UUID
 
-data class PlaceResolutionResult(val added: Int, val newestVisitAt: Long)
+data class PlaceResolutionResult(
+    val added: Int,
+    val newestVisitAt: Long,
+    val placesUpdated: Boolean
+)
 
 object ProgressionManager {
     fun sync(context: Context, summary: DataSummary): ProgressionSnapshot {
@@ -87,6 +97,7 @@ object ProgressionManager {
         // Do not manufacture new discovery notifications from replaying historical drives.
         var added = 0
         var newestVisitAt = 0L
+        var placesUpdated = false
         var processed = 0
         while (processed < limit) {
             val candidates = repository.pendingPlaceCandidates(limit - processed)
@@ -96,15 +107,64 @@ object ProgressionManager {
                 if (discoveries.isNullOrEmpty()) {
                     repository.deferCandidate(candidate)
                 } else {
+                    val missingStartTown = repository.hasMissingStartingTown()
+                    reconcileMissingStartingTown(context, repository, discoveries)
+                    val startTownRecovered = missingStartTown && !repository.hasMissingStartingTown()
                     val newPlaces = repository.resolveCandidate(candidate, discoveries)
                     added += newPlaces
+                    // A zero-point baseline or a late recovery changes visited-place
+                    // overlays without awarding any points or showing a "new place" toast.
+                    placesUpdated = placesUpdated || newPlaces > 0 || startTownRecovered ||
+                        (candidate.cellX == Long.MIN_VALUE && candidate.cellY == Long.MIN_VALUE)
                     if (newPlaces > 0) newestVisitAt = maxOf(newestVisitAt, candidate.visitedAt)
                 }
                 processed++
                 if (processed >= limit) break
             }
         }
-        return PlaceResolutionResult(added, newestVisitAt)
+        return PlaceResolutionResult(added, newestVisitAt, placesUpdated)
+    }
+
+    /**
+     * A failed baseline town lookup is released after repeated partial results.
+     * When a later, VERIFIED boundary includes the original start coordinate,
+     * it is the zero-point town, not a newly discovered place.
+     */
+    internal fun reconcileMissingStartingTown(
+        context: Context,
+        repository: ProgressionRepository,
+        discoveries: List<PlaceDiscovery>,
+        resolveOfficialAtStart: (PlaceDiscovery) -> PlaceDiscovery? = {
+            UnitedStatesMunicipalityAtPoint.fetch(it)?.place
+        }
+    ) {
+        if (!repository.hasMissingStartingTown()) return
+        val start = repository.startingLocation() ?: return
+        for (town in discoveries) {
+            if (town.kind != PlaceKind.TOWN ||
+                !UnitedStatesMunicipalBoundaries.applies(town)
+            ) continue
+            val verified = PlaceOverlayCache.readOfficialUs(context, town).data
+                ?: continue
+            val containsStart = runCatching {
+                PlaceGeometry.contains(
+                    JSONObject(verified.geometryJson), start.latitude, start.longitude
+                )
+            }.getOrDefault(false)
+            if (!containsStart) continue
+            // Both Census layers may cover the start. Containment alone cannot
+            // establish which town takes precedence. Confirm the actual Census
+            // point result before suppressing a legitimate discovery reward.
+            val atStart = runCatching {
+                resolveOfficialAtStart(town.copy(
+                    latitude = start.latitude, longitude = start.longitude,
+                    visitedAt = start.recordedAt
+                ))
+            }.getOrNull()
+            if (atStart?.key == town.key &&
+                repository.recordVerifiedStartingTown(town, start)
+            ) break
+        }
     }
 
     fun metrics(snapshot: ProgressionSnapshot) = AchievementMetrics(

@@ -4,6 +4,10 @@ import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.location.Location
+import com.roadconquest.app.map.PlaceGeometry
+import com.roadconquest.app.map.PlaceOverlayCache
+import com.roadconquest.app.map.UnitedStatesMunicipalBoundaries
+import org.json.JSONObject
 import kotlin.math.PI
 import kotlin.math.atan
 import kotlin.math.floor
@@ -62,7 +66,8 @@ data class ProgressionSnapshot(
 enum class PurchaseResult { PURCHASED, OWNED, INSUFFICIENT_POINTS }
 
 class ProgressionRepository(context: Context) {
-    private val dbHelper = AppDatabase.get(context.applicationContext)
+    private val appContext = context.applicationContext
+    private val dbHelper = AppDatabase.get(appContext)
     private val historyGeneration = synchronized(dbHelper.historyLock) { dbHelper.historyGeneration }
 
     fun isHistoryGenerationCurrent(expected: Long): Boolean =
@@ -367,7 +372,16 @@ class ProgressionRepository(context: Context) {
                     }
                 }
                 if (baseline && !baselineComplete(db)) {
-                    if (candidate.attempts + 1 >= BASELINE_PARTIAL_RESOLUTION_LIMIT) {
+                    // Do not retire the only durable starting fix when geocoding has
+                    // produced no places at all. Without an initial visited place,
+                    // ordinary candidates remain gated forever and the next GPS fix
+                    // can incorrectly become a new zero-point baseline.
+                    val hasResolvedBaselinePlace = db.rawQuery(
+                        "SELECT 1 FROM visited_places LIMIT 1", null
+                    ).use { it.moveToFirst() }
+                    if (candidate.attempts + 1 >= BASELINE_PARTIAL_RESOLUTION_LIMIT &&
+                        hasResolvedBaselinePlace
+                    ) {
                         markMissingBaselineKinds(db)
                     } else {
                         scheduleCandidateRetry(db, candidate, System.currentTimeMillis())
@@ -382,6 +396,44 @@ class ProgressionRepository(context: Context) {
                 }
                 db.setTransactionSuccessful()
                 added
+            } finally {
+                db.endTransaction()
+            }
+        }
+
+    /** A partially resolved zero-point baseline can lack its municipality. */
+    fun hasMissingStartingTown(): Boolean = synchronized(dbHelper.historyLock) {
+        isCurrentHistory() &&
+            counterOrNull(dbHelper.readableDatabase, baselineMissingKey(PlaceKind.TOWN)) == 1L
+    }
+
+    /**
+     * Used only after a verified municipal polygon contains the ORIGINAL start fix.
+     * Reconcile a late town identification with the zero-point baseline before
+     * the ordinary candidate is processed; never award points for the start town.
+     */
+    fun recordVerifiedStartingTown(discovery: PlaceDiscovery, start: StartingLocation): Boolean =
+        synchronized(dbHelper.historyLock) {
+            if (!isCurrentHistory() || discovery.kind != PlaceKind.TOWN ||
+                counterOrNull(dbHelper.readableDatabase, baselineMissingKey(PlaceKind.TOWN)) != 1L ||
+                startingLocation() != start
+            ) return@synchronized false
+            val db = dbHelper.writableDatabase
+            db.beginTransaction()
+            try {
+                val baselineDiscovery = alignTownWithExistingPlace(db, discovery.copy(
+                    visitedAt = start.recordedAt,
+                    latitude = start.latitude,
+                    longitude = start.longitude
+                ))
+                val inserted = insertVisitedPlace(db, baselineDiscovery)
+                if (inserted) {
+                    putCounter(db, baselineKey(baselineDiscovery), 1L)
+                    db.delete("progression_counters", "counter_key = ?",
+                        arrayOf(baselineMissingKey(PlaceKind.TOWN)))
+                }
+                db.setTransactionSuccessful()
+                inserted
             } finally {
                 db.endTransaction()
             }
@@ -664,21 +716,98 @@ class ProgressionRepository(context: Context) {
      * Explicitly different municipal types are not treated as aliases.
      */
     private fun alignTownWithExistingPlace(db: SQLiteDatabase, discovery: PlaceDiscovery): PlaceDiscovery {
+        // Preserve country rewards from geocoders that supplied only a country
+        // name ("united states") before they started supplying ISO code "us".
+        if (discovery.kind == PlaceKind.COUNTRY) {
+            if (!UnitedStatesMunicipalBoundaries.isUnitedStatesCountry(discovery.key)) return discovery
+            db.query("visited_places", arrayOf("place_key"),
+                "kind = ? AND lower(place_key) IN ('us', 'usa', 'united states', 'united states of america')",
+                arrayOf(PlaceKind.COUNTRY.name), null, null, null
+            ).use { rows ->
+                if (rows.moveToFirst()) return discovery.copy(key = rows.getString(0))
+            }
+            return discovery
+        }
+        // Older providers sometimes called the same state "NJ" and "New Jersey".
+        // Keep the previously rewarded key instead of creating a duplicate state.
+        if (discovery.kind == PlaceKind.STATE) {
+            val stateFips = UnitedStatesMunicipalBoundaries.stateCode(
+                discovery.countryName, discovery.displayName
+            ) ?: return discovery
+            db.query("visited_places", arrayOf("place_key", "display_name"),
+                "kind = ? AND lower(country_name) IN ('us', 'usa', 'united states', 'united states of america')",
+                arrayOf(PlaceKind.STATE.name),
+                null, null, null
+            ).use { existing ->
+                while (existing.moveToNext()) {
+                    if (UnitedStatesMunicipalBoundaries.stateCode(
+                            discovery.countryName, existing.getString(1)
+                        ) == stateFips
+                    ) return discovery.copy(key = existing.getString(0))
+                }
+            }
+            return discovery
+        }
         if (discovery.kind != PlaceKind.TOWN) return discovery
         val proposed = municipalityIdentity(discovery.displayName)
+        val officialNewKey = discovery.key.substringAfterLast('|').startsWith("census-")
+        // New official IDs must never be reduced to the same name+nearby-fix
+        // heuristic. For an old name-key visit, verify that its saved fix is
+        // physically inside the newly fetched official polygon before reusing it.
+        val officialPolygon by lazy(LazyThreadSafetyMode.NONE) {
+            if (officialNewKey) {
+                PlaceOverlayCache.readOfficialUs(appContext, discovery).data?.let {
+                    runCatching { JSONObject(it.geometryJson) }.getOrNull()
+                }
+            } else null
+        }
+        val postal = UnitedStatesMunicipalBoundaries.postalCode(
+            discovery.countryName, discovery.parentName
+        )
+        val parentName = UnitedStatesMunicipalBoundaries.normalizedStateName(
+            discovery.countryName, discovery.parentName
+        )
+        // A legacy geocoder may also have labeled the country "USA" or "US".
+        // Compare real U.S. municipality identities across those spelling changes.
+        val us = UnitedStatesMunicipalBoundaries.isUnitedStatesCountry(discovery.countryName)
+        val countryClause = if (us) {
+            "lower(country_name) IN ('us', 'usa', 'united states', 'united states of america')"
+        } else "country_name = ?"
+        val townSelection = if (postal == null) "kind = ? AND parent_name = ? AND $countryClause"
+            else "kind = ? AND (parent_name = ? COLLATE NOCASE OR parent_name = ? COLLATE NOCASE) AND $countryClause"
+        val townArgs = buildList {
+            add(PlaceKind.TOWN.name)
+            add(if (postal == null) discovery.parentName else parentName)
+            if (postal != null) add(postal)
+            if (!us) add(discovery.countryName)
+        }.toTypedArray()
         db.query(
             "visited_places",
             arrayOf("place_key", "display_name", "latitude", "longitude"),
-            "kind = ? AND parent_name = ? AND country_name = ?",
-            arrayOf(PlaceKind.TOWN.name, discovery.parentName, discovery.countryName),
-            null, null, null
+            townSelection, townArgs, null, null, null
         ).use { rows ->
             val distances = FloatArray(1)
             while (rows.moveToNext()) {
+                val existingKey = rows.getString(0)
+                if (existingKey == discovery.key) return discovery
+                val existingOfficial = existingKey.substringAfterLast('|').startsWith("census-")
+                if (officialNewKey && existingOfficial) {
+                    // An older geocoder may have persisted "us|nj|census-4-GEOID"
+                    // where the current provider uses "us|new jersey|census-4-GEOID".
+                    // The exact Census layer + GEOID is the same real municipality.
+                    if (existingKey.substringAfterLast('|') == discovery.key.substringAfterLast('|')) {
+                        return discovery.copy(key = existingKey)
+                    }
+                    continue
+                }
                 val existing = municipalityIdentity(rows.getString(1))
                 if (existing.first != proposed.first ||
                     (existing.second.isNotEmpty() && proposed.second.isNotEmpty() &&
                         existing.second != proposed.second)
+                ) continue
+                if (officialNewKey && officialPolygon?.let {
+                        PlaceGeometry.contains(it, rows.getDouble(2), rows.getDouble(3))
+                    } != true
                 ) continue
                 Location.distanceBetween(
                     discovery.latitude, discovery.longitude,

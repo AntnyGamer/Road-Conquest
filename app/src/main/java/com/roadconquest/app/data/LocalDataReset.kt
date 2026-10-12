@@ -17,9 +17,9 @@ object LocalDataReset {
         Prefs.setDeviceDataDeletionPending(app, true)
         Prefs.setManualOnly(app, true)
         Prefs.setTrackingPaused(app, true)
-        // Privacy deletion revokes precise-GPS upload consent before service teardown. This
-        // prevents VerifiedDriving.close() from draining a queued final batch after deletion.
-        Prefs.setDriveVerificationEnabled(app, false)
+        // The durable deletion marker above atomically revoked precise-GPS
+        // verification consent before service teardown. No second preference
+        // write is needed; VerifiedDriving.close() cannot upload a final batch.
         app.stopService(Intent(app, TrackingService::class.java))
     }
 

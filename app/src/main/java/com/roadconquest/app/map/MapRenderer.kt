@@ -87,6 +87,10 @@ class MapRenderer(
     private var regionalFogRunning = false
     private var reusableRegionalFogBitmap: Bitmap? = null
     private var installedRegionalFogKey: FogKey? = null
+    // The style starts with a ready 512px full-world cloud image. Re-uploading
+    // identical pixels during a rapid pinch can briefly invalidate the native
+    // texture on Android 12; only replace it when its exploration mask changes.
+    private var worldFogHasExploration = false
     private var carIconBitmap: Bitmap? = null
     private var appliedCarStyle = ""
     private var appliedCarColor = ""
@@ -191,7 +195,10 @@ class MapRenderer(
     }
 
     fun setFogEnabled(enabled: Boolean) {
-        if (destroyed) return
+        // Settings/Activity resume repeats the current choice frequently. A
+        // no-op must not resubmit four native raster opacity properties or
+        // queue another bitmap render; resumeViewport handles camera refresh.
+        if (destroyed || enabled == fogEnabled) return
         fogEnabled = enabled
         val cameraPosition = map.cameraPosition
         updateFogCoverage(force = true, cameraPosition = cameraPosition)
@@ -230,7 +237,7 @@ class MapRenderer(
                 if (!cached.cached) missing += place
                 cached.data?.let(loaded::add)
             }
-            postPlaceOverlay(generation, kind, loaded)
+            postPlaceOverlay(generation, kind, loaded, cacheGeneration)
             for (place in missing) {
                 if (destroyed || generation != overlayGeneration ||
                     cacheGeneration != PlaceOverlayCache.generation()) return@execute
@@ -252,11 +259,22 @@ class MapRenderer(
                     PlaceOverlayCache.writeOfficialUs(context, place, data, cacheGeneration)
                 } else PlaceOverlayCache.write(context, place, data, cacheGeneration)
                 if (!written) return@execute
-                if (data != null) {
-                    loaded += data
-                    // The public boundary service is deliberately rate-limited. Show
-                    // each completed town now rather than waiting for four requests.
-                    postPlaceOverlay(generation, kind, loaded)
+                // Another discovery worker may have cached a verified polygon
+                // while our lookup was in flight. If our older lookup returned
+                // no boundary, render that preserved positive cache right now.
+                val resolved = if (data == null || !us && place.kind == PlaceKind.TOWN) {
+                    // A verified worldwide town polygon may have been stored while
+                    // this less-trusted overlay fetch was running. write() correctly
+                    // kept that polygon; render the accepted cache, not the rejected
+                    // network candidate.
+                    if (us) PlaceOverlayCache.readOfficialUs(context, place).data
+                    else PlaceOverlayCache.read(context, place).data
+                } else data
+                if (resolved != null) {
+                    loaded += resolved
+                    // Show completed boundaries immediately without waiting for
+                    // a future viewport or discovery refresh.
+                    postPlaceOverlay(generation, kind, loaded, cacheGeneration)
                 }
             }
         }
@@ -676,7 +694,8 @@ class MapRenderer(
     private fun postPlaceOverlay(
         generation: Int,
         kind: com.roadconquest.app.data.PlaceKind,
-        data: List<PlaceOverlayData>
+        data: List<PlaceOverlayData>,
+        expectedCacheGeneration: Long
     ) {
         // Polygon conversion can be expensive for many visited municipalities.
         // Build immutable GeoJSON on overlayExecutor instead of blocking the map's UI thread.
@@ -711,7 +730,8 @@ class MapRenderer(
             else -> otherPartition?.outlines ?: overlayBoundaryFeatureCollection(snapshot)
         }
         mainHandler.post {
-            if (destroyed || generation != overlayGeneration || overlayMode.kind != kind) return@post
+            if (destroyed || generation != overlayGeneration || overlayMode.kind != kind ||
+                expectedCacheGeneration != PlaceOverlayCache.generation()) return@post
             val mode = when (kind) {
                 com.roadconquest.app.data.PlaceKind.COUNTRY -> PlaceOverlayMode.COUNTRY
                 com.roadconquest.app.data.PlaceKind.STATE -> PlaceOverlayMode.STATE
@@ -817,6 +837,7 @@ class MapRenderer(
     }
 
     private fun installFogLayer(style: Style) {
+        worldFogHasExploration = false
         activeDetailedFogAlternate = false
         detailedFogCoordinates = null
         regionalFogCoordinates = null
@@ -1071,6 +1092,15 @@ class MapRenderer(
             return
         }
         val capture = captureFog() ?: return
+        // An identical ready world raster was installed with the map style.
+        // Keep its GPU texture untouched while zooming if there are no cleared
+        // grid cells. But after a deletion, replace any previously revealed
+        // world raster once to erase the old exploration mask as required.
+        if (capture.world && savedGridCoordinates.isEmpty() && !worldFogHasExploration) {
+            installedFogKey = capture.key
+            updateFogCoverage(force = true)
+            return
+        }
         // MapLibre already animates this georeferenced ImageSource in native
         // coordinates. Do not repaint/replace an identical cloud rectangle on
         // each 120ms pan callback: that caused needless texture uploads and
@@ -1106,7 +1136,12 @@ class MapRenderer(
                         source?.setCoordinates(capture.quad)
                         // MapLibre 13.6.1 synchronously copies source bitmap pixels.
                         source?.setImage(rendered)
-                        if (source != null) installedFogKey = capture.key
+                        if (source != null) {
+                            installedFogKey = capture.key
+                            if (capture.world) {
+                                worldFogHasExploration = capture.request.gridScreen.isNotEmpty()
+                            }
+                        }
                         if (!capture.world && source != null) {
                             activeDetailedFogAlternate = nextAlternate
                             detailedFogCoordinates = doubleArrayOf(

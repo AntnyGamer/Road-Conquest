@@ -30,6 +30,16 @@ class VerifiedDrivingTest {
         AccountStore.clear(context)
     }
 
+    @Test fun expiredTriggerFixCanRetryCommittedEvidenceButCannotAddNewEvidence() {
+        // A retry is scheduled 30 seconds after an upload failure. The old
+        // triggering GPS fix has normally exceeded its 30-second live age limit
+        // by then. Previously it was discarded before the pending upload retried.
+        assertEquals(true, VerifiedDriving.canResumePreparedEvidence(true, false))
+        // No queued upload means an expired GPS fix remains ineligible.
+        assertEquals(false, VerifiedDriving.canResumePreparedEvidence(false, false))
+        assertEquals(true, VerifiedDriving.canResumePreparedEvidence(false, true))
+    }
+
     @Test fun retryCooldownKeepsFreshFixesBufferedInsteadOfDiscardingThem() {
         val context = RuntimeEnvironment.getApplication()
         val verified = VerifiedDriving(context)

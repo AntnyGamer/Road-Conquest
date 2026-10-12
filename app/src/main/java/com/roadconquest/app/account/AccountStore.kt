@@ -79,6 +79,27 @@ object AccountStore {
         return update(current).also { save(context, it) }
     }
 
+    /**
+     * A /me response may arrive after a newer local username/privacy update.
+     * Apply server fields only if nobody changed that field since the request.
+     * Never write back the caller's stale whole-session snapshot.
+     */
+    fun refreshIfUnchanged(
+        context: Context, requested: Session, serverUsername: String,
+        serverLeaderboardVisible: Boolean
+    ): Session? = updateIfToken(context, requested.token) { current ->
+        mergeServerRefresh(current, requested, serverUsername, serverLeaderboardVisible)
+    }
+
+    internal fun mergeServerRefresh(
+        current: Session, requested: Session, serverUsername: String,
+        serverLeaderboardVisible: Boolean
+    ): Session = current.copy(
+        username = if (current.username == requested.username) serverUsername else current.username,
+        leaderboardVisible = if (current.leaderboardVisible == requested.leaderboardVisible)
+            serverLeaderboardVisible else current.leaderboardVisible
+    )
+
     private fun key(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         (store.getKey(KEY_ALIAS, null) as? SecretKey)?.let { return it }

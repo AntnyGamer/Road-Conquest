@@ -44,6 +44,69 @@ class UnitedStatesMunicipalityAtPointTest {
         ))
     }
 
+    @Test fun sameNamedMunicipalitiesUseDistinctOfficialIdentifiers() {
+        val first = response(featureWithGeoid(
+            "Washington township", "42", "4200300123", -75.04, -75.01
+        ))
+        val second = response(featureWithGeoid(
+            "Washington township", "42", "4200500456", -75.04, -75.01
+        ))
+        val sample = seed("Pennsylvania")
+        val a = UnitedStatesMunicipalityAtPoint.parseResponse(sample, first, 1)!!
+        val b = UnitedStatesMunicipalityAtPoint.parseResponse(sample, second, 1)!!
+        assertEquals(a.place.displayName, b.place.displayName)
+        assertNotEquals(a.place.key, b.place.key)
+        assertEquals("us|pennsylvania|census-1-4200300123", a.place.key)
+        assertEquals("us|pennsylvania|census-1-4200500456", b.place.key)
+    }
+
+    @Test fun incorporatedAndSubdivisionIdsDoNotCollideEvenWithSameLabel() {
+        val sample = seed()
+        val name = "Example town"
+        val incorporated = UnitedStatesMunicipalityAtPoint.parseResponse(
+            sample, response(featureWithGeoid(name, "34", "3401234", -75.04, -75.01)), 4
+        )!!
+        val township = UnitedStatesMunicipalityAtPoint.parseResponse(
+            sample, response(featureWithGeoid(name, "34", "3400100123", -75.04, -75.01)), 1
+        )!!
+        assertEquals("us|new jersey|census-4-3401234", incorporated.place.key)
+        assertEquals("us|new jersey|census-1-3400100123", township.place.key)
+        assertNotEquals(incorporated.place.key, township.place.key)
+    }
+
+    private fun featureWithGeoid(
+        name: String, fips: String, geoid: String, west: Double, east: Double
+    ) = feature(name, fips, west, east)
+        .replace("\"FUNCSTAT\"", "\"GEOID\":\"$geoid\",\"FUNCSTAT\"")
+
+    @Test fun featureCollectionWithoutFeaturesIsRetryableNotProofOfNoTown() {
+        for (body in listOf(
+            """{"type":"FeatureCollection"}""",
+            """{"type":"FeatureCollection","features":null}""",
+            """{"type":"FeatureCollection","features":{}}"""
+        )) {
+            try {
+                UnitedStatesMunicipalityAtPoint.parseResponse(seed(), body, 4)
+                fail("Missing/non-array features must not retire a genuine GPS discovery")
+            } catch (_: java.io.IOException) {
+                // A valid but empty array is different: it proves no matching
+                // municipality on the queried layer.
+            }
+        }
+        assertNull(UnitedStatesMunicipalityAtPoint.parseResponse(
+            seed(), """{"type":"FeatureCollection","features":[]}""", 4
+        ))
+    }
+
+    @Test fun malformedProviderBodyBecomesRetryableIoFailure() {
+        try {
+            UnitedStatesMunicipalityAtPoint.parseResponse(seed(), "<html>Service unavailable</html>", 4)
+            fail("Invalid JSON must be treated as an I/O failure for the existing retry path")
+        } catch (e: java.io.IOException) {
+            assertTrue(e.cause is org.json.JSONException)
+        }
+    }
+
     @Test fun neverUsesPolygonFromDifferentState() {
         assertNull(UnitedStatesMunicipalityAtPoint.parseResponse(
             seed(), response(feature("Wrong city", "42", -75.04, -75.01)), 4

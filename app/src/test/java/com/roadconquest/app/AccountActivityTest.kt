@@ -53,12 +53,75 @@ class AccountActivityTest {
         assertTrue(collecting > initial)
     }
 
+    @Test fun verificationCannotBeEnabledDuringPendingDeviceDataDeletion() {
+        val context = RuntimeEnvironment.getApplication()
+        Prefs.setDeviceDataDeletionPending(context, false)
+        try {
+            Prefs.setDriveVerificationEnabled(context, true)
+            assertTrue(Prefs.isDriveVerificationEnabled(context))
+            val before = Prefs.driveVerificationConsentVersion(context)
+            Prefs.setDeviceDataDeletionPending(context, true)
+            // Setting the durable deletion marker itself must revoke precise
+            // location-sharing consent; no separate callback is required.
+            assertFalse(Prefs.isDriveVerificationEnabled(context))
+            val revokedAt = Prefs.driveVerificationConsentVersion(context)
+            assertTrue(revokedAt > before)
+            // A stale Settings UI or in-flight callback must not restore
+            // consent after the local deletion marker becomes durable.
+            Prefs.setDriveVerificationEnabled(context, true)
+            assertFalse(Prefs.isDriveVerificationEnabled(context))
+            assertTrue(Prefs.driveVerificationConsentVersion(context) > revokedAt)
+            Prefs.setDeviceDataDeletionPending(context, false)
+            assertFalse(Prefs.isDriveVerificationEnabled(context))
+        } finally {
+            Prefs.setDriveVerificationEnabled(context, false)
+            Prefs.setDeviceDataDeletionPending(context, false)
+        }
+    }
+
     @Test fun clearingAnySessionAlsoClearsVerifiedDriveConsent() {
         val context = RuntimeEnvironment.getApplication()
         Prefs.setDriveVerificationEnabled(context, true)
         assertTrue(Prefs.isDriveVerificationEnabled(context))
         AccountStore.clear(context)
         assertFalse(Prefs.isDriveVerificationEnabled(context))
+    }
+
+    @Test fun delayedAccountRefreshDoesNotRevertNewerPrivacyOrUsernameChanges() {
+        val before = AccountStore.Session("OldUser", "token", false)
+        val newLocal = before.copy(username = "NewUser", leaderboardVisible = true)
+
+        // A remote /me request started while both values were old. Before the
+        // result arrives, the user updates their username and privacy setting.
+        val merged = AccountStore.mergeServerRefresh(
+            newLocal, before, "OldUser", false
+        )
+        assertEquals("NewUser", merged.username)
+        assertTrue(merged.leaderboardVisible)
+        assertEquals(before.token, merged.token)
+
+        // When there were no competing edits, the refresh still updates both
+        // fields exactly as it did before the concurrency fix.
+        val refreshed = AccountStore.mergeServerRefresh(
+            before, before, "ServerRenamed", true
+        )
+        assertEquals("ServerRenamed", refreshed.username)
+        assertTrue(refreshed.leaderboardVisible)
+    }
+
+    @Test fun delayedRemoteFieldUpdatesPreserveOnlyTheLocallyModifiedField() {
+        val before = AccountStore.Session("Driver", "token", false)
+        val privacyChanged = AccountStore.mergeServerRefresh(
+            before.copy(leaderboardVisible = true), before, "RemoteDriver", false
+        )
+        assertEquals("RemoteDriver", privacyChanged.username)
+        assertTrue(privacyChanged.leaderboardVisible)
+
+        val usernameChanged = AccountStore.mergeServerRefresh(
+            before.copy(username = "LocalDriver"), before, "RemoteDriver", true
+        )
+        assertEquals("LocalDriver", usernameChanged.username)
+        assertTrue(usernameChanged.leaderboardVisible)
     }
 
     @Test fun sessionStringNeverContainsBearerToken() {
