@@ -30,6 +30,9 @@ object PlaceResolver {
             ProgressionRepository(appContext).visitedPlaces(PlaceKind.TOWN)
                 .asSequence()
                 .filter(UnitedStatesMunicipalBoundaries::applies)
+                // Only incorporated (layer 4) keys are safe shortcut candidates.
+                // Avoid loading and parsing polygons we must validate online anyway.
+                .filter { it.key.substringAfterLast('|').startsWith("census-4-") }
                 .mapNotNull { place ->
                     PlaceOverlayCache.readOfficialUs(appContext, place).data?.let { overlay ->
                         try {
