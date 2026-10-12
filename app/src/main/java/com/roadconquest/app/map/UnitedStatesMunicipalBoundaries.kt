@@ -163,7 +163,8 @@ internal object UnitedStatesMunicipalBoundaries {
         if (doc.optString("type") != "FeatureCollection") {
             throw IOException("Census service did not return GeoJSON")
         }
-        val features = doc.optJSONArray("features") ?: return null
+        val features = doc.optJSONArray("features")
+            ?: throw IOException("Census boundary GeoJSON lacks a features array")
         val wanted = municipalityIdentity(place.displayName)
         val state = stateFips[place.parentName.trim().lowercase(Locale.ROOT)] ?: return null
         // New verified discovery keys bind overlays to a single Census polygon.
