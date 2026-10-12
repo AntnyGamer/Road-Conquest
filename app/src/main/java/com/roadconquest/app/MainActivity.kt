@@ -425,13 +425,13 @@ class MainActivity : Activity() {
                         // make a selected place overlay renderable.
                         // Do not cancel in-flight Census downloads for every
                         // GPS batch that merely revisits known places.
-                        if (resolved != null && resolved.added > 0 &&
-                            Prefs.placeOverlayMode(this) != PlaceOverlayMode.NONE
-                        ) {
-                            renderer?.refreshPlaceOverlays()
+                        if (resolved?.placesUpdated == true) {
+                            if (Prefs.placeOverlayMode(this) != PlaceOverlayMode.NONE) {
+                                renderer?.refreshPlaceOverlays()
+                            }
+                            refreshControls()
                         }
                         if (resolved != null && resolved.added > 0) {
-                            refreshControls()
                             // Late geocoding of a prior drive does not mean the
                             // user has entered a new town on app launch.
                             val ageMs = System.currentTimeMillis() - resolved.newestVisitAt
