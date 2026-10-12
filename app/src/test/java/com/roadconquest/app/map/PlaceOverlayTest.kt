@@ -212,6 +212,18 @@ class PlaceOverlayTest {
             )
         )
         assertFalse(PlaceOverlayCache.read(context, place).cached)
+        // The foreground Census discovery worker must honor the same reset
+        // generation as the map renderer. A pre-deletion network response is
+        // not allowed to recreate the user's erased location-related cache.
+        val official = place.copy(key = "us|new jersey|census-4-3401234")
+        val boundary = PlaceOverlayData(
+            official.key, official.displayName, official.kind, null, 1.0,
+            """{"type":"Polygon","coordinates":[[
+                [-75,39],[-74,39],[-74,40],[-75,39]
+            ]]}"""
+        )
+        assertFalse(PlaceOverlayCache.writeOfficialUs(context, official, boundary, generation))
+        assertFalse(PlaceOverlayCache.readOfficialUs(context, official).cached)
     }
 
     @Test fun sameNamedTownUsesTheBoundaryNearestTheDiscoveredLocation() {
