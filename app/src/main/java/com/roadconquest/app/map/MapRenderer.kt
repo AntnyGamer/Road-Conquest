@@ -252,10 +252,16 @@ class MapRenderer(
                     PlaceOverlayCache.writeOfficialUs(context, place, data, cacheGeneration)
                 } else PlaceOverlayCache.write(context, place, data, cacheGeneration)
                 if (!written) return@execute
-                if (data != null) {
-                    loaded += data
-                    // The public boundary service is deliberately rate-limited. Show
-                    // each completed town now rather than waiting for four requests.
+                // Another discovery worker may have cached a verified polygon
+                // while our lookup was in flight. If our older lookup returned
+                // no boundary, render that preserved positive cache right now.
+                val resolved = data ?: if (us) {
+                    PlaceOverlayCache.readOfficialUs(context, place).data
+                } else PlaceOverlayCache.read(context, place).data
+                if (resolved != null) {
+                    loaded += resolved
+                    // Show completed boundaries immediately without waiting for
+                    // a future viewport or discovery refresh.
                     postPlaceOverlay(generation, kind, loaded)
                 }
             }
