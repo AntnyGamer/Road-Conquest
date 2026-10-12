@@ -204,7 +204,7 @@ class AccountActivity : Activity() {
                     },
                     onFailure = { error ->
                         rendering = true
-                        leaderboardSwitch.isChecked = session.leaderboardVisible
+                        leaderboardSwitch.isChecked = AccountStore.load(this)?.leaderboardVisible == true
                         rendering = false
                         leaderboardSwitch.isEnabled = !busy
                         statusText.text = error.message ?: "Could not save leaderboard privacy."
