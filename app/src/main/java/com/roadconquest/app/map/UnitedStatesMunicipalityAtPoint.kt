@@ -41,7 +41,7 @@ internal object UnitedStatesMunicipalityAtPoint {
                 .appendQueryParameter("inSR", "4326")
                 .appendQueryParameter("spatialRel", "esriSpatialRelIntersects")
                 .appendQueryParameter("outFields",
-                    "BASENAME,NAME,STATE,FUNCSTAT,AREALAND,AREAWATER")
+                    "BASENAME,NAME,STATE,GEOID,FUNCSTAT,AREALAND,AREAWATER")
                 .appendQueryParameter("returnGeometry", "true")
                 .appendQueryParameter("outSR", "4326")
                 .appendQueryParameter("resultRecordCount", "20")
@@ -118,7 +118,14 @@ internal object UnitedStatesMunicipalityAtPoint {
             if (!areaSqKm.isFinite() || areaSqKm <= 0.0) continue
             val canonical = name.trim().lowercase(Locale.ROOT)
                 .replace(WHITESPACE_RE, " ")
-            val key = seed.key.substringBeforeLast('|') + "|" + canonical
+            // Names repeat within a state (including same-named county subdivisions).
+            // The Census layer + GEOID identify the actual polygon, not its label.
+            // Preserve name keys as a fallback for older service responses.
+            val geoid = properties.optString("GEOID").trim()
+            val validGeoid = geoid.length == (if (layer == 4) 7 else 10) &&
+                geoid.startsWith(state) && geoid.all(Char::isDigit)
+            val identity = if (validGeoid) "census-$layer-$geoid" else canonical
+            val key = seed.key.substringBeforeLast('|') + "|" + identity
             val place = seed.copy(key = key, displayName = name)
             return Result(
                 place,
