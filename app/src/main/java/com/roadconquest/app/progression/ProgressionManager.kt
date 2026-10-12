@@ -7,7 +7,12 @@ import com.roadconquest.app.achievements.Achievements
 import com.roadconquest.app.data.DataSummary
 import com.roadconquest.app.data.ProgressionRepository
 import com.roadconquest.app.data.ProgressionSnapshot
+import com.roadconquest.app.data.PlaceDiscovery
+import com.roadconquest.app.data.PlaceKind
+import com.roadconquest.app.map.PlaceGeometry
 import com.roadconquest.app.map.PlaceOverlayCache
+import com.roadconquest.app.map.UnitedStatesMunicipalBoundaries
+import org.json.JSONObject
 import java.util.UUID
 
 data class PlaceResolutionResult(val added: Int, val newestVisitAt: Long)
@@ -96,6 +101,7 @@ object ProgressionManager {
                 if (discoveries.isNullOrEmpty()) {
                     repository.deferCandidate(candidate)
                 } else {
+                    reconcileMissingStartingTown(context, repository, discoveries)
                     val newPlaces = repository.resolveCandidate(candidate, discoveries)
                     added += newPlaces
                     if (newPlaces > 0) newestVisitAt = maxOf(newestVisitAt, candidate.visitedAt)
@@ -105,6 +111,34 @@ object ProgressionManager {
             }
         }
         return PlaceResolutionResult(added, newestVisitAt)
+    }
+
+    /**
+     * A failed baseline town lookup is released after repeated partial results.
+     * When a later, VERIFIED boundary includes the original start coordinate,
+     * it is the zero-point town, not a newly discovered place.
+     */
+    internal fun reconcileMissingStartingTown(
+        context: Context,
+        repository: ProgressionRepository,
+        discoveries: List<PlaceDiscovery>
+    ) {
+        if (!repository.hasMissingStartingTown()) return
+        val start = repository.startingLocation() ?: return
+        for (town in discoveries) {
+            if (town.kind != PlaceKind.TOWN) continue
+            val verified = if (UnitedStatesMunicipalBoundaries.applies(town)) {
+                PlaceOverlayCache.readOfficialUs(context, town).data
+            } else {
+                PlaceOverlayCache.readVerifiedForDiscovery(context, town)
+            } ?: continue
+            val containsStart = runCatching {
+                PlaceGeometry.contains(
+                    JSONObject(verified.geometryJson), start.latitude, start.longitude
+                )
+            }.getOrDefault(false)
+            if (containsStart && repository.recordVerifiedStartingTown(town, start)) break
+        }
     }
 
     fun metrics(snapshot: ProgressionSnapshot) = AchievementMetrics(
