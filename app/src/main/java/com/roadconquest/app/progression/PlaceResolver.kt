@@ -190,9 +190,18 @@ object PlaceResolver {
         // Reverse geocoders sometimes return a road/address result first with incomplete
         // administrative fields. Combine only results for this same coordinate rather than
         // letting one sparse result permanently omit the zero-point state/town.
-        val countryName = firstValue { it.countryName }
-        val countryCode = firstValue { it.countryCode }
-        val countryKey = canonical(countryCode.ifBlank { countryName })
+        val reportedCountryName = firstValue { it.countryName }
+        val reportedCountryCode = firstValue { it.countryCode }
+        val isUnitedStates = reportedCountryCode.equals("US", ignoreCase = true) ||
+            canonical(reportedCountryName) in setOf(
+                "us", "usa", "united states", "united states of america"
+            )
+        // Reverse geocoders can omit either country field for the very same GPS
+        // position. Use one stable US key and display name regardless of which
+        // field was present, including during the zero-point baseline.
+        val countryName = if (isUnitedStates) "United States" else reportedCountryName
+        val countryKey = if (isUnitedStates) "us" else
+            canonical(reportedCountryCode.ifBlank { countryName })
         val stateName = UnitedStatesMunicipalBoundaries.normalizedStateName(
             countryName, firstValue { it.adminArea }
         )
