@@ -337,7 +337,13 @@ class PlaceOverlayClient(
         )
 
         internal fun parseResponse(place: PlaceDiscovery, body: String, requireContainment: Boolean = true): PlaceOverlayData? {
-            val results = runCatching { JSONArray(body) }.getOrNull() ?: return null
+            val results = try {
+                JSONArray(body)
+            } catch (error: org.json.JSONException) {
+                // An HTML, truncated, or malformed 200 response is a provider failure,
+                // not a verified absence of this boundary. Do not negative-cache it.
+                throw IOException("Invalid place overlay response", error)
+            }
             var best: JSONObject? = null
             var bestScore = Int.MIN_VALUE
             for (i in 0 until results.length()) {
