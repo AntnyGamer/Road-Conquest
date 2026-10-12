@@ -120,7 +120,7 @@ class PlaceOverlayTest {
             // the town; its eventual null response must not replace this success.
             assertTrue(PlaceOverlayCache.writeOfficialUs(context, town, verified))
             assertTrue(PlaceOverlayCache.writeOfficialUs(context, town, null, generation))
-            assertEquals(verified.geometryJson,
+            assertEquals(JSONObject(verified.geometryJson).toString(),
                 PlaceOverlayCache.readOfficialUs(context, town).data?.geometryJson)
             // A negative response still caches normally if there was no polygon.
             val absent = town.copy(key = "us|new jersey|census-4-3405678")
