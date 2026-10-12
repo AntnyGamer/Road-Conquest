@@ -85,6 +85,10 @@ object PlaceResolver {
         context: Context, candidate: PendingPlaceCandidate,
         municipalCache: VerifiedMunicipalCache? = null
     ): List<PlaceDiscovery>? {
+        // Capture BEFORE geocoding and network I/O. Clearing local data changes
+        // this generation; older in-flight lookups must never recreate erased
+        // precise-location boundary caches when their responses finally arrive.
+        val cacheGeneration = PlaceOverlayCache.generation()
         if (!Geocoder.isPresent()) return null
         val addresses = try {
             Geocoder(context.applicationContext, Locale.US)
@@ -123,7 +127,7 @@ object PlaceResolver {
             }
             if (result != null) {
                 if (!PlaceOverlayCache.writeOfficialUs(
-                        context, result.place, result.overlay
+                        context, result.place, result.overlay, cacheGeneration
                     )
                 ) return null
                 known.remember(result)
@@ -157,7 +161,10 @@ object PlaceResolver {
             val cached = PlaceOverlayCache.readVerifiedForDiscovery(context, town)
             val boundary = if (cached != null) cached else try {
                 client.fetch(town, requireContainment = false)?.also {
-                    PlaceOverlayCache.write(context, town, it, verifiedForDiscovery = true)
+                    if (!PlaceOverlayCache.write(
+                            context, town, it, cacheGeneration, verifiedForDiscovery = true
+                        )
+                    ) return null
                 }
             } catch (_: Exception) {
                 // Preserve the candidate for retry when the boundary provider is offline.
