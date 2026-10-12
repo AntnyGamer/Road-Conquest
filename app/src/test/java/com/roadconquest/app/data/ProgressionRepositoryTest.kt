@@ -84,6 +84,43 @@ class ProgressionRepositoryTest {
         assertEquals(1, progression.visitedPlaces(PlaceKind.TOWN).size)
     }
 
+    @Test fun missingGeocoderCountryFieldsDoNotDuplicateHistoricalUsRewards() {
+        val repository = ProgressionRepository(context)
+        val oldCountry = PlaceDiscovery(
+            PlaceKind.COUNTRY, "united states", "United States",
+            visitedAt = 1000L, latitude = 39.80, longitude = -75.1
+        )
+        assertTrue(repository.recordPlace(oldCountry))
+        assertFalse(repository.recordPlace(oldCountry.copy(
+            key = "us", visitedAt = 2000L
+        )))
+        assertEquals(1L, repository.snapshot().countries)
+
+        val oldState = PlaceDiscovery(
+            PlaceKind.STATE, "usa|nj", "NJ", "USA", "USA",
+            1000L, 39.80, -75.1
+        )
+        assertTrue(repository.recordPlace(oldState))
+        assertFalse(repository.recordPlace(oldState.copy(
+            key = "us|new jersey", displayName = "New Jersey",
+            parentName = "United States", countryName = "United States",
+            visitedAt = 2000L
+        )))
+        assertEquals(1L, repository.snapshot().states)
+
+        val oldTown = PlaceDiscovery(
+            PlaceKind.TOWN, "usa|nj|census-4-3401234", "Sample borough",
+            "NJ", "USA", 1000L, 39.80, -75.1
+        )
+        assertTrue(repository.recordPlace(oldTown))
+        assertFalse(repository.recordPlace(oldTown.copy(
+            key = "us|new jersey|census-4-3401234",
+            parentName = "New Jersey", countryName = "United States",
+            visitedAt = 2000L
+        )))
+        assertEquals(1L, repository.snapshot().towns)
+    }
+
     @Test fun legacyPostalStateAndOfficialTownKeysDoNotEarnDuplicateVisitPoints() {
         val repository = ProgressionRepository(context)
         val legacyState = PlaceDiscovery(
