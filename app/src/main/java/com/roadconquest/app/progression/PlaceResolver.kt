@@ -55,7 +55,15 @@ object PlaceResolver {
                 // over an as-yet-unvisited city: never let it bypass that lookup.
                 // Legacy name-only keys have no recorded source layer either.
                 if (!place.key.substringAfterLast('|').startsWith("census-4-")) continue
-                if (place.parentName != seed.parentName ||
+                val savedState = UnitedStatesMunicipalBoundaries.stateCode(
+                    place.countryName, place.parentName
+                )
+                val candidateState = UnitedStatesMunicipalBoundaries.stateCode(
+                    seed.countryName, seed.parentName
+                )
+                val sameState = place.parentName == seed.parentName ||
+                    (savedState != null && savedState == candidateState)
+                if (!sameState ||
                     !PlaceGeometry.contains(polygon, seed.latitude, seed.longitude)
                 ) continue
                 // County subdivisions can overlap incorporated places. The cache
