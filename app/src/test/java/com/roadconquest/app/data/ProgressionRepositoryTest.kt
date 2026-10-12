@@ -84,6 +84,71 @@ class ProgressionRepositoryTest {
         assertEquals(1, progression.visitedPlaces(PlaceKind.TOWN).size)
     }
 
+    @Test fun officialIdsPreventNearbySameNameMunicipalitiesBeingMerged() {
+        val progression = ProgressionRepository(context)
+        val first = PlaceDiscovery(
+            PlaceKind.TOWN, "us|pennsylvania|census-1-4200300123",
+            "Washington township", "Pennsylvania", "United States",
+            1_000L, 40.00, -75.10
+        )
+        val second = first.copy(
+            key = "us|pennsylvania|census-1-4200500456",
+            visitedAt = 2_000L, latitude = 40.003, longitude = -75.102
+        )
+        assertTrue(progression.recordPlace(first))
+        assertTrue(progression.recordPlace(second))
+        assertEquals(200L, progression.snapshot().balance)
+        assertEquals(2L, progression.snapshot().towns)
+        assertEquals(2, progression.visitedPlaces(PlaceKind.TOWN).size)
+        assertFalse(progression.recordPlace(first.copy(visitedAt = 3_000L)))
+        assertEquals(200L, progression.snapshot().balance)
+    }
+
+    @Test fun legacyNameBasedVisitIsReusedOnlyIfInsideNewOfficialPolygon() {
+        val progression = ProgressionRepository(context)
+        val legacy = PlaceDiscovery(
+            PlaceKind.TOWN, "us|pennsylvania|sample borough",
+            "Sample borough", "Pennsylvania", "United States",
+            1_000L, 40.000, -75.100
+        )
+        val sameTown = legacy.copy(
+            key = "us|pennsylvania|census-4-4201234",
+            visitedAt = 2_000L, latitude = 40.003, longitude = -75.102
+        )
+        fun cache(place: PlaceDiscovery, coordinates: String) {
+            assertTrue(com.roadconquest.app.map.PlaceOverlayCache.writeOfficialUs(
+                context, place, com.roadconquest.app.map.PlaceOverlayData(
+                    place.key, place.displayName, place.kind, null, 1.0, coordinates
+                )
+            ))
+        }
+        assertTrue(progression.recordPlace(legacy))
+        val enclosing = """{"type":"Polygon","coordinates":[[
+            [-75.12,39.99],[-75.08,39.99],[-75.08,40.02],
+            [-75.12,40.02],[-75.12,39.99]
+        ]]}"""
+        cache(sameTown, enclosing)
+        assertFalse("Same verified town must not earn a second reward",
+            progression.recordPlace(sameTown))
+        assertEquals(listOf(legacy.key),
+            progression.visitedPlaces(PlaceKind.TOWN).map { it.key })
+        assertEquals(100L, progression.snapshot().balance)
+
+        val differentTown = sameTown.copy(
+            key = "us|pennsylvania|census-4-4205678",
+            visitedAt = 3_000L, latitude = 40.003, longitude = -75.102
+        )
+        val disjoint = """{"type":"Polygon","coordinates":[[
+            [-75.11,40.002],[-75.09,40.002],[-75.09,40.02],
+            [-75.11,40.02],[-75.11,40.002]
+        ]]}"""
+        cache(differentTown, disjoint)
+        assertTrue("New municipality must not be folded into nearby old same-name visit",
+            progression.recordPlace(differentTown))
+        assertEquals(200L, progression.snapshot().balance)
+        assertEquals(2L, progression.snapshot().towns)
+    }
+
     @Test fun newPlacesPayOnceAndPurchasesCannotOverspend() {
         val progression = ProgressionRepository(context)
         val town = PlaceDiscovery(
