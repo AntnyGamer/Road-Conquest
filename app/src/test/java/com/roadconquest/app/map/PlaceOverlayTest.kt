@@ -89,6 +89,64 @@ class PlaceOverlayTest {
         }
     }
 
+    @Test fun lateNegativeCensusBoundaryResultCannotEraseVerifiedTownGeometry() {
+        val context = RuntimeEnvironment.getApplication()
+        val town = PlaceDiscovery(
+            PlaceKind.TOWN, "us|new jersey|census-4-3401234", "Sample borough",
+            "New Jersey", "United States", 1_000L, 39.9, -75.1
+        )
+        val geometry = """{"type":"Polygon","coordinates":[[
+            [-75.2,39.8],[-75.0,39.8],[-75.0,40.0],
+            [-75.2,40.0],[-75.2,39.8]
+        ]]}"""
+        val verified = PlaceOverlayData(town.key, town.displayName, town.kind, null, 3.0, geometry)
+        PlaceOverlayCache.clear(context)
+        try {
+            val generation = PlaceOverlayCache.generation()
+            // In production, an overlay fetch begins before discovery resolves
+            // the town; its eventual null response must not replace this success.
+            assertTrue(PlaceOverlayCache.writeOfficialUs(context, town, verified))
+            assertTrue(PlaceOverlayCache.writeOfficialUs(context, town, null, generation))
+            assertEquals(verified.geometryJson,
+                PlaceOverlayCache.readOfficialUs(context, town).data?.geometryJson)
+            // A negative response still caches normally if there was no polygon.
+            val absent = town.copy(key = "us|new jersey|census-4-3405678")
+            assertTrue(PlaceOverlayCache.writeOfficialUs(context, absent, null, generation))
+            val negative = PlaceOverlayCache.readOfficialUs(context, absent)
+            assertTrue(negative.cached)
+            assertNull(negative.data)
+        } finally {
+            PlaceOverlayCache.clear(context)
+        }
+    }
+
+    @Test fun staleWorldwideOverlayCannotDowngradeVerifiedDiscoveryPolygon() {
+        val context = RuntimeEnvironment.getApplication()
+        val town = PlaceDiscovery(
+            PlaceKind.TOWN, "gb|region|verified-borough", "Verified borough",
+            "Region", "United Kingdom", 1_000L, 51.5, -0.1
+        )
+        val verified = PlaceOverlayData(town.key, town.displayName, town.kind, null, 2.0,
+            """{"type":"Polygon","coordinates":[[
+                [-0.2,51.4],[0.0,51.4],[0.0,51.6],
+                [-0.2,51.6],[-0.2,51.4]
+            ]]}""")
+        val unverified = verified.copy(areaSquareKilometers = 50.0)
+        PlaceOverlayCache.clear(context)
+        try {
+            assertTrue(PlaceOverlayCache.write(
+                context, town, verified, verifiedForDiscovery = true
+            ))
+            assertTrue(PlaceOverlayCache.write(context, town, unverified))
+            assertTrue(PlaceOverlayCache.write(context, town, null))
+            assertEquals(2.0,
+                PlaceOverlayCache.readVerifiedForDiscovery(context, town)?.areaSquareKilometers
+                    ?: -1.0, 0.0)
+        } finally {
+            PlaceOverlayCache.clear(context)
+        }
+    }
+
     @Test fun legacyV3CacheCannotReintroduceBadTownOutlines() {
         val context = RuntimeEnvironment.getApplication()
         val place = PlaceDiscovery(
