@@ -42,6 +42,31 @@ class PlaceResolverTest {
             a.single { it.kind == PlaceKind.TOWN }.key)
     }
 
+    @Test fun usCountryNameOrCodeAlonePreservesOneCountryAndStateIdentity() {
+        val complete = address("Woodbury", "Deptford Township")
+        val onlyCode = address("Woodbury", "Deptford Township").apply {
+            countryName = null
+        }
+        val onlyName = address("Woodbury", "Deptford Township").apply {
+            countryCode = null
+        }
+        val alias = address("Woodbury", "Deptford Township").apply {
+            countryName = "USA"
+            countryCode = null
+            adminArea = "NJ"
+        }
+        val standard = PlaceResolver.resolveAddresses(candidate, listOf(complete))
+        for (variant in listOf(onlyCode, onlyName, alias)) {
+            val resolved = PlaceResolver.resolveAddresses(candidate, listOf(variant))
+            assertEquals(standard, resolved)
+            assertEquals("us", resolved.single { it.kind == PlaceKind.COUNTRY }.key)
+            assertEquals("United States",
+                resolved.single { it.kind == PlaceKind.COUNTRY }.displayName)
+            assertEquals("us|new jersey",
+                resolved.single { it.kind == PlaceKind.STATE }.key)
+        }
+    }
+
     @Test fun townshipNameOverridesNearbyPostalCity() {
         val places = PlaceResolver.resolveAddresses(
             candidate, listOf(address("Woodbury", "Deptford Township"))
