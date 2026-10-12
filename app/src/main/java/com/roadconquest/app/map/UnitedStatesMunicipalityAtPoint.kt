@@ -85,7 +85,13 @@ internal object UnitedStatesMunicipalityAtPoint {
         val state = UnitedStatesMunicipalBoundaries.stateCode(
             seed.countryName, seed.parentName
         ) ?: return null
-        val doc = JSONObject(body)
+        val doc = try {
+            JSONObject(body)
+        } catch (e: org.json.JSONException) {
+            // A malformed/HTML response from the service is a retryable provider
+            // failure, not a reason to abort the foreground discovery worker.
+            throw IOException("Invalid Census municipality response", e)
+        }
         if (doc.has("error")) throw IOException("Census municipality service error")
         if (doc.optString("type") != "FeatureCollection") {
             throw IOException("Unexpected municipality GeoJSON")
