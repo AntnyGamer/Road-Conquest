@@ -86,6 +86,8 @@ internal object UnitedStatesMunicipalBoundaries {
     )
     private val officialStateNameByLowercase =
         stateNamesByPostal.values.associateBy { it.lowercase(Locale.ROOT) }
+    private val postalCodeByOfficialStateName =
+        stateNamesByPostal.entries.associate { (postal, name) -> name.lowercase(Locale.ROOT) to postal }
 
     private val US_NAMES = setOf(
         "us", "usa", "united states", "united states of america"
@@ -106,6 +108,11 @@ internal object UnitedStatesMunicipalBoundaries {
         return stateNamesByPostal[lower] ?: officialStateNameByLowercase[lower] ?: trimmed
     }
 
+    internal fun postalCode(countryName: String, stateName: String): String? =
+        postalCodeByOfficialStateName[
+            normalizedStateName(countryName, stateName).lowercase(Locale.ROOT)
+        ]?.takeIf { stateCode(countryName, stateName) != null }
+
     internal fun stateCode(countryName: String, stateName: String): String? {
         if (countryName.trim().lowercase(Locale.ROOT) !in US_NAMES) return null
         return stateFips[normalizedStateName(countryName, stateName).lowercase(Locale.ROOT)]
@@ -119,8 +126,7 @@ internal object UnitedStatesMunicipalBoundaries {
     fun fetch(place: PlaceDiscovery): PlaceOverlayData? {
         require(applies(place))
         val normalized = municipalityIdentity(place.displayName)
-        val state = stateFips[place.parentName.trim().lowercase(Locale.ROOT)]
-            ?: return null
+        val state = stateCode(place.countryName, place.parentName) ?: return null
         val name = normalized.first
         if (name.length !in 2..90) return null
         // Limit a query by the actual geographic neighborhood instead of
@@ -199,7 +205,7 @@ internal object UnitedStatesMunicipalBoundaries {
         val features = doc.optJSONArray("features")
             ?: throw IOException("Census boundary GeoJSON lacks a features array")
         val wanted = municipalityIdentity(place.displayName)
-        val state = stateFips[place.parentName.trim().lowercase(Locale.ROOT)] ?: return null
+        val state = stateCode(place.countryName, place.parentName) ?: return null
         // New verified discovery keys bind overlays to a single Census polygon.
         // Legacy name-only keys retain the existing name-and-position fallback.
         val officialIdentity = Regex("""\|census-(1|4)-(\d+)$""").find(place.key)
