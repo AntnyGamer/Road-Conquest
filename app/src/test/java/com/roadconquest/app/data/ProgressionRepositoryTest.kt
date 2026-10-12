@@ -132,6 +132,23 @@ class ProgressionRepositoryTest {
         assertEquals(200L, progression.snapshot().balance)
     }
 
+    @Test fun separateCensusGeoidsStaySeparateEvenWhenParentStateSpellingChanges() {
+        val repository = ProgressionRepository(context)
+        val first = PlaceDiscovery(
+            PlaceKind.TOWN, "us|nj|census-1-3400300012", "Washington township",
+            "NJ", "United States", 1_000L, 39.80, -75.1
+        )
+        val second = first.copy(
+            key = "us|new jersey|census-1-3400500034",
+            parentName = "New Jersey", visitedAt = 2_000L,
+            latitude = 39.805
+        )
+        assertTrue(repository.recordPlace(first))
+        assertTrue(repository.recordPlace(second))
+        assertEquals(2L, repository.snapshot().towns)
+        assertEquals(2, repository.visitedPlaces(PlaceKind.TOWN).size)
+    }
+
     @Test fun legacyNameBasedVisitIsReusedOnlyIfInsideNewOfficialPolygon() {
         val progression = ProgressionRepository(context)
         val legacy = PlaceDiscovery(
