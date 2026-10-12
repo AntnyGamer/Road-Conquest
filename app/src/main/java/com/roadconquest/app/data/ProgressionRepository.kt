@@ -6,6 +6,7 @@ import android.database.sqlite.SQLiteDatabase
 import android.location.Location
 import com.roadconquest.app.map.PlaceGeometry
 import com.roadconquest.app.map.PlaceOverlayCache
+import com.roadconquest.app.map.UnitedStatesMunicipalBoundaries
 import org.json.JSONObject
 import kotlin.math.PI
 import kotlin.math.atan
@@ -715,6 +716,26 @@ class ProgressionRepository(context: Context) {
      * Explicitly different municipal types are not treated as aliases.
      */
     private fun alignTownWithExistingPlace(db: SQLiteDatabase, discovery: PlaceDiscovery): PlaceDiscovery {
+        // Older providers sometimes called the same state "NJ" and "New Jersey".
+        // Keep the previously rewarded key instead of creating a duplicate state.
+        if (discovery.kind == PlaceKind.STATE) {
+            val stateFips = UnitedStatesMunicipalBoundaries.stateCode(
+                discovery.countryName, discovery.displayName
+            ) ?: return discovery
+            db.query("visited_places", arrayOf("place_key", "display_name"),
+                "kind = ? AND country_name = ?",
+                arrayOf(PlaceKind.STATE.name, discovery.countryName),
+                null, null, null
+            ).use { existing ->
+                while (existing.moveToNext()) {
+                    if (UnitedStatesMunicipalBoundaries.stateCode(
+                            discovery.countryName, existing.getString(1)
+                        ) == stateFips
+                    ) return discovery.copy(key = existing.getString(0))
+                }
+            }
+            return discovery
+        }
         if (discovery.kind != PlaceKind.TOWN) return discovery
         val proposed = municipalityIdentity(discovery.displayName)
         val officialNewKey = discovery.key.substringAfterLast('|').startsWith("census-")
@@ -728,11 +749,19 @@ class ProgressionRepository(context: Context) {
                 }
             } else null
         }
+        val postal = UnitedStatesMunicipalBoundaries.postalCode(
+            discovery.countryName, discovery.parentName
+        )
+        val parentName = UnitedStatesMunicipalBoundaries.normalizedStateName(
+            discovery.countryName, discovery.parentName
+        )
         db.query(
             "visited_places",
             arrayOf("place_key", "display_name", "latitude", "longitude"),
-            "kind = ? AND parent_name = ? AND country_name = ?",
-            arrayOf(PlaceKind.TOWN.name, discovery.parentName, discovery.countryName),
+            if (postal == null) "kind = ? AND parent_name = ? AND country_name = ?"
+            else "kind = ? AND (parent_name = ? COLLATE NOCASE OR parent_name = ? COLLATE NOCASE) AND country_name = ?",
+            if (postal == null) arrayOf(PlaceKind.TOWN.name, discovery.parentName, discovery.countryName)
+            else arrayOf(PlaceKind.TOWN.name, parentName, postal, discovery.countryName),
             null, null, null
         ).use { rows ->
             val distances = FloatArray(1)
@@ -740,7 +769,15 @@ class ProgressionRepository(context: Context) {
                 val existingKey = rows.getString(0)
                 if (existingKey == discovery.key) return discovery
                 val existingOfficial = existingKey.substringAfterLast('|').startsWith("census-")
-                if (officialNewKey && existingOfficial) continue
+                if (officialNewKey && existingOfficial) {
+                    // An older geocoder may have persisted "us|nj|census-4-GEOID"
+                    // where the current provider uses "us|new jersey|census-4-GEOID".
+                    // The exact Census layer + GEOID is the same real municipality.
+                    if (existingKey.substringAfterLast('|') == discovery.key.substringAfterLast('|')) {
+                        return discovery.copy(key = existingKey)
+                    }
+                    continue
+                }
                 val existing = municipalityIdentity(rows.getString(1))
                 if (existing.first != proposed.first ||
                     (existing.second.isNotEmpty() && proposed.second.isNotEmpty() &&
