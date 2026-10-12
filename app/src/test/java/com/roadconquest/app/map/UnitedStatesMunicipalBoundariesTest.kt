@@ -48,6 +48,46 @@ class UnitedStatesMunicipalBoundariesTest {
         ))
     }
 
+    @Test fun everyPostalAbbreviationUsesTheSameNationalCensusStateCode() {
+        val postalFips = mapOf(
+            "AL" to "01", "AK" to "02", "AZ" to "04", "AR" to "05",
+            "CA" to "06", "CO" to "08", "CT" to "09", "DE" to "10",
+            "DC" to "11", "FL" to "12", "GA" to "13", "HI" to "15",
+            "ID" to "16", "IL" to "17", "IN" to "18", "IA" to "19",
+            "KS" to "20", "KY" to "21", "LA" to "22", "ME" to "23",
+            "MD" to "24", "MA" to "25", "MI" to "26", "MN" to "27",
+            "MS" to "28", "MO" to "29", "MT" to "30", "NE" to "31",
+            "NV" to "32", "NH" to "33", "NJ" to "34", "NM" to "35",
+            "NY" to "36", "NC" to "37", "ND" to "38", "OH" to "39",
+            "OK" to "40", "OR" to "41", "PA" to "42", "RI" to "44",
+            "SC" to "45", "SD" to "46", "TN" to "47", "TX" to "48",
+            "UT" to "49", "VT" to "50", "VA" to "51", "WA" to "53",
+            "WV" to "54", "WI" to "55", "WY" to "56", "PR" to "72"
+        )
+        assertEquals(52, postalFips.size)
+        for ((postal, fips) in postalFips) {
+            val full = UnitedStatesMunicipalBoundaries.normalizedStateName(
+                "United States", postal
+            )
+            assertEquals(postal, fips,
+                UnitedStatesMunicipalBoundaries.stateCode("United States", postal))
+            assertEquals(postal, fips,
+                UnitedStatesMunicipalBoundaries.stateCode("USA", full))
+            assertEquals(postal.lowercase(),
+                UnitedStatesMunicipalBoundaries.postalCode("United States", full))
+        }
+        assertNull(UnitedStatesMunicipalBoundaries.stateCode("Canada", "NJ"))
+    }
+
+    @Test fun officialCensusGeometryAcceptsPostalStateFromOldVisit() {
+        val p = place("Philadelphia City", "PA", 39.95, -75.15)
+        val data = UnitedStatesMunicipalBoundaries.parseResponse(
+            p, response(item("Philadelphia city", "Philadelphia", "42",
+                box(-75.2, 39.9, -75.1, 40.0))), 4
+        )
+        assertNotNull(data)
+    }
+
     @Test fun pennsylvaniaCityIsRetrievedFromOfficialIncorporatedPlaces() {
         val p = place("Philadelphia City", "Pennsylvania", 39.95, -75.15)
         assertTrue(UnitedStatesMunicipalBoundaries.applies(p))
