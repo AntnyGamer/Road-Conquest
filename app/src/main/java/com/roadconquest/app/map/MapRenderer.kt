@@ -234,7 +234,7 @@ class MapRenderer(
                 if (!cached.cached) missing += place
                 cached.data?.let(loaded::add)
             }
-            postPlaceOverlay(generation, kind, loaded)
+            postPlaceOverlay(generation, kind, loaded, cacheGeneration)
             for (place in missing) {
                 if (destroyed || generation != overlayGeneration ||
                     cacheGeneration != PlaceOverlayCache.generation()) return@execute
@@ -271,7 +271,7 @@ class MapRenderer(
                     loaded += resolved
                     // Show completed boundaries immediately without waiting for
                     // a future viewport or discovery refresh.
-                    postPlaceOverlay(generation, kind, loaded)
+                    postPlaceOverlay(generation, kind, loaded, cacheGeneration)
                 }
             }
         }
@@ -691,7 +691,8 @@ class MapRenderer(
     private fun postPlaceOverlay(
         generation: Int,
         kind: com.roadconquest.app.data.PlaceKind,
-        data: List<PlaceOverlayData>
+        data: List<PlaceOverlayData>,
+        expectedCacheGeneration: Long
     ) {
         // Polygon conversion can be expensive for many visited municipalities.
         // Build immutable GeoJSON on overlayExecutor instead of blocking the map's UI thread.
@@ -726,7 +727,8 @@ class MapRenderer(
             else -> otherPartition?.outlines ?: overlayBoundaryFeatureCollection(snapshot)
         }
         mainHandler.post {
-            if (destroyed || generation != overlayGeneration || overlayMode.kind != kind) return@post
+            if (destroyed || generation != overlayGeneration || overlayMode.kind != kind ||
+                expectedCacheGeneration != PlaceOverlayCache.generation()) return@post
             val mode = when (kind) {
                 com.roadconquest.app.data.PlaceKind.COUNTRY -> PlaceOverlayMode.COUNTRY
                 com.roadconquest.app.data.PlaceKind.STATE -> PlaceOverlayMode.STATE
