@@ -32,6 +32,22 @@ class UnitedStatesMunicipalBoundariesTest {
     private fun response(vararg features: String) =
         """{"type":"FeatureCollection","features":[${features.joinToString(",")}]}"""
 
+    @Test fun censusBoundaryMissingFeaturesRetriesInsteadOfCreatingNegativeCache() {
+        val place = place("Sample City", "New Jersey", 39.95, -75.15)
+        for (body in listOf(
+            """{"type":"FeatureCollection"}""",
+            """{"type":"FeatureCollection","features":null}""",
+            """{"type":"FeatureCollection","features":{}}"""
+        )) {
+            assertThrows(java.io.IOException::class.java) {
+                UnitedStatesMunicipalBoundaries.parseResponse(place, body, 4)
+            }
+        }
+        assertNull(UnitedStatesMunicipalBoundaries.parseResponse(
+            place, response(), 4
+        ))
+    }
+
     @Test fun pennsylvaniaCityIsRetrievedFromOfficialIncorporatedPlaces() {
         val p = place("Philadelphia City", "Pennsylvania", 39.95, -75.15)
         assertTrue(UnitedStatesMunicipalBoundaries.applies(p))
