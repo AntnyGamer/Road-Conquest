@@ -259,9 +259,14 @@ class MapRenderer(
                 // Another discovery worker may have cached a verified polygon
                 // while our lookup was in flight. If our older lookup returned
                 // no boundary, render that preserved positive cache right now.
-                val resolved = data ?: if (us) {
-                    PlaceOverlayCache.readOfficialUs(context, place).data
-                } else PlaceOverlayCache.read(context, place).data
+                val resolved = if (data == null || !us && place.kind == PlaceKind.TOWN) {
+                    // A verified worldwide town polygon may have been stored while
+                    // this less-trusted overlay fetch was running. write() correctly
+                    // kept that polygon; render the accepted cache, not the rejected
+                    // network candidate.
+                    if (us) PlaceOverlayCache.readOfficialUs(context, place).data
+                    else PlaceOverlayCache.read(context, place).data
+                } else data
                 if (resolved != null) {
                     loaded += resolved
                     // Show completed boundaries immediately without waiting for
