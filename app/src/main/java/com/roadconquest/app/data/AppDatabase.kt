@@ -10,6 +10,9 @@ class AppDatabase private constructor(context: Context) :
 
     internal val historyLock = Any()
     internal var historyGeneration = 0L
+    // Separate from driving history: resetting points must invalidate already-queued
+    // progression writers without discarding or invalidating recorded GPS/roads.
+    internal var progressionGeneration = 0L
 
     // Summary reads happen frequently while the UI is open. Keep exact in-memory aggregates
     // between writes so large driving histories do not need to be rescanned just to redraw stats.
