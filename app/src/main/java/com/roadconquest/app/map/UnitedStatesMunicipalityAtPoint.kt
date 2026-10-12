@@ -96,7 +96,8 @@ internal object UnitedStatesMunicipalityAtPoint {
         if (doc.optString("type") != "FeatureCollection") {
             throw IOException("Unexpected municipality GeoJSON")
         }
-        val features = doc.optJSONArray("features") ?: return null
+        val features = doc.optJSONArray("features")
+            ?: throw IOException("Census municipality GeoJSON lacks a features array")
         for (index in 0 until features.length()) {
             val feature = features.optJSONObject(index) ?: continue
             val properties = feature.optJSONObject("properties") ?: continue
