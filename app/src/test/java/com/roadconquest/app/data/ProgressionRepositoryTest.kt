@@ -258,6 +258,54 @@ class ProgressionRepositoryTest {
         assertTrue(ProgressionRepository(context).pendingPlaceCandidates(nowMillis = 4_000L).isEmpty())
     }
 
+    @Test fun emptyBaselineResolutionsCannotEraseTheFirstStartingFix() {
+        val progression = ProgressionRepository(context)
+        val first = android.location.Location("gps").apply {
+            latitude = 39.7
+            longitude = -75.1
+            accuracy = 5f
+            time = 1_000L
+        }
+        assertTrue(progression.recordBaselineCandidate(first))
+        repeat(4) {
+            val pending = progression.pendingPlaceCandidates(nowMillis = Long.MAX_VALUE).single()
+            assertEquals(Long.MIN_VALUE, pending.cellX)
+            assertEquals(0, progression.resolveCandidate(pending, emptyList()))
+        }
+
+        // Unresolved geocoding must never let a restart redefine the initial fix.
+        val later = android.location.Location("gps").apply {
+            latitude = 40.0
+            longitude = -75.0
+            accuracy = 5f
+            time = 2_000L
+        }
+        assertFalse(progression.recordBaselineCandidate(later))
+        assertTrue(progression.recordPlaceCandidate(later))
+        assertEquals(first.latitude, progression.startingLocation()!!.latitude, 0.0)
+        assertEquals(first.longitude, progression.startingLocation()!!.longitude, 0.0)
+        assertEquals(first.time, progression.startingLocation()!!.recordedAt)
+        assertEquals(Long.MIN_VALUE,
+            progression.pendingPlaceCandidates(nowMillis = Long.MAX_VALUE).single().cellX)
+
+        // Once at least one place is resolved, the bounded partial-baseline
+        // fallback may release queued discoveries without losing their visits.
+        val baseline = progression.pendingPlaceCandidates(nowMillis = Long.MAX_VALUE).single()
+        assertEquals(0, progression.resolveCandidate(
+            baseline,
+            listOf(PlaceDiscovery(
+                PlaceKind.COUNTRY, "us", "United States",
+                visitedAt = baseline.visitedAt,
+                latitude = baseline.latitude, longitude = baseline.longitude
+            ))
+        ))
+        val queued = progression.pendingPlaceCandidates(nowMillis = Long.MAX_VALUE).single()
+        assertEquals(later.time, queued.visitedAt)
+        assertEquals(later.latitude, queued.latitude, 0.0)
+        assertEquals(first.time, progression.startingLocation()!!.recordedAt)
+        assertEquals(0L, progression.snapshot().balance)
+    }
+
     @Test fun failedBaselineGeocodingRetriesPromptly() {
         val progression = ProgressionRepository(context)
         val fix = android.location.Location("gps").apply {
