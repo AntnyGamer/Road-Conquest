@@ -721,11 +721,13 @@ class ProgressionRepository(context: Context) {
         // New official IDs must never be reduced to the same name+nearby-fix
         // heuristic. For an old name-key visit, verify that its saved fix is
         // physically inside the newly fetched official polygon before reusing it.
-        val officialPolygon = if (officialNewKey) {
-            PlaceOverlayCache.readOfficialUs(appContext, discovery).data?.let {
-                runCatching { JSONObject(it.geometryJson) }.getOrNull()
-            }
-        } else null
+        val officialPolygon by lazy(LazyThreadSafetyMode.NONE) {
+            if (officialNewKey) {
+                PlaceOverlayCache.readOfficialUs(appContext, discovery).data?.let {
+                    runCatching { JSONObject(it.geometryJson) }.getOrNull()
+                }
+            } else null
+        }
         db.query(
             "visited_places",
             arrayOf("place_key", "display_name", "latitude", "longitude"),
@@ -739,16 +741,16 @@ class ProgressionRepository(context: Context) {
                 if (existingKey == discovery.key) return discovery
                 val existingOfficial = existingKey.substringAfterLast('|').startsWith("census-")
                 if (officialNewKey && existingOfficial) continue
+                val existing = municipalityIdentity(rows.getString(1))
+                if (existing.first != proposed.first ||
+                    (existing.second.isNotEmpty() && proposed.second.isNotEmpty() &&
+                        existing.second != proposed.second)
+                ) continue
                 if (officialNewKey && (officialPolygon == null ||
                         !PlaceGeometry.contains(
                             officialPolygon, rows.getDouble(2), rows.getDouble(3)
                         )
                     )
-                ) continue
-                val existing = municipalityIdentity(rows.getString(1))
-                if (existing.first != proposed.first ||
-                    (existing.second.isNotEmpty() && proposed.second.isNotEmpty() &&
-                        existing.second != proposed.second)
                 ) continue
                 Location.distanceBetween(
                     discovery.latitude, discovery.longitude,
