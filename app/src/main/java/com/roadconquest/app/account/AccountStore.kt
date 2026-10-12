@@ -88,12 +88,17 @@ object AccountStore {
         context: Context, requested: Session, serverUsername: String,
         serverLeaderboardVisible: Boolean
     ): Session? = updateIfToken(context, requested.token) { current ->
-        current.copy(
-            username = if (current.username == requested.username) serverUsername else current.username,
-            leaderboardVisible = if (current.leaderboardVisible == requested.leaderboardVisible)
-                serverLeaderboardVisible else current.leaderboardVisible
-        )
+        mergeServerRefresh(current, requested, serverUsername, serverLeaderboardVisible)
     }
+
+    internal fun mergeServerRefresh(
+        current: Session, requested: Session, serverUsername: String,
+        serverLeaderboardVisible: Boolean
+    ): Session = current.copy(
+        username = if (current.username == requested.username) serverUsername else current.username,
+        leaderboardVisible = if (current.leaderboardVisible == requested.leaderboardVisible)
+            serverLeaderboardVisible else current.leaderboardVisible
+    )
 
     private fun key(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
