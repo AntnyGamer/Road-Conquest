@@ -12,6 +12,7 @@ import com.roadconquest.app.data.PlaceKind
 import com.roadconquest.app.map.PlaceGeometry
 import com.roadconquest.app.map.PlaceOverlayCache
 import com.roadconquest.app.map.UnitedStatesMunicipalBoundaries
+import com.roadconquest.app.map.UnitedStatesMunicipalityAtPoint
 import org.json.JSONObject
 import java.util.UUID
 
@@ -121,23 +122,37 @@ object ProgressionManager {
     internal fun reconcileMissingStartingTown(
         context: Context,
         repository: ProgressionRepository,
-        discoveries: List<PlaceDiscovery>
+        discoveries: List<PlaceDiscovery>,
+        resolveOfficialAtStart: (PlaceDiscovery) -> PlaceDiscovery? = {
+            UnitedStatesMunicipalityAtPoint.fetch(it)?.place
+        }
     ) {
         if (!repository.hasMissingStartingTown()) return
         val start = repository.startingLocation() ?: return
         for (town in discoveries) {
-            if (town.kind != PlaceKind.TOWN) continue
-            val verified = if (UnitedStatesMunicipalBoundaries.applies(town)) {
-                PlaceOverlayCache.readOfficialUs(context, town).data
-            } else {
-                PlaceOverlayCache.readVerifiedForDiscovery(context, town)
-            } ?: continue
+            if (town.kind != PlaceKind.TOWN ||
+                !UnitedStatesMunicipalBoundaries.applies(town)
+            ) continue
+            val verified = PlaceOverlayCache.readOfficialUs(context, town).data
+                ?: continue
             val containsStart = runCatching {
                 PlaceGeometry.contains(
                     JSONObject(verified.geometryJson), start.latitude, start.longitude
                 )
             }.getOrDefault(false)
-            if (containsStart && repository.recordVerifiedStartingTown(town, start)) break
+            if (!containsStart) continue
+            // Both Census layers may cover the start. Containment alone cannot
+            // establish which town takes precedence. Confirm the actual Census
+            // point result before suppressing a legitimate discovery reward.
+            val atStart = runCatching {
+                resolveOfficialAtStart(town.copy(
+                    latitude = start.latitude, longitude = start.longitude,
+                    visitedAt = start.recordedAt
+                ))
+            }.getOrNull()
+            if (atStart?.key == town.key &&
+                repository.recordVerifiedStartingTown(town, start)
+            ) break
         }
     }
 
