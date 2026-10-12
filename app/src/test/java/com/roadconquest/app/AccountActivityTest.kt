@@ -61,11 +61,18 @@ class AccountActivityTest {
             assertTrue(Prefs.isDriveVerificationEnabled(context))
             val before = Prefs.driveVerificationConsentVersion(context)
             Prefs.setDeviceDataDeletionPending(context, true)
+            // Setting the durable deletion marker itself must revoke precise
+            // location-sharing consent; no separate callback is required.
+            assertFalse(Prefs.isDriveVerificationEnabled(context))
+            val revokedAt = Prefs.driveVerificationConsentVersion(context)
+            assertTrue(revokedAt > before)
             // A stale Settings UI or in-flight callback must not restore
             // consent after the local deletion marker becomes durable.
             Prefs.setDriveVerificationEnabled(context, true)
             assertFalse(Prefs.isDriveVerificationEnabled(context))
-            assertTrue(Prefs.driveVerificationConsentVersion(context) > before)
+            assertTrue(Prefs.driveVerificationConsentVersion(context) > revokedAt)
+            Prefs.setDeviceDataDeletionPending(context, false)
+            assertFalse(Prefs.isDriveVerificationEnabled(context))
         } finally {
             Prefs.setDriveVerificationEnabled(context, false)
             Prefs.setDeviceDataDeletionPending(context, false)
