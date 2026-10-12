@@ -16,7 +16,11 @@ import com.roadconquest.app.map.UnitedStatesMunicipalityAtPoint
 import org.json.JSONObject
 import java.util.UUID
 
-data class PlaceResolutionResult(val added: Int, val newestVisitAt: Long)
+data class PlaceResolutionResult(
+    val added: Int,
+    val newestVisitAt: Long,
+    val placesUpdated: Boolean
+)
 
 object ProgressionManager {
     fun sync(context: Context, summary: DataSummary): ProgressionSnapshot {
@@ -93,6 +97,7 @@ object ProgressionManager {
         // Do not manufacture new discovery notifications from replaying historical drives.
         var added = 0
         var newestVisitAt = 0L
+        var placesUpdated = false
         var processed = 0
         while (processed < limit) {
             val candidates = repository.pendingPlaceCandidates(limit - processed)
@@ -102,16 +107,22 @@ object ProgressionManager {
                 if (discoveries.isNullOrEmpty()) {
                     repository.deferCandidate(candidate)
                 } else {
+                    val missingStartTown = repository.hasMissingStartingTown()
                     reconcileMissingStartingTown(context, repository, discoveries)
+                    val startTownRecovered = missingStartTown && !repository.hasMissingStartingTown()
                     val newPlaces = repository.resolveCandidate(candidate, discoveries)
                     added += newPlaces
+                    // A zero-point baseline or a late recovery changes visited-place
+                    // overlays without awarding any points or showing a "new place" toast.
+                    placesUpdated = placesUpdated || newPlaces > 0 || startTownRecovered ||
+                        (candidate.cellX == Long.MIN_VALUE && candidate.cellY == Long.MIN_VALUE)
                     if (newPlaces > 0) newestVisitAt = maxOf(newestVisitAt, candidate.visitedAt)
                 }
                 processed++
                 if (processed >= limit) break
             }
         }
-        return PlaceResolutionResult(added, newestVisitAt)
+        return PlaceResolutionResult(added, newestVisitAt, placesUpdated)
     }
 
     /**
