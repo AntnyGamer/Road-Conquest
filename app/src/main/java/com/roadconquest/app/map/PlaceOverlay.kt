@@ -71,11 +71,11 @@ object PlaceOverlayCache {
     fun generation(): Long = generation.get()
 
     fun read(context: Context, place: PlaceDiscovery): PlaceOverlayCacheResult =
-        readCacheFile(file(context, place), place)
+        synchronized(mutationLock) { readCacheFile(file(context, place), place) }
 
     /** Census municipalities for all 50 states are cached separately from OSM. */
     fun readOfficialUs(context: Context, place: PlaceDiscovery): PlaceOverlayCacheResult =
-        readCacheFile(officialUsFile(context, place), place)
+        synchronized(mutationLock) { readCacheFile(officialUsFile(context, place), place) }
 
     fun writeOfficialUs(
         context: Context, place: PlaceDiscovery, data: PlaceOverlayData?,
@@ -83,6 +83,11 @@ object PlaceOverlayCache {
     ): Boolean = synchronized(mutationLock) {
         if (expectedGeneration != null && expectedGeneration != generation.get()) return@synchronized false
         val target = officialUsFile(context, place)
+        // A slow overlay request may finish after authoritative point discovery
+        // has cached its polygon. An older negative result must not erase it.
+        if (data == null && readCacheFile(target, place).data != null) {
+            return@synchronized true
+        }
         val directory = target.parentFile ?: return@synchronized false
         if (!directory.exists() && !directory.mkdirs()) return@synchronized false
         val json = JSONObject()
@@ -139,7 +144,9 @@ object PlaceOverlayCache {
     /** Only polygons fetched using the strict municipal verification rules can earn town points. */
     fun readVerifiedForDiscovery(context: Context, place: PlaceDiscovery): PlaceOverlayData? {
         if (place.kind != PlaceKind.TOWN) return null
-        return readCacheFile(file(context, place), place, verifiedOnly = true).data
+        return synchronized(mutationLock) {
+            readCacheFile(file(context, place), place, verifiedOnly = true).data
+        }
     }
 
     fun write(
@@ -150,7 +157,15 @@ object PlaceOverlayCache {
         verifiedForDiscovery: Boolean = false
     ): Boolean = synchronized(mutationLock) {
         if (expectedGeneration != null && generation.get() != expectedGeneration) return@synchronized false
-        val directory = file(context, place).parentFile ?: return@synchronized false
+        val target = file(context, place)
+        val cached = readCacheFile(target, place)
+        // Preserve an already-verified town polygon against a stale generic
+        // overlay refresh, and never replace a valid polygon with a miss.
+        if (cached.data != null && (data == null ||
+                place.kind == PlaceKind.TOWN && !verifiedForDiscovery &&
+                readCacheFile(target, place, verifiedOnly = true).data != null)
+        ) return@synchronized true
+        val directory = target.parentFile ?: return@synchronized false
         if (!directory.exists() && !directory.mkdirs()) return@synchronized false
         val json = JSONObject()
             .put("found", data != null)
@@ -165,7 +180,7 @@ object PlaceOverlayCache {
                 .put("area_sq_km", data.areaSquareKilometers)
                 .put("geometry", JSONObject(data.geometryJson))
         }
-        runCatching { file(context, place).writeText(json.toString()) }.isSuccess
+        runCatching { target.writeText(json.toString()) }.isSuccess
     }
 
     fun clear(context: Context) = synchronized(mutationLock) {
