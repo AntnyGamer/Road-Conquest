@@ -48,6 +48,19 @@ class PlaceOverlayTest {
         assertEquals("Polygon", JSONObject(data.geometryJson).getString("type"))
     }
 
+    @Test fun malformedWorldwideResponseTriggersRetryButEmptyArrayDoesNot() {
+        val place = PlaceDiscovery(
+            PlaceKind.COUNTRY, "us", "United States",
+            visitedAt = 1L, latitude = 39.5, longitude = -74.5
+        )
+        for (body in listOf("<html>Error</html>", "{\"error\":\"temporary\"}", "[broken")) {
+            org.junit.Assert.assertThrows(IOException::class.java) {
+                PlaceOverlayClient.parseResponse(place, body)
+            }
+        }
+        assertNull(PlaceOverlayClient.parseResponse(place, "[]"))
+    }
+
     @Test fun providerConfigReadIsStrictlyBounded() {
         assertEquals(
             "https://example.com",
