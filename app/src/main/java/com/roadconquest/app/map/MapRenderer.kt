@@ -87,6 +87,10 @@ class MapRenderer(
     private var regionalFogRunning = false
     private var reusableRegionalFogBitmap: Bitmap? = null
     private var installedRegionalFogKey: FogKey? = null
+    // The style starts with a ready 512px full-world cloud image. Re-uploading
+    // identical pixels during a rapid pinch can briefly invalidate the native
+    // texture on Android 12; only replace it when its exploration mask changes.
+    private var worldFogHasExploration = false
     private var carIconBitmap: Bitmap? = null
     private var appliedCarStyle = ""
     private var appliedCarColor = ""
@@ -823,6 +827,7 @@ class MapRenderer(
     }
 
     private fun installFogLayer(style: Style) {
+        worldFogHasExploration = false
         activeDetailedFogAlternate = false
         detailedFogCoordinates = null
         regionalFogCoordinates = null
@@ -1077,6 +1082,15 @@ class MapRenderer(
             return
         }
         val capture = captureFog() ?: return
+        // An identical ready world raster was installed with the map style.
+        // Keep its GPU texture untouched while zooming if there are no cleared
+        // grid cells. But after a deletion, replace any previously revealed
+        // world raster once to erase the old exploration mask as required.
+        if (capture.world && savedGridCoordinates.isEmpty() && !worldFogHasExploration) {
+            installedFogKey = capture.key
+            updateFogCoverage(force = true)
+            return
+        }
         // MapLibre already animates this georeferenced ImageSource in native
         // coordinates. Do not repaint/replace an identical cloud rectangle on
         // each 120ms pan callback: that caused needless texture uploads and
@@ -1112,7 +1126,12 @@ class MapRenderer(
                         source?.setCoordinates(capture.quad)
                         // MapLibre 13.6.1 synchronously copies source bitmap pixels.
                         source?.setImage(rendered)
-                        if (source != null) installedFogKey = capture.key
+                        if (source != null) {
+                            installedFogKey = capture.key
+                            if (capture.world) {
+                                worldFogHasExploration = capture.request.gridScreen.isNotEmpty()
+                            }
+                        }
                         if (!capture.world && source != null) {
                             activeDetailedFogAlternate = nextAlternate
                             detailedFogCoordinates = doubleArrayOf(
