@@ -195,7 +195,10 @@ class MapRenderer(
     }
 
     fun setFogEnabled(enabled: Boolean) {
-        if (destroyed) return
+        // Settings/Activity resume repeats the current choice frequently. A
+        // no-op must not resubmit four native raster opacity properties or
+        // queue another bitmap render; resumeViewport handles camera refresh.
+        if (destroyed || enabled == fogEnabled) return
         fogEnabled = enabled
         val cameraPosition = map.cameraPosition
         updateFogCoverage(force = true, cameraPosition = cameraPosition)
