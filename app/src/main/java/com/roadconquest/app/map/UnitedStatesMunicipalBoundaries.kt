@@ -101,7 +101,7 @@ internal object UnitedStatesMunicipalBoundaries {
             place.longitude + longitudePad, place.latitude + latitudePad
         ).joinToString(",")
         val where = "STATE = '$state'"
-        val officialLayer = Regex("""\\|census-(1|4)-(\\d+)$""")
+        val officialLayer = Regex("""\|census-(1|4)-(\d+)$""")
             .find(place.key)?.groupValues?.get(1)?.toIntOrNull()
         val layerOrder = if (officialLayer != null) listOf(officialLayer) else if (normalized.second == "township" ||
             normalized.second == "town" &&
@@ -168,7 +168,7 @@ internal object UnitedStatesMunicipalBoundaries {
         val state = stateFips[place.parentName.trim().lowercase(Locale.ROOT)] ?: return null
         // New verified discovery keys bind overlays to a single Census polygon.
         // Legacy name-only keys retain the existing name-and-position fallback.
-        val officialIdentity = Regex("""\\|census-(1|4)-(\\d+)$""").find(place.key)
+        val officialIdentity = Regex("""\|census-(1|4)-(\d+)$""").find(place.key)
         val requestedLayer = officialIdentity?.groupValues?.get(1)?.toIntOrNull()
         val requestedGeoid = officialIdentity?.groupValues?.get(2)
         var selected: PlaceOverlayData? = null
