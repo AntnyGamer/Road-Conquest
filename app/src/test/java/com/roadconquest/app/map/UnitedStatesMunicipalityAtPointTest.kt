@@ -44,6 +44,13 @@ class UnitedStatesMunicipalityAtPointTest {
         ))
     }
 
+    @Test fun consolidatedCityQueriesOnlyWhereTheCensusPublishesThatGeography() {
+        assertTrue(UnitedStatesMunicipalBoundaries.hasConsolidatedCities("18"))
+        assertTrue(UnitedStatesMunicipalBoundaries.hasConsolidatedCities("13"))
+        assertFalse(UnitedStatesMunicipalBoundaries.hasConsolidatedCities("34"))
+        assertFalse(UnitedStatesMunicipalBoundaries.hasConsolidatedCities("06"))
+    }
+
     @Test fun consolidatedCityHasStableCensusIdentityAndResolvableOfficialBoundary() {
         val sample = seed("Indiana")
         val geojson = response(featureWithGeoid(
