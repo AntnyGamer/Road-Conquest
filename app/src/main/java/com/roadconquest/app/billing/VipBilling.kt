@@ -97,11 +97,7 @@ class VipBilling(
                 val details = if (result.responseCode == BillingClient.BillingResponseCode.OK) {
                     response.productDetailsList.firstOrNull { it.productId == VipEntitlement.PRODUCT_ID }
                 } else null
-                val buy = details?.oneTimePurchaseOfferDetailsList?.firstOrNull {
-                    // VIP is permanent: never offer a rental or preorder as
-                    // "Lifetime", even if Play lists such an offer first.
-                    it.rentalDetails == null && it.preorderDetails == null
-                }
+                val buy = details?.let(::permanentBuyOffer)
                 val offerToken = buy?.offerToken
                 if (details == null || offerToken.isNullOrBlank()) {
                     message = "VIP is not available yet. Activate vip_lifetime in Google Play Console."
@@ -182,6 +178,19 @@ class VipBilling(
         }
     }
 
+    /**
+     * Billing 9 can list rentals, preorders and permanent offers together.
+     * Older Play configurations may only expose the backwards-compatible
+     * single-offer field. Both the displayed price and purchase must use the
+     * same eligible, non-rental, non-preorder option.
+     */
+    private fun permanentBuyOffer(details: ProductDetails): ProductDetails.OneTimePurchaseOfferDetails? {
+        fun permanent(offer: ProductDetails.OneTimePurchaseOfferDetails) =
+            offer.rentalDetails == null && offer.preorderDetails == null
+        return details.oneTimePurchaseOfferDetailsList?.firstOrNull(::permanent)
+            ?: details.oneTimePurchaseOfferDetails?.takeIf(::permanent)
+    }
+
     private fun queryOffer() {
         if (closed || !client.isReady) return
         val product = QueryProductDetailsParams.Product.newBuilder()
@@ -193,11 +202,7 @@ class VipBilling(
             if (closed) return@queryProductDetailsAsync
             offer = if (result.responseCode == BillingClient.BillingResponseCode.OK) {
                 response.productDetailsList.firstOrNull { it.productId == VipEntitlement.PRODUCT_ID }
-                    ?.oneTimePurchaseOfferDetailsList?.firstOrNull {
-                    // VIP is permanent: never offer a rental or preorder as
-                    // "Lifetime", even if Play lists such an offer first.
-                    it.rentalDetails == null && it.preorderDetails == null
-                }?.let { Offer(it.formattedPrice) }
+                    ?.let(::permanentBuyOffer)?.let { Offer(it.formattedPrice) }
             } else null
             notifyStatus()
         }
