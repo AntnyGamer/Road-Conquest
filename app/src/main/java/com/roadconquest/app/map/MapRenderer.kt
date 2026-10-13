@@ -1106,7 +1106,16 @@ class MapRenderer(
             mainHandler.postDelayed(renderFog, delay)
             return
         }
-        val capture = captureFog() ?: return
+        val captureResult = captureFog() ?: return
+        if (captureResult is FogCaptureResult.Unchanged) {
+            if (captureResult.world && savedGridCoordinates.isEmpty() && !worldFogHasExploration) {
+                updateFogCoverage(force = true)
+            } else if (!cameraMoving) {
+                scheduleRegionalFogRender()
+            }
+            return
+        }
+        val capture = (captureResult as FogCaptureResult.Changed).capture
         // An identical ready world raster was installed with the map style.
         // Keep its GPU texture untouched while zooming if there are no cleared
         // grid cells. But after a deletion, replace any previously revealed
@@ -1116,14 +1125,8 @@ class MapRenderer(
             updateFogCoverage(force = true)
             return
         }
-        // MapLibre already animates this georeferenced ImageSource in native
-        // coordinates. Do not repaint/replace an identical cloud rectangle on
-        // each 120ms pan callback: that caused needless texture uploads and
-        // could flash an otherwise stable clearing on the GPU.
-        if (capture.key == installedFogKey) {
-            if (!cameraMoving) scheduleRegionalFogRender()
-            return
-        }
+        // An unchanged raster is rejected in captureFog() before projecting
+        // potentially thousands of visited-cell corners.
         lastFogRenderAt = SystemClock.elapsedRealtime()
         fogAgain = false
         fogRunning = true
@@ -1189,8 +1192,9 @@ class MapRenderer(
         if (destroyed || !viewportActive || !fogEnabled || cameraMoving ||
             regionalFogRunning || fogRunning
         ) return
-        val capture = captureFog(regional = true) ?: return
-        if (capture.key == installedRegionalFogKey) return
+        val captureResult = captureFog(regional = true) ?: return
+        if (captureResult is FogCaptureResult.Unchanged) return
+        val capture = (captureResult as FogCaptureResult.Changed).capture
         regionalFogRunning = true
         val reusable = reusableRegionalFogBitmap
         reusableRegionalFogBitmap = null
@@ -1230,7 +1234,7 @@ class MapRenderer(
         }
     }
 
-    private fun captureFog(regional: Boolean = false): FogCapture? {
+    private fun captureFog(regional: Boolean = false): FogCaptureResult? {
         if (mapView.width <= 0 || mapView.height <= 0 || map.style == null) return null
         val position = map.cameraPosition
         val center = position.target ?: return null
@@ -1262,6 +1266,16 @@ class MapRenderer(
         // The live marker is not authoritative exploration: its current preview
         // can wander while parked or immediately after reopening the app.
         // Only persisted, movement-validated mile cells may clear the fog.
+        val key = FogKey(
+            styleGeneration, world, raster.westMeters, raster.northMeters,
+            raster.metersPerPixel, size, placeDataRevision, null
+        )
+        // Most pan callbacks keep the exact same snapped north-up raster.
+        // Checking the cheap scalar key first avoids reprojecting all unlocked
+        // mile cells and reallocating a screen-coordinate array unnecessarily.
+        if (key == if (regional) installedRegionalFogKey else installedFogKey) {
+            return FogCaptureResult.Unchanged(world)
+        }
         val corners = savedGridCoordinates
         val screen = raster.project(corners)
         val geographic = raster.corners()
@@ -1271,11 +1285,7 @@ class MapRenderer(
             LatLng(geographic[4], geographic[5]),
             LatLng(geographic[6], geographic[7])
         )
-        val key = FogKey(
-            styleGeneration, world, raster.westMeters, raster.northMeters,
-            raster.metersPerPixel, size, placeDataRevision, null
-        )
-        return FogCapture(styleGeneration, quad, FogBitmapRenderer.Request(
+        return FogCaptureResult.Changed(FogCapture(styleGeneration, quad, FogBitmapRenderer.Request(
             bitmapWidth = size,
             bitmapHeight = size,
             screenLeft = 0f,
@@ -1293,7 +1303,7 @@ class MapRenderer(
             gridMode = true,
             gridCoordinates = corners,
             gridScreen = screen
-        ), world = world, key = key)
+        ), world = world, key = key))
     }
 
     private fun currentFogQuad(): LatLngQuad {
@@ -1384,6 +1394,11 @@ class MapRenderer(
         val visitedRevision: Int,
         val liveCellKey: Long?
     )
+
+    private sealed interface FogCaptureResult {
+        data class Changed(val capture: FogCapture) : FogCaptureResult
+        data class Unchanged(val world: Boolean) : FogCaptureResult
+    }
 
     private data class FogCapture(
         val styleGeneration: Int,
