@@ -97,8 +97,8 @@ class MapRenderer(
     private var appliedRoadColor = ""
     private var fogEnabled = Prefs.isFogEnabled(context)
     private var overlayMode = Prefs.placeOverlayMode(context)
-    private var shownOverlayKeys = emptyList<String>()
-    private var shownOverlayCacheGeneration = -1L
+    @Volatile private var shownOverlayKeys = emptyList<String>()
+    @Volatile private var shownOverlayCacheGeneration = -1L
     private val overlayClient = PlaceOverlayClient()
     @Volatile private var overlayGeneration = 0
     @Volatile private var destroyed = false
@@ -700,6 +700,15 @@ class MapRenderer(
         // Polygon conversion can be expensive for many visited municipalities.
         // Build immutable GeoJSON on overlayExecutor instead of blocking the map's UI thread.
         val snapshot = data.toList()
+        val keys = snapshot.map { "${it.key}:${it.geometryJson.hashCode()}" }
+        // This gets called after normal activity refreshes as well as during
+        // incremental downloads. If the complete geometry set is already drawn,
+        // skip costly JTS polygon clipping and GeoJSON serialization altogether.
+        // These state fields are written on the UI thread and read here on the
+        // serial overlay executor; volatility keeps the early check up to date.
+        if (keys == shownOverlayKeys &&
+            expectedCacheGeneration == shownOverlayCacheGeneration
+        ) return
         // Existing boundaries can overlap due to mismatched or historical OSM
         // polygons. Partition only town shapes so their translucent fills never
         // stack or paint an overlapping boundary twice.
@@ -728,7 +737,6 @@ class MapRenderer(
         val officialPartition = if (censusLayers.size > 1) {
             TownOverlayPartition.renderOfficialUs(officialUs)
         } else null
-        val keys = snapshot.map { "${it.key}:${it.geometryJson.hashCode()}" }
         val officialFills = officialPartition?.fills ?: overlayFeatureCollection(officialUs)
         val officialBorders = officialPartition?.outlines ?:
             TownOverlayPartition.authoritativeOutlines(officialUs)
