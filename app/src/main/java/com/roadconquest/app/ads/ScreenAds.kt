@@ -72,7 +72,10 @@ class ScreenAds(
     }
     private val vipListener: () -> Unit = {
         activity.runOnUiThread {
-            if (alive() && active && VipEntitlement.isActive(activity)) suspendAdsForVip()
+            if (alive() && active) {
+                if (VipEntitlement.isActive(activity)) suspendAdsForVip()
+                else if (vipChecked) resumeAfterVipCheck()
+            }
         }
     }
     private val retryAds = Runnable { if (permitted()) enableAds() }
@@ -197,8 +200,9 @@ class ScreenAds(
     }
 
     private fun updatePrivacyButton() {
-        privacyButton.visibility = if (!VipEntitlement.isActive(activity) &&
-            consent.privacyOptionsRequirementStatus ==
+        // Paying to remove ads must not remove access to existing ad privacy
+        // choices for people who previously consented to personalized ads.
+        privacyButton.visibility = if (consent.privacyOptionsRequirementStatus ==
             ConsentInformation.PrivacyOptionsRequirementStatus.REQUIRED) View.VISIBLE else View.GONE
         privacyButton.isEnabled = !formShowing && !showingReward
         updateFooter()
