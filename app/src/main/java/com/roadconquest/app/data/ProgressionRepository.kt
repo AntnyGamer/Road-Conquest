@@ -69,6 +69,9 @@ class ProgressionRepository(context: Context) {
     private val appContext = context.applicationContext
     private val dbHelper = AppDatabase.get(appContext)
     private val historyGeneration = synchronized(dbHelper.historyLock) { dbHelper.historyGeneration }
+    // Only accessed under dbHelper.historyLock. Reuse the one-element result
+    // through bounded history backfills instead of allocating per duplicate fix.
+    private val candidateDistanceScratch = FloatArray(1)
 
     fun isHistoryGenerationCurrent(expected: Long): Boolean =
         synchronized(dbHelper.historyLock) {
@@ -248,9 +251,10 @@ class ProgressionRepository(context: Context) {
         ).use { cursor ->
             if (cursor.moveToFirst()) cursor.getDouble(0) to cursor.getDouble(1) else null
         } ?: return false
-        val separation = FloatArray(1)
-        Location.distanceBetween(first.first, first.second, latitude, normalized, separation)
-        if (separation[0] < SECONDARY_CANDIDATE_MIN_DISTANCE_M) return false
+        Location.distanceBetween(
+            first.first, first.second, latitude, normalized, candidateDistanceScratch
+        )
+        if (candidateDistanceScratch[0] < SECONDARY_CANDIDATE_MIN_DISTANCE_M) return false
         values.put("cell_x", x + SECONDARY_CANDIDATE_OFFSET)
         return db.insertWithOnConflict(
             "place_candidates", null, values, SQLiteDatabase.CONFLICT_IGNORE
