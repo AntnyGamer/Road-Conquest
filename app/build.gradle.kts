@@ -3,7 +3,7 @@ plugins {
 }
 
 val accountApiUrl = providers.gradleProperty("ROADCONQUEST_ACCOUNT_API_URL").getOrElse(
-    "https://br-withered-dew-b7u432kv-roadconquest.compute.c-13.us-east-1.aws.neon.tech"
+    "https://roadconquest-api.22abongiovanni.workers.dev"
 )
 val osrmApiUrl = providers.gradleProperty("ROADCONQUEST_OSRM_API_URL").getOrElse(
     "https://router.project-osrm.org"
