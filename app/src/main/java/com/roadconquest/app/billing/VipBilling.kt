@@ -97,7 +97,11 @@ class VipBilling(
                 val details = if (result.responseCode == BillingClient.BillingResponseCode.OK) {
                     response.productDetailsList.firstOrNull { it.productId == VipEntitlement.PRODUCT_ID }
                 } else null
-                val buy = details?.oneTimePurchaseOfferDetailsList?.firstOrNull()
+                val buy = details?.oneTimePurchaseOfferDetailsList?.firstOrNull {
+                    // VIP is permanent: never offer a rental or preorder as
+                    // "Lifetime", even if Play lists such an offer first.
+                    it.rentalDetails == null && it.preorderDetails == null
+                }
                 val offerToken = buy?.offerToken
                 if (details == null || offerToken.isNullOrBlank()) {
                     message = "VIP is not available yet. Activate vip_lifetime in Google Play Console."
@@ -189,7 +193,11 @@ class VipBilling(
             if (closed) return@queryProductDetailsAsync
             offer = if (result.responseCode == BillingClient.BillingResponseCode.OK) {
                 response.productDetailsList.firstOrNull { it.productId == VipEntitlement.PRODUCT_ID }
-                    ?.oneTimePurchaseOfferDetailsList?.firstOrNull()?.let { Offer(it.formattedPrice) }
+                    ?.oneTimePurchaseOfferDetailsList?.firstOrNull {
+                    // VIP is permanent: never offer a rental or preorder as
+                    // "Lifetime", even if Play lists such an offer first.
+                    it.rentalDetails == null && it.preorderDetails == null
+                }?.let { Offer(it.formattedPrice) }
             } else null
             notifyStatus()
         }
