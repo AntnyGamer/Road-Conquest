@@ -598,18 +598,20 @@ class MapRenderer(
                                 (it.nextPendingExpiryMillis - System.currentTimeMillis()).coerceAtLeast(1_000L)
                             )
                         }
-                        val explorationChanged = if (it.places != null) {
+                        if (it.places != null) {
                             loadedPlaceBounds = it.placeBounds
                             setDisplayedPlaces(it.places)
-                        } else false
+                        }
                         if (it.overlay != null && it.features != null && !queryRoadsAgain) {
                             loadedRoadBounds = it.roadBounds
                             setDisplayedRoads(it.overlay, it.features)
-                            if (explorationChanged) scheduleFogRender()
-                        } else {
-                            // Also refresh on camera/lifecycle paths without a road query.
-                            scheduleFogRender()
                         }
+                        // A new camera footprint needs a fog capture even when the
+                        // loaded grid cells are unchanged. captureFog() compares
+                        // geographic keys before projecting them, so this check is cheap
+                        // when there is nothing to redraw. Do not couple this to road
+                        // source updates or to whether the cell list changed.
+                        scheduleFogRender()
                     }
                 }
                 if (queryAgain || revision != viewportRevision) {
@@ -1020,14 +1022,13 @@ class MapRenderer(
         // Blue roads render in their own source and do not clear exploration-only fog.
     }
 
-    private fun setDisplayedPlaces(places: DoubleArray): Boolean {
-        if (displayedPlaces.contentEquals(places)) return false
+    private fun setDisplayedPlaces(places: DoubleArray) {
+        if (displayedPlaces.contentEquals(places)) return
         displayedPlaces = places
         // Stored one-mile grid centers are authoritative; legacy samples were backfilled
         // once into this table. Scoring and road matching remain independent.
         savedGridCoordinates = FogGrid.uniqueVisitedCorners(places)
         placeDataRevision++
-        return true
     }
 
     private fun updateCarLayer() {
