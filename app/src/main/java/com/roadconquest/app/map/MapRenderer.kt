@@ -1277,7 +1277,7 @@ class MapRenderer(
             return FogCaptureResult.Unchanged(world)
         }
         val corners = savedGridCoordinates
-        val screen = raster.project(corners)
+        val screen = raster.projectGridCorners(corners)
         val geographic = raster.corners()
         val quad = LatLngQuad(
             LatLng(geographic[0], geographic[1]),
