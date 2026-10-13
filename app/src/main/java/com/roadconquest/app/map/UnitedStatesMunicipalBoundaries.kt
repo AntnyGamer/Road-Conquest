@@ -30,6 +30,7 @@ internal object UnitedStatesMunicipalBoundaries {
     private const val MAX_CHARS = 16 * 1024 * 1024
     private const val MAX_SAVED_ERROR_METERS = 1_800.0
     private val WHITESPACE_RE = Regex("\\s+")
+    private val OFFICIAL_CENSUS_ID_RE = Regex("""\|census-(1|3|4)-(\d+)$""")
     // State files published by Census for the CONCITY layer (2025 vintage).
     // Other states have no consolidated-city polygons, so do not make an
     // otherwise empty additional network request for every driven town.
@@ -149,7 +150,7 @@ internal object UnitedStatesMunicipalBoundaries {
             place.longitude - longitudePad, place.latitude - latitudePad,
             place.longitude + longitudePad, place.latitude + latitudePad
         ).joinToString(",")
-        val officialIdentity = Regex("""\|census-(1|3|4)-(\d+)$""").find(place.key)
+        val officialIdentity = OFFICIAL_CENSUS_ID_RE.find(place.key)
         val officialLayer = officialIdentity?.groupValues?.get(1)?.toIntOrNull()
         // A saved official GEOID is already an exact identifier, so don't fetch
         // every nearby Census polygon and discard all but one on the client.
@@ -229,7 +230,7 @@ internal object UnitedStatesMunicipalBoundaries {
         val state = stateCode(place.countryName, place.parentName) ?: return null
         // New verified discovery keys bind overlays to a single Census polygon.
         // Legacy name-only keys retain the existing name-and-position fallback.
-        val officialIdentity = Regex("""\|census-(1|3|4)-(\d+)$""").find(place.key)
+        val officialIdentity = OFFICIAL_CENSUS_ID_RE.find(place.key)
         val requestedLayer = officialIdentity?.groupValues?.get(1)?.toIntOrNull()
         val requestedGeoid = officialIdentity?.groupValues?.get(2)
         var selected: PlaceOverlayData? = null
