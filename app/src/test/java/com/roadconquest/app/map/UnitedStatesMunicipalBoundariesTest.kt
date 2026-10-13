@@ -79,6 +79,15 @@ class UnitedStatesMunicipalBoundariesTest {
         assertNull(UnitedStatesMunicipalBoundaries.stateCode("Canada", "NJ"))
     }
 
+    @Test fun verifiedCensusGeoidFiltersNetworkResultsWithoutChangingLegacyLookup() {
+        assertEquals("STATE = '34' AND GEOID = '3401234'",
+            UnitedStatesMunicipalBoundaries.municipalityWhereClause("34", "3401234"))
+        assertEquals("STATE = '42' AND GEOID = '4200300123'",
+            UnitedStatesMunicipalBoundaries.municipalityWhereClause("42", "4200300123"))
+        assertEquals("STATE = '34'",
+            UnitedStatesMunicipalBoundaries.municipalityWhereClause("34", null))
+    }
+
     @Test fun officialCensusGeometryAcceptsPostalStateFromOldVisit() {
         val p = place("Philadelphia City", "PA", 39.95, -75.15)
         val data = UnitedStatesMunicipalBoundaries.parseResponse(
