@@ -1273,7 +1273,7 @@ class MapRenderer(
         // Most pan callbacks keep the exact same snapped north-up raster.
         // Checking the cheap scalar key first avoids reprojecting all unlocked
         // mile cells and reallocating a screen-coordinate array unnecessarily.
-        if (key == if (regional) installedRegionalFogKey else installedFogKey) {
+        if (key == (if (regional) installedRegionalFogKey else installedFogKey)) {
             return FogCaptureResult.Unchanged(world)
         }
         val corners = savedGridCoordinates
