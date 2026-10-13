@@ -63,8 +63,8 @@ test("only recent ingress-signed client IPs separate rate-limit identities", asy
   }, { rateLimitIpSignatureKey: key });
   const path = "/v1/login?source=test";
   const timestamp = String(Date.now());
-  const signed = ip => createHmac("sha256", key)
-    .update(`GET\n${path}\n${ip}\n${timestamp}`, "utf8").digest("hex");
+  const signed = (ip, time = timestamp) => createHmac("sha256", key)
+    .update(`GET\n${path}\n${ip}\n${time}`, "utf8").digest("hex");
   const request = (ip, signature, time = timestamp) => new Request(
     "https://accounts.example" + path,
     { headers: {
@@ -78,7 +78,8 @@ test("only recent ingress-signed client IPs separate rate-limit identities", asy
   await fetch(request("198.51.100.2", signed("198.51.100.2")));
   await fetch(request("198.51.100.3", signed("203.0.113.5")));
   await fetch(request("2001:db8::1", "0".repeat(64)));
-  await fetch(request("203.0.113.5", signed("203.0.113.5"), String(Date.now() - 120_000)));
+  const expired = String(Date.now() - 120_000);
+  await fetch(request("203.0.113.5", signed("203.0.113.5", expired), expired));
   assert.deepEqual(remoteAddresses, [
     "203.0.113.5", "198.51.100.2", "function-anonymous", "function-anonymous", "function-anonymous"
   ]);
