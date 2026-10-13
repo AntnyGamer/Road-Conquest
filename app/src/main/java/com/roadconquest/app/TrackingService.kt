@@ -389,7 +389,11 @@ class TrackingService : Service(), LocationListener {
                 }
                 if (placeCandidate != null && ::progressionRepository.isInitialized) {
                     try {
-                        progressionRepository.recordPlaceCandidate(placeCandidate)
+                        if (progressionRepository.recordPlaceCandidate(placeCandidate)) {
+                            // Resolve actual new crossing candidates while the map is open,
+                            // even inside a previously cleared mile-sized fog tile.
+                            sendUiBroadcast(ACTION_PLACE_CANDIDATE_UPDATED)
+                        }
                     } catch (error: Exception) {
                         // Optional municipal lookups must never interrupt recorded
                         // driving, distance, road matching, or fog persistence.
@@ -885,6 +889,7 @@ class TrackingService : Service(), LocationListener {
         const val ACTION_STATS_UPDATED = "com.roadconquest.app.STATS_UPDATED"
         const val ACTION_ROADS_UPDATED = "com.roadconquest.app.ROADS_UPDATED"
         const val ACTION_EXPLORATION_UPDATED = "com.roadconquest.app.EXPLORATION_UPDATED"
+        const val ACTION_PLACE_CANDIDATE_UPDATED = "com.roadconquest.app.PLACE_CANDIDATE_UPDATED"
         const val ACTION_TRACKING_STATE_CHANGED = "com.roadconquest.app.TRACKING_STATE_CHANGED"
         const val ACTION_STOP_UNTIL_OPEN = "com.roadconquest.app.STOP_UNTIL_OPEN"
         const val EXTRA_LATITUDE = "latitude"

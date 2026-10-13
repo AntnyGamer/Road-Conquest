@@ -97,7 +97,23 @@ The function validates HTTPS from the platform's request URL and discards caller
 forwarding headers. Without a documented trusted client-IP source, anonymous requests share a
 conservative database-backed budget: eight signup attempts per hour and twenty login attempts per
 15 minutes across the function, plus the existing per-username login limit. This suits a small
-hobby deployment; changing IP headers cannot bypass it. Review that limit before broader use.
+hobby deployment; changing IP headers cannot bypass it.
+
+For independent per-client limits when usage grows, route requests through an independently
+trusted HTTPS ingress that supplies the real client IP (not a forwarded value from the caller)
+and signs it. Set the **same** random 32+-character `RATE_LIMIT_IP_SIGNATURE_KEY` secret at
+the ingress and in the Neon Function. The ingress must strip any client-supplied
+`X-RoadConquest-Client-*` headers and overwrite these three:
+- `X-RoadConquest-Client-IP`: ingress-authenticated IPv4/IPv6 literal.
+- `X-RoadConquest-Client-Timestamp`: current Unix time in milliseconds.
+- `X-RoadConquest-Client-Signature`: lowercase hexadecimal HMAC-SHA256 under that
+  secret over `METHOD + "\n" + pathAndQuery + "\n" + ip + "\n" + timestamp`.
+The Function checks the signature and a 60-second freshness window. Forged, expired,
+or absent signatures keep the shared rate-limit budget; neither
+`X-Forwarded-For` nor `X-Real-IP` is trusted. Do not put this secret in Android,
+public source, or an ordinary browser script. Simply setting the secret without
+deploying a trusted signing ingress does **not** change the live shared limits.
+Keep the public privacy and deletion pages accessible through the ingress.
 
 After deployment reports success, test the returned HTTPS invocation URL through actual signup,
 login, session revocation and profile privacy. Only then build the Android release with that
@@ -198,7 +214,7 @@ PLAY_SERVICE_ACCOUNT_FILE=/run/secrets/play-integrity.json
 # or PLAY_SERVICE_ACCOUNT_JSON=<service-account JSON stored as a secret env var>
 PLAY_CLOUD_PROJECT_NUMBER=<numeric linked Google Cloud project>
 PLAY_CERTIFICATES=<base64url SHA256 app-signing certificate, without padding>
-PLAY_VERSION_CODES=26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68
+PLAY_VERSION_CODES=26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69
 ```
 
 Configure and authorize the Google Cloud project for Play Integrity token decoding. Play-installed

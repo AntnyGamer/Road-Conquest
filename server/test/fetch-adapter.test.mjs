@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHmac } from "node:crypto";
 import { createFetchHandler } from "../src/fetch-adapter.mjs";
 
 test("HTTPS transport cannot be spoofed with forwarding headers", async () => {
@@ -49,4 +50,37 @@ test("request bodies remain streaming so the API can enforce its size limit", as
     method: "POST", body: payload
   }));
   assert.equal(response.status, 413);
+});
+
+test("only recent ingress-signed client IPs separate rate-limit identities", async () => {
+  const key = "a-demo-secret-long-enough-for-identity-authentication";
+  const remoteAddresses = [];
+  const fetch = createFetchHandler((req, res) => {
+    remoteAddresses.push(req.socket.remoteAddress);
+    assert.equal(req.headers["x-roadconquest-client-ip"], undefined);
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end('{"ok":true}');
+  }, { rateLimitIpSignatureKey: key });
+  const path = "/v1/login?source=test";
+  const timestamp = String(Date.now());
+  const signed = (ip, time = timestamp) => createHmac("sha256", key)
+    .update(`GET\n${path}\n${ip}\n${time}`, "utf8").digest("hex");
+  const request = (ip, signature, time = timestamp) => new Request(
+    "https://accounts.example" + path,
+    { headers: {
+      "X-Forwarded-For": "192.0.2.99",
+      "X-RoadConquest-Client-IP": ip,
+      "X-RoadConquest-Client-Timestamp": time,
+      "X-RoadConquest-Client-Signature": signature
+    } }
+  );
+  await fetch(request("203.0.113.5", signed("203.0.113.5")));
+  await fetch(request("198.51.100.2", signed("198.51.100.2")));
+  await fetch(request("198.51.100.3", signed("203.0.113.5")));
+  await fetch(request("2001:db8::1", "0".repeat(64)));
+  const expired = String(Date.now() - 120_000);
+  await fetch(request("203.0.113.5", signed("203.0.113.5", expired), expired));
+  assert.deepEqual(remoteAddresses, [
+    "203.0.113.5", "198.51.100.2", "function-anonymous", "function-anonymous", "function-anonymous"
+  ]);
 });

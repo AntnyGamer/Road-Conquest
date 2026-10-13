@@ -1,4 +1,4 @@
-# Road Conquest 1.0 Beta 31
+# Road Conquest 1.0 Beta 43
 
 Road Conquest remembers the roads you drive and the places you visit, revealing them through a
 cloud-textured fog map.
@@ -7,14 +7,11 @@ cloud-textured fog map.
 [Source and issues](https://github.com/AntnyGamer/RoadConquest-Beta) ·
 [GNU AGPL v3 license](LICENSE)
 
-Beta 31 fixes explored mile squares that briefly reappear covered in fog during
-fast pinch zooms. A geographically anchored wider backup mask retains the existing
-cloud-fog clearings while the detailed raster catches up, without stacking fog layers.
-The town, state and country overlay popups now show first-visited and last-visited
-timestamps. Geographic discovery samples actual driven GPS locations more densely,
-rechecks stored accurate history after the initial zero-point baseline and shows
-downloaded boundaries incrementally instead of waiting for a batch. Previously
-unlocked roads, exploration, purchases and scoring remain intact.
+Beta 43 improves starting-location discovery, official nationwide municipality
+lookup, post-deletion privacy, on-road departure counting, fog efficiency, and
+verified-drive retries. Earlier road, exploration, and map improvements remain
+included. Previously unlocked roads, exploration, purchases, and scoring are
+preserved when installing a signed update over an existing installation.
 
 ## Install
 
@@ -31,7 +28,7 @@ Grant Precise location. For automatic background tracking, choose Allow all the 
 location settings and allow background battery use. Settings includes shortcuts to the relevant
 Android screens. Allow notifications to see the tracking notification and its Stop tracking control.
 
-This release uses Android application ID `com.roadconquest.app` and internal version code 57.
+This release uses Android application ID `com.roadconquest.app` and internal version code 69.
 The app shows its exact version in Settings → About. Treat the application ID as permanent once
 the Google Play listing is created; changing it later would create a different app.
 

@@ -1,5 +1,27 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
+import { isIP } from "node:net";
+
+/**
+ * Client IPs cannot be trusted from arbitrary caller headers on a public Neon URL.
+ * Optionally accept a short-lived HMAC from an independently trusted ingress which
+ * derives the real IP itself. All unsigned/spoofed requests retain the shared budget.
+ */
+function authenticatedClientIp(request, url, secret, now = Date.now()) {
+  if (!secret) return null;
+  if (secret.length < 32) throw new Error("RATE_LIMIT_IP_SIGNATURE_KEY must be at least 32 characters");
+  const ip = request.headers.get("x-roadconquest-client-ip");
+  const time = request.headers.get("x-roadconquest-client-timestamp");
+  const signature = request.headers.get("x-roadconquest-client-signature");
+  if (!ip || !isIP(ip) || !/^\d{13}$/u.test(time || "") ||
+      Math.abs(now - Number(time)) > 60_000 || !/^[a-f0-9]{64}$/u.test(signature || "")) return null;
+  const expected = createHmac("sha256", secret)
+    .update(`${request.method}\n${url.pathname}${url.search}\n${ip}\n${time}`, "utf8")
+    .digest();
+  return timingSafeEqual(expected, Buffer.from(signature, "hex")) ? ip : null;
+}
+
 /** Adapt the account API to a platform Fetch handler without trusting client proxy headers. */
-export function createFetchHandler(serve) {
+export function createFetchHandler(serve, { rateLimitIpSignatureKey = process.env.RATE_LIMIT_IP_SIGNATURE_KEY } = {}) {
   return async function fetch(request) {
     const url = new URL(request.url);
     if (url.protocol !== "https:") {
@@ -9,18 +31,21 @@ export function createFetchHandler(serve) {
       });
     }
     const headers = Object.fromEntries(request.headers);
-    // Fetch supplies the transport URL. Callers cannot make an HTTP request secure by
-    // supplying x-forwarded-proto, or evade rate limits by inventing an IP address.
+    // Ordinary forwarded headers are caller-controlled. Only an HMAC verified
+    // above can supply a separate rate-limit key for this public Function.
     delete headers["x-forwarded-for"];
     delete headers["x-real-ip"];
+    delete headers["x-roadconquest-client-ip"];
+    delete headers["x-roadconquest-client-timestamp"];
+    delete headers["x-roadconquest-client-signature"];
     headers["x-forwarded-proto"] = "https";
     const req = {
       method: request.method,
       url: url.pathname + url.search,
       headers,
-      // Until the platform documents an authenticated client-IP source, anonymous
-      // requests share the existing conservative database-backed attempt budget.
-      socket: { remoteAddress: "function-anonymous" },
+      // Without a trusted ingress, anonymous requests deliberately share a
+      // bounded budget instead of trusting any caller-supplied IP.
+      socket: { remoteAddress: authenticatedClientIp(request, url, rateLimitIpSignatureKey) || "function-anonymous" },
       async *[Symbol.asyncIterator]() {
         if (request.body) yield* request.body;
       }

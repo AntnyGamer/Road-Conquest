@@ -3,7 +3,7 @@ plugins {
 }
 
 val accountApiUrl = providers.gradleProperty("ROADCONQUEST_ACCOUNT_API_URL").getOrElse(
-    "https://br-withered-dew-b7u432kv-roadconquest.compute.c-13.us-east-1.aws.neon.tech"
+    "https://roadconquest-api.22abongiovanni.workers.dev"
 )
 val osrmApiUrl = providers.gradleProperty("ROADCONQUEST_OSRM_API_URL").getOrElse(
     "https://router.project-osrm.org"
@@ -20,8 +20,8 @@ android {
         applicationId = "com.roadconquest.app"
         minSdk = 31
         targetSdk = 37
-        versionCode = 68
-        versionName = "1.0-beta.42"
+        versionCode = 69
+        versionName = "1.0-beta.43"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         testInstrumentationRunnerArguments["timeout_msec"] = "120000"
         val escapedAccountApiUrl = accountApiUrl.replace("\\", "\\\\").replace("\"", "\\\"")
