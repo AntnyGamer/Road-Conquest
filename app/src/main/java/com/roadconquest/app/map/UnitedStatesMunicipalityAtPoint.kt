@@ -12,7 +12,7 @@ import java.util.Locale
 
 /**
  * Resolve the municipality containing a genuine recorded GPS fix.
- * Incorporated places take precedence over county subdivisions throughout
+ * Incorporated places take precedence over consolidated cities, then county subdivisions throughout
  * the United States; no state-specific or postal-name heuristics are used.
  */
 internal object UnitedStatesMunicipalityAtPoint {
@@ -33,7 +33,7 @@ internal object UnitedStatesMunicipalityAtPoint {
             seed.latitude !in -90.0..90.0 || seed.longitude !in -180.0..180.0
         ) return null
 
-        for (layer in listOf(4, 1)) {
+        for (layer in listOf(4, 3, 1)) {
             val request = Uri.parse("$BASE/$layer/query").buildUpon()
                 .appendQueryParameter("where", "STATE = '$state'")
                 .appendQueryParameter("geometry", "${seed.longitude},${seed.latitude}")
@@ -81,7 +81,7 @@ internal object UnitedStatesMunicipalityAtPoint {
 
     /** Parsing is independently testable without accessing the network. */
     internal fun parseResponse(seed: PlaceDiscovery, body: String, layer: Int): Result? {
-        if (layer !in setOf(1, 4)) return null
+        if (layer !in setOf(1, 3, 4)) return null
         val state = UnitedStatesMunicipalBoundaries.stateCode(
             seed.countryName, seed.parentName
         ) ?: return null
@@ -123,7 +123,7 @@ internal object UnitedStatesMunicipalityAtPoint {
             // The Census layer + GEOID identify the actual polygon, not its label.
             // Preserve name keys as a fallback for older service responses.
             val geoid = properties.optString("GEOID").trim()
-            val validGeoid = geoid.length == (if (layer == 4) 7 else 10) &&
+            val validGeoid = geoid.length == (if (layer == 1) 10 else 7) &&
                 geoid.startsWith(state) && geoid.all(Char::isDigit)
             val identity = if (validGeoid) "census-$layer-$geoid" else canonical
             val key = seed.key.substringBeforeLast('|') + "|" + identity
