@@ -33,7 +33,10 @@ internal object UnitedStatesMunicipalityAtPoint {
             seed.latitude !in -90.0..90.0 || seed.longitude !in -180.0..180.0
         ) return null
 
-        for (layer in listOf(4, 3, 1)) {
+        val layers = if (UnitedStatesMunicipalBoundaries.hasConsolidatedCities(state)) {
+            listOf(4, 3, 1)
+        } else listOf(4, 1)
+        for (layer in layers) {
             val request = Uri.parse("$BASE/$layer/query").buildUpon()
                 .appendQueryParameter("where", "STATE = '$state'")
                 .appendQueryParameter("geometry", "${seed.longitude},${seed.latitude}")
