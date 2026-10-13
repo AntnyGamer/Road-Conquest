@@ -107,7 +107,7 @@ the ingress and in the Neon Function. The ingress must strip any client-supplied
 - `X-RoadConquest-Client-IP`: ingress-authenticated IPv4/IPv6 literal.
 - `X-RoadConquest-Client-Timestamp`: current Unix time in milliseconds.
 - `X-RoadConquest-Client-Signature`: lowercase hexadecimal HMAC-SHA256 under that
-  secret over `METHOD + "\\n" + pathAndQuery + "\\n" + ip + "\\n" + timestamp`.
+  secret over `METHOD + "\n" + pathAndQuery + "\n" + ip + "\n" + timestamp`.
 The Function checks the signature and a 60-second freshness window. Forged, expired,
 or absent signatures keep the shared rate-limit budget; neither
 `X-Forwarded-For` nor `X-Real-IP` is trusted. Do not put this secret in Android,
