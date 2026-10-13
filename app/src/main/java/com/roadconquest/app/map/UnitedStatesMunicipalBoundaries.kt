@@ -30,6 +30,13 @@ internal object UnitedStatesMunicipalBoundaries {
     private const val MAX_CHARS = 16 * 1024 * 1024
     private const val MAX_SAVED_ERROR_METERS = 1_800.0
     private val WHITESPACE_RE = Regex("\\s+")
+    // State files published by Census for the CONCITY layer (2025 vintage).
+    // Other states have no consolidated-city polygons, so do not make an
+    // otherwise empty additional network request for every driven town.
+    private val CONSOLIDATED_CITY_STATES = setOf("09", "13", "18", "20", "21", "30", "47")
+
+    internal fun hasConsolidatedCities(stateFips: String): Boolean =
+        stateFips in CONSOLIDATED_CITY_STATES
     private val MUNICIPAL_SUFFIXES = listOf(
         " township" to "township", " twp" to "township",
         " borough" to "borough", " boro" to "borough",
@@ -152,7 +159,10 @@ internal object UnitedStatesMunicipalBoundaries {
                 "rhode island", "vermont", "new york", "wisconsin"
             )
         ) listOf(1, 4, 3) else listOf(4, 3, 1)
-        for (layer in layerOrder) {
+        val relevantLayers = if (officialLayer == null && !hasConsolidatedCities(state)) {
+            layerOrder.filterNot { it == 3 }
+        } else layerOrder
+        for (layer in relevantLayers) {
             val url = Uri.parse("$BASE/$layer/query").buildUpon()
                 .appendQueryParameter("where", where)
                 .appendQueryParameter("geometry", envelope)
