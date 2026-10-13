@@ -391,7 +391,6 @@ class MainActivity : Activity() {
     private fun resolvePendingPlaces() {
         if (!placeResolutionInFlight.compareAndSet(false, true)) return
         discoveryExecutor.execute {
-            var backfilled = 0
             val resolved = runCatching {
                 val now = SystemClock.elapsedRealtime()
                 if (lastPlaceBackfillElapsed < 0L ||
@@ -399,27 +398,33 @@ class MainActivity : Activity() {
                 ) {
                     // Recover actual saved GPS crossings of short municipalities.
                     // Only points after the current progression baseline are eligible.
-                    backfilled = ProgressionRepository(applicationContext)
-                        .backfillPlaceCandidates(3_000)
+                    ProgressionRepository(applicationContext).backfillPlaceCandidates(3_000)
                     lastPlaceBackfillElapsed = now
                 }
                 ProgressionManager.resolvePendingPlacesWithDetails(this, 6)
             }.getOrNull()
-            val more = resolved != null && runCatching {
-                ProgressionRepository(applicationContext)
-                    .pendingPlaceCandidates(1).isNotEmpty()
-            }.getOrDefault(false)
+            val pending = runCatching {
+                val repository = ProgressionRepository(applicationContext)
+                repository.nextPlaceCandidateAttemptMillis() to repository.hasUnscannedPlaceHistory()
+            }.getOrNull()
             placeResolutionInFlight.set(false)
             if (!isDestroyed) {
                 runOnUiThread {
                     if (!isDestroyed) {
                         statsHandler.removeCallbacks(queuedPlaceResolution)
-                        if (resumed && more) {
-                            // Drain ready candidates while the app remains open,
-                            // rather than waiting for another GPS update.
-                            statsHandler.postDelayed(queuedPlaceResolution, 500L)
-                        } else if (resumed && backfilled > 0) {
-                            statsHandler.postDelayed(queuedPlaceResolution, 20_000L)
+                        if (resumed) {
+                            // An exhausted candidate page can still leave unscanned GPS history;
+                            // deferred geocoder lookups also need a wakeup without movement.
+                            val retryDelay = pending?.first?.let {
+                                if (resolved == null) 20_000L
+                                else (it - System.currentTimeMillis()).coerceAtLeast(500L)
+                            }
+                            val backfillDelay = if (pending?.second == true) {
+                                (lastPlaceBackfillElapsed + 20_000L -
+                                    SystemClock.elapsedRealtime()).coerceAtLeast(500L)
+                            } else null
+                            val delay = listOfNotNull(retryDelay, backfillDelay).minOrNull()
+                            if (delay != null) statsHandler.postDelayed(queuedPlaceResolution, delay)
                         }
                         // Baseline places are zero-point progress, but resolving them can still
                         // make a selected place overlay renderable.
