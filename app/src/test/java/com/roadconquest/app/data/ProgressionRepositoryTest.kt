@@ -537,6 +537,7 @@ class ProgressionRepositoryTest {
         val baseline = progression.pendingPlaceCandidates(nowMillis = 2_000L).single()
 
         progression.deferCandidate(baseline, nowMillis = 10_000L)
+        assertEquals(70_000L, progression.nextPlaceCandidateAttemptMillis())
 
         assertTrue(progression.pendingPlaceCandidates(nowMillis = 69_999L).isEmpty())
         val retry = progression.pendingPlaceCandidates(nowMillis = 70_000L).single()
@@ -924,6 +925,49 @@ class ProgressionRepositoryTest {
                     "New Jersey", "United States", 3_000L, 39.96, -75.015))
             ))
             assertEquals(100L, progression.snapshot().balance)
+        } finally {
+            database.execSQL("DELETE FROM track_points")
+        }
+    }
+
+    @Test fun duplicateHistoricalCellsDoNotStopOlderTownBackfill() {
+        val progression = ProgressionRepository(context)
+        val database = AppDatabase.get(context).writableDatabase
+        database.execSQL("DELETE FROM track_points")
+        assertFalse(progression.hasUnscannedPlaceHistory())
+        val start = android.location.Location("gps").apply {
+            latitude = 39.98; longitude = -74.88; accuracy = 4f; time = 1_000L
+        }
+        assertTrue(progression.recordBaselineCandidate(start))
+        val baseline = progression.pendingPlaceCandidates(nowMillis = 2_000L).single()
+        progression.resolveCandidate(baseline, listOf(
+            PlaceDiscovery(PlaceKind.COUNTRY, "us", "United States",
+                visitedAt = 1_000L, latitude = start.latitude, longitude = start.longitude),
+            PlaceDiscovery(PlaceKind.STATE, "us|new jersey", "New Jersey",
+                "United States", "United States", 1_000L, start.latitude, start.longitude),
+            PlaceDiscovery(PlaceKind.TOWN, "us|new jersey|start", "Start",
+                "New Jersey", "United States", 1_000L, start.latitude, start.longitude)
+        ))
+        fun fix(lon: Double, time: Long) {
+            database.execSQL(
+                """INSERT INTO track_points(latitude, longitude, accuracy_m, speed_mps,
+                   bearing_deg, timestamp_ms) VALUES (39.96, ?, 5, 10, 0, ?)""",
+                arrayOf(lon, time)
+            )
+        }
+        try {
+            fix(-75.1, 2_000L)
+            fix(-75.2, 3_000L)
+            fix(-75.200001, 4_000L)
+            assertTrue(progression.hasUnscannedPlaceHistory())
+            assertEquals(1, progression.backfillPlaceCandidates(1))
+            assertEquals("Duplicate cells do not mean older history is finished",
+                0, progression.backfillPlaceCandidates(1))
+            assertTrue(progression.hasUnscannedPlaceHistory())
+            assertEquals("Older unique municipality must still be scanned",
+                1, progression.backfillPlaceCandidates(1))
+            assertEquals(0, progression.backfillPlaceCandidates(1))
+            assertFalse(progression.hasUnscannedPlaceHistory())
         } finally {
             database.execSQL("DELETE FROM track_points")
         }
