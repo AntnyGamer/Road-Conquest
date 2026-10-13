@@ -160,7 +160,18 @@ Keep the signing backup outside the repository and release assets. Each release 
 Override the account endpoint with the Gradle property
 `ROADCONQUEST_ACCOUNT_API_URL=https://accounts.example.com`. Local matching defaults to the public
 OSRM demo; a compatible controlled matcher can be selected with
-`ROADCONQUEST_OSRM_API_URL=https://roads.example.com`. Administrative overlay boundaries are requested only after the user enables an overlay; results are cached and requests are throttled. The APK reads the active provider from `OVERLAY_PROVIDER.txt` on this repository’s `main` branch so the service can be switched or disabled without an app update. Custom builds can point at another remote config with `ROADCONQUEST_PLACE_OVERLAY_CONFIG_URL=https://example.com/overlay-provider.txt`.
+`ROADCONQUEST_OSRM_API_URL=https://roads.example.com`.
+
+**OSRM provider limits:** The default endpoint is a shared *demo*, not a
+production routing contract. It limits requests to one per second and offers
+no uptime or commercial-use guarantee. Road Conquest now paces requests to the
+demo, respects HTTP 429/503 cooldowns, and preserves unmatched GPS data for
+later retries instead of repeatedly requesting unavailable matching.
+This per-device pacing does **not** reserve any of the demo's global capacity
+for multiple installed phones. For a growing, ad-supported public launch,
+arrange a production-authorized OSRM-compatible hosted matcher and set
+`ROADCONQUEST_OSRM_API_URL`. Other hosted products cannot simply be swapped
+in without checking licensing, map-display restrictions, and response format. Administrative overlay boundaries are requested only after the user enables an overlay; results are cached and requests are throttled. The APK reads the active provider from `OVERLAY_PROVIDER.txt` on this repository’s `main` branch so the service can be switched or disabled without an app update. Custom builds can point at another remote config with `ROADCONQUEST_PLACE_OVERLAY_CONFIG_URL=https://example.com/overlay-provider.txt`.
 See [server setup](server/README.md) and the [physical-device checklist](ANDROID_TEST_CHECKLIST.md).
 
 ## Google Play submission
