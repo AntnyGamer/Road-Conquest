@@ -105,13 +105,19 @@ class VipBilling(
                 }
                 val params = BillingFlowParams.ProductDetailsParams.newBuilder()
                     .setProductDetails(details).setOfferToken(buy.offerToken).build()
-                val launch = client.launchBillingFlow(
-                    activity, BillingFlowParams.newBuilder()
-                        .setProductDetailsParamsList(listOf(params)).build()
-                )
-                if (launch.responseCode != BillingClient.BillingResponseCode.OK) {
-                    message = "Google Play could not open the purchase screen."
-                    notifyStatus()
+                // The purchase UI must always be launched from Android's main thread,
+                // even if a Play Store implementation delivers detail callbacks elsewhere.
+                handler.post {
+                    if (!closed && !activity.isDestroyed && !activity.isFinishing) {
+                        val launch = client.launchBillingFlow(
+                            activity, BillingFlowParams.newBuilder()
+                                .setProductDetailsParamsList(listOf(params)).build()
+                        )
+                        if (launch.responseCode != BillingClient.BillingResponseCode.OK) {
+                            message = "Google Play could not open the purchase screen."
+                            notifyStatus()
+                        }
+                    }
                 }
             }
         }
