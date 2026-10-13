@@ -707,14 +707,7 @@ object FogBitmapRenderer {
         val height = bitmap.height
         val count = width * height
         val pixels = scratch.gridPixels(count)
-        val distances = scratch.gridDistances(count)
         bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
-        val infinity = (width + height).toFloat()
-        for (i in 0 until count) {
-            // Anti-aliased polygon coverage counts as a visited pixel. This keeps
-            // 1-pixel-scale cells perceptible on zoomed-out maps.
-            distances[i] = if ((pixels[i] and 0xff) > 0) 0f else infinity
-        }
         val physicalFadePixels = (ROAD_FULL_M * request.screenScale /
             request.metersPerScreenPixelAtCenter).toFloat()
         if (physicalFadePixels < 0.75f) {
@@ -728,6 +721,16 @@ object FogBitmapRenderer {
             }
             bitmap.setPixels(pixels, 0, width, 0, 0, width, height)
             return
+        }
+        // At world zoom the subpixel branch above doesn't need a distance
+        // buffer or the first full-bitmap scan. Keep both for the exact same
+        // detailed-zoom fade below.
+        val distances = scratch.gridDistances(count)
+        val infinity = (width + height).toFloat()
+        for (i in 0 until count) {
+            // Anti-aliased polygon coverage counts as a visited pixel. This keeps
+            // 1-pixel-scale cells perceptible on zoomed-out maps.
+            distances[i] = if ((pixels[i] and 0xff) > 0) 0f else infinity
         }
         val diagonal = 1.41421356f
         for (y in 0 until height) {
