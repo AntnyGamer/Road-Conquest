@@ -168,12 +168,20 @@ internal object UnitedStatesMunicipalBoundaries {
             layerOrder.filterNot { it == 3 }
         } else layerOrder
         for (layer in relevantLayers) {
-            val url = Uri.parse("$BASE/$layer/query").buildUpon()
+            val query = Uri.parse("$BASE/$layer/query").buildUpon()
                 .appendQueryParameter("where", where)
-                .appendQueryParameter("geometry", envelope)
-                .appendQueryParameter("geometryType", "esriGeometryEnvelope")
-                .appendQueryParameter("inSR", "4326")
-                .appendQueryParameter("spatialRel", "esriSpatialRelIntersects")
+            // For legacy name-only records, the nearby envelope prevents
+            // thousands of same-state results. For a verified Census GEOID the
+            // indexed identity is already unique: do not also require the
+            // originally visited GPS point to remain near a subsequently
+            // revised municipal boundary.
+            if (officialLayer == null) {
+                query.appendQueryParameter("geometry", envelope)
+                    .appendQueryParameter("geometryType", "esriGeometryEnvelope")
+                    .appendQueryParameter("inSR", "4326")
+                    .appendQueryParameter("spatialRel", "esriSpatialRelIntersects")
+            }
+            val url = query
                 .appendQueryParameter("outFields",
                     "BASENAME,NAME,STATE,GEOID,LSADC,FUNCSTAT,AREALAND,AREAWATER")
                 .appendQueryParameter("returnGeometry", "true")
