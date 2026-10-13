@@ -383,6 +383,10 @@ class MainActivity : Activity() {
                         renderer?.refreshPlaceOverlays()
                     }
                     if (added > 0) refreshControls()
+                    // The initial baseline may have resolved on this separate worker
+                    // after the resume-time scan found no visited places. Kick off the
+                    // regular bounded history/retry scheduler even while stationary.
+                    if (resumed) resolvePendingPlaces()
                 }
             }
         }
