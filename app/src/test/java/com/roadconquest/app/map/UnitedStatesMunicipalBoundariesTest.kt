@@ -166,6 +166,20 @@ class UnitedStatesMunicipalBoundariesTest {
         ))
     }
 
+    @Test fun verifiedCensusGeoidSurvivesOfficialNameChangesWithoutWeakeningLegacyLookup() {
+        val original = place("Old City", "Pennsylvania", 39.95, -75.15)
+        val official = original.copy(key = "us|pennsylvania|census-4-4212345")
+        val updated = item("Renamed city", "Renamed", "42",
+            box(-75.2, 39.9, -75.1, 40.0))
+            .replace("\"LSADC\"", "\"GEOID\":\"4212345\",\"LSADC\"")
+        assertNotNull(
+            "A precise Census ID, not an obsolete display name, identifies this polygon",
+            UnitedStatesMunicipalBoundaries.parseResponse(official, response(updated), 4)
+        )
+        assertNull("A legacy name-only record must still verify the municipal name",
+            UnitedStatesMunicipalBoundaries.parseResponse(original, response(updated), 4))
+    }
+
     @Test fun duplicateNamesChooseClosestGeographicMunicipality() {
         val p = place("Washington Township", "Pennsylvania", 40.0, -75.10)
         val close = item("Washington township", "Washington", "42",
