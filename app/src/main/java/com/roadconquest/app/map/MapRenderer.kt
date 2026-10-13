@@ -343,9 +343,9 @@ class MapRenderer(
         mainHandler.removeCallbacks(expireLocation)
         mainHandler.postDelayed(expireLocation, LiveLocation.MAX_AGE_MS - ageMillis)
 
-        // Equal live fixes can still be newer and must extend expiry, but they do not need
-        // another MapLibre source upload or fog bitmap render. Only skip work when every
-        // user-visible value is exactly unchanged.
+        // Equal live fixes can still be newer and must extend expiry without another
+        // MapLibre source upload. The exploration-only fog never uses live GPS
+        // coordinates; persisted cell updates and camera changes schedule its redraw.
         val currentVisual = liveLocation.current(now)
         val positionChanged = previousVisual == null || currentVisual == null ||
             previousVisual.latitude != currentVisual.latitude ||
@@ -354,7 +354,6 @@ class MapRenderer(
             previousVisual.bearing != currentVisual.bearing
         if (positionChanged) {
             updateCarLayer()
-            scheduleFogRender()
         } else if (bearingChanged) {
             // Heading-only updates still rotate the marker, but do not re-upload identical
             // GeoJSON or rebuild fog because neither depends on bearing.
@@ -401,11 +400,10 @@ class MapRenderer(
         if (destroyed) return
         mainHandler.removeCallbacks(expireLocation)
         // refreshControls can ask for a clear repeatedly while Location stays unavailable.
-        // Once the fix is already gone, another MapLibre upload and fog render cannot change
-        // anything visible, so skip that work entirely.
+        // Once the fix is already gone, another MapLibre marker upload cannot
+        // change anything visible, so skip that work entirely.
         if (!liveLocation.clear()) return
         updateCarLayer()
-        scheduleFogRender()
     }
 
     fun refreshViewport() = refreshViewport(loadRoads = true)
