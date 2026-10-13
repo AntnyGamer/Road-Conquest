@@ -568,21 +568,26 @@ object FogBitmapRenderer {
         // Blue roads still render separately; entering a mile tile is the sole unlock trigger.
         if (request.gridMode) {
             if (request.gridScreen.isEmpty()) return bitmap
-            val relevantCells = ArrayList<Int>()
+            // Acquire the reveal mask only for the first tile that can affect
+            // the bitmap; most nearby views have many saved tiles entirely offscreen.
+            var reveal: Bitmap? = null
+            var revealCanvas: Canvas? = null
             for (i in 0 until minOf(request.gridCoordinates.size, request.gridScreen.size) - 7 step 8) {
-                if (gridCellMayAffectBitmap(request, i)) relevantCells.add(i)
+                if (!gridCellMayAffectBitmap(request, i)) continue
+                if (revealCanvas == null) {
+                    reveal = scratch.acquireRevealBitmap(request.bitmapWidth, request.bitmapHeight)
+                    revealCanvas = Canvas(reveal)
+                }
+                drawGridReveal(revealCanvas, request, i, scratch)
             }
-            // No recorded tile can affect this raster, even via its surrounding
-            // 1,500-foot fade. Skip the full bitmap mask and two distance passes.
-            if (relevantCells.isEmpty()) return bitmap
-            val reveal = scratch.acquireRevealBitmap(request.bitmapWidth, request.bitmapHeight)
-            val revealCanvas = Canvas(reveal)
-            for (i in relevantCells) drawGridReveal(revealCanvas, request, i, scratch)
+            // No recorded tile affects this raster, even via its 1,500-foot fade:
+            // avoid the bitmap-sized reveal mask and distance transform altogether.
+            val mask = reveal ?: return bitmap
             // Merge every visited cell into ONE binary silhouette before fading. Individual
             // square edge/corner shaders create visible gray tiles and double seams where
             // neighboring cells meet. One distance-to-union mask has neither artifact.
-            fadeGridUnion(reveal, request, scratch)
-            canvas.drawBitmap(reveal, 0f, 0f, scratch.applyRevealPaint)
+            fadeGridUnion(mask, request, scratch)
+            canvas.drawBitmap(mask, 0f, 0f, scratch.applyRevealPaint)
             return bitmap
         }
         if (request.roads.coordinates.isEmpty() && request.exploredCoordinates.isEmpty() && request.liveScreen == null) return bitmap
