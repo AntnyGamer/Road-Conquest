@@ -1,0 +1,215 @@
+package com.roadconquest.app.billing
+
+import android.app.Activity
+import android.content.Context
+import android.os.Handler
+import android.os.Looper
+import com.android.billingclient.api.AcknowledgePurchaseParams
+import com.android.billingclient.api.BillingClient
+import com.android.billingclient.api.BillingClientStateListener
+import com.android.billingclient.api.BillingFlowParams
+import com.android.billingclient.api.BillingResult
+import com.android.billingclient.api.PendingPurchasesParams
+import com.android.billingclient.api.ProductDetails
+import com.android.billingclient.api.Purchase
+import com.android.billingclient.api.QueryProductDetailsParams
+import com.android.billingclient.api.QueryPurchasesParams
+
+/**
+ * Activity-scoped Play Billing connection: restores a non-consumable VIP product,
+ * checks completed vs pending purchases, and acknowledges purchases promptly.
+ * Purchase details and price are taken from the store, never assumed from UI text.
+ */
+class VipBilling(
+    context: Context,
+    private val onUpdate: (Offer?, Boolean, String?) -> Unit
+) {
+    data class Offer(val price: String)
+
+    private val appContext = context.applicationContext
+    private val handler = Handler(Looper.getMainLooper())
+    private var closed = false
+    private var connecting = false
+    private var ownershipChecked = false
+    private var offer: Offer? = null
+    private var message: String? = null
+    private val waiters = mutableListOf<() -> Unit>()
+
+    private val client: BillingClient = BillingClient.newBuilder(appContext)
+        .setListener { result, purchases ->
+            if (closed) return@setListener
+            when (result.responseCode) {
+                BillingClient.BillingResponseCode.OK -> {
+                    purchases.orEmpty()
+                        .filter { VipEntitlement.PRODUCT_ID in it.products &&
+                            it.purchaseState == Purchase.PurchaseState.PURCHASED }
+                        .forEach {
+                            VipEntitlement.updateFromPlay(appContext, true)
+                            acknowledge(it)
+                        }
+                    if (purchases.orEmpty().any {
+                        VipEntitlement.PRODUCT_ID in it.products &&
+                            it.purchaseState == Purchase.PurchaseState.PENDING
+                    }) message = "VIP payment pending. Benefits unlock after payment completes."
+                    queryOwnership()
+                }
+                BillingClient.BillingResponseCode.USER_CANCELED -> {
+                    message = null
+                    notifyStatus()
+                }
+                else -> {
+                    message = "Google Play could not complete this purchase."
+                    notifyStatus()
+                }
+            }
+        }
+        .enablePendingPurchases(
+            PendingPurchasesParams.newBuilder().enableOneTimeProducts().build()
+        )
+        .enableAutoServiceReconnection()
+        .build()
+
+    fun refresh() {
+        ownershipChecked = false
+        notifyStatus()
+        connect {
+            queryOwnership()
+            queryOffer()
+        }
+    }
+
+    fun purchase(activity: Activity) {
+        if (closed) return
+        if (VipEntitlement.isActive(appContext)) {
+            message = "VIP is already owned."
+            notifyStatus()
+            return
+        }
+        connect {
+            // Never launch a flow using stale cached ProductDetails.
+            val product = QueryProductDetailsParams.Product.newBuilder()
+                .setProductId(VipEntitlement.PRODUCT_ID)
+                .setProductType(BillingClient.ProductType.INAPP).build()
+            client.queryProductDetailsAsync(
+                QueryProductDetailsParams.newBuilder().setProductList(listOf(product)).build()
+            ) { result, response ->
+                if (closed || activity.isDestroyed || activity.isFinishing) return@queryProductDetailsAsync
+                val details = if (result.responseCode == BillingClient.BillingResponseCode.OK) {
+                    response.productDetailsList.firstOrNull { it.productId == VipEntitlement.PRODUCT_ID }
+                } else null
+                val buy = details?.oneTimePurchaseOfferDetailsList?.firstOrNull()
+                if (details == null || buy == null) {
+                    message = "VIP is not available yet. Activate vip_lifetime in Google Play Console."
+                    notifyStatus()
+                    return@queryProductDetailsAsync
+                }
+                val params = BillingFlowParams.ProductDetailsParams.newBuilder()
+                    .setProductDetails(details).setOfferToken(buy.offerToken).build()
+                val launch = client.launchBillingFlow(
+                    activity, BillingFlowParams.newBuilder()
+                        .setProductDetailsParamsList(listOf(params)).build()
+                )
+                if (launch.responseCode != BillingClient.BillingResponseCode.OK) {
+                    message = "Google Play could not open the purchase screen."
+                    notifyStatus()
+                }
+            }
+        }
+    }
+
+    private fun connect(ready: () -> Unit) {
+        if (closed) return
+        if (client.isReady) { ready(); return }
+        waiters.add(ready)
+        if (connecting) return
+        connecting = true
+        client.startConnection(object : BillingClientStateListener {
+            override fun onBillingServiceDisconnected() {
+                connecting = false
+                // A future foreground refresh will reconnect automatically.
+            }
+
+            override fun onBillingSetupFinished(result: BillingResult) {
+                if (closed) return
+                connecting = false
+                if (result.responseCode == BillingClient.BillingResponseCode.OK) {
+                    val callbacks = waiters.toList()
+                    waiters.clear()
+                    callbacks.forEach { it() }
+                } else {
+                    waiters.clear()
+                    ownershipChecked = true
+                    message = "Google Play purchases are unavailable on this device."
+                    notifyStatus()
+                }
+            }
+        })
+    }
+
+    private fun queryOwnership() {
+        if (closed || !client.isReady) return
+        client.queryPurchasesAsync(
+            QueryPurchasesParams.newBuilder()
+                .setProductType(BillingClient.ProductType.INAPP).build()
+        ) { result, purchases ->
+            if (closed) return@queryPurchasesAsync
+            ownershipChecked = true
+            if (result.responseCode == BillingClient.BillingResponseCode.OK) {
+                val vipPurchases = purchases.filter { VipEntitlement.PRODUCT_ID in it.products }
+                val owned = vipPurchases.any { it.purchaseState == Purchase.PurchaseState.PURCHASED }
+                VipEntitlement.updateFromPlay(appContext, owned)
+                vipPurchases.filter { it.purchaseState == Purchase.PurchaseState.PURCHASED }
+                    .forEach(::acknowledge)
+                message = if (vipPurchases.any { it.purchaseState == Purchase.PurchaseState.PENDING } &&
+                    !owned) "VIP payment pending. Benefits unlock after payment completes." else null
+            } else {
+                // Network/Play outage is not proof of a refund. Keep the last
+                // confirmed entitlement until a *successful* purchase query.
+                message = "Google Play could not check past purchases."
+            }
+            notifyStatus()
+        }
+    }
+
+    private fun queryOffer() {
+        if (closed || !client.isReady) return
+        val product = QueryProductDetailsParams.Product.newBuilder()
+            .setProductId(VipEntitlement.PRODUCT_ID)
+            .setProductType(BillingClient.ProductType.INAPP).build()
+        client.queryProductDetailsAsync(
+            QueryProductDetailsParams.newBuilder().setProductList(listOf(product)).build()
+        ) { result, response ->
+            if (closed) return@queryProductDetailsAsync
+            offer = if (result.responseCode == BillingClient.BillingResponseCode.OK) {
+                response.productDetailsList.firstOrNull { it.productId == VipEntitlement.PRODUCT_ID }
+                    ?.oneTimePurchaseOfferDetailsList?.firstOrNull()?.let { Offer(it.formattedPrice) }
+            } else null
+            notifyStatus()
+        }
+    }
+
+    private fun acknowledge(purchase: Purchase) {
+        if (purchase.isAcknowledged) return
+        client.acknowledgePurchase(
+            AcknowledgePurchaseParams.newBuilder()
+                .setPurchaseToken(purchase.purchaseToken).build()
+        ) { _ ->
+            // On transient failure, queryOwnership() retries on the next resume.
+            // The purchased entitlement is never gated on a network ACK.
+        }
+    }
+
+    private fun notifyStatus() {
+        val currentOffer = offer
+        val checked = ownershipChecked
+        val status = message
+        handler.post { if (!closed) onUpdate(currentOffer, checked, status) }
+    }
+
+    fun close() {
+        closed = true
+        waiters.clear()
+        handler.removeCallbacksAndMessages(null)
+        client.endConnection()
+    }
+}
