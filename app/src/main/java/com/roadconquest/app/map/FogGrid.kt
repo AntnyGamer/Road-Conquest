@@ -62,6 +62,23 @@ internal object FogGrid {
         }
     }
 
+    /**
+     * Explored-grid centers fetched from the database are unique by its
+     * (grid_row, grid_col) PRIMARY KEY. Skip a redundant HashSet and Cell list
+     * when turning that already-deduplicated query into renderable squares.
+     * Other callers can continue using visitedCorners(), which deduplicates.
+     */
+    fun uniqueVisitedCorners(samples: DoubleArray): DoubleArray {
+        val output = DoubleArray(samples.size * 4)
+        var offset = 0
+        for (i in 0 until samples.size - 1 step 2) {
+            val tile = cell(samples[i], samples[i + 1]) ?: continue
+            writeCorners(tile, output, offset)
+            offset += 8
+        }
+        return if (offset == output.size) output else output.copyOf(offset)
+    }
+
     /** Project date-line cells into the same copy of the world as the camera. */
     fun nearLongitude(corners: DoubleArray, centerLongitude: Double): DoubleArray {
         if (corners.isEmpty() || !centerLongitude.isFinite()) return corners
