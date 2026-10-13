@@ -224,20 +224,36 @@ class ProgressionRepository(context: Context) {
             PLACE_CANDIDATE_VERSION_OFFSET
         val y = floor(radius * ln(tan(PI / 4 + Math.toRadians(latitude) / 2)) /
             PLACE_CANDIDATE_CELL_M).toLong()
+        val values = ContentValues().apply {
+            put("cell_x", x)
+            put("cell_y", y)
+            // Resolve the ACTUAL driven fix, not a grid center across a town border.
+            put("latitude", latitude)
+            put("longitude", normalized)
+            put("first_seen_at", time)
+            put("attempts", 0)
+            put("next_attempt_ms", 0)
+        }
+        if (db.insertWithOnConflict("place_candidates", null, values, SQLiteDatabase.CONFLICT_IGNORE) != -1L) {
+            return true
+        }
+        // Two different municipalities can lie in the same 150 m cell. Preserve a
+        // second sufficiently separated actual fix without changing the coarse
+        // sampling grid, database schema or existing saved candidates. Limit
+        // unresolved candidates to two per cell to bound network/geocoder work.
+        val first = db.query(
+            "place_candidates", arrayOf("latitude", "longitude"),
+            "cell_x = ? AND cell_y = ?",
+            arrayOf(x.toString(), y.toString()), null, null, null, "1"
+        ).use { cursor ->
+            if (cursor.moveToFirst()) cursor.getDouble(0) to cursor.getDouble(1) else null
+        } ?: return false
+        val separation = FloatArray(1)
+        Location.distanceBetween(first.first, first.second, latitude, normalized, separation)
+        if (separation[0] < SECONDARY_CANDIDATE_MIN_DISTANCE_M) return false
+        values.put("cell_x", x + SECONDARY_CANDIDATE_OFFSET)
         return db.insertWithOnConflict(
-            "place_candidates", null,
-            ContentValues().apply {
-                put("cell_x", x)
-                put("cell_y", y)
-                // Reverse-geocode the ACTUAL driven fix, not an arbitrary 2 km
-                // grid center which may sit across the municipal boundary.
-                put("latitude", latitude)
-                put("longitude", normalized)
-                put("first_seen_at", time)
-                put("attempts", 0)
-                put("next_attempt_ms", 0)
-            },
-            SQLiteDatabase.CONFLICT_IGNORE
+            "place_candidates", null, values, SQLiteDatabase.CONFLICT_IGNORE
         ) != -1L
     }
 
@@ -1007,6 +1023,8 @@ class ProgressionRepository(context: Context) {
         // Retain the old cells separately; their pending lookups remain valid after an update.
         private const val PLACE_CANDIDATE_CELL_M = 150.0
         private const val PLACE_CANDIDATE_VERSION_OFFSET = 2_000_000_000L
+        private const val SECONDARY_CANDIDATE_OFFSET = 1_000_000_000L
+        private const val SECONDARY_CANDIDATE_MIN_DISTANCE_M = 45f
         private const val COUNTER_PLACE_BACKFILL_NEXT_ID = "place_backfill_next_track_id_v3"
         private const val BASELINE_RETRY_MS = 60_000L
         private const val BASELINE_RETRY_MAX_MS = 15 * 60_000L
