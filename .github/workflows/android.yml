@@ -61,6 +61,24 @@ jobs:
         run: npm test
       - name: Test OSM catalog importer
         run: python3 -m unittest discover -s server/test -p '*_test.py'
+      - name: Export temporary tested Neon deployment package
+        if: github.event_name == 'pull_request' && github.head_ref == 'fix/discovery-retries-and-serverless-limits-20261013'
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from io import BytesIO
+          from pathlib import Path
+          from zipfile import ZipFile, ZIP_DEFLATED
+          import base64
+          output = BytesIO()
+          with ZipFile(output, "w", compression=ZIP_DEFLATED, compresslevel=9) as archive:
+              archive.writestr("index.mjs", Path("server/dist/index.mjs").read_bytes())
+          data = base64.b64encode(output.getvalue()).decode("ascii")
+          print("NEON_ZIP_START")
+          for start in range(0, len(data), 960):
+              print("NEON_ZIP_CHUNK:" + data[start:start+960])
+          print("NEON_ZIP_END")
+          PY
       - name: Save tested account function
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
