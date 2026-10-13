@@ -132,8 +132,15 @@ class VipBilling(
         connecting = true
         client.startConnection(object : BillingClientStateListener {
             override fun onBillingServiceDisconnected() {
+                if (closed) return
                 connecting = false
-                // A future foreground refresh will reconnect automatically.
+                // A setup attempt can disconnect without delivering a successful
+                // setup callback. Do not retain stale activity callbacks or leave
+                // non-VIP ad screens blocked indefinitely waiting for Play.
+                waiters.clear()
+                ownershipChecked = true
+                message = "Google Play connection interrupted. Reopen this screen to retry."
+                notifyStatus()
             }
 
             override fun onBillingSetupFinished(result: BillingResult) {
@@ -186,7 +193,8 @@ class VipBilling(
      */
     private fun permanentBuyOffer(details: ProductDetails): ProductDetails.OneTimePurchaseOfferDetails? {
         fun permanent(offer: ProductDetails.OneTimePurchaseOfferDetails) =
-            offer.rentalDetails == null && offer.preorderDetails == null
+            offer.rentalDetails == null && offer.preorderDetails == null &&
+                offer.offerToken.isNotBlank()
         return details.oneTimePurchaseOfferDetailsList?.firstOrNull(::permanent)
             ?: details.oneTimePurchaseOfferDetails?.takeIf(::permanent)
     }
