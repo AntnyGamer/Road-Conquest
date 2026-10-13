@@ -11,6 +11,8 @@ import android.widget.Toast
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import com.roadconquest.app.billing.VipBilling
+import com.roadconquest.app.billing.VipEntitlement
 import com.roadconquest.app.data.ProgressionRepository
 import com.roadconquest.app.data.ProgressionSnapshot
 import com.roadconquest.app.data.PurchaseResult
@@ -32,6 +34,11 @@ class ShopActivity : Activity() {
     private lateinit var progressText: TextView
     private lateinit var items: LinearLayout
     private lateinit var ads: ScreenAds
+    private lateinit var vipBilling: VipBilling
+    private var vipOffer: VipBilling.Offer? = null
+    private var vipChecked = false
+    private var vipMessage: String? = null
+    private var lastSnapshot: ProgressionSnapshot? = null
     @Volatile private var generation = 0
 
     override fun attachBaseContext(newBase: Context) {
@@ -52,6 +59,12 @@ class ShopActivity : Activity() {
         pointsText = findViewById(R.id.shopPointsText)
         progressText = findViewById(R.id.shopProgressText)
         items = findViewById(R.id.shopItems)
+        vipBilling = VipBilling(this) { offer, checked, status ->
+            vipOffer = offer
+            vipChecked = checked
+            vipMessage = status
+            lastSnapshot?.let(::render)
+        }
         ads = ScreenAds(this, findViewById(R.id.shopRoot), findViewById(R.id.shopRewardButton), ::refresh)
     }
 
@@ -63,6 +76,7 @@ class ShopActivity : Activity() {
     override fun onResume() {
         super.onResume()
         if (::items.isInitialized) refresh()
+        if (::vipBilling.isInitialized) vipBilling.refresh()
         if (::ads.isInitialized) ads.onResume()
     }
 
@@ -88,6 +102,7 @@ class ShopActivity : Activity() {
     }
 
     private fun render(snapshot: ProgressionSnapshot) {
+        lastSnapshot = snapshot
         pointsText.text = String.format(Locale.getDefault(), "⚔ %,d points", snapshot.balance)
         progressText.text = String.format(
             Locale.getDefault(),
@@ -100,6 +115,7 @@ class ShopActivity : Activity() {
             snapshot.pointsSpent
         )
         items.removeAllViews()
+        addVipCard()
         var previousType: CosmeticType? = null
         for (item in ShopCatalog.items) {
             if (item.type != previousType) {
@@ -108,6 +124,53 @@ class ShopActivity : Activity() {
             }
             addShopItem(item, snapshot)
         }
+    }
+
+    private fun addVipCard() {
+        val vip = VipEntitlement.isActive(this)
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundResource(R.drawable.panel_background)
+            elevation = dp(2).toFloat()
+            val padding = dp(16)
+            setPadding(padding, padding, padding, padding)
+        }
+        card.addView(TextView(this).apply {
+            text = "VIP • Lifetime"
+            textSize = 20f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setTextColor(Appearance.color(this@ShopActivity, R.attr.rcTextPrimary))
+        })
+        card.addView(TextView(this).apply {
+            text = "One-time Google Play purchase. Remove banners and rewarded-ad offers, and unlock Gold car, Gold roads, and Golden Road Conquest UI without spending points. You can still choose other styles."
+            textSize = 13f
+            setTextColor(Appearance.color(this@ShopActivity, R.attr.rcTextSecondary))
+            setPadding(0, dp(8), 0, dp(8))
+        })
+        val label = when {
+            vip -> "VIP owned • Ad-free"
+            vipOffer != null -> "Get VIP • ${vipOffer!!.price} once"
+            !vipChecked -> "Checking Google Play…"
+            else -> "VIP • $2.99 (US price, not available yet)"
+        }
+        card.addView(Button(this).apply {
+            text = label
+            isEnabled = !vip && vipChecked && vipOffer != null
+            setOnClickListener { vipBilling.purchase(this@ShopActivity) }
+        })
+        if (!vip && (vipMessage != null || vipOffer == null)) {
+            card.addView(TextView(this).apply {
+                text = vipMessage ?: if (vipChecked) {
+                    "Purchase unavailable until vip_lifetime is activated in Google Play Console."
+                } else "Connecting to Google Play…"
+                textSize = 12f
+                setTextColor(Appearance.color(this@ShopActivity, R.attr.rcTextSecondary))
+            })
+        }
+        items.addView(card, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { bottomMargin = dp(12) })
     }
 
     private fun addSectionTitle(title: String) {
@@ -121,7 +184,8 @@ class ShopActivity : Activity() {
     }
 
     private fun addShopItem(item: ShopItem, snapshot: ProgressionSnapshot) {
-        val owned = item.cost == 0L || item.id in snapshot.purchasedItems
+        val owned = item.cost == 0L || item.id in snapshot.purchasedItems ||
+            (VipEntitlement.isActive(this) && VipEntitlement.isGoldIncluded(item.id))
         val equipped = Cosmetics.isEquipped(this, item)
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -232,6 +296,7 @@ class ShopActivity : Activity() {
     override fun onDestroy() {
         generation++
         if (::ads.isInitialized) ads.destroy()
+        if (::vipBilling.isInitialized) vipBilling.close()
         // A purchase the user already confirmed is a local state mutation and should finish
         // even if the Garage screen closes immediately afterward. Stale UI callbacks are
         // rejected by generation/isDestroyed checks.
