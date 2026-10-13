@@ -63,14 +63,19 @@ internal object TownOverlayPartition {
             val overlapping = placed.asSequence().map(Candidate::geometry)
                 .filter { it.envelopeInternal.intersects(candidateBounds) }
                 .toList()
-            val clipped = runCatching {
-                val remaining = when (overlapping.size) {
-                    0 -> candidate.geometry
-                    1 -> candidate.geometry.difference(overlapping[0])
-                    else -> candidate.geometry.difference(UnaryUnionOp.union(overlapping))
-                }
-                polygonal(GeometryFixer.fix(remaining))
-            }.getOrNull() ?: continue
+            // Each candidate was already fixed and reduced to polygons above.
+            // With no geometric overlap, re-running the costly topology fixer
+            // cannot change the visible result and needlessly reconstructs it.
+            val clipped = if (overlapping.isEmpty()) candidate.geometry else {
+                runCatching {
+                    val remaining = if (overlapping.size == 1) {
+                        candidate.geometry.difference(overlapping[0])
+                    } else {
+                        candidate.geometry.difference(UnaryUnionOp.union(overlapping))
+                    }
+                    polygonal(GeometryFixer.fix(remaining))
+                }.getOrNull() ?: continue
+            }
             if (!clipped.isEmpty && clipped.area > 0.0) {
                 placed += Candidate(candidate.overlay, clipped)
             }
