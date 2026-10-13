@@ -112,20 +112,7 @@ class MapRenderer(
     private var savedGridCoordinates = doubleArrayOf()
     private var loadedRoadBounds: RoadQueryBounds? = null
     private var loadedPlaceBounds: RoadQueryBounds? = null
-    private var roadDataRevision = 0
     private var placeDataRevision = 0
-    private var roadProjectionDataRevision = -1
-    private var roadProjectionViewportRevision = -1
-    private var placeProjectionDataRevision = -1
-    private var placeProjectionViewportRevision = -1
-    private var roadProjectionWidth = -1
-    private var roadProjectionHeight = -1
-    private var placeProjectionWidth = -1
-    private var placeProjectionHeight = -1
-    private var roadScreenCache = doubleArrayOf()
-    private var placeScreenCache = doubleArrayOf()
-    private val liveCoordinates = DoubleArray(2)
-    private val liveScreenCache = DoubleArray(2)
     private var detailedFogCoordinates: DoubleArray? = null
     private var regionalFogCoordinates: DoubleArray? = null
     private val fogCoverageScreen = DoubleArray(8)
@@ -1029,7 +1016,6 @@ class MapRenderer(
     private fun setDisplayedRoads(roads: OverlayRoads, features: FeatureCollection) {
         displayedRoads = roads
         displayedRoadFeatures = features
-        roadDataRevision++
         (map.style?.getSource(ROAD_SOURCE_ID) as? GeoJsonSource)?.setGeoJson(features)
         // Blue roads render in their own source and do not clear exploration-only fog.
     }
@@ -1042,49 +1028,6 @@ class MapRenderer(
         savedGridCoordinates = FogGrid.visitedCorners(places)
         placeDataRevision++
         return true
-    }
-
-    private fun projectRoads(roads: OverlayRoads): DoubleArray {
-        if (roads.coordinates.isEmpty()) return roads.coordinates
-        val width = mapView.width
-        val height = mapView.height
-        if (roadProjectionDataRevision != roadDataRevision ||
-            roadProjectionViewportRevision != viewportRevision ||
-            roadProjectionWidth != width || roadProjectionHeight != height ||
-            roadScreenCache.size != roads.coordinates.size
-        ) {
-            if (roadScreenCache.size != roads.coordinates.size) {
-                roadScreenCache = DoubleArray(roads.coordinates.size)
-            }
-            map.projection.toScreenLocations(roads.coordinates, roadScreenCache)
-            roadProjectionDataRevision = roadDataRevision
-            roadProjectionViewportRevision = viewportRevision
-            roadProjectionWidth = width
-            roadProjectionHeight = height
-        }
-        return roadScreenCache
-    }
-
-    private fun projectPlaces(places: DoubleArray): DoubleArray {
-        if (places.isEmpty()) return places
-        val width = mapView.width
-        val height = mapView.height
-        if (placeProjectionDataRevision != placeDataRevision ||
-            placeProjectionViewportRevision != viewportRevision ||
-            placeProjectionWidth != width || placeProjectionHeight != height ||
-            placeScreenCache.size != places.size
-        ) {
-            if (placeScreenCache.size != places.size) {
-                placeScreenCache = DoubleArray(places.size)
-            }
-            val centerLongitude = map.cameraPosition.target?.longitude ?: 0.0
-            map.projection.toScreenLocations(FogGrid.nearLongitude(places, centerLongitude), placeScreenCache)
-            placeProjectionDataRevision = placeDataRevision
-            placeProjectionViewportRevision = viewportRevision
-            placeProjectionWidth = width
-            placeProjectionHeight = height
-        }
-        return placeScreenCache
     }
 
     private fun updateCarLayer() {
