@@ -203,6 +203,17 @@ class ProgressionRepository(context: Context) {
         inserted
     }
 
+    /** Continue scanning old GPS even if the last bounded page added no new cells. */
+    fun hasUnscannedPlaceHistory(): Boolean = synchronized(dbHelper.historyLock) {
+        if (!isCurrentHistory() || startingLocation() == null) return@synchronized false
+        val db = dbHelper.readableDatabase
+        if (!db.rawQuery("SELECT 1 FROM visited_places LIMIT 1", null).use { it.moveToFirst() }) {
+            return@synchronized false
+        }
+        // A missing cursor means no historical scan has started; 1 means fully scanned.
+        counterOrNull(db, COUNTER_PLACE_BACKFILL_NEXT_ID) != 1L
+    }
+
     /** V2 keys cannot collide with old 2 km keys while pending old visits resolve. */
     private fun insertPlaceCandidate(db: SQLiteDatabase, latitude: Double, longitude: Double, time: Long): Boolean {
         if (!latitude.isFinite() || !longitude.isFinite() ||
@@ -341,6 +352,22 @@ class ProgressionRepository(context: Context) {
             }
         }
         return result
+    }
+
+    /** Earliest retry, including an unresolved zero-point baseline that blocks other places. */
+    fun nextPlaceCandidateAttemptMillis(): Long? = synchronized(dbHelper.historyLock) {
+        if (!isCurrentHistory()) return@synchronized null
+        val db = dbHelper.readableDatabase
+        val args = arrayOf(BASELINE_CANDIDATE_X.toString(), BASELINE_CANDIDATE_Y.toString())
+        db.rawQuery(
+            "SELECT next_attempt_ms FROM place_candidates WHERE cell_x = ? AND cell_y = ? LIMIT 1", args
+        ).use { if (it.moveToFirst()) return@synchronized it.getLong(0) }
+        if (!db.rawQuery("SELECT 1 FROM visited_places LIMIT 1", null).use { it.moveToFirst() }) {
+            return@synchronized null
+        }
+        db.rawQuery(
+            "SELECT MIN(next_attempt_ms) FROM place_candidates WHERE NOT (cell_x = ? AND cell_y = ?)", args
+        ).use { if (it.moveToFirst() && !it.isNull(0)) it.getLong(0) else null }
     }
 
     fun resolveCandidate(candidate: PendingPlaceCandidate, discoveries: List<PlaceDiscovery>): Int =
