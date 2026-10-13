@@ -1,6 +1,9 @@
 package com.roadconquest.app.billing
 
 import android.content.Context
+import com.roadconquest.app.data.ProgressionRepository
+import com.roadconquest.app.progression.LauncherIcon
+import com.roadconquest.app.util.Prefs
 import java.util.concurrent.CopyOnWriteArraySet
 
 /**
@@ -31,6 +34,22 @@ object VipEntitlement {
         if (isActive(context) == owned) return
         context.applicationContext.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
             .edit().putBoolean(VIP_KEY, owned).apply()
+        if (!owned) {
+            // An authoritative Play refund/revocation removes VIP-only equipped
+            // colors and themes. Never remove a gold item purchased with points.
+            val repo = ProgressionRepository(context)
+            fun earned(itemId: String) = runCatching { repo.isPurchased(itemId) }.getOrDefault(false)
+            if (Prefs.carColor(context) == "gold" && !earned("car_color_gold")) {
+                Prefs.setCarColor(context, "blue")
+            }
+            if (Prefs.roadColor(context) == "gold" && !earned("road_color_gold")) {
+                Prefs.setRoadColor(context, "blue")
+            }
+            if (Prefs.isGoldUiEnabled(context) && !earned("ui_gold")) {
+                Prefs.setGoldUiEnabled(context, false)
+                LauncherIcon.apply(context, false)
+            }
+        }
         listeners.forEach { it() }
     }
 }
