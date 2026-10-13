@@ -297,12 +297,24 @@ class MapRenderingDeviceTest {
                         val capture = MapRenderer::class.java
                             .getDeclaredMethod("captureFog", Boolean::class.javaPrimitiveType)
                             .apply { isAccessible = true }.invoke(renderer, true)
-                        val desiredKey = capture?.javaClass
-                            ?.getDeclaredField("key")?.apply { isAccessible = true }?.get(capture)
                         val installedKey = MapRenderer::class.java
                             .getDeclaredField("installedRegionalFogKey")
                             .apply { isAccessible = true }.get(renderer)
-                        regionalReady = desiredKey != null && desiredKey == installedKey
+                        // captureFog now avoids projecting grid cells when the
+                        // installed geographic key already matches the camera.
+                        // In that case its Unchanged result proves readiness;
+                        // otherwise compare the new capture's requested key.
+                        val desiredKey = when (capture?.javaClass?.simpleName) {
+                            "Unchanged" -> installedKey
+                            "Changed" -> {
+                                val value = capture.javaClass.getDeclaredField("capture")
+                                    .apply { isAccessible = true }.get(capture)
+                                value.javaClass.getDeclaredField("key")
+                                    .apply { isAccessible = true }.get(value)
+                            }
+                            else -> null
+                        }
+                        regionalReady = installedKey != null && desiredKey == installedKey
                     }
                     if (!regionalReady) SystemClock.sleep(100)
                 }
