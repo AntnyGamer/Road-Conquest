@@ -48,4 +48,33 @@ class VipEntitlementTest {
             VipEntitlement.updateFromPlay(context, false)
         }
     }
+    @Test fun refundDoesNotRemoveGoldItemsAlreadyBoughtWithPoints() {
+        val context = org.robolectric.RuntimeEnvironment.getApplication()
+        val repo = com.roadconquest.app.data.ProgressionRepository(context)
+        repo.clearProgression()
+        Prefs.resetCosmetics(context)
+        VipEntitlement.updateFromPlay(context, false)
+        try {
+            for (id in listOf("car_color_gold", "road_color_gold", "ui_gold")) {
+                assertEquals(
+                    com.roadconquest.app.data.PurchaseResult.PURCHASED,
+                    repo.purchase(id, 0L)
+                )
+            }
+            VipEntitlement.updateFromPlay(context, true)
+            for (id in listOf("car_color_gold", "road_color_gold", "ui_gold")) {
+                assertTrue(Cosmetics.equip(context, ShopCatalog.items.single { it.id == id }))
+            }
+            VipEntitlement.updateFromPlay(context, false)
+            assertEquals("gold", Prefs.carColor(context))
+            assertEquals("gold", Prefs.roadColor(context))
+            assertTrue(Prefs.isGoldUiEnabled(context))
+        } finally {
+            Prefs.resetCosmetics(context)
+            VipEntitlement.updateFromPlay(context, false)
+            repo.clearProgression()
+        }
+    }
+
+
 }
