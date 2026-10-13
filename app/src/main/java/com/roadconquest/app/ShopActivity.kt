@@ -23,6 +23,7 @@ import com.roadconquest.app.progression.ProgressionManager
 import com.roadconquest.app.progression.ShopCatalog
 import com.roadconquest.app.progression.ShopItem
 import com.roadconquest.app.util.Appearance
+import com.roadconquest.app.util.Prefs
 import com.roadconquest.app.util.ForegroundSession
 import com.roadconquest.app.ads.ScreenAds
 import java.util.Locale
@@ -39,6 +40,7 @@ class ShopActivity : Activity() {
     private var vipChecked = false
     private var vipMessage: String? = null
     private var lastSnapshot: ProgressionSnapshot? = null
+    private var appliedGoldUi = false
     @Volatile private var generation = 0
 
     override fun attachBaseContext(newBase: Context) {
@@ -46,6 +48,7 @@ class ShopActivity : Activity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        appliedGoldUi = Prefs.isGoldUiEnabled(this)
         setTheme(Appearance.themeRes(this))
         super.onCreate(savedInstanceState)
         WindowCompat.enableEdgeToEdge(window)
@@ -63,7 +66,11 @@ class ShopActivity : Activity() {
             vipOffer = offer
             vipChecked = checked
             vipMessage = status
-            lastSnapshot?.let(::render)
+            // A refund can revoke a VIP-only Golden UI while Garage is open.
+            // Rebuild the theme immediately instead of showing stale gold
+            // surfaces until the user leaves and reopens the screen.
+            if (appliedGoldUi != Prefs.isGoldUiEnabled(this)) recreate()
+            else lastSnapshot?.let(::render)
         }
         ads = ScreenAds(this, findViewById(R.id.shopRoot), findViewById(R.id.shopRewardButton), ::refresh)
     }
@@ -75,6 +82,10 @@ class ShopActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        if (appliedGoldUi != Prefs.isGoldUiEnabled(this)) {
+            recreate()
+            return
+        }
         if (::items.isInitialized) refresh()
         if (::vipBilling.isInitialized) vipBilling.refresh()
         if (::ads.isInitialized) ads.onResume()
