@@ -16,7 +16,7 @@ import kotlin.math.hypot
  * Official nationwide U.S. Census TIGERweb administrative geography.
  *
  * All states, INCLUDING NEW JERSEY, use the same Census incorporated-place
- * (layer 4) and county-subdivision (layer 1) features and identical checks.
+ * (layer 4), consolidated-city (layer 3), and county-subdivision (layer 1) features.
  * Incorporated cities/boroughs are in layer 4; townships and New England
  * towns usually appear in layer 1. There are no state-specific providers.
  *
@@ -143,7 +143,7 @@ internal object UnitedStatesMunicipalBoundaries {
             place.longitude + longitudePad, place.latitude + latitudePad
         ).joinToString(",")
         val where = "STATE = '$state'"
-        val officialLayer = Regex("""\|census-(1|4)-(\d+)$""")
+        val officialLayer = Regex("""\|census-(1|3|4)-(\d+)$""")
             .find(place.key)?.groupValues?.get(1)?.toIntOrNull()
         val layerOrder = if (officialLayer != null) listOf(officialLayer) else if (normalized.second == "township" ||
             normalized.second == "town" &&
@@ -151,7 +151,7 @@ internal object UnitedStatesMunicipalBoundaries {
                 "connecticut", "massachusetts", "maine", "new hampshire",
                 "rhode island", "vermont", "new york", "wisconsin"
             )
-        ) listOf(1, 4) else listOf(4, 1)
+        ) listOf(1, 4, 3) else listOf(4, 3, 1)
         for (layer in layerOrder) {
             val url = Uri.parse("$BASE/$layer/query").buildUpon()
                 .appendQueryParameter("where", where)
@@ -199,7 +199,7 @@ internal object UnitedStatesMunicipalBoundaries {
     }
 
     internal fun parseResponse(place: PlaceDiscovery, body: String, layer: Int): PlaceOverlayData? {
-        if (!applies(place) || layer !in setOf(1, 4)) return null
+        if (!applies(place) || layer !in setOf(1, 3, 4)) return null
         val doc = JSONObject(body)
         if (doc.has("error")) throw IOException("Census municipal service error")
         if (doc.optString("type") != "FeatureCollection") {
@@ -211,7 +211,7 @@ internal object UnitedStatesMunicipalBoundaries {
         val state = stateCode(place.countryName, place.parentName) ?: return null
         // New verified discovery keys bind overlays to a single Census polygon.
         // Legacy name-only keys retain the existing name-and-position fallback.
-        val officialIdentity = Regex("""\|census-(1|4)-(\d+)$""").find(place.key)
+        val officialIdentity = Regex("""\|census-(1|3|4)-(\d+)$""").find(place.key)
         val requestedLayer = officialIdentity?.groupValues?.get(1)?.toIntOrNull()
         val requestedGeoid = officialIdentity?.groupValues?.get(2)
         var selected: PlaceOverlayData? = null
@@ -234,7 +234,8 @@ internal object UnitedStatesMunicipalBoundaries {
             // Basenames alone cannot prove a township is a city, or vice versa.
             if (wanted.second != null && actualType != null && wanted.second != actualType) continue
             if (wanted.second == "township" && layer != 1) continue
-            if (wanted.second in setOf("city", "borough", "village") && layer != 4) continue
+            if (wanted.second == "city" && layer !in setOf(3, 4)) continue
+            if (wanted.second in setOf("borough", "village") && layer != 4) continue
             val nearest = distanceToPolygonMeters(
                 geometry, place.latitude, place.longitude
             )
