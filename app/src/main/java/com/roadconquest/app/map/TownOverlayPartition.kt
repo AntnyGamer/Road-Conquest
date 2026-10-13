@@ -64,8 +64,10 @@ internal object TownOverlayPartition {
                 .filter { it.envelopeInternal.intersects(candidateBounds) }
                 .toList()
             val clipped = runCatching {
-                val remaining = if (overlapping.isEmpty()) candidate.geometry else {
-                    candidate.geometry.difference(UnaryUnionOp.union(overlapping))
+                val remaining = when (overlapping.size) {
+                    0 -> candidate.geometry
+                    1 -> candidate.geometry.difference(overlapping[0])
+                    else -> candidate.geometry.difference(UnaryUnionOp.union(overlapping))
                 }
                 polygonal(GeometryFixer.fix(remaining))
             }.getOrNull() ?: continue
