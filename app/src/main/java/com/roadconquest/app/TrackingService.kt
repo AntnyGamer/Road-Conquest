@@ -654,7 +654,7 @@ class TrackingService : Service(), LocationListener {
         }
 
     private fun maybeRunMatching(force: Boolean = false) {
-        if (!ready) return
+        if (!ready || matcher.rateLimitRemainingMs() > 0L) return
         val now = SystemClock.elapsedRealtime()
         val cooldownRemaining = if (lastMatchAttempt == 0L) {
             0L
@@ -737,10 +737,16 @@ class TrackingService : Service(), LocationListener {
                 lastMatchAttempt = SystemClock.elapsedRealtime()
                 val result = matcher.match(points)
                 if (result == null) {
+                    val providerCooldown = matcher.rateLimitRemainingMs()
                     repository.deferMatching(
                         window.markableIds,
-                        System.currentTimeMillis() + MATCH_RETRY_AFTER_FAILURE_MS
+                        System.currentTimeMillis() +
+                            maxOf(MATCH_RETRY_AFTER_FAILURE_MS, providerCooldown)
                     )
+                    // If the remote server rejected traffic, do not drain other
+                    // pending batches into the same cooldown. Saved GPS persists,
+                    // and the scheduled deferred retry will resume later.
+                    if (providerCooldown > 0L) return
                     // The newest batch may be intrinsically unmatchable, not merely
                     // offline. Since it is now deferred, keep draining older eligible
                     // history so one bad batch cannot permanently starve the queue.
