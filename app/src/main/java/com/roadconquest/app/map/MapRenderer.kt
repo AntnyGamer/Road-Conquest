@@ -1025,7 +1025,7 @@ class MapRenderer(
         displayedPlaces = places
         // Stored one-mile grid centers are authoritative; legacy samples were backfilled
         // once into this table. Scoring and road matching remain independent.
-        savedGridCoordinates = FogGrid.visitedCorners(places)
+        savedGridCoordinates = FogGrid.uniqueVisitedCorners(places)
         placeDataRevision++
         return true
     }
