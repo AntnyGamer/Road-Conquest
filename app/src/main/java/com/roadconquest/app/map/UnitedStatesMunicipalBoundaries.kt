@@ -138,8 +138,10 @@ internal object UnitedStatesMunicipalBoundaries {
         require(applies(place))
         val normalized = municipalityIdentity(place.displayName)
         val state = stateCode(place.countryName, place.parentName) ?: return null
-        val name = normalized.first
-        if (name.length !in 2..90) return null
+        val officialIdentity = OFFICIAL_CENSUS_ID_RE.find(place.key)
+        // Names may change after the original Census GEOID was discovered.
+        // An authoritative saved identity must not depend on the old label.
+        if (officialIdentity == null && normalized.first.length !in 2..90) return null
         // Limit a query by the actual geographic neighborhood instead of
         // relying on case-sensitive DB string comparisons across whole states.
         // The saved first-visit position in older builds can be off by ~1km.
@@ -150,7 +152,6 @@ internal object UnitedStatesMunicipalBoundaries {
             place.longitude - longitudePad, place.latitude - latitudePad,
             place.longitude + longitudePad, place.latitude + latitudePad
         ).joinToString(",")
-        val officialIdentity = OFFICIAL_CENSUS_ID_RE.find(place.key)
         val officialLayer = officialIdentity?.groupValues?.get(1)?.toIntOrNull()
         // A saved official GEOID is already an exact identifier, so don't fetch
         // every nearby Census polygon and discard all but one on the client.
@@ -244,20 +245,24 @@ internal object UnitedStatesMunicipalBoundaries {
             ) continue
             val geometry = feature.optJSONObject("geometry") ?: continue
             if (geometry.optString("type") !in setOf("Polygon", "MultiPolygon")) continue
-            val actual = municipalityIdentity(
-                props.optString("NAME").ifBlank { props.optString("BASENAME") }
-            )
-            val bare = municipalityIdentity(props.optString("BASENAME"))
-            if (actual.first != wanted.first && bare.first != wanted.first) continue
-            val actualType = actual.second
-            // Basenames alone cannot prove a township is a city, or vice versa.
-            if (wanted.second != null && actualType != null && wanted.second != actualType) continue
-            if (wanted.second == "township" && layer != 1) continue
-            if (wanted.second == "city" && layer !in setOf(3, 4)) continue
-            if (wanted.second in setOf("borough", "village") && layer != 4) continue
-            val nearest = distanceToPolygonMeters(
-                geometry, place.latitude, place.longitude
-            )
+            // Exact official IDs already verify both Census layer and GEOID above.
+            // The display name may have changed between Census vintages; a name,
+            // municipal suffix or positional heuristic must not reject this same
+            // identified polygon. Keep the strict legacy-name checks below for
+            // records without a trustworthy official ID.
+            val nearest = if (requestedLayer != null) 0.0 else {
+                val actual = municipalityIdentity(
+                    props.optString("NAME").ifBlank { props.optString("BASENAME") }
+                )
+                val bare = municipalityIdentity(props.optString("BASENAME"))
+                if (actual.first != wanted.first && bare.first != wanted.first) continue
+                val actualType = actual.second
+                if (wanted.second != null && actualType != null && wanted.second != actualType) continue
+                if (wanted.second == "township" && layer != 1) continue
+                if (wanted.second == "city" && layer !in setOf(3, 4)) continue
+                if (wanted.second in setOf("borough", "village") && layer != 4) continue
+                distanceToPolygonMeters(geometry, place.latitude, place.longitude)
+            }
             if (!nearest.isFinite() || nearest > MAX_SAVED_ERROR_METERS || nearest >= distance) {
                 continue
             }
