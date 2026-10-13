@@ -149,9 +149,12 @@ internal object UnitedStatesMunicipalBoundaries {
             place.longitude - longitudePad, place.latitude - latitudePad,
             place.longitude + longitudePad, place.latitude + latitudePad
         ).joinToString(",")
-        val where = "STATE = '$state'"
-        val officialLayer = Regex("""\|census-(1|3|4)-(\d+)$""")
-            .find(place.key)?.groupValues?.get(1)?.toIntOrNull()
+        val officialIdentity = Regex("""\|census-(1|3|4)-(\d+)$""").find(place.key)
+        val officialLayer = officialIdentity?.groupValues?.get(1)?.toIntOrNull()
+        // A saved official GEOID is already an exact identifier, so don't fetch
+        // every nearby Census polygon and discard all but one on the client.
+        // Legacy name-only visits must retain the broader search.
+        val where = municipalityWhereClause(state, officialIdentity?.groupValues?.get(2))
         val layerOrder = if (officialLayer != null) listOf(officialLayer) else if (normalized.second == "township" ||
             normalized.second == "town" &&
             place.parentName.trim().lowercase(Locale.ROOT) in setOf(
@@ -207,6 +210,11 @@ internal object UnitedStatesMunicipalBoundaries {
         }
         return null
     }
+
+    internal fun municipalityWhereClause(stateFips: String, officialGeoid: String?): String =
+        if (officialGeoid != null && officialGeoid.all(Char::isDigit)) {
+            "STATE = '$stateFips' AND GEOID = '$officialGeoid'"
+        } else "STATE = '$stateFips'"
 
     internal fun parseResponse(place: PlaceDiscovery, body: String, layer: Int): PlaceOverlayData? {
         if (!applies(place) || layer !in setOf(1, 3, 4)) return null
