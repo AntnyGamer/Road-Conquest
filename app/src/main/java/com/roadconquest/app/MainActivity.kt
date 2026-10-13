@@ -188,6 +188,9 @@ class MainActivity : Activity() {
                     renderer?.refreshExploration()
                     if (resumed) resolvePendingPlaces()
                 }
+                TrackingService.ACTION_PLACE_CANDIDATE_UPDATED -> {
+                    if (resumed) resolvePendingPlaces()
+                }
                 TrackingService.ACTION_TRACKING_STATE_CHANGED -> {
                     refreshControls()
                     if (TrackingService.isRunning || Prefs.isTrackingPaused(this@MainActivity)) stopPreviewLocation() else startPreviewLocation()
@@ -289,6 +292,7 @@ class MainActivity : Activity() {
             addAction(TrackingService.ACTION_STATS_UPDATED)
             addAction(TrackingService.ACTION_ROADS_UPDATED)
             addAction(TrackingService.ACTION_EXPLORATION_UPDATED)
+            addAction(TrackingService.ACTION_PLACE_CANDIDATE_UPDATED)
             addAction(TrackingService.ACTION_TRACKING_STATE_CHANGED)
             addAction(LocationManager.PROVIDERS_CHANGED_ACTION)
             addAction(LocationManager.MODE_CHANGED_ACTION)
