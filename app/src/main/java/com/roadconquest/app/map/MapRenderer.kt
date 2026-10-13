@@ -703,10 +703,9 @@ class MapRenderer(
         // Existing boundaries can overlap due to mismatched or historical OSM
         // polygons. Partition only town shapes so their translucent fills never
         // stack or paint an overlapping boundary twice.
-        // Official US Census boundaries are used as supplied.
-        // Clipping individual municipalities invents slivers and gaps; only
-        // shared boundary linework is dissolved. Other countries retain
-        // the verified administrative OpenStreetMap fallback.
+        // Keep official Census polygons unchanged in storage. Where different
+        // Census municipal layers overlap, partition only the rendered fills
+        // so an incorporated city and its parent subdivision cannot double shade.
         val officialUs = if (kind == com.roadconquest.app.data.PlaceKind.TOWN) {
             snapshot.filter { UnitedStatesMunicipalBoundaries.isUnitedStatesKey(it.key) }
         } else emptyList()
@@ -716,17 +715,33 @@ class MapRenderer(
         val otherPartition = if (kind == com.roadconquest.app.data.PlaceKind.TOWN &&
             other.isNotEmpty()
         ) TownOverlayPartition.render(other) else null
+        val censusLayers = officialUs.mapNotNull {
+            when {
+                "|census-4-" in it.key -> 4
+                "|census-3-" in it.key -> 3
+                "|census-1-" in it.key -> 1
+                else -> null
+            }
+        }.toSet()
+        // A single layer cannot overlap itself in normal Census geography.
+        // Avoid unnecessary polygon differences on ordinary single-layer maps.
+        val officialPartition = if (censusLayers.size > 1) {
+            TownOverlayPartition.renderOfficialUs(officialUs)
+        } else null
         val keys = snapshot.map { "${it.key}:${it.geometryJson.hashCode()}" }
+        val officialFills = officialPartition?.fills ?: overlayFeatureCollection(officialUs)
+        val officialBorders = officialPartition?.outlines ?:
+            TownOverlayPartition.authoritativeOutlines(officialUs)
         val fillFeatures = when {
             officialUs.isNotEmpty() && otherPartition != null ->
-                mergeOverlayCollections(overlayFeatureCollection(officialUs), otherPartition.fills)
-            officialUs.isNotEmpty() -> overlayFeatureCollection(officialUs)
+                mergeOverlayCollections(officialFills, otherPartition.fills)
+            officialUs.isNotEmpty() -> officialFills
             else -> otherPartition?.fills ?: overlayFeatureCollection(snapshot)
         }
         val boundaries = when {
             officialUs.isNotEmpty() && otherPartition != null ->
-                mergeOverlayCollections(TownOverlayPartition.authoritativeOutlines(officialUs), otherPartition.outlines)
-            officialUs.isNotEmpty() -> TownOverlayPartition.authoritativeOutlines(officialUs)
+                mergeOverlayCollections(officialBorders, otherPartition.outlines)
+            officialUs.isNotEmpty() -> officialBorders
             else -> otherPartition?.outlines ?: overlayBoundaryFeatureCollection(snapshot)
         }
         mainHandler.post {
