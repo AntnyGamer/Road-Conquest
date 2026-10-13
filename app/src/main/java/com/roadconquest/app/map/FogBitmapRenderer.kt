@@ -568,11 +568,16 @@ object FogBitmapRenderer {
         // Blue roads still render separately; entering a mile tile is the sole unlock trigger.
         if (request.gridMode) {
             if (request.gridScreen.isEmpty()) return bitmap
+            val relevantCells = ArrayList<Int>()
+            for (i in 0 until minOf(request.gridCoordinates.size, request.gridScreen.size) - 7 step 8) {
+                if (gridCellMayAffectBitmap(request, i)) relevantCells.add(i)
+            }
+            // No recorded tile can affect this raster, even via its surrounding
+            // 1,500-foot fade. Skip the full bitmap mask and two distance passes.
+            if (relevantCells.isEmpty()) return bitmap
             val reveal = scratch.acquireRevealBitmap(request.bitmapWidth, request.bitmapHeight)
             val revealCanvas = Canvas(reveal)
-            for (i in 0 until minOf(request.gridCoordinates.size, request.gridScreen.size) - 7 step 8) {
-                drawGridReveal(revealCanvas, request, i, scratch)
-            }
+            for (i in relevantCells) drawGridReveal(revealCanvas, request, i, scratch)
             // Merge every visited cell into ONE binary silhouette before fading. Individual
             // square edge/corner shaders create visible gray tiles and double seams where
             // neighboring cells meet. One distance-to-union mask has neither artifact.
@@ -629,6 +634,36 @@ object FogBitmapRenderer {
         }
         canvas.drawBitmap(reveal, 0f, 0f, scratch.applyRevealPaint)
         return bitmap
+    }
+
+    /**
+     * Conservative culling before allocating a reveal mask or running the bitmap-wide
+     * distance transform. Include the full physical fade plus two raster pixels for
+     * antialiasing and subpixel cells. Reject only tiles that cannot touch the image.
+     */
+    internal fun gridCellMayAffectBitmap(request: Request, offset: Int): Boolean {
+        if (offset < 0 || offset + 7 >= request.gridScreen.size) return false
+        val scale = request.screenScale.toDouble()
+        val metersPerPixel = request.metersPerScreenPixelAtCenter
+        if (!scale.isFinite() || scale <= 0.0 ||
+            !metersPerPixel.isFinite() || metersPerPixel <= 0.0
+        ) return true // Preserve old rendering for unusual caller inputs.
+        val fade = ROAD_FULL_M * scale / metersPerPixel + 2.0
+        var minX = Double.POSITIVE_INFINITY
+        var minY = Double.POSITIVE_INFINITY
+        var maxX = Double.NEGATIVE_INFINITY
+        var maxY = Double.NEGATIVE_INFINITY
+        for (corner in 0..3) {
+            val x = (request.gridScreen[offset + corner * 2] - request.screenLeft) * scale
+            val y = (request.gridScreen[offset + corner * 2 + 1] - request.screenTop) * scale
+            if (!x.isFinite() || !y.isFinite()) return false
+            minX = minOf(minX, x)
+            maxX = maxOf(maxX, x)
+            minY = minOf(minY, y)
+            maxY = maxOf(maxY, y)
+        }
+        return maxX >= -fade && minX <= request.bitmapWidth + fade &&
+            maxY >= -fade && minY <= request.bitmapHeight + fade
     }
 
     /**
