@@ -611,14 +611,16 @@ class MapRenderer(
                                 (it.nextPendingExpiryMillis - System.currentTimeMillis()).coerceAtLeast(1_000L)
                             )
                         }
-                        if (it.places != null) {
+                        val explorationChanged = if (it.places != null) {
                             loadedPlaceBounds = it.placeBounds
                             setDisplayedPlaces(it.places)
-                        }
+                        } else false
                         if (it.overlay != null && it.features != null && !queryRoadsAgain) {
                             loadedRoadBounds = it.roadBounds
                             setDisplayedRoads(it.overlay, it.features)
+                            if (explorationChanged) scheduleFogRender()
                         } else {
+                            // Also refresh on camera/lifecycle paths without a road query.
                             scheduleFogRender()
                         }
                     }
@@ -1032,15 +1034,14 @@ class MapRenderer(
         // Blue roads render in their own source and do not clear exploration-only fog.
     }
 
-    private fun setDisplayedPlaces(places: DoubleArray) {
-        if (displayedPlaces.contentEquals(places)) return
+    private fun setDisplayedPlaces(places: DoubleArray): Boolean {
+        if (displayedPlaces.contentEquals(places)) return false
         displayedPlaces = places
         // Stored one-mile grid centers are authoritative; legacy samples were backfilled
         // once into this table. Scoring and road matching remain independent.
         savedGridCoordinates = FogGrid.visitedCorners(places)
         placeDataRevision++
-        // Only accepted/persisted exploration squares affect the fog image.
-        scheduleFogRender()
+        return true
     }
 
     private fun projectRoads(roads: OverlayRoads): DoubleArray {
