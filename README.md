@@ -53,6 +53,7 @@ the Google Play listing is created; changing it later would create a different a
 - Open Garage & Shop to buy and equip car shapes, car colors, road colors, or the Golden
   Road Conquest UI and launcher icon. Purchases are one-time and equipped cosmetics can be changed later.
 - Choose Streets, Minimal, Night or Satellite maps, and a Light, Dark or phone-controlled appearance.
+- **VIP (one-time $2.99 US purchase through Google Play, configured separately in Play Console):** permanently remove in-app banners and rewarded-ad offers, and equip the Gold car color, Gold road color, and Golden Road Conquest UI without spending points. Existing point purchases stay owned and non-gold items still use earned points. Play restores VIP from the purchasing Google account after reinstall. VIP is unavailable until the `vip_lifetime` one-time product is active in Play Console (see [VIP setup](PLAY_VIP_SETUP.md)).
 - Use the map overlay button to highlight explored countries in blue, states/regions in purple, or towns in green. Only one overlay type is active at a time; tap a highlighted area for population, area, first visit and last visit when available.
 - Tap an unlocked road for its name, saved length, first-unlocked time, last-driven time and times driven.
 - Browse achievements by **Road Conquest**, **Mileage**, **Exploration**, **Ad Rewards**, and **Bonus** categories. Battery challenges live under Bonus; ad milestones have their own Ad Rewards category.
