@@ -171,7 +171,9 @@ This per-device pacing does **not** reserve any of the demo's global capacity
 for multiple installed phones. For a growing, ad-supported public launch,
 arrange a production-authorized OSRM-compatible hosted matcher and set
 `ROADCONQUEST_OSRM_API_URL`. Other hosted products cannot simply be swapped
-in without checking licensing, map-display restrictions, and response format. Administrative overlay boundaries are requested only after the user enables an overlay; results are cached and requests are throttled. The APK reads the active provider from `OVERLAY_PROVIDER.txt` on this repository’s `main` branch so the service can be switched or disabled without an app update. Custom builds can point at another remote config with `ROADCONQUEST_PLACE_OVERLAY_CONFIG_URL=https://example.com/overlay-provider.txt`.
+in without checking licensing, map-display restrictions, and response format.
+
+Administrative overlay boundaries are requested only after the user enables an overlay; results are cached and requests are throttled. The APK reads the active provider from `OVERLAY_PROVIDER.txt` on this repository’s `main` branch so the service can be switched or disabled without an app update. Custom builds can point at another remote config with `ROADCONQUEST_PLACE_OVERLAY_CONFIG_URL=https://example.com/overlay-provider.txt`.
 See [server setup](server/README.md) and the [physical-device checklist](ANDROID_TEST_CHECKLIST.md).
 
 ## Google Play submission
