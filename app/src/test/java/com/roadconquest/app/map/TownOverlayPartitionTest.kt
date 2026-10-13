@@ -31,6 +31,24 @@ class TownOverlayPartitionTest {
         }
     }
 
+    @Test fun officialIncorporatedCityTakesPrecedenceOverOverlappingSubdivision() {
+        val result = TownOverlayPartition.renderOfficialUs(listOf(
+            town("County Township", "us|pa|census-1-4200100001", 1.0,
+                square(1.0, 1.0, 2.0, 2.0)),
+            town("Incorporated City", "us|pa|census-4-4201234", 16.0,
+                square(0.0, 0.0, 4.0, 4.0))
+        ))
+        val features = JSONObject(result.fills).getJSONArray("features")
+        val visibleAtOverlap = (0 until features.length()).map { features.getJSONObject(it) }
+            .filter { PlaceGeometry.contains(it.getJSONObject("geometry"), 1.5, 1.5) }
+        assertEquals(1, visibleAtOverlap.size)
+        assertEquals("Incorporated City",
+            visibleAtOverlap.single().getJSONObject("properties").getString("overlay_name"))
+        assertEquals(2, result.shown.size)
+        assertEquals(16.0, result.shown.single { it.name == "Incorporated City" }
+            .areaSquareKilometers, 0.0)
+    }
+
     @Test fun intersectingMunicipalitiesHaveSingleVisibleFillAcrossOverlap() {
         val result = TownOverlayPartition.render(listOf(
             town("Town A", "us|nj|a", 4.0, square(0.0, 0.0, 2.0, 2.0)),
