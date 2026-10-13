@@ -1029,7 +1029,7 @@ class MapRenderer(
         displayedRoadFeatures = features
         roadDataRevision++
         (map.style?.getSource(ROAD_SOURCE_ID) as? GeoJsonSource)?.setGeoJson(features)
-        scheduleFogRender()
+        // Blue roads render in their own source and do not clear exploration-only fog.
     }
 
     private fun setDisplayedPlaces(places: DoubleArray) {
@@ -1039,6 +1039,8 @@ class MapRenderer(
         // once into this table. Scoring and road matching remain independent.
         savedGridCoordinates = FogGrid.visitedCorners(places)
         placeDataRevision++
+        // Only accepted/persisted exploration squares affect the fog image.
+        scheduleFogRender()
     }
 
     private fun projectRoads(roads: OverlayRoads): DoubleArray {
