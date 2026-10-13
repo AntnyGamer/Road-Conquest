@@ -98,13 +98,14 @@ class VipBilling(
                     response.productDetailsList.firstOrNull { it.productId == VipEntitlement.PRODUCT_ID }
                 } else null
                 val buy = details?.oneTimePurchaseOfferDetailsList?.firstOrNull()
-                if (details == null || buy == null) {
+                val offerToken = buy?.offerToken
+                if (details == null || offerToken.isNullOrBlank()) {
                     message = "VIP is not available yet. Activate vip_lifetime in Google Play Console."
                     notifyStatus()
                     return@queryProductDetailsAsync
                 }
                 val params = BillingFlowParams.ProductDetailsParams.newBuilder()
-                    .setProductDetails(details).setOfferToken(buy.offerToken).build()
+                    .setProductDetails(details).setOfferToken(offerToken).build()
                 // The purchase UI must always be launched from Android's main thread,
                 // even if a Play Store implementation delivers detail callbacks elsewhere.
                 handler.post {
