@@ -1,10 +1,11 @@
 package com.roadconquest.app.billing
 
+import com.roadconquest.app.progression.Cosmetics
+import com.roadconquest.app.progression.ShopCatalog
 import com.roadconquest.app.util.Prefs
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
@@ -28,9 +29,21 @@ class VipEntitlementTest {
             assertTrue("Deleting driving progress must not delete Play purchases",
                 VipEntitlement.isActive(context))
 
-            // An authoritative successful Play query can revoke refunded VIP.
+            for (id in listOf("car_color_gold", "road_color_gold", "ui_gold")) {
+                val item = ShopCatalog.items.single { it.id == id }
+                assertTrue("VIP can equip $id without spending points", Cosmetics.equip(context, item))
+            }
+            assertEquals("gold", Prefs.carColor(context))
+            assertEquals("gold", Prefs.roadColor(context))
+            assertTrue(Prefs.isGoldUiEnabled(context))
+
+            // A successful Play refund query revokes only gold items not purchased
+            // with local points; the rest of the local progression remains intact.
             VipEntitlement.updateFromPlay(context, false)
             assertFalse(VipEntitlement.isActive(context))
+            assertEquals("blue", Prefs.carColor(context))
+            assertEquals("blue", Prefs.roadColor(context))
+            assertFalse(Prefs.isGoldUiEnabled(context))
         } finally {
             VipEntitlement.updateFromPlay(context, false)
         }
