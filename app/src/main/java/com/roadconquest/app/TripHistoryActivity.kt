@@ -8,6 +8,7 @@ import android.os.Looper
 import android.view.MotionEvent
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.SeekBar
@@ -100,7 +101,7 @@ class TripHistoryActivity : Activity() {
         if (compact) {
             setContentView(ScrollView(this).apply {
                 fillViewport = true
-                addView(root, ScrollView.LayoutParams(
+                addView(root, FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
             })
         } else {
@@ -287,9 +288,11 @@ class TripHistoryActivity : Activity() {
         showPosition(seek?.progress ?: 0)
         val bounds = LatLngBounds.Builder()
         points.forEach { bounds.include(LatLng(it.latitude, it.longitude)) }
+        val expectedGeneration = generation
+        val tripBounds = bounds.build()
         mapView?.post {
-            if (!isDestroyed && mapReady) {
-                map?.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds.build(), dp(26)))
+            if (!isDestroyed && mapReady && generation == expectedGeneration) {
+                map?.moveCamera(CameraUpdateFactory.newLatLngBounds(tripBounds, dp(26)))
             }
         }
     }
