@@ -41,6 +41,16 @@ object Achievements {
     private const val METERS_PER_MILE = 1609.344
     private val stateLock = Any()
 
+    /**
+     * VIP removes rewarded ads; do not display unattainable ad-only challenges
+     * as outstanding goals. Previously completed challenges and their awards
+     * remain visible and owned. Never mint points just because VIP was bought.
+     */
+    fun visibleAchievements(items: List<AchievementProgress>, vip: Boolean): List<AchievementProgress> =
+        if (!vip) items else items.filter {
+            it.category != AchievementCategory.ADS || it.unlocked
+        }
+
     fun progress(summary: DataSummary, metrics: AchievementMetrics = AchievementMetrics()): List<AchievementProgress> {
         val miles = summary.distanceMeters / METERS_PER_MILE
         val roads = summary.roadsUnlockedCount.toDouble()
