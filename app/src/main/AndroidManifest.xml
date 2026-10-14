@@ -28,6 +28,9 @@
         <activity
             android:name=".SettingsActivity"
             android:exported="false" />
+        <activity
+            android:name=".TripHistoryActivity"
+            android:exported="false" />
 
         <activity
             android:name=".AccountActivity"
