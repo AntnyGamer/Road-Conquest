@@ -15,6 +15,7 @@ import androidx.core.view.WindowInsetsCompat
 import com.roadconquest.app.achievements.AchievementCategory
 import com.roadconquest.app.achievements.AchievementProgress
 import com.roadconquest.app.achievements.Achievements
+import com.roadconquest.app.billing.VipEntitlement
 import com.roadconquest.app.data.TrackingRepository
 import com.roadconquest.app.progression.ProgressionManager
 import com.roadconquest.app.util.Appearance
@@ -108,8 +109,17 @@ class AchievementsActivity : Activity() {
 
     private fun renderCategory(container: LinearLayout) {
         container.removeAllViews()
+        val vipAdChallenges = selectedCategory == AchievementCategory.ADS &&
+            VipEntitlement.isActive(this)
+        if (vipAdChallenges) {
+            container.addView(TextView(this).apply {
+                text = "VIP removes rewarded ads. Unfinished ad milestones are optional and hidden while VIP is active; previously earned rewards stay yours."
+                setTextColor(Appearance.color(this@AchievementsActivity, R.attr.rcTextSecondary))
+                setPadding(dp(12), dp(12), dp(12), dp(16))
+            })
+        }
         achievements.asSequence()
-            .filter { it.category == selectedCategory }
+            .filter { it.category == selectedCategory && (!vipAdChallenges || it.unlocked) }
             .forEach { addAchievement(container, it) }
         updateCategoryButtons()
     }
@@ -183,6 +193,9 @@ class AchievementsActivity : Activity() {
     override fun onResume() {
         super.onResume()
         ads.onResume()
+        // Play may restore or revoke VIP while another screen is active.
+        // Ad-only achievements should follow the current entitlement immediately.
+        if (achievements.isNotEmpty()) renderCategory(findViewById(R.id.achievementsList))
     }
 
     override fun onPause() {
