@@ -48,6 +48,24 @@ class VipEntitlementTest {
             VipEntitlement.updateFromPlay(context, false)
         }
     }
+    @Test fun oldBillingQueriesCannotRevokeNewerConfirmedVipPurchase() {
+        val context = org.robolectric.RuntimeEnvironment.getApplication()
+        VipEntitlement.updateFromPlay(context, false)
+        try {
+            val oldQueryRevision = VipEntitlement.revision()
+            VipEntitlement.updateFromPlay(context, true)
+            VipEntitlement.updateIfCurrent(context, false, oldQueryRevision)
+            assertTrue("An older ownership response must not undo a newer purchase",
+                VipEntitlement.isActive(context))
+
+            // A new authoritative query still detects a refund.
+            VipEntitlement.updateIfCurrent(context, false, VipEntitlement.revision())
+            assertFalse(VipEntitlement.isActive(context))
+        } finally {
+            VipEntitlement.updateFromPlay(context, false)
+        }
+    }
+
     @Test fun refundDoesNotRemoveGoldItemsAlreadyBoughtWithPoints() {
         val context = org.robolectric.RuntimeEnvironment.getApplication()
         val repo = com.roadconquest.app.data.ProgressionRepository(context)
