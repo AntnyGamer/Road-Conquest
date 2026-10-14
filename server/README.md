@@ -301,9 +301,10 @@ Endpoint summary:
 | `POST /v1/reauth` | Authenticated current-password check without changing account/session state |
 | `PUT /v1/privacy` | Existing authenticated visibility setting; immediate public exclusion |
 
-Precise evidence is processed in memory, not saved as a route. Boundary validation persists only
-the last accepted timestamp plus a server-keyed HMAC-SHA-256 fingerprint of that fix; the precise coordinate is not
-stored. Receipt hashes/responses and expired runs are cleaned after one day; cleanup runs at
+Full traces are processed in memory, not saved as routes. Continuity retains one AES-256-GCM
+encrypted latest accepted GPS fix, its timestamp and an account/map-scoped keyed fingerprint.
+The next accepted fix replaces it; account deletion removes it. Receipt hashes/responses and
+expired runs are cleaned after one day; cleanup runs at
 process/function startup as well as periodically. Aggregate scores/road IDs
 remain until account deletion. Configure proxy/access logging to avoid request bodies, authorization
 headers and OSRM coordinate-bearing URLs, and set a 32 KiB body limit at the proxy as well.

@@ -48,8 +48,10 @@ Leaderboards remain hidden until all of the following are actually operational:
 5. A successful end-to-end submission from the actual Play-installed release on a real
    eligible phone, and rejected tampering/retry/privacy cases against that deployment.
 
-`server/README.md` lists the required environment variables. After these checks pass,
-enable `LEADERBOARDS_ENABLED=1` on the server and `LEADERBOARDS_VISIBLE` in the app.
+`server/README.md` lists the required environment variables. Once infrastructure is ready,
+enable `LEADERBOARDS_ENABLED=1` on a test deployment and `LEADERBOARDS_VISIBLE` in an
+internal Google Play test build. Verify a real eligible phone without simulated verdict
+overrides. After the end-to-end checks pass, enable the tested setup for public competition.
 Deterministic test verifiers and emulator tests do not establish real Google eligibility.
 
 ## Practical limit
