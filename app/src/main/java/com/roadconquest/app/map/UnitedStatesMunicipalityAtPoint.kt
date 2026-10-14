@@ -24,6 +24,68 @@ internal object UnitedStatesMunicipalityAtPoint {
     private const val MAX_RESPONSE_CHARS = 16 * 1024 * 1024
     private val WHITESPACE_RE = Regex("\\s+")
 
+    /**
+     * US fallback for devices without a working Android Geocoder. The official
+     * Census States layer identifies the state directly from the recorded GPS
+     * coordinate, without guessing from postal cities or proximity.
+     * A null result means no US state was confirmed; network failures are retryable.
+     */
+    internal fun stateNameAt(latitude: Double, longitude: Double): String? {
+        if (!latitude.isFinite() || !longitude.isFinite() ||
+            latitude !in -90.0..90.0 || longitude !in -180.0..180.0
+        ) return null
+        val request = Uri.parse(
+            "https://tigerweb.geo.census.gov/arcgis/rest/services/" +
+                "TIGERweb/State_County/MapServer/0/query"
+        ).buildUpon()
+            .appendQueryParameter("geometry", "$longitude,$latitude")
+            .appendQueryParameter("geometryType", "esriGeometryPoint")
+            .appendQueryParameter("inSR", "4326")
+            .appendQueryParameter("spatialRel", "esriSpatialRelIntersects")
+            .appendQueryParameter("outFields", "STATE")
+            .appendQueryParameter("returnGeometry", "false")
+            .appendQueryParameter("f", "json")
+            .build().toString()
+        val connection = (URL(request).openConnection() as HttpURLConnection).apply {
+            connectTimeout = 8_000
+            readTimeout = 20_000
+            setRequestProperty("User-Agent",
+                "RoadConquest/${BuildConfig.VERSION_NAME} (+https://github.com/AntnyGamer/RoadConquest-Beta)")
+        }
+        return try {
+            if (connection.responseCode !in 200..299) {
+                throw IOException("Census state lookup HTTP ${connection.responseCode}")
+            }
+            val body = connection.inputStream.bufferedReader().use { reader ->
+                val text = CharArray(4096)
+                val count = reader.read(text)
+                if (count < 0) "" else {
+                    val first = String(text, 0, count)
+                    if (reader.read() >= 0) throw IOException("Census state lookup response too large")
+                    first
+                }
+            }
+            parseStateResponse(body)
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    internal fun parseStateResponse(body: String): String? {
+        val json = try { JSONObject(body) } catch (error: org.json.JSONException) {
+            throw IOException("Invalid Census state lookup response", error)
+        }
+        if (json.has("error")) throw IOException("Census state lookup service error")
+        val features = json.optJSONArray("features")
+            ?: throw IOException("Census state lookup lacks features")
+        // A point should have one official state. Ambiguous boundary hits are not
+        // a reliable basis for awarding a state or a town.
+        if (features.length() != 1) return null
+        val fips = features.optJSONObject(0)?.optJSONObject("attributes")
+            ?.optString("STATE").orEmpty()
+        return UnitedStatesMunicipalBoundaries.stateNameFromFips(fips)
+    }
+
     fun fetch(seed: PlaceDiscovery): Result? {
         val state = UnitedStatesMunicipalBoundaries.stateCode(
             seed.countryName, seed.parentName
