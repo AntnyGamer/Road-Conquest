@@ -234,7 +234,7 @@ class TripHistoryActivity : Activity() {
                     })
                 }
             }
-        })
+        }
     }
 
     private fun loadTrip(trip: SavedTrip) {
