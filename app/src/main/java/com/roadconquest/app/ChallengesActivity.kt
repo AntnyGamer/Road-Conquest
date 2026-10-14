@@ -43,6 +43,12 @@ class ChallengesActivity : Activity() {
         setTheme(Appearance.themeRes(this))
         super.onCreate(savedInstanceState)
         WindowCompat.enableEdgeToEdge(window)
+        // System bars sit on this screen's themed background, not the dark map fog.
+        val lightSystemBars = !Appearance.isDark(this)
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = lightSystemBars
+            isAppearanceLightNavigationBars = lightSystemBars
+        }
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         setContentView(ScrollView(this).apply { addView(root) })
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
