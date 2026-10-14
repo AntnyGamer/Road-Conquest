@@ -22,6 +22,27 @@ class TripHistoryRepositoryTest {
         assertFalse(TripHistoryRepository.isTripBoundary(1000, 1000))
     }
 
+    @Test fun skippedGapBeforeFinalSampleMustBreakTheRoute() {
+        val context = RuntimeEnvironment.getApplication()
+        TrackingRepository(context).clearHistory()
+        val db = AppDatabase.get(context).writableDatabase
+        val times = listOf(1_000_000L, 1_020_000L, 1_060_000L, 1_080_000L, 1_100_000L)
+        times.forEachIndexed { index, time ->
+            db.execSQL(
+                "INSERT INTO track_points(latitude, longitude, accuracy_m, speed_mps, bearing_deg, timestamp_ms) VALUES (?,?,?,?,?,?)",
+                arrayOf(40.0, -74.0 + index * 0.001, 5.0, 10.0, 0.0, time)
+            )
+        }
+
+        val history = TripHistoryRepository(context)
+        val trip = history.recentTrips().single()
+        val downsampled = history.replay(trip, maxPoints = 2)
+        assertEquals(2, downsampled.size)
+        assertFalse(downsampled.first().breakBefore)
+        assertTrue(downsampled.last().breakBefore)
+        assertTrue(TripReplayRoute.visibleRanges(downsampled, 1).isEmpty())
+    }
+
     @Test fun replayPreservesTrueGapsThroughSamplingAndRejectsReplacedHistory() {
         val context = RuntimeEnvironment.getApplication()
         val tracker = TrackingRepository(context)
