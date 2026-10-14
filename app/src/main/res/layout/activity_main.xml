@@ -142,6 +142,7 @@
 
             <Button
                 android:id="@+id/tripsNavButton"
+                android:contentDescription="Trip history and replay"
                 style="@style/RoadConquest.NavigationAction"
                 android:layout_width="0dp"
                 android:layout_height="52dp"
@@ -150,6 +151,7 @@
 
             <Button
                 android:id="@+id/goalsNavButton"
+                android:contentDescription="Achievements and milestones"
                 style="@style/RoadConquest.NavigationAction"
                 android:layout_width="0dp"
                 android:layout_height="52dp"
@@ -159,6 +161,7 @@
 
             <Button
                 android:id="@+id/garageNavButton"
+                android:contentDescription="Garage and points shop"
                 style="@style/RoadConquest.NavigationAction"
                 android:layout_width="0dp"
                 android:layout_height="52dp"
@@ -168,6 +171,7 @@
 
             <Button
                 android:id="@+id/friendsNavButton"
+                android:contentDescription="Weekly challenges and friends"
                 style="@style/RoadConquest.NavigationAction"
                 android:layout_width="0dp"
                 android:layout_height="52dp"
