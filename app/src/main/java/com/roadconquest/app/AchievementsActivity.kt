@@ -15,6 +15,7 @@ import androidx.core.view.WindowInsetsCompat
 import com.roadconquest.app.achievements.AchievementCategory
 import com.roadconquest.app.achievements.AchievementProgress
 import com.roadconquest.app.achievements.Achievements
+import com.roadconquest.app.billing.VipEntitlement
 import com.roadconquest.app.data.TrackingRepository
 import com.roadconquest.app.progression.ProgressionManager
 import com.roadconquest.app.util.Appearance
@@ -92,7 +93,9 @@ class AchievementsActivity : Activity() {
                     onSuccess = { (progression, achievements) ->
                         points.text = String.format(Locale.getDefault(), "⚔ %,d points", progression.balance)
                         text.visibility = android.view.View.GONE
-                        this.achievements = achievements
+                        this.achievements = Achievements.visibleAchievements(
+                            achievements, VipEntitlement.isActive(this@AchievementsActivity)
+                        )
                         renderCategory(list)
                     },
                     onFailure = {
@@ -117,6 +120,13 @@ class AchievementsActivity : Activity() {
     private fun updateCategoryButtons() {
         categoryButtons.forEach { (category, button) ->
             button.isEnabled = category != selectedCategory
+            // VIP has no rewarded-ad offers: preserve earned ad milestones,
+            // but do not show an empty page of impossible locked challenges.
+            button.visibility = if (category == AchievementCategory.ADS &&
+                VipEntitlement.isActive(this) && achievements.none {
+                    it.category == AchievementCategory.ADS
+                }
+            ) android.view.View.GONE else android.view.View.VISIBLE
         }
     }
 
