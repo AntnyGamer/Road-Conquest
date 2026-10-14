@@ -74,12 +74,14 @@ class VipBilling(
         .enableAutoServiceReconnection()
         .build()
 
-    fun refresh() {
+    fun refresh(includeOffer: Boolean = true) {
         ownershipChecked = false
         notifyStatus()
         connect {
             queryOwnership()
-            queryOffer()
+            // Ad-supported screens only need ownership; fetching localized
+            // purchase offers on every navigation has no purpose there.
+            if (includeOffer) queryOffer()
         }
     }
 
