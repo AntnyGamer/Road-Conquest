@@ -1,12 +1,19 @@
 <resources>
-    <color name="road_blue">#2563EB</color>
-    <color name="panel_bg">#F2FFFFFF</color>
-    <color name="screen_bg">#F4F7FB</color>
-    <color name="text_primary">#111827</color>
-    <color name="text_secondary">#4B5563</color>
-    <color name="gold_screen_bg">#FFF9E8</color>
-    <color name="gold_panel_bg">#F7FFF2CC</color>
-    <color name="gold_text_primary">#3A2A00</color>
-    <color name="gold_text_secondary">#705A18</color>
-    <color name="gold_accent">#C99100</color>
+    <color name="road_blue">#235DDE</color>
+    <color name="panel_bg">#F9FFFFFF</color>
+    <color name="screen_bg">#F5F7FC</color>
+    <color name="text_primary">#142039</color>
+    <color name="text_secondary">#52617A</color>
+    <color name="outline">#DDE4F0</color>
+    <color name="muted_surface">#EEF3FC</color>
+    <color name="gold_screen_bg">#FFF9EA</color>
+    <color name="gold_panel_bg">#FFFFF5DE</color>
+    <color name="gold_text_primary">#332500</color>
+    <color name="gold_text_secondary">#75602C</color>
+    <color name="gold_accent">#986C00</color>
+    <color name="gold_outline">#EADAB1</color>
+    <color name="gold_muted_surface">#FFF0CA</color>
+    <color name="text_on_accent">#FFFFFF</color>
+    <color name="gold_on_accent">#FFFFFF</color>
+    <color name="danger">#B93A46</color>
 </resources>

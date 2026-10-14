@@ -5,8 +5,11 @@ import android.content.Context
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.text.format.DateUtils
+import android.view.MotionEvent
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.SeekBar
@@ -17,6 +20,7 @@ import androidx.core.view.WindowInsetsCompat
 import com.roadconquest.app.data.SavedTrip
 import com.roadconquest.app.data.SavedTripPoint
 import com.roadconquest.app.data.TripHistoryRepository
+import com.roadconquest.app.data.TripReplayRoute
 import com.roadconquest.app.util.Appearance
 import com.roadconquest.app.util.ForegroundSession
 import com.roadconquest.app.util.Prefs
@@ -53,9 +57,13 @@ class TripHistoryActivity : Activity() {
     private var seek: SeekBar? = null
     private var playButton: Button? = null
     private var routeStatus: TextView? = null
+    private var replayProgress: TextView? = null
+    private var selectedTripButton: Button? = null
     private var points: List<SavedTripPoint> = emptyList()
+    private var routeCoordinates: List<Point> = emptyList()
     private var playing = false
-    private var generation = 0
+    @Volatile private var generation = 0
+    private var lastRenderedIndex = -1
     private val tick = object : Runnable {
         override fun run() {
             if (!playing || isDestroyed) return
@@ -79,29 +87,73 @@ class TripHistoryActivity : Activity() {
         setTheme(Appearance.themeRes(this))
         super.onCreate(savedInstanceState)
         WindowCompat.enableEdgeToEdge(window)
+        // System bars sit on this screen's themed background, not the dark map fog.
+        val lightSystemBars = !Appearance.isDark(this)
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = lightSystemBars
+            isAppearanceLightNavigationBars = lightSystemBars
+        }
         MapLibre.getInstance(this)
+        // On short screens, a fixed map plus player could leave the trip list
+        // with zero space. Allow the whole screen to scroll in that case.
+        val compact = resources.displayMetrics.heightPixels / resources.displayMetrics.density < 600f ||
+            resources.configuration.fontScale > 1.25f
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), dp(16), dp(12), dp(8))
+            setPadding(dp(18), dp(20), dp(18), dp(12))
         }
-        setContentView(root)
+        if (compact) {
+            setContentView(ScrollView(this).apply {
+                isFillViewport = true
+                addView(root, FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            })
+        } else {
+            setContentView(root)
+        }
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val safe = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
-            view.setPadding(dp(12) + safe.left, dp(16) + safe.top, dp(12) + safe.right, dp(8) + safe.bottom)
+            view.setPadding(dp(18) + safe.left, dp(20) + safe.top, dp(18) + safe.right, dp(12) + safe.bottom)
             insets
         }
         root.addView(TextView(this).apply {
+            text = "YOUR JOURNEYS"
+            textSize = 12f
+            letterSpacing = 0.14f
+            setTextColor(Appearance.color(this@TripHistoryActivity, R.attr.rcAccent))
+        })
+        root.addView(TextView(this).apply {
             text = "Trip history"
-            textSize = 24f
+            isAccessibilityHeading = true
+            textSize = 28f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setTextColor(Appearance.color(this@TripHistoryActivity, R.attr.rcTextPrimary))
+            setPadding(0, dp(8), 0, dp(8))
         })
         val status = TextView(this).also {
             routeStatus = it
-            it.text = "Select a saved drive below to replay its route."
+            it.text = "Choose a drive to watch your route unfold."
+            it.accessibilityLiveRegion = android.view.View.ACCESSIBILITY_LIVE_REGION_POLITE
+            it.textSize = 14f
+            it.setTextColor(Appearance.color(this@TripHistoryActivity, R.attr.rcTextSecondary))
+            it.setPadding(0, 0, 0, dp(12))
             root.addView(it)
         }
+        // Leave room for the trip list on short phones and landscape displays.
+        val screenHeightDp = resources.displayMetrics.heightPixels / resources.displayMetrics.density
+        val mapHeightDp = (screenHeightDp * 0.27f).toInt().coerceIn(120, 250)
         mapView = MapView(this).also { view ->
+            if (compact) {
+                // Map gestures take priority over the surrounding scroll view.
+                view.setOnTouchListener { target, event ->
+                    target.parent?.requestDisallowInterceptTouchEvent(
+                        event.actionMasked != MotionEvent.ACTION_UP &&
+                            event.actionMasked != MotionEvent.ACTION_CANCEL)
+                    false
+                }
+            }
             root.addView(view, LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(230)))
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(mapHeightDp)).apply { bottomMargin = dp(10) })
             view.onCreate(savedInstanceState)
             view.getMapAsync { ready ->
                 if (isDestroyed) return@getMapAsync
@@ -117,6 +169,7 @@ class TripHistoryActivity : Activity() {
                         style.addLayer(CircleLayer(ROUTE_MARKER, MARKER)
                             .withProperties(circleColor("#E33B3B"), circleRadius(8f)))
                         mapReady = true
+                        lastRenderedIndex = -1
                         renderReplay()
                     }
                 }
@@ -132,6 +185,14 @@ class TripHistoryActivity : Activity() {
                 override fun onStartTrackingTouch(bar: SeekBar) { pauseReplay() }
                 override fun onStopTrackingTouch(bar: SeekBar) {}
             })
+            contentDescription = "Replay position"
+            root.addView(this)
+        }
+        replayProgress = TextView(this).apply {
+            text = "Choose a drive to replay"
+            textSize = 13f
+            setTextColor(Appearance.color(this@TripHistoryActivity, R.attr.rcTextSecondary))
+            setPadding(0, 0, 0, dp(8))
             root.addView(this)
         }
         playButton = Button(this).apply {
@@ -145,15 +206,24 @@ class TripHistoryActivity : Activity() {
                     handler.post(tick)
                 }
             }
-            root.addView(this)
+            minHeight = dp(52)
+            root.addView(this, LinearLayout.LayoutParams(-1, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                bottomMargin = dp(10)
+            })
         }
-        root.addView(ScrollView(this).apply {
-            val column = LinearLayout(this@TripHistoryActivity).apply {
-                orientation = LinearLayout.VERTICAL
-            }
-            addView(column)
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        if (compact) {
+            root.addView(column, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        } else {
+            root.addView(ScrollView(this).apply {
+                addView(column)
+            }, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        }
+        run {
             val formatter = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT)
             worker.execute {
                 val result = runCatching { TripHistoryRepository(applicationContext).recentTrips() }
@@ -167,31 +237,61 @@ class TripHistoryActivity : Activity() {
                         }
                         trips.forEach { trip ->
                             val miles = trip.distanceMeters / 1609.344
-                            column.addView(Button(this@TripHistoryActivity).apply {
-                                isAllCaps = false
+                            column.addView(Button(this@TripHistoryActivity, null, 0,
+                                R.style.RoadConquest_SettingsAction).apply {
                                 text = String.format(Locale.getDefault(), "%s  •  %.1f mi  •  %d fixes",
                                     formatter.format(Date(trip.startedAt)), miles, trip.pointCount)
-                                setOnClickListener { loadTrip(trip) }
-                            })
+                                setOnClickListener {
+                                    selectedTripButton?.apply {
+                                        isSelected = false
+                                        contentDescription = null
+                                        setBackgroundResource(R.drawable.settings_action_background)
+                                        setTextColor(Appearance.color(this@TripHistoryActivity, R.attr.rcTextPrimary))
+                                    }
+                                    selectedTripButton = this
+                                    isSelected = true
+                                    contentDescription = "$text, selected trip"
+                                    setBackgroundResource(R.drawable.selected_filter_background)
+                                    setTextColor(Appearance.color(this@TripHistoryActivity, R.attr.rcOnAccent))
+                                    loadTrip(trip)
+                                }
+                            }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
                         }
                     }, {
                         status.text = "Trip history is temporarily unavailable."
                     })
                 }
             }
-        })
+        }
     }
 
     private fun loadTrip(trip: SavedTrip) {
         pauseReplay()
         val expected = ++generation
-        routeStatus?.text = "Loading drive..."
+        // Clear the previous drive immediately; never show its track or marker
+        // while the next drive is loading or if loading fails.
+        points = emptyList()
+        routeCoordinates = emptyList()
+        lastRenderedIndex = -1
+        seek?.isEnabled = false
+        playButton?.isEnabled = false
+        seek?.progress = 0
+        renderReplay()
+        routeStatus?.text = "Loading drive…"
+        replayProgress?.text = "Loading drive…"
         worker.execute {
+            // Drop queued requests superseded by a newer selection before
+            // touching the database, not merely after completing the work.
+            if (expected != generation) return@execute
             val result = runCatching { TripHistoryRepository(applicationContext).replay(trip) }
             runOnUiThread {
                 if (isDestroyed || expected != generation) return@runOnUiThread
                 result.fold({ loaded ->
                     points = loaded
+                    // Cache MapLibre geometries once instead of reconstructing
+                    // every previously travelled point on every animation tick.
+                    routeCoordinates = loaded.map { Point.fromLngLat(it.longitude, it.latitude) }
+                    lastRenderedIndex = -1
                     seek?.isEnabled = loaded.size >= 2
                     playButton?.isEnabled = loaded.size >= 2
                     seek?.progress = 0
@@ -202,33 +302,38 @@ class TripHistoryActivity : Activity() {
                             (trip.endedAt - trip.startedAt).coerceAtLeast(0L) / 60_000,
                             trip.pointCount)
                     renderReplay()
-                }, { routeStatus?.text = "Could not load the selected drive." })
+                    if (loaded.size < 2) replayProgress?.text = "Drive unavailable"
+                    else if (!mapReady) replayProgress?.text = "Preparing replay map…"
+                }, {
+                    routeStatus?.text = "Could not load the selected drive."
+                    replayProgress?.text = "Replay unavailable"
+                })
             }
         }
     }
 
     private fun renderReplay() {
-        if (!mapReady || points.size < 2) return
-        val style = map?.style ?: return
-        val paths = ArrayList<List<Point>>()
-        var path = ArrayList<Point>()
-        points.forEachIndexed { index, point ->
-            if (index > 0 && point.breakBefore) {
-                if (path.size >= 2) paths += path
-                path = ArrayList()
-            }
-            path += Point.fromLngLat(point.longitude, point.latitude)
+        if (!mapReady) return
+        if (points.size < 2) {
+            lastRenderedIndex = -1
+            if (points.isEmpty()) replayProgress?.text = "Choose a drive to replay"
+            map?.style?.getSourceAs<GeoJsonSource>(ROUTE)?.setGeoJson(
+                FeatureCollection.fromFeatures(emptyList())
+            )
+            map?.style?.getSourceAs<GeoJsonSource>(MARKER)?.setGeoJson(
+                FeatureCollection.fromFeatures(emptyList())
+            )
+            return
         }
-        if (path.size >= 2) paths += path
-        style.getSourceAs<GeoJsonSource>(ROUTE)?.setGeoJson(
-            Feature.fromGeometry(MultiLineString.fromLngLats(paths))
-        )
+        // No route is exposed on selection: the replay draws only the traversed prefix.
         showPosition(seek?.progress ?: 0)
         val bounds = LatLngBounds.Builder()
         points.forEach { bounds.include(LatLng(it.latitude, it.longitude)) }
+        val expectedGeneration = generation
+        val tripBounds = bounds.build()
         mapView?.post {
-            if (!isDestroyed && mapReady) {
-                map?.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds.build(), dp(26)))
+            if (!isDestroyed && mapReady && generation == expectedGeneration) {
+                map?.moveCamera(CameraUpdateFactory.newLatLngBounds(tripBounds, dp(26)))
             }
         }
     }
@@ -237,10 +342,28 @@ class TripHistoryActivity : Activity() {
         if (!mapReady || points.isEmpty()) return
         val index = ((points.size - 1) * position / 1000.0).toInt()
             .coerceIn(0, points.lastIndex)
+        // A slider tick may refer to the same sampled GPS fix. Skip needless
+        // MapLibre source updates; the visible route has not changed.
+        if (index == lastRenderedIndex) return
         val point = points[index]
-        map?.style?.getSourceAs<GeoJsonSource>(MARKER)?.setGeoJson(
-            Feature.fromGeometry(Point.fromLngLat(point.longitude, point.latitude))
+        val style = map?.style ?: return
+        lastRenderedIndex = index
+        style.getSourceAs<GeoJsonSource>(MARKER)?.setGeoJson(
+            Feature.fromGeometry(routeCoordinates[index])
         )
+        val firstTimestamp = points.first().timestamp
+        val totalSeconds = ((points.last().timestamp - firstTimestamp).coerceAtLeast(0L)) / 1000L
+        val elapsedSeconds = ((point.timestamp - firstTimestamp).coerceIn(0L, totalSeconds * 1000L)) / 1000L
+        replayProgress?.text = "${DateUtils.formatElapsedTime(elapsedSeconds)} / ${DateUtils.formatElapsedTime(totalSeconds)}"
+        val visible = TripReplayRoute.visibleRanges(points, index).map { range ->
+            routeCoordinates.subList(range.first, range.last + 1)
+        }
+        val source = style.getSourceAs<GeoJsonSource>(ROUTE) ?: return
+        if (visible.isEmpty()) {
+            source.setGeoJson(FeatureCollection.fromFeatures(emptyList()))
+        } else {
+            source.setGeoJson(Feature.fromGeometry(MultiLineString.fromLngLats(visible)))
+        }
     }
 
     private fun pauseReplay() {

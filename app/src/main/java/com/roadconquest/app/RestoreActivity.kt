@@ -15,6 +15,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import com.roadconquest.app.export.DataImporter
 import com.roadconquest.app.util.Appearance
+import android.graphics.Typeface
 import com.roadconquest.app.util.ForegroundSession
 import java.util.Locale
 import java.util.concurrent.Executors
@@ -33,10 +34,14 @@ class RestoreActivity : Activity() {
         setTheme(Appearance.themeRes(this))
         super.onCreate(savedInstanceState)
         WindowCompat.enableEdgeToEdge(window)
+        // System bars sit on this screen's themed background, not the dark map fog.
+        val lightSystemBars = !Appearance.isDark(this)
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = lightSystemBars
+            isAppearanceLightNavigationBars = lightSystemBars
+        }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            val padding = (20 * resources.displayMetrics.density).toInt()
-            setPadding(padding, padding, padding, padding)
         }
         setContentView(ScrollView(this).apply { addView(root) })
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
@@ -45,10 +50,28 @@ class RestoreActivity : Activity() {
             view.setPadding(p + safe.left, p + safe.top, p + safe.right, p + safe.bottom)
             insets
         }
-        root.addView(TextView(this).apply { text = "Restore your progress"; textSize = 24f })
+        val dp = resources.displayMetrics.density
+        root.addView(TextView(this).apply {
+            text = "YOUR DATA"
+            textSize = 12f
+            letterSpacing = 0.14f
+            setTextColor(Appearance.color(this@RestoreActivity, R.attr.rcAccent))
+        })
+        root.addView(TextView(this).apply {
+            text = "Restore your progress"
+            isAccessibilityHeading = true
+            textSize = 28f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(Appearance.color(this@RestoreActivity, R.attr.rcTextPrimary))
+            setPadding(0, (8 * dp).toInt(), 0, (12 * dp).toInt())
+        })
         root.addView(TextView(this).apply {
             text = "Choose a Road Conquest export ZIP. Roads, mileage, fog, visit counts, discoveries, points and garage purchases are restored together.\n\nThe backup is checked before you confirm replacement. Your current progress is saved on this phone for recovery. Tracking and verified sharing stay off afterward.\n\nSign in to your account and restore VIP through Google Play separately. Imported history does not earn verified leaderboard credit."
             textSize = 15f
+            setTextColor(Appearance.color(this@RestoreActivity, R.attr.rcTextSecondary))
+            setBackgroundResource(R.drawable.settings_card_background)
+            val inset = (16 * dp).toInt()
+            setPadding(inset, inset, inset, inset)
         })
         choose = Button(this).apply {
             text = "Choose backup (.zip)"
@@ -63,13 +86,18 @@ class RestoreActivity : Activity() {
             }
             root.addView(this)
         }
-        recovery = Button(this).apply {
+        recovery = Button(this, null, 0, R.style.RoadConquest_SettingsAction).apply {
             text = "Restore progress from before last import"
             isEnabled = DataImporter.previousBackup(this@RestoreActivity).isFile
             setOnClickListener { validate { DataImporter.previousBackup(applicationContext).inputStream() } }
             root.addView(this)
         }
-        status = TextView(this).apply { textSize = 15f; root.addView(this) }
+        status = TextView(this).apply {
+            textSize = 15f
+            setTextColor(Appearance.color(this@RestoreActivity, R.attr.rcTextPrimary))
+            setPadding(0, (12 * dp).toInt(), 0, (8 * dp).toInt())
+            root.addView(this)
+        }
     }
 
     @Deprecated("Storage Access Framework on minSdk 31")

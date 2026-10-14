@@ -5,7 +5,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <!-- Fog, traveled roads and the live marker stay on MapLibre's native render surface. -->
+    <!-- Keep the live map and fog on MapLibre's render surface. -->
     <org.maplibre.android.maps.MapView
         android:id="@+id/mapView"
         android:layout_width="match_parent"
@@ -22,11 +22,12 @@
         android:layout_margin="16dp"
         android:maxWidth="210dp"
         android:background="@drawable/panel_background"
-        android:elevation="8dp"
+        android:elevation="6dp"
         android:text="@string/stats_initial"
         android:textColor="?attr/rcTextPrimary"
-        android:textSize="13sp"
-        android:lineSpacingExtra="3dp" />
+        android:textSize="14sp"
+        android:fontFamily="sans-serif-medium"
+        android:lineSpacingExtra="5dp" />
 
     <TextView
         android:id="@+id/pointsText"
@@ -34,15 +35,19 @@
         android:layout_height="wrap_content"
         android:layout_gravity="top|start"
         android:layout_marginStart="16dp"
-        android:layout_marginTop="88dp"
-        android:background="@drawable/panel_background"
+        android:layout_marginTop="102dp"
+        android:background="@drawable/points_chip_background"
         android:clickable="true"
-        android:elevation="8dp"
+        android:elevation="6dp"
         android:focusable="true"
+        android:minHeight="48dp"
+        android:gravity="center_vertical"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
         android:text="⚔ 0 points"
         android:textColor="?attr/rcTextPrimary"
         android:textSize="14sp"
-        android:textStyle="bold" />
+        android:fontFamily="sans-serif-medium" />
 
     <ImageButton
         android:id="@+id/settingsButton"
@@ -52,9 +57,10 @@
         android:layout_margin="16dp"
         android:background="@drawable/circle_button_background"
         android:contentDescription="@string/settings"
-        android:elevation="8dp"
-        android:padding="12dp"
-        android:src="@drawable/ic_settings" />
+        android:elevation="6dp"
+        android:padding="13dp"
+        android:src="@drawable/ic_settings"
+        android:tint="?attr/rcTextPrimary" />
 
     <ImageButton
         android:id="@+id/centerCarButton"
@@ -65,9 +71,10 @@
         android:layout_marginTop="80dp"
         android:background="@drawable/circle_button_background"
         android:contentDescription="@string/center_on_car"
-        android:elevation="8dp"
-        android:padding="12dp"
-        android:src="@drawable/ic_my_location" />
+        android:elevation="6dp"
+        android:padding="13dp"
+        android:src="@drawable/ic_my_location"
+        android:tint="?attr/rcTextPrimary" />
 
     <ImageButton
         android:id="@+id/overlayButton"
@@ -77,10 +84,11 @@
         android:layout_marginEnd="16dp"
         android:layout_marginTop="144dp"
         android:background="@drawable/circle_button_background"
-        android:contentDescription="Map overlays"
-        android:elevation="8dp"
-        android:padding="12dp"
-        android:src="@drawable/ic_layers" />
+        android:contentDescription="Map layers and overlays"
+        android:elevation="6dp"
+        android:padding="13dp"
+        android:src="@drawable/ic_layers"
+        android:tint="?attr/rcTextPrimary" />
 
     <LinearLayout
         android:id="@+id/controlPanel"
@@ -88,24 +96,93 @@
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
         android:layout_margin="16dp"
-        android:background="@drawable/panel_background"
-        android:elevation="8dp"
-        android:orientation="vertical">
+        android:background="@drawable/home_panel_background"
+        android:elevation="10dp"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="YOUR DRIVE"
+            android:letterSpacing="0.12"
+            android:textColor="?attr/rcTextSecondary"
+            android:textSize="11sp"
+            android:fontFamily="sans-serif-medium" />
 
         <TextView
             android:id="@+id/statusText"
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
             android:text="Not tracking"
             android:textColor="?attr/rcTextPrimary"
-            android:textSize="16sp"
-            android:textStyle="bold" />
+            android:textSize="18sp"
+            android:fontFamily="sans-serif-medium"
+            android:accessibilityLiveRegion="polite" />
 
         <Button
             android:id="@+id/enableButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:text="Enable" />
+            android:minHeight="56dp"
+            android:layout_marginTop="12dp"
+            android:text="Enable tracking" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="14dp"
+            android:background="?attr/rcOutline" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/tripsNavButton"
+                android:contentDescription="Trip history and replay"
+                style="@style/RoadConquest.NavigationAction"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:minHeight="52dp"
+                android:layout_weight="1"
+                android:text="Trips" />
+
+            <Button
+                android:id="@+id/goalsNavButton"
+                android:contentDescription="Achievements and milestones"
+                style="@style/RoadConquest.NavigationAction"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:minHeight="52dp"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:text="Badges" />
+
+            <Button
+                android:id="@+id/garageNavButton"
+                android:contentDescription="Garage and points shop"
+                style="@style/RoadConquest.NavigationAction"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:minHeight="52dp"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:text="Garage" />
+
+            <Button
+                android:id="@+id/friendsNavButton"
+                android:contentDescription="Weekly challenges and friends"
+                style="@style/RoadConquest.NavigationAction"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:minHeight="52dp"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:text="Goals" />
+        </LinearLayout>
     </LinearLayout>
 </FrameLayout>

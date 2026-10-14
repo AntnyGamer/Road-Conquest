@@ -9,18 +9,30 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="20dp">
+        android:padding="22dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="YOUR PROFILE"
+            android:letterSpacing="0.14"
+            android:textSize="12sp"
+            android:fontFamily="sans-serif-medium"
+            android:textColor="?attr/rcAccent" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
             android:text="Account"
+            android:accessibilityHeading="true"
             android:textColor="?attr/rcTextPrimary"
             android:textSize="28sp"
             android:textStyle="bold" />
 
         <TextView
             android:id="@+id/accountStatusText"
+            android:accessibilityLiveRegion="polite"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
@@ -32,17 +44,24 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="18dp"
+            android:background="@drawable/settings_card_background"
+            android:padding="18dp"
             android:orientation="vertical">
 
             <EditText
                 android:id="@+id/accountUsername"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                android:layout_height="54dp"
                 android:autofillHints="username"
                 android:hint="Username"
                 android:inputType="text"
                 android:maxLength="24"
-                android:singleLine="true" />
+                android:singleLine="true"
+                android:background="@drawable/input_background"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:textColor="?attr/rcTextPrimary"
+                android:textColorHint="?attr/rcTextSecondary" />
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -53,14 +72,19 @@
                 <EditText
                     android:id="@+id/accountPassword"
                     android:layout_width="0dp"
-                    android:layout_height="wrap_content"
+                    android:layout_height="54dp"
                     android:layout_weight="1"
                     android:autofillHints="password"
                     android:hint="Password"
                     android:inputType="textPassword"
                     android:maxLength="128"
                     android:saveEnabled="false"
-                    android:singleLine="true" />
+                    android:singleLine="true"
+                android:background="@drawable/input_background"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:textColor="?attr/rcTextPrimary"
+                android:textColorHint="?attr/rcTextSecondary" />
 
                 <ImageButton
                     android:id="@+id/accountPasswordVisibility"
@@ -81,14 +105,19 @@
                 <EditText
                     android:id="@+id/accountConfirmPassword"
                     android:layout_width="0dp"
-                    android:layout_height="wrap_content"
+                    android:layout_height="54dp"
                     android:layout_weight="1"
                     android:autofillHints="newPassword"
-                    android:hint="Confirm password (sign up only)"
+                    android:hint="Confirm password"
                     android:inputType="textPassword"
                     android:maxLength="128"
                     android:saveEnabled="false"
-                    android:singleLine="true" />
+                    android:singleLine="true"
+                android:background="@drawable/input_background"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:textColor="?attr/rcTextPrimary"
+                android:textColorHint="?attr/rcTextSecondary" />
 
                 <ImageButton
                     android:id="@+id/accountConfirmPasswordVisibility"
@@ -99,6 +128,14 @@
                     android:padding="12dp"
                     android:src="@drawable/ic_visibility" />
             </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="Confirm your password when creating an account; it is not needed to sign in."
+                android:textColor="?attr/rcTextSecondary"
+                android:textSize="12sp" />
 
             <TextView
                 android:layout_width="match_parent"
@@ -117,6 +154,7 @@
 
             <Button
                 android:id="@+id/accountLoginButton"
+                style="@style/RoadConquest.SettingsAction"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="Sign in" />
@@ -127,6 +165,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="18dp"
+            android:background="@drawable/settings_card_background"
+            android:padding="18dp"
             android:orientation="vertical"
             android:visibility="gone">
 
@@ -168,6 +208,7 @@
 
             <Button
                 android:id="@+id/accountChangeUsernameButton"
+                style="@style/RoadConquest.SettingsAction"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="18dp"
@@ -175,6 +216,7 @@
 
             <Button
                 android:id="@+id/accountLogoutButton"
+                style="@style/RoadConquest.SettingsAction"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="18dp"
@@ -182,6 +224,7 @@
 
             <Button
                 android:id="@+id/accountDeleteButton"
+                style="@style/RoadConquest.DangerAction"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="Delete account" />

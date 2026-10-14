@@ -93,7 +93,14 @@ class TripHistoryRepository(context: Context) {
                     position++
                 }
             }
-            last?.let { if (selected.lastOrNull() != it) selected += it }
+            // The terminal fix is always kept even if it falls between strides.
+            // Carry any gap found in skipped fixes into its break flag so replay
+            // never draws a straight line across an unrecorded stretch.
+            last?.let {
+                if (selected.lastOrNull() != it) {
+                    selected += it.copy(breakBefore = it.breakBefore || gapSinceSample)
+                }
+            }
             selected
         }
 

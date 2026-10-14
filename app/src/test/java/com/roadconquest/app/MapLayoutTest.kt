@@ -83,4 +83,51 @@ class MapLayoutTest {
         assertEquals(23, (points.layoutParams as FrameLayout.LayoutParams).marginStart)
         assertEquals(34, (panel.layoutParams as FrameLayout.LayoutParams).bottomMargin)
     }
+
+    @Test fun expandingStatsKeepsPointsChipBelowIt() {
+        val activity = Robolectric.buildActivity(MainActivity::class.java).get()
+        activity.setTheme(R.style.Theme_RoadConquest)
+        val root = FrameLayout(activity).apply { id = R.id.root }
+        val stats = TextView(activity).apply { maxWidth = 210; text = "Huge mileage and road totals" }
+        val points = TextView(activity).apply { text = "⚔ 500 points" }
+        val settings = ImageButton(activity)
+        val center = ImageButton(activity)
+        val overlay = ImageButton(activity)
+        val panel = View(activity)
+        fun add(view: View, width: Int, height: Int, gravity: Int, top: Int = 0) {
+            root.addView(view, FrameLayout.LayoutParams(width, height, gravity).apply {
+                topMargin = top
+                marginStart = 16
+                marginEnd = 16
+                bottomMargin = 16
+            })
+        }
+        add(stats, 210, 200, Gravity.TOP or Gravity.START, 16)
+        add(points, 150, 48, Gravity.TOP or Gravity.START, 102)
+        add(settings, 52, 52, Gravity.TOP or Gravity.END, 16)
+        add(center, 52, 52, Gravity.TOP or Gravity.END, 80)
+        add(overlay, 52, 52, Gravity.TOP or Gravity.END, 144)
+        add(panel, 340, 160, Gravity.BOTTOM)
+        activity.setContentView(root)
+        MainActivity::class.java.getDeclaredMethod(
+            "applySafeAreaInsets",
+            ImageButton::class.java,
+            ImageButton::class.java,
+            ImageButton::class.java,
+            View::class.java,
+            View::class.java,
+            View::class.java
+        ).apply { isAccessible = true }
+            .invoke(activity, settings, center, overlay, panel, stats, points)
+        val insets = WindowInsetsCompat.Builder()
+            .setInsets(WindowInsetsCompat.Type.systemBars(), Insets.of(0, 30, 0, 24)).build()
+        ViewCompat.dispatchApplyWindowInsets(root, insets)
+        repeat(4) {
+            root.measure(View.MeasureSpec.makeMeasureSpec(420, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.EXACTLY))
+            root.layout(0, 0, 420, 800)
+        }
+        assertTrue("Points chip must not overlap a taller statistics panel",
+            points.top >= stats.bottom + (8 * activity.resources.displayMetrics.density).toInt())
+    }
 }
