@@ -299,6 +299,14 @@
                 android:layout_marginTop="8dp"
                 android:text="Garage and points shop" />
 
+            <Button
+                android:id="@+id/tripHistoryButton"
+                style="@style/RoadConquest.SettingsAction"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Trip history and replay" />
+
             <TextView
                 android:id="@+id/dataSummaryText"
                 android:layout_width="match_parent"
