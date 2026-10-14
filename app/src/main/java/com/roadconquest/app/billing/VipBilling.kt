@@ -44,8 +44,11 @@ class VipBilling(
                         .filter { VipEntitlement.PRODUCT_ID in it.products &&
                             it.purchaseState == Purchase.PurchaseState.PURCHASED }
                         .forEach {
-                            VipEntitlement.updateFromPlay(appContext, true)
+                            // A granted Gold UI can immediately recreate ShopActivity,
+                            // which closes this activity's BillingClient. Start Play
+                            // acknowledgement before notifying entitlement listeners.
                             acknowledge(it)
+                            VipEntitlement.updateFromPlay(appContext, true)
                         }
                     if (purchases.orEmpty().any {
                         VipEntitlement.PRODUCT_ID in it.products &&
@@ -187,9 +190,11 @@ class VipBilling(
                 // A purchase callback or another screen may have confirmed a
                 // newer state while this async query was in flight. In that
                 // case don't let this potentially stale result revoke/grant VIP.
-                VipEntitlement.updateIfCurrent(appContext, owned, revisionAtRequest)
+                // Start pending acknowledgements before a new entitlement causes
+                // the current screen to recreate and close its Billing connection.
                 vipPurchases.filter { it.purchaseState == Purchase.PurchaseState.PURCHASED }
                     .forEach(::acknowledge)
+                VipEntitlement.updateIfCurrent(appContext, owned, revisionAtRequest)
                 message = if (vipPurchases.any { it.purchaseState == Purchase.PurchaseState.PENDING } &&
                     !owned) "VIP payment pending. Benefits unlock after payment completes." else null
             } else {
