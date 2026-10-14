@@ -202,6 +202,10 @@ object DataImporter {
                 try {
                     // Child rows first for deletion, parents first for insertion.
                     (listOf("road_visits") + tables.filter { it != "road_visits" }).forEach { live.delete(it, null, null) }
+                    // This is a complete history replacement. Rebuild the GPS ID
+                    // sequence from the imported rows so an old exhausted counter
+                    // cannot prevent the user from recording their next drive.
+                    live.delete("sqlite_sequence", "name = ?", arrayOf("track_points"))
                     for (table in tables) source.query(table, null, null, null, null, null, null).use { cursor ->
                         while (cursor.moveToNext()) {
                             check(!Thread.currentThread().isInterrupted) { "Restore cancelled" }
@@ -251,7 +255,8 @@ object DataImporter {
         when (table) {
             "track_points" -> {
                 coordinates()
-                require(v.getAsLong("id") > 0 && v.getAsDouble("accuracy_m") in 0.0..100_000.0 &&
+                // Leave ample AUTOINCREMENT headroom for future driving fixes.
+                require(v.getAsLong("id") in 1..1_000_000_000_000_000L && v.getAsDouble("accuracy_m") in 0.0..100_000.0 &&
                     v.getAsDouble("speed_mps") in 0.0..1000.0 && v.getAsDouble("bearing_deg") in 0.0..360.0 &&
                     v.getAsDouble("distance_m") in 0.0..10_000_000.0) { "Invalid driving fix" }
             }

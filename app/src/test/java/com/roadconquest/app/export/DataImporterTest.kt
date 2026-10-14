@@ -88,6 +88,7 @@ class DataImporterTest {
             source - "roads.csv",
             source + ("../escape.csv" to "bad"),
             source + ("track_points.csv" to source.getValue("track_points.csv").replace("40.0", "NaN")),
+            source + ("track_points.csv" to source.getValue("track_points.csv").replaceFirst(Regex("(?m)^[0-9]+,"), "9223372036854775807,")),
             source + ("metadata.json" to JSONObject(source.getValue("metadata.json")).put("track_point_count", 900).toString()),
             source + ("metadata.json" to JSONObject(source.getValue("metadata.json")).put("schema_version", 100).toString()),
             source + ("road_visits.csv" to "segment_id,started_at_utc,ended_at_utc\nmissing,1970-01-01T00:00:01Z,1970-01-01T00:00:02Z\n"),
@@ -110,6 +111,18 @@ class DataImporterTest {
             assertTrue(runCatching { DataImporter.restore(context, backup) }.isFailure)
         }
         assertEquals(0L, TrackingRepository(context).getSummary().trackPointCount)
+    }
+
+    @Test fun restoringRebuildsAnExhaustedGpsIdCounterAndAllowsFutureDriving() {
+        val originalId = TrackingRepository(context).insertLocation(fix(1_000_000))
+        val bytes = export()
+        AppDatabase.get(context).writableDatabase.execSQL(
+            "UPDATE sqlite_sequence SET seq = ? WHERE name = 'track_points'", arrayOf(Long.MAX_VALUE)
+        )
+        DataImporter.prepare(context, ByteArrayInputStream(bytes)).use { DataImporter.restore(context, it) }
+        val fresh = TrackingRepository(context)
+        assertEquals(originalId + 1, fresh.insertLocation(fix(1_005_000, -74.0001)))
+        assertEquals(2L, fresh.getSummary().trackPointCount)
     }
 
     @Test fun acceptsLegacySchemaNineAndDecodesEscapedNegativeCandidateCoordinates() {
