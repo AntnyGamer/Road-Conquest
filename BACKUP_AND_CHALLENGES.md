@@ -42,3 +42,6 @@ retained for a later enabled build.
 
 Trip replay respects raw GPS gaps even when the displayed route is downsampled. A trip
 selected before data deletion/restore cannot replay unrelated replacement history.
+
+Account competitive scores require the hardened server verification policy. See
+[leaderboard security and activation requirements](LEADERBOARD_SECURITY.md).

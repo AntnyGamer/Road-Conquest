@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { competitionConfig } from "../src/competition.mjs";
-import { boundedJson, edgeKey, evidenceHash, parseEvidence, scoreMatch, verifyIntegrityVerdict } from "../src/scoring.mjs";
+import { boundedJson, edgeKey, evidenceHash, matchEvidence, parseEvidence, scoreMatch, verifyIntegrityVerdict } from "../src/scoring.mjs";
 
 const now = Date.now();
 const fixes = [
@@ -17,9 +17,9 @@ export function matching(points = fixes) {
 const evidence = () => ({ run: randomUUID(), nonce: "A".repeat(43), sequence: 0, fixes: structuredClone(fixes) });
 const catalog = new Map([[edgeKey(10, 11), "100"], [edgeKey(11, 12), "101"]]);
 const version = "2026-10-01T00:00:00Z";
-const config = { packageName: "com.roadconquest.app", certificates: ["A".repeat(43)], versions: ["6"] };
+const config = { packageName: "com.roadconquest.app", certificates: ["A".repeat(43)], versions: ["71"] };
 const verdict = () => ({ requestDetails: { requestHash: "hash", requestPackageName: config.packageName, timestampMillis: String(now) },
-  appIntegrity: { appRecognitionVerdict: "PLAY_RECOGNIZED", packageName: config.packageName, versionCode: "6", certificateSha256Digest: config.certificates },
+  appIntegrity: { appRecognitionVerdict: "PLAY_RECOGNIZED", packageName: config.packageName, versionCode: "71", certificateSha256Digest: config.certificates },
   accountDetails: { appLicensingVerdict: "LICENSED" }, deviceIntegrity: { deviceRecognitionVerdict: ["MEETS_DEVICE_INTEGRITY", "MEETS_STRONG_INTEGRITY"] } });
 
 test("only tightly bounded fresh GPS evidence is accepted and all client totals are rejected", () => {
@@ -48,17 +48,19 @@ test("Google verdict binds the whole action to the official certificate, version
   sideloaded.appIntegrity.appRecognitionVerdict = "UNRECOGNIZED_VERSION";
   sideloaded.accountDetails.appLicensingVerdict = "UNLICENSED";
   sideloaded.deviceIntegrity.deviceRecognitionVerdict = ["MEETS_DEVICE_INTEGRITY"];
-  assert.doesNotThrow(() => verifyIntegrityVerdict(sideloaded, "hash", config, now));
+  assert.throws(() => verifyIntegrityVerdict(sideloaded, "hash", config, now));
 
   const sideloadedUnevaluatedLicense = structuredClone(sideloaded);
   sideloadedUnevaluatedLicense.accountDetails.appLicensingVerdict = "UNEVALUATED";
-  assert.doesNotThrow(() => verifyIntegrityVerdict(sideloadedUnevaluatedLicense, "hash", config, now));
+  assert.throws(() => verifyIntegrityVerdict(sideloadedUnevaluatedLicense, "hash", config, now));
 
   for (const mutate of [v => { v.requestDetails.requestHash = "changed"; }, v => { v.requestDetails.timestampMillis = String(now - 120001); },
     v => { v.requestDetails.requestPackageName = "other"; }, v => { v.appIntegrity.packageName = "other"; },
     v => { v.appIntegrity.versionCode = "5"; }, v => { v.appIntegrity.certificateSha256Digest = ["B".repeat(43)]; },
     v => { v.appIntegrity.appRecognitionVerdict = "UNEVALUATED"; },
-    v => { v.accountDetails.appLicensingVerdict = "UNLICENSED"; }, v => { v.deviceIntegrity.deviceRecognitionVerdict = []; }]) {
+    v => { v.accountDetails.appLicensingVerdict = "UNLICENSED"; }, v => { v.deviceIntegrity.deviceRecognitionVerdict = []; },
+    v => { v.deviceIntegrity.deviceRecognitionVerdict = ["MEETS_DEVICE_INTEGRITY"]; },
+    v => { v.deviceIntegrity.deviceRecognitionVerdict = ["MEETS_STRONG_INTEGRITY"]; }]) {
     const bad = verdict(); mutate(bad); assert.throws(() => verifyIntegrityVerdict(bad, "hash", config, now));
   }
 });
@@ -102,15 +104,34 @@ test("rankings cannot accidentally start with demo OSRM or missing production ve
   assert.equal(competitionConfig({}), null);
   assert.throws(() => competitionConfig({ LEADERBOARDS_ENABLED: "1" }));
   const env = { LEADERBOARDS_ENABLED: "1", ROAD_DATASET_SHA256: "a".repeat(64), OSRM_DATA_VERSION: version,
-    VERIFIED_OSRM_URL: "https://roads.example.com", PLAY_SERVICE_ACCOUNT_FILE: "credential-file",
-    PLAY_CERTIFICATES: "A".repeat(43), PLAY_VERSION_CODES: "6", PLAY_CLOUD_PROJECT_NUMBER: "123456789",
-    PASSWORD_PEPPER: "test-only-watermark-key-32-characters" };
+    VERIFIED_OSRM_URL: "https://roads.example.com", VERIFIED_OSRM_BEARER_TOKEN: "B".repeat(43), PLAY_SERVICE_ACCOUNT_FILE: "credential-file",
+    PLAY_CERTIFICATES: "A".repeat(43), PLAY_VERSION_CODES: "71", PLAY_CLOUD_PROJECT_NUMBER: "123456789",
+    VERIFIED_EVIDENCE_KEY: "K".repeat(43) };
   assert.equal(competitionConfig(env).dataset, "a".repeat(64));
   assert.throws(() => competitionConfig({ ...env, VERIFIED_OSRM_URL: "https://router.project-osrm.org" }));
+  assert.throws(() => competitionConfig({ ...env, PLAY_VERSION_CODES: "70,71" }));
+  assert.throws(() => competitionConfig({ ...env, VERIFIED_EVIDENCE_KEY: undefined }));
+  assert.throws(() => competitionConfig({ ...env, VERIFIED_EVIDENCE_KEY: "short" }));
+  assert.throws(() => competitionConfig({ ...env, VERIFIED_OSRM_BEARER_TOKEN: undefined }));
 });
 
 test("upstream failures and oversized verification responses fail closed", async () => {
   await assert.rejects(boundedJson(new Response("{}", { status: 500 })));
   await assert.rejects(boundedJson(new Response("x".repeat(100)), 10));
   await assert.rejects(boundedJson(new Response("not JSON")));
+});
+
+test("private road matching authenticates on the server without putting the secret in its URL", async () => {
+  const savedFetch = globalThis.fetch;
+  const token = "B".repeat(43);
+  try {
+    globalThis.fetch = async (url, options) => {
+      assert.equal(new URL(url).origin, "https://roads.example.com");
+      assert.equal(String(url).includes(token), false);
+      assert.equal(options.headers.Authorization, `Bearer ${token}`);
+      assert.equal(options.redirect, "error");
+      return new Response(JSON.stringify(matching()));
+    };
+    assert.deepEqual(await matchEvidence(fixes, { osrmUrl: "https://roads.example.com", osrmToken: token }), matching());
+  } finally { globalThis.fetch = savedFetch; }
 });

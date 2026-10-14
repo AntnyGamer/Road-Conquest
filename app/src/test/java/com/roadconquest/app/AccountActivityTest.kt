@@ -53,6 +53,17 @@ class AccountActivityTest {
         assertTrue(collecting > initial)
     }
 
+    @Test fun olderSharingConsentCannotResumeUploadsUnderANewVerificationPolicy() {
+        val context = RuntimeEnvironment.getApplication()
+        context.getSharedPreferences("roadconquest_preferences", 0).edit()
+            .putBoolean("verify_drives", true).remove("verification_policy").commit()
+        assertFalse(Prefs.isDriveVerificationEnabled(context))
+        Prefs.setDriveVerificationEnabled(context, true)
+        assertTrue(Prefs.isDriveVerificationEnabled(context))
+        Prefs.setDriveVerificationEnabled(context, false)
+        assertFalse(Prefs.isDriveVerificationEnabled(context))
+    }
+
     @Test fun verificationCannotBeEnabledDuringPendingDeviceDataDeletion() {
         val context = RuntimeEnvironment.getApplication()
         Prefs.setDeviceDataDeletionPending(context, false)
@@ -225,6 +236,19 @@ class AccountActivityTest {
         assertFalse(AccountClient.isConfigured())
         AccountClient.endpointOverrideForTests = "https://example.org/base/"
         assertTrue(AccountClient.isConfigured())
+    }
+
+    @Test fun competitiveResponsesCannotSubstituteLegacyOrUnverifiedAccountScores() {
+        AccountClient.requireVerifiedPolicy(org.json.JSONObject().put("verified", true).put("scoring_policy", 2))
+        for (body in listOf(org.json.JSONObject(),
+            org.json.JSONObject().put("verified", false).put("scoring_policy", 2),
+            org.json.JSONObject().put("verified", "true").put("scoring_policy", 2),
+            org.json.JSONObject().put("verified", true).put("scoring_policy", 1))) {
+            try {
+                AccountClient.requireVerifiedPolicy(body)
+                fail("Competitive scores must have the hardened verified policy")
+            } catch (_: AccountClient.ApiException) { }
+        }
     }
 
     @Test fun liveAccountEndpointIsConfiguredByDefault() {

@@ -160,6 +160,7 @@ database owner to exercise these permissions.
 ## Friends and weekly competitions
 
 Apply the updated `schema.sql` as the database owner before deploying the account function.
+The additive hardened-score columns default to zero/false; migration never awards legacy credit.
 Existing restricted runtime roles need `SELECT, INSERT, UPDATE, DELETE` on the two new
 tables `friendships` and `competition_weeks`; they do not need catalog or schema write access.
 
@@ -195,13 +196,20 @@ A small final batch is attempted on a normal tracking stop. Missing networks, ki
 low-quality GPS, ambiguous matches, failed attestation and short/slow motion earn no credit;
 there is no offline-history backfill or estimated-credit fallback.
 
-The server requires the exact Android package `com.roadconquest.app`, the correct request hash, an approved version and signing certificate, a fresh token timestamp, and `MEETS_DEVICE_INTEGRITY`. Play-installed builds must be `PLAY_RECOGNIZED` and `LICENSED`; the exact official signed sideload build may use Google's `UNRECOGNIZED_VERSION` verdict with an `UNLICENSED` or `UNEVALUATED` licensing verdict while still matching the approved certificate/version. Production has **no test verifier or client-provided verdict endpoint**.
+The server requires the exact Android package `com.roadconquest.app`, the exact request hash,
+an approved version code of 71 or later, the approved **Play app-signing certificate**, a fresh
+integrity timestamp, `PLAY_RECOGNIZED`, `LICENSED`, and both `MEETS_DEVICE_INTEGRITY` and
+`MEETS_STRONG_INTEGRITY`. Sideloaded, modified, basic-integrity-only and unlicensed builds cannot
+compete. Opt into the strong-integrity label in Play Console; on Android 13+ this also excludes
+devices without sufficiently recent security patches. No client option relaxes these rules.
+Production has **no test verifier or client-provided verdict endpoint**.
 CI injects a deterministic verifier directly into the scoring module to test database behavior;
 that dependency is never selectable through environment variables or HTTP.
 
 Independent OSRM matching must have at least 0.95 confidence, complete unambiguous tracepoints,
 consistent distances/annotations, reasonable snap distances and speed, and the pinned map version.
-Only the private HTTPS server chosen by the operator is contacted; clients cannot choose a URL.
+Only the authenticated private HTTPS server chosen by the operator is contacted; clients cannot choose a URL.
+Its reverse proxy must verify `VERIFIED_OSRM_BEARER_TOKEN` before accepting matching requests.
 Unknown or ambiguous catalog edges reject the batch. Distance is summed from validated matched
 legs, rounded to millimeters per leg and stored as PostgreSQL BIGINT. Repeat drives add mileage.
 A road unlock is a distinct **OSM way ID** with at least 20 matched meters in an accepted batch;
@@ -211,7 +219,17 @@ One real street may contain multiple OSM way sections: the UI states this defini
 Each account's score mutations are serialized inside a database transaction. Unique receipts
 make response-loss retries idempotent; altered sequence reuse, cross-account runs, expired
 challenges, overlapping time ranges and changed boundary anchors are rejected. Starting another
-run never clears the account's replay watermark. Road unlocks have a database UNIQUE key.
+run never clears the account's replay watermark. Each latest verified fix is AES-256-GCM encrypted
+with a dedicated key, scoped to the account and dataset, so continuity survives device/session
+changes without exposing coordinates. The same live run requires plausible driving motion and a
+consistent monotonic clock; separate runs allow plausible air travel but reject instantaneous jumps.
+Gaps earn no mileage. Corrupt checkpoints fail closed. Keep `VERIFIED_EVIDENCE_KEY` stable; do not
+rotate it without an explicit checkpoint migration. Road unlocks have a database UNIQUE key.
+
+Policy-2 verified distance, road flags and weekly counts are stored separately from legacy
+columns. Legacy totals remain retained but cannot contribute to public, friend or private verified
+scores. Old-policy receipts cannot masquerade as policy-2 results. Moderated accounts cannot
+start or submit drives, including when moderation changes during an in-flight verification.
 Public results filter current visibility and eligibility, have deterministic tie ordering, equal
 ranks for equal scores, and return only usernames, ranks and aggregate metrics. No route, user ID,
 last coordinate or hidden-profile rank is exposed. Responses disable caching.
@@ -233,18 +251,20 @@ Besides the account service environment, configure:
 ```text
 LEADERBOARDS_ENABLED=1
 VERIFIED_OSRM_URL=https://your-private-osrm.example.com
+VERIFIED_OSRM_BEARER_TOKEN=<32 random bytes encoded as unpadded base64url>
+VERIFIED_EVIDENCE_KEY=<separate 32 random bytes encoded as unpadded base64url>
 OSRM_DATA_VERSION=<exact data_version ISO timestamp>
 ROAD_DATASET_SHA256=<SHA256 of the immutable OSM XML used for both builds>
 PLAY_SERVICE_ACCOUNT_FILE=/run/secrets/play-integrity.json
 # or PLAY_SERVICE_ACCOUNT_JSON=<service-account JSON stored as a secret env var>
 PLAY_CLOUD_PROJECT_NUMBER=<numeric linked Google Cloud project>
 PLAY_CERTIFICATES=<base64url SHA256 app-signing certificate, without padding>
-PLAY_VERSION_CODES=26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71
+PLAY_VERSION_CODES=71
 ```
 
 Configure and authorize the Google Cloud project for Play Integrity token decoding. Play-installed
-builds require Play recognition/licensing. The official signed sideload APK can pass the separate
-allowlisted policy only when Google supplies its exact package, version, certificate and device verdict.
+builds require Play recognition/licensing and strong device integrity. Sideloaded builds retain local
+features but cannot earn competitive credit. Restrict the approved-version list to tested releases.
 Credentials, database passwords and pepper belong in your deployment's secret manager; none go
 in Git or the APK. The APK only receives the HTTPS account URL as a Gradle property. The default
 unsigned or debug-signed build cannot pass the approved-certificate policy. Validate token decoding

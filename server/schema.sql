@@ -54,6 +54,9 @@ CREATE TABLE IF NOT EXISTS competition_scores (
     last_fix JSONB,
     PRIMARY KEY (user_id, dataset)
 );
+-- Legacy totals remain stored, but cannot enter hardened verified-only rankings.
+ALTER TABLE competition_scores ADD COLUMN IF NOT EXISTS verified_distance_mm BIGINT NOT NULL DEFAULT 0 CHECK (verified_distance_mm >= 0);
+ALTER TABLE competition_scores ADD COLUMN IF NOT EXISTS last_verified_fix JSONB;
 CREATE TABLE IF NOT EXISTS competition_roads (
     user_id BIGINT NOT NULL,
     dataset VARCHAR(64) NOT NULL,
@@ -61,6 +64,8 @@ CREATE TABLE IF NOT EXISTS competition_roads (
     PRIMARY KEY (user_id, dataset, way_id),
     FOREIGN KEY (user_id, dataset) REFERENCES competition_scores(user_id, dataset) ON DELETE CASCADE
 );
+ALTER TABLE competition_roads ADD COLUMN IF NOT EXISTS verified BOOLEAN NOT NULL DEFAULT FALSE;
+CREATE INDEX IF NOT EXISTS competition_verified_roads_idx ON competition_roads(user_id, dataset) WHERE verified;
 CREATE TABLE IF NOT EXISTS competition_runs (
     user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     id UUID NOT NULL UNIQUE,
@@ -92,6 +97,8 @@ CREATE TABLE IF NOT EXISTS competition_weeks (
     FOREIGN KEY (user_id, dataset) REFERENCES competition_scores(user_id, dataset) ON DELETE CASCADE,
     CHECK (EXTRACT(ISODOW FROM week_start) = 1)
 );
+ALTER TABLE competition_weeks ADD COLUMN IF NOT EXISTS verified_distance_mm BIGINT NOT NULL DEFAULT 0 CHECK (verified_distance_mm >= 0);
+ALTER TABLE competition_weeks ADD COLUMN IF NOT EXISTS verified_new_roads BIGINT NOT NULL DEFAULT 0 CHECK (verified_new_roads >= 0);
 
 -- Both users must consent. Username changes leave the relationship intact.
 CREATE TABLE IF NOT EXISTS friendships (

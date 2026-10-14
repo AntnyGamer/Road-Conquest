@@ -17,10 +17,10 @@ test("friend consent, private weekly scores, ties, removal, username changes and
     const [alpha, beta, outsider] = (await pool.query(`INSERT INTO users(username_display,username_key,password_salt,password_hash)
       VALUES ('Alpha','alpha',$1,$2),('Beta','beta',$1,$2),('Outsider','outsider',$1,$2) RETURNING id`, [Buffer.alloc(16), Buffer.alloc(64)])).rows;
     const friends = createFriends(pool);
-    const competition = await createCompetition(pool, { dataset, dataVersion, watermarkKey: "test-only-32-character-secret-key" }, { verify: async () => {}, match: async () => {} });
+    const competition = await createCompetition(pool, { dataset, dataVersion, checkpointKey: "K".repeat(43) }, { verify: async () => {}, match: async () => {} });
     for (const user of [alpha, beta, outsider]) {
       await pool.query("INSERT INTO competition_scores(user_id,dataset) VALUES ($1,$2)", [user.id, dataset]);
-      await pool.query(`INSERT INTO competition_weeks(user_id,dataset,week_start,distance_mm,new_roads)
+      await pool.query(`INSERT INTO competition_weeks(user_id,dataset,week_start,verified_distance_mm,verified_new_roads)
         VALUES ($1,$2,date_trunc('week',CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date,100000,2)`, [user.id, dataset]);
     }
     assert.deepEqual((await competition.friendWeek(alpha, "roads")).entries.map(r => r.username), ["Alpha"]);
@@ -41,7 +41,7 @@ test("friend consent, private weekly scores, ties, removal, username changes and
     await pool.query("UPDATE users SET leaderboard_visible=TRUE,username_display='Renamed',username_key='renamed' WHERE id=$1", [beta.id]);
     assert.equal((await friends.list(alpha)).friends[0].username, "Renamed");
     // Previous weeks cannot inflate this week's standings.
-    await pool.query(`INSERT INTO competition_weeks(user_id,dataset,week_start,distance_mm,new_roads)
+    await pool.query(`INSERT INTO competition_weeks(user_id,dataset,week_start,verified_distance_mm,verified_new_roads)
       VALUES ($1,$2,(date_trunc('week',CURRENT_TIMESTAMP AT TIME ZONE 'UTC') - INTERVAL '7 days')::date,999999,99)`, [alpha.id, dataset]);
     assert.equal((await competition.friendWeek(alpha, "roads")).entries[0].roads, 2);
     await assert.rejects(friends.change(alpha, "Alpha", "request"), /another/u);

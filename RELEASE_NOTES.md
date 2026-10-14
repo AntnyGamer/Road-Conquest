@@ -1,5 +1,7 @@
 # Road Conquest 1.0 Beta 45
 
+- **Competitive score hardening:** Require licensed Play-installed builds and strong device integrity, bind every batch to a fresh server challenge, reject impossible cross-drive travel, and isolate verified scores from older totals. Ranked results never fall back to local or restored progress.
+
 - **Progress restore:** Validates exported ZIPs before replacing history, restores the points ledger and purchases, and saves a private recovery backup first. Imported driving never earns verified credit.
 - **Weekly challenges and friends:** Earn points once per UTC week for 25 new roads or three new towns. Add, accept and remove friends by username. Competitive rankings and verification uploads are temporarily hidden; local weekly rewards remain available.
 - **Saved-trip replay:** Browse saved drives and replay routes without joining gaps in GPS coverage.

@@ -138,6 +138,14 @@
                 android:textSize="18sp"
                 android:textStyle="bold" />
 
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="Competitive account scores use server-verified live drives only. Local points and restored history never count toward rankings. Sharing live driving evidence requires your consent."
+                android:textColor="?attr/rcTextSecondary"
+                android:textSize="13sp" />
+
             <Switch
                 android:id="@+id/accountLeaderboardSwitch"
                 android:visibility="gone"

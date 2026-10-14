@@ -38,7 +38,8 @@ export function parseEvidence(text, now = Date.now()) {
       const p = body.fixes[i - 1];
       const dt = f.time - p.time;
       if (dt < 1000 || dt > 15000 || f.elapsed <= p.elapsed || Math.abs(f.elapsed - p.elapsed - dt) > 1000 ||
-          distance(p, f) / (dt / 1000) > 65) throw new EvidenceError("Discontinuous GPS evidence.");
+          distance(p, f) / (dt / 1000) > 65 ||
+          Math.abs(f.speed - p.speed) / (dt / 1000) > 12) throw new EvidenceError("Discontinuous GPS evidence.");
     }
   }
   if (body.fixes.at(-1).time - body.fixes[0].time > 120000) throw new EvidenceError("Trace too long.");
@@ -52,17 +53,14 @@ export function verifyIntegrityVerdict(payload, hash, config, now = Date.now()) 
   const stamp = Number(request?.timestampMillis);
   const recognition = app?.appRecognitionVerdict;
   const licensing = payload?.accountDetails?.appLicensingVerdict;
-  const recognized = recognition === "PLAY_RECOGNIZED";
-  const sideloadedOfficial = recognition === "UNRECOGNIZED_VERSION";
   if (request?.requestHash !== hash || request?.requestPackageName !== config.packageName ||
       !Number.isSafeInteger(stamp) || now - stamp < -10000 || now - stamp > 120000 ||
-      (!recognized && !sideloadedOfficial) || app?.packageName !== config.packageName ||
+      recognition !== "PLAY_RECOGNIZED" || app?.packageName !== config.packageName ||
       !config.versions.includes(String(app?.versionCode)) ||
       !Array.isArray(app?.certificateSha256Digest) || app.certificateSha256Digest.length !== 1 ||
       !config.certificates.includes(app.certificateSha256Digest[0]) ||
-      (recognized && licensing !== "LICENSED") ||
-      (sideloadedOfficial && licensing !== "UNLICENSED" && licensing !== "UNEVALUATED") ||
-      !Array.isArray(labels) || !labels.includes("MEETS_DEVICE_INTEGRITY")) {
+      licensing !== "LICENSED" ||
+      !Array.isArray(labels) || !labels.includes("MEETS_DEVICE_INTEGRITY") || !labels.includes("MEETS_STRONG_INTEGRITY")) {
     throw new EvidenceError("App/device verification failed.", 403);
   }
 }
@@ -90,7 +88,8 @@ export async function matchEvidence(fixes, config) {
     // very high-confidence, unambiguous snap before any leaderboard credit is accepted.
     radiuses: fixes.map(f => Math.max(10, f.accuracy)).join(";")
   }).toString();
-  return boundedJson(await fetch(url, { redirect: "error", signal: AbortSignal.timeout(8000) }));
+  return boundedJson(await fetch(url, { redirect: "error", signal: AbortSignal.timeout(8000),
+    headers: { Accept: "application/json", Authorization: `Bearer ${config.osrmToken}` } }));
 }
 
 export function scoreMatch(root, fixes, catalog, dataVersion) {

@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.SystemClock
 import android.widget.Switch
 import android.widget.TextView
+import android.view.View
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -11,29 +12,38 @@ import com.roadconquest.app.account.AccountStore
 import com.roadconquest.app.account.AccountClient
 import com.roadconquest.app.account.AccountOnboarding
 import com.roadconquest.app.util.Prefs
+import com.roadconquest.app.util.FeatureFlags
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class AccountStoreDeviceTest {
-    @Test fun verificationCanBeTurnedOffWhenServiceStatusCannotBeChecked() {
+    @Test fun verificationVisibilityAndOptOutRespectUnavailableService() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         AccountStore.save(context, AccountStore.Session("OfflineDriver", "test-only-expired-token", true))
         Prefs.setDriveVerificationEnabled(context, true)
         AccountClient.endpointOverrideForTests = "https://127.0.0.1:1"
         try {
             ActivityScenario.launch(SettingsActivity::class.java).use { scenario ->
-                val deadline = SystemClock.elapsedRealtime() + 10_000L
-                var checkFailed = false
-                while (!checkFailed && SystemClock.elapsedRealtime() < deadline) {
-                    scenario.onActivity { activity ->
-                        checkFailed = activity.findViewById<TextView>(R.id.verificationStatusText).text.toString()
-                            .contains("Could not check verified scoring.")
+                if (FeatureFlags.LEADERBOARDS_VISIBLE) {
+                    val deadline = SystemClock.elapsedRealtime() + 10_000L
+                    var checkFailed = false
+                    while (!checkFailed && SystemClock.elapsedRealtime() < deadline) {
+                        scenario.onActivity { activity ->
+                            checkFailed = activity.findViewById<TextView>(R.id.verificationStatusText).text.toString()
+                                .contains("Could not check verified scoring.")
+                        }
+                        if (!checkFailed) SystemClock.sleep(50)
                     }
-                    if (!checkFailed) SystemClock.sleep(50)
+                    assertTrue("Status-check failure is displayed without claiming scoring is unavailable", checkFailed)
+                } else {
+                    scenario.onActivity { activity ->
+                        for (id in listOf(R.id.verifyDrivesSwitch, R.id.leaderboardsButton, R.id.verificationStatusText)) {
+                            assertEquals("Hidden competition has no active UI", View.GONE, activity.findViewById<View>(id).visibility)
+                        }
+                    }
                 }
-                assertTrue("Status-check failure is displayed without claiming scoring is unavailable", checkFailed)
                 scenario.onActivity { activity ->
                     Prefs.setAccountPromptShown(context, false)
                     assertNull("Saved accounts skip the first-launch invitation", AccountOnboarding.showIfNeeded(activity) { fail("Already signed in") })

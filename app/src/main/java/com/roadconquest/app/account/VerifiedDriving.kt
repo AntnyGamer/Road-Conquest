@@ -89,7 +89,7 @@ class VerifiedDriving internal constructor(context: Context, private val competi
                 // Retry after a short cooldown; never turn an account/Integrity outage into a
                 // permanent hole in otherwise valid competitive mileage.
                 provider = null
-                retryAfter = SystemClock.elapsedRealtime() + RETRY_AFTER_FAILURE_MS
+                retryAfter = maxOf(retryAfter, SystemClock.elapsedRealtime() + RETRY_AFTER_FAILURE_MS)
                 synchronized(queueLock) {
                     if (pendingLocations.size >= MAX_BUFFERED_FIXES) pendingLocations.removeLast()
                     pendingLocations.addFirst(location)
@@ -181,7 +181,7 @@ class VerifiedDriving internal constructor(context: Context, private val competi
             StandardIntegrityManager.StandardIntegrityTokenRequest.builder().setRequestHash(hash).build()
         ), 10, TimeUnit.SECONDS).token()
         // Recheck consent/account after the asynchronous attestation, before uploading any GPS.
-        if (!Prefs.isDriveVerificationEnabled(context) || Prefs.driveVerificationConsentVersion(context) != consentVersion ||
+        if (!competitionsEnabled() || !Prefs.isDriveVerificationEnabled(context) || Prefs.driveVerificationConsentVersion(context) != consentVersion ||
             AccountStore.load(context)?.token != token || (closed && !finishing)) { reset(); return }
         try {
             val result = AccountClient.submitVerifiedDrive(token, evidence, integrity)
@@ -192,6 +192,7 @@ class VerifiedDriving internal constructor(context: Context, private val competi
             pendingEvidence = null
         } catch (error: AccountClient.ApiException) {
             if (error.status == 403 || error.status == 409 || error.status == 422 || error.status == 401) reset()
+            if (error.status == 403) retryAfter = SystemClock.elapsedRealtime() + 300_000L
             throw error
         }
     }
