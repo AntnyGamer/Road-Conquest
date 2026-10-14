@@ -1,4 +1,5 @@
 <resources>
+    <color name="danger">#FF9CA6</color>
     <color name="road_blue">#82B2FF</color>
     <color name="text_on_accent">#08182F</color>
     <color name="panel_bg">#F51B273B</color>

@@ -57,6 +57,7 @@ class TripHistoryActivity : Activity() {
     private var points: List<SavedTripPoint> = emptyList()
     private var playing = false
     private var generation = 0
+    private var lastRenderedIndex = -1
     private val tick = object : Runnable {
         override fun run() {
             if (!playing || isDestroyed) return
@@ -112,9 +113,12 @@ class TripHistoryActivity : Activity() {
             it.setPadding(0, 0, 0, dp(12))
             root.addView(it)
         }
+        // Leave room for the trip list on short phones and landscape displays.
+        val screenHeightDp = resources.displayMetrics.heightPixels / resources.displayMetrics.density
+        val mapHeightDp = (screenHeightDp * 0.27f).toInt().coerceIn(120, 250)
         mapView = MapView(this).also { view ->
             root.addView(view, LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(250)).apply { bottomMargin = dp(10) })
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(mapHeightDp)).apply { bottomMargin = dp(10) })
             view.onCreate(savedInstanceState)
             view.getMapAsync { ready ->
                 if (isDestroyed) return@getMapAsync
@@ -130,6 +134,7 @@ class TripHistoryActivity : Activity() {
                         style.addLayer(CircleLayer(ROUTE_MARKER, MARKER)
                             .withProperties(circleColor("#E33B3B"), circleRadius(8f)))
                         mapReady = true
+                        lastRenderedIndex = -1
                         renderReplay()
                     }
                 }
@@ -198,13 +203,22 @@ class TripHistoryActivity : Activity() {
     private fun loadTrip(trip: SavedTrip) {
         pauseReplay()
         val expected = ++generation
-        routeStatus?.text = "Loading drive..."
+        // Clear the previous drive immediately; never show its track or marker
+        // while the next drive is loading or if loading fails.
+        points = emptyList()
+        lastRenderedIndex = -1
+        seek?.isEnabled = false
+        playButton?.isEnabled = false
+        seek?.progress = 0
+        renderReplay()
+        routeStatus?.text = "Loading drive…"
         worker.execute {
             val result = runCatching { TripHistoryRepository(applicationContext).replay(trip) }
             runOnUiThread {
                 if (isDestroyed || expected != generation) return@runOnUiThread
                 result.fold({ loaded ->
                     points = loaded
+                    lastRenderedIndex = -1
                     seek?.isEnabled = loaded.size >= 2
                     playButton?.isEnabled = loaded.size >= 2
                     seek?.progress = 0
@@ -223,6 +237,7 @@ class TripHistoryActivity : Activity() {
     private fun renderReplay() {
         if (!mapReady) return
         if (points.size < 2) {
+            lastRenderedIndex = -1
             map?.style?.getSourceAs<GeoJsonSource>(ROUTE)?.setGeoJson(
                 FeatureCollection.fromFeatures(emptyList())
             )
@@ -246,8 +261,12 @@ class TripHistoryActivity : Activity() {
         if (!mapReady || points.isEmpty()) return
         val index = ((points.size - 1) * position / 1000.0).toInt()
             .coerceIn(0, points.lastIndex)
+        // A slider tick may refer to the same sampled GPS fix. Skip needless
+        // MapLibre source updates; the visible route has not changed.
+        if (index == lastRenderedIndex) return
         val point = points[index]
         val style = map?.style ?: return
+        lastRenderedIndex = index
         style.getSourceAs<GeoJsonSource>(MARKER)?.setGeoJson(
             Feature.fromGeometry(Point.fromLngLat(point.longitude, point.latitude))
         )

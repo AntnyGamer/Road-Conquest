@@ -739,6 +739,9 @@ class MainActivity : Activity() {
                     onSuccess = { (value, progression, unlocked) ->
                         statsText.text = StatsText.format(this, value)
                         pointsText.text = String.format(Locale.getDefault(), "⚔ %,d points", progression.balance)
+                        pointsText.contentDescription = String.format(
+                            Locale.getDefault(), "%,d points. Open garage and shop.", progression.balance
+                        )
                         if (unlocked.isNotEmpty()) {
                             val reward = unlocked.sumOf { it.rewardPoints }
                             val message = if (unlocked.size == 1) {
@@ -759,6 +762,7 @@ class MainActivity : Activity() {
                         Log.e("RoadConquest", "Could not load data summary", error)
                         statsText.text = getString(R.string.saved_data_unavailable)
                         pointsText.text = "Points unavailable"
+                        pointsText.contentDescription = "Points unavailable. Open garage and shop."
                     }
                 )
             }
@@ -964,7 +968,24 @@ class MainActivity : Activity() {
             val target = minOf(dpToPx(210f), available)
             if ((stats as TextView).maxWidth != target) stats.maxWidth = target
         }
-        root.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> sizeStats() }
+
+        // The stats card can grow with font scaling and longer mileage/road totals.
+        // Keep the points chip below it rather than relying on a fixed top offset.
+        var safeTop = 0
+        fun alignPoints() {
+            val targetTop = maxOf(pointsTop + safeTop,
+                if (stats.bottom > 0) stats.bottom + dpToPx(8f) else 0)
+            val params = points.layoutParams as FrameLayout.LayoutParams
+            if (params.topMargin != targetTop) {
+                params.topMargin = targetTop
+                points.layoutParams = params
+            }
+        }
+        root.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            sizeStats()
+            alignPoints()
+        }
+        stats.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> alignPoints() }
 
         ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
             val safe = insets.getInsets(
@@ -972,6 +993,7 @@ class MainActivity : Activity() {
             )
             safeLeft = safe.left
             safeRight = safe.right
+            safeTop = safe.top
             (stats.layoutParams as FrameLayout.LayoutParams).also { params ->
                 if (params.topMargin != statsTop + safe.top || params.marginStart != statsStart + safe.left) {
                     params.topMargin = statsTop + safe.top
@@ -980,12 +1002,12 @@ class MainActivity : Activity() {
                 }
             }
             (points.layoutParams as FrameLayout.LayoutParams).also { params ->
-                if (params.topMargin != pointsTop + safe.top || params.marginStart != pointsStart + safe.left) {
-                    params.topMargin = pointsTop + safe.top
+                if (params.marginStart != pointsStart + safe.left) {
                     params.marginStart = pointsStart + safe.left
                     points.layoutParams = params
                 }
             }
+            alignPoints()
             // Setters can request layout even for identical values. Keep repeated inset/layout
             // callbacks idle, or the next layout will schedule another layout forever.
             sizeStats()
