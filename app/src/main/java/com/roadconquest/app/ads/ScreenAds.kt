@@ -25,6 +25,8 @@ import com.google.android.ump.ConsentRequestParameters
 import com.google.android.ump.UserMessagingPlatform
 import com.roadconquest.app.BuildConfig
 import com.roadconquest.app.R
+import com.roadconquest.app.billing.VipBilling
+import com.roadconquest.app.billing.VipEntitlement
 import com.roadconquest.app.progression.AdRewardBridge
 import com.roadconquest.app.util.ForegroundSession
 import java.util.concurrent.CompletableFuture
@@ -58,9 +60,28 @@ class ScreenAds(
     private var showingReward = false
     private var privacyRevision = AdPrivacy.revision
     private var recoveryUsed = false
+    private var vipChecked = false
+    private val vipBilling = VipBilling(activity) { _, checked, _ ->
+        if (checked) {
+            vipChecked = true
+            if (active && alive()) {
+                if (VipEntitlement.isActive(activity)) suspendAdsForVip()
+                else resumeAfterVipCheck()
+            }
+        }
+    }
+    private val vipListener: () -> Unit = {
+        activity.runOnUiThread {
+            if (alive() && active) {
+                if (VipEntitlement.isActive(activity)) suspendAdsForVip()
+                else if (vipChecked) resumeAfterVipCheck()
+            }
+        }
+    }
     private val retryAds = Runnable { if (permitted()) enableAds() }
 
     init {
+        VipEntitlement.addListener(vipListener)
         rewardButton?.setOnClickListener { loadOrShowReward() }
         privacyButton.setOnClickListener { showPrivacyOptions() }
     }
@@ -68,19 +89,29 @@ class ScreenAds(
     fun onResume() {
         active = true
         recoveryUsed = false
+        vipChecked = false
         root.removeCallbacks(retryAds)
         if (privacyRevision != AdPrivacy.revision) {
             privacyRevision = AdPrivacy.revision
             destroyBanner()
         }
+        // Restore a prior Play purchase before initializing/loading ads. A
+        // cached offline VIP entitlement also suppresses ads immediately.
+        if (VipEntitlement.isActive(activity)) suspendAdsForVip()
+        vipBilling.refresh(includeOffer = false)
+    }
+
+    private fun resumeAfterVipCheck() {
+        if (!active || !alive() || VipEntitlement.isActive(activity)) return
+        updateRewardButton()
         if (!consentRequested) {
             consentRequested = true
             consent.requestConsentInfoUpdate(activity, ConsentRequestParameters.Builder().build(), {
-                if (!alive()) return@requestConsentInfoUpdate
+                if (!alive() || VipEntitlement.isActive(activity)) return@requestConsentInfoUpdate
                 formPending = true
                 presentConsentForm()
             }, {
-                if (!alive()) return@requestConsentInfoUpdate
+                if (!alive() || VipEntitlement.isActive(activity)) return@requestConsentInfoUpdate
                 consentComplete = true
                 updatePrivacyButton()
                 enableAds()
@@ -90,6 +121,16 @@ class ScreenAds(
         } else {
             enableAds()
         }
+    }
+
+    private fun suspendAdsForVip() {
+        epoch++
+        root.removeCallbacks(retryAds)
+        rewarded = null
+        loadingReward = false
+        destroyBanner()
+        updateRewardButton()
+        updatePrivacyButton()
     }
 
     fun onPause() {
@@ -107,12 +148,15 @@ class ScreenAds(
     fun destroy() {
         destroyed = true
         onPause()
+        VipEntitlement.removeListener(vipListener)
+        vipBilling.close()
         destroyBanner()
     }
 
     private fun alive() = !destroyed && !activity.isDestroyed && !activity.isFinishing
 
-    private fun permitted() = alive() && active && consentComplete && !formShowing && consent.canRequestAds()
+    private fun permitted() = alive() && active && vipChecked &&
+        !VipEntitlement.isActive(activity) && consentComplete && !formShowing && consent.canRequestAds()
 
     /** At most one foreground recovery attempt per screen visit; never retry while hidden. */
     private fun retryOnce() {
@@ -156,6 +200,8 @@ class ScreenAds(
     }
 
     private fun updatePrivacyButton() {
+        // Paying to remove ads must not remove access to existing ad privacy
+        // choices for people who previously consented to personalized ads.
         privacyButton.visibility = if (consent.privacyOptionsRequirementStatus ==
             ConsentInformation.PrivacyOptionsRequirementStatus.REQUIRED) View.VISIBLE else View.GONE
         privacyButton.isEnabled = !formShowing && !showingReward
@@ -256,6 +302,7 @@ class ScreenAds(
 
     private fun updateRewardButton() {
         rewardButton?.apply {
+            visibility = if (VipEntitlement.isActive(activity)) View.GONE else View.VISIBLE
             isEnabled = permitted() && sdkReady && !loadingReward && !showingReward
             text = when {
                 showingReward -> activity.getString(R.string.ad_showing)

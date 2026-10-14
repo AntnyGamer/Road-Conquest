@@ -44,6 +44,27 @@ class UnitedStatesMunicipalityAtPointTest {
         ))
     }
 
+    @Test fun consolidatedCityQueriesOnlyWhereTheCensusPublishesThatGeography() {
+        assertTrue(UnitedStatesMunicipalBoundaries.hasConsolidatedCities("18"))
+        assertTrue(UnitedStatesMunicipalBoundaries.hasConsolidatedCities("13"))
+        assertFalse(UnitedStatesMunicipalBoundaries.hasConsolidatedCities("34"))
+        assertFalse(UnitedStatesMunicipalBoundaries.hasConsolidatedCities("06"))
+    }
+
+    @Test fun consolidatedCityHasStableCensusIdentityAndResolvableOfficialBoundary() {
+        val sample = seed("Indiana")
+        val geojson = response(featureWithGeoid(
+            "Example city", "18", "1801234", -75.04, -75.01
+        ))
+        val resolved = UnitedStatesMunicipalityAtPoint.parseResponse(sample, geojson, 3)!!
+        assertEquals("us|indiana|census-3-1801234", resolved.place.key)
+        assertEquals("Example city", resolved.place.displayName)
+        val boundary = UnitedStatesMunicipalBoundaries.parseResponse(resolved.place, geojson, 3)
+        assertNotNull("A newly discovered consolidated city must also draw its overlay", boundary)
+        assertEquals(resolved.place.key, boundary!!.key)
+        assertNull(UnitedStatesMunicipalBoundaries.parseResponse(resolved.place, geojson, 4))
+    }
+
     @Test fun sameNamedMunicipalitiesUseDistinctOfficialIdentifiers() {
         val first = response(featureWithGeoid(
             "Washington township", "42", "4200300123", -75.04, -75.01

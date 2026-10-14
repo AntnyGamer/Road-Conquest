@@ -973,6 +973,40 @@ class ProgressionRepositoryTest {
         }
     }
 
+    @Test fun separatedFixesInOneCellCanDiscoverTwoTownsWithoutUnboundedRequests() {
+        val progression = ProgressionRepository(context)
+        assertTrue(progression.recordPlace(PlaceDiscovery(
+            PlaceKind.TOWN, "us|nj|initial", "Initial",
+            "New Jersey", "United States", 1_000L, 39.95, -75.02
+        )))
+        fun fix(lat: Double, time: Long) = android.location.Location("gps").apply {
+            latitude = lat
+            longitude = 0.0001
+            accuracy = 4f
+            this.time = time
+        }
+        // Both fixes fall in the same 150 m Mercator cell; the old unique
+        // (cell_x, cell_y) key silently discarded the second crossing.
+        val first = fix(0.0001, 2_000L)
+        val second = fix(0.0008, 3_000L)
+        assertTrue(progression.recordPlaceCandidate(first))
+        assertTrue(progression.recordPlaceCandidate(second))
+        assertFalse(progression.recordPlaceCandidate(fix(0.00081, 4_000L)))
+        assertFalse(progression.recordPlaceCandidate(fix(0.0011, 5_000L)))
+        val pending = progression.pendingPlaceCandidates(limit = 10, nowMillis = 6_000L)
+        assertEquals(2, pending.size)
+        assertEquals(setOf(first.latitude, second.latitude), pending.map { it.latitude }.toSet())
+        val originalPoints = progression.snapshot().balance
+        pending.forEachIndexed { index, candidate ->
+            assertEquals(1, progression.resolveCandidate(candidate, listOf(
+                PlaceDiscovery(PlaceKind.TOWN, "us|nj|crossing-$index", "Crossing $index",
+                    "New Jersey", "United States", candidate.visitedAt,
+                    candidate.latitude, candidate.longitude)
+            )))
+        }
+        assertEquals(originalPoints + 200L, progression.snapshot().balance)
+    }
+
     @Test fun aFreshTownCandidateRetainsTheRealFixAtMunicipalBoundaries() {
         val progression = ProgressionRepository(context)
         assertTrue(progression.recordPlace(PlaceDiscovery(

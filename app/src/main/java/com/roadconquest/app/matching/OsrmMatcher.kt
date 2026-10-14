@@ -1,5 +1,6 @@
 package com.roadconquest.app.matching
 
+import android.os.SystemClock
 import com.roadconquest.app.data.MatchedRoad
 import com.roadconquest.app.data.RoadGrouping
 import com.roadconquest.app.data.TrackPoint
@@ -24,8 +25,19 @@ data class MatchResult(
 )
 
 class OsrmMatcher(
-    private val baseUrl: String = "https://router.project-osrm.org"
+    private val baseUrl: String = "https://router.project-osrm.org",
+    // FOSSGIS's public demo allows at most one request per second. Keep private
+    // OSRM deployments unthrottled unless they explicitly report a limit.
+    private val minimumRequestIntervalMs: Long =
+        if (baseUrl.trimEnd('/') == "https://router.project-osrm.org") 1_100L else 0L
 ) {
+    private var nextRequestAt = 0L
+    @Volatile private var rateLimitedUntil = 0L
+
+    /** Only a provider's rate-limit response blocks new matching requests. */
+    internal fun rateLimitRemainingMs(): Long =
+        (rateLimitedUntil - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
+
     fun match(points: List<TrackPoint>): MatchResult? {
         if (points.size !in 2..MAX_MATCH_POINTS) return null
         val coordinates = points.joinToString(";") { "${it.longitude},${it.latitude}" }
@@ -87,17 +99,46 @@ class OsrmMatcher(
         return if (newGap > oldGap && preservesEvidence) second else first
     }
 
+    @Synchronized
     private fun requestMatch(url: URL, points: List<TrackPoint>): MatchResult? {
-        val connection = (url.openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            connectTimeout = 8_000
-            readTimeout = 12_000
-            setRequestProperty("Accept", "application/json")
-            setRequestProperty("User-Agent", "RoadConquest/1.0 (Android road-history app)")
+        if (rateLimitRemainingMs() > 0L) return null
+        // Only the shared public demo needs pacing. The matcher runs on a
+        // background executor, so no location callback or UI thread waits.
+        val waitMs = nextRequestAt - SystemClock.elapsedRealtime()
+        if (waitMs > 0L) {
+            try {
+                Thread.sleep(waitMs)
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return null
+            }
         }
+        if (rateLimitRemainingMs() > 0L) return null
+        nextRequestAt = SystemClock.elapsedRealtime() + minimumRequestIntervalMs
 
+        var connection: HttpURLConnection? = null
         return try {
-            if (connection.responseCode !in 200..299) return null
+            connection = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 8_000
+                readTimeout = 12_000
+                setRequestProperty("Accept", "application/json")
+                setRequestProperty("User-Agent", "RoadConquest/1.0 (Android road-history app)")
+            }
+            val status = connection.responseCode
+            if (status == 429 || status == 503) {
+                // A rate-limited/unavailable provider must not receive another
+                // immediate request from this batch or the next GPS callback.
+                // The repository already retains unmatched fixes for later
+                // retries, so never invent a locally guessed road instead.
+                val seconds = connection.getHeaderField("Retry-After")
+                    ?.trim()?.toLongOrNull()?.coerceIn(1L, 3_600L)
+                val defaultMs = if (status == 429) 60_000L else 30_000L
+                val pauseMs = maxOf(defaultMs, (seconds ?: 0L) * 1_000L)
+                rateLimitedUntil = SystemClock.elapsedRealtime() + pauseMs
+                return null
+            }
+            if (status !in 200..299) return null
             val body = connection.inputStream.use { input ->
                 val output = ByteArrayOutputStream()
                 val buffer = ByteArray(8192)
@@ -113,7 +154,7 @@ class OsrmMatcher(
         } catch (_: Exception) {
             null
         } finally {
-            connection.disconnect()
+            connection?.disconnect()
         }
     }
 

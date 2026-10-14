@@ -79,6 +79,15 @@ class UnitedStatesMunicipalBoundariesTest {
         assertNull(UnitedStatesMunicipalBoundaries.stateCode("Canada", "NJ"))
     }
 
+    @Test fun verifiedCensusGeoidFiltersNetworkResultsWithoutChangingLegacyLookup() {
+        assertEquals("STATE = '34' AND GEOID = '3401234'",
+            UnitedStatesMunicipalBoundaries.municipalityWhereClause("34", "3401234"))
+        assertEquals("STATE = '42' AND GEOID = '4200300123'",
+            UnitedStatesMunicipalBoundaries.municipalityWhereClause("42", "4200300123"))
+        assertEquals("STATE = '34'",
+            UnitedStatesMunicipalBoundaries.municipalityWhereClause("34", null))
+    }
+
     @Test fun officialCensusGeometryAcceptsPostalStateFromOldVisit() {
         val p = place("Philadelphia City", "PA", 39.95, -75.15)
         val data = UnitedStatesMunicipalBoundaries.parseResponse(
@@ -155,6 +164,27 @@ class UnitedStatesMunicipalBoundariesTest {
         assertNull(UnitedStatesMunicipalBoundaries.parseResponse(
             p, response(correct), 4
         ))
+    }
+
+    @Test fun verifiedCensusGeoidSurvivesOfficialNameChangesWithoutWeakeningLegacyLookup() {
+        val original = place("Old City", "Pennsylvania", 39.95, -75.15)
+        val official = original.copy(key = "us|pennsylvania|census-4-4212345")
+        val updated = item("Renamed city", "Renamed", "42",
+            box(-75.2, 39.9, -75.1, 40.0))
+            .replace("\"LSADC\"", "\"GEOID\":\"4212345\",\"LSADC\"")
+        assertNotNull(
+            "A precise Census ID, not an obsolete display name, identifies this polygon",
+            UnitedStatesMunicipalBoundaries.parseResponse(official, response(updated), 4)
+        )
+        assertNotNull(
+            "The official identity must survive later boundary changes from the saved fix",
+            UnitedStatesMunicipalBoundaries.parseResponse(
+                official.copy(latitude = 40.05, longitude = -74.95),
+                response(updated), 4
+            )
+        )
+        assertNull("A legacy name-only record must still verify the municipal name",
+            UnitedStatesMunicipalBoundaries.parseResponse(original, response(updated), 4))
     }
 
     @Test fun duplicateNamesChooseClosestGeographicMunicipality() {

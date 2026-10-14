@@ -568,16 +568,26 @@ object FogBitmapRenderer {
         // Blue roads still render separately; entering a mile tile is the sole unlock trigger.
         if (request.gridMode) {
             if (request.gridScreen.isEmpty()) return bitmap
-            val reveal = scratch.acquireRevealBitmap(request.bitmapWidth, request.bitmapHeight)
-            val revealCanvas = Canvas(reveal)
+            // Acquire the reveal mask only for the first tile that can affect
+            // the bitmap; most nearby views have many saved tiles entirely offscreen.
+            var reveal: Bitmap? = null
+            var revealCanvas: Canvas? = null
             for (i in 0 until minOf(request.gridCoordinates.size, request.gridScreen.size) - 7 step 8) {
+                if (!gridCellMayAffectBitmap(request, i)) continue
+                if (revealCanvas == null) {
+                    reveal = scratch.acquireRevealBitmap(request.bitmapWidth, request.bitmapHeight)
+                    revealCanvas = Canvas(reveal)
+                }
                 drawGridReveal(revealCanvas, request, i, scratch)
             }
+            // No recorded tile affects this raster, even via its 1,500-foot fade:
+            // avoid the bitmap-sized reveal mask and distance transform altogether.
+            val mask = reveal ?: return bitmap
             // Merge every visited cell into ONE binary silhouette before fading. Individual
             // square edge/corner shaders create visible gray tiles and double seams where
             // neighboring cells meet. One distance-to-union mask has neither artifact.
-            fadeGridUnion(reveal, request, scratch)
-            canvas.drawBitmap(reveal, 0f, 0f, scratch.applyRevealPaint)
+            fadeGridUnion(mask, request, scratch)
+            canvas.drawBitmap(mask, 0f, 0f, scratch.applyRevealPaint)
             return bitmap
         }
         if (request.roads.coordinates.isEmpty() && request.exploredCoordinates.isEmpty() && request.liveScreen == null) return bitmap
@@ -632,6 +642,36 @@ object FogBitmapRenderer {
     }
 
     /**
+     * Conservative culling before allocating a reveal mask or running the bitmap-wide
+     * distance transform. Include the full physical fade plus two raster pixels for
+     * antialiasing and subpixel cells. Reject only tiles that cannot touch the image.
+     */
+    internal fun gridCellMayAffectBitmap(request: Request, offset: Int): Boolean {
+        if (offset < 0 || offset + 7 >= request.gridScreen.size) return false
+        val scale = request.screenScale.toDouble()
+        val metersPerPixel = request.metersPerScreenPixelAtCenter
+        if (!scale.isFinite() || scale <= 0.0 ||
+            !metersPerPixel.isFinite() || metersPerPixel <= 0.0
+        ) return true // Preserve old rendering for unusual caller inputs.
+        val fade = ROAD_FULL_M * scale / metersPerPixel + 2.0
+        var minX = Double.POSITIVE_INFINITY
+        var minY = Double.POSITIVE_INFINITY
+        var maxX = Double.NEGATIVE_INFINITY
+        var maxY = Double.NEGATIVE_INFINITY
+        for (corner in 0..3) {
+            val x = (request.gridScreen[offset + corner * 2] - request.screenLeft) * scale
+            val y = (request.gridScreen[offset + corner * 2 + 1] - request.screenTop) * scale
+            if (!x.isFinite() || !y.isFinite()) return false
+            minX = minOf(minX, x)
+            maxX = maxOf(maxX, x)
+            minY = minOf(minY, y)
+            maxY = maxOf(maxY, y)
+        }
+        return maxX >= -fade && minX <= request.bitmapWidth + fade &&
+            maxY >= -fade && minY <= request.bitmapHeight + fade
+    }
+
+    /**
      * Rasterize only the core polygon. Every tile draws into one shared, opaque RGB
      * mask; neighboring tiles never have internal edge gradients or visible seams.
      */
@@ -667,14 +707,7 @@ object FogBitmapRenderer {
         val height = bitmap.height
         val count = width * height
         val pixels = scratch.gridPixels(count)
-        val distances = scratch.gridDistances(count)
         bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
-        val infinity = (width + height).toFloat()
-        for (i in 0 until count) {
-            // Anti-aliased polygon coverage counts as a visited pixel. This keeps
-            // 1-pixel-scale cells perceptible on zoomed-out maps.
-            distances[i] = if ((pixels[i] and 0xff) > 0) 0f else infinity
-        }
         val physicalFadePixels = (ROAD_FULL_M * request.screenScale /
             request.metersPerScreenPixelAtCenter).toFloat()
         if (physicalFadePixels < 0.75f) {
@@ -688,6 +721,16 @@ object FogBitmapRenderer {
             }
             bitmap.setPixels(pixels, 0, width, 0, 0, width, height)
             return
+        }
+        // At world zoom the subpixel branch above doesn't need a distance
+        // buffer or the first full-bitmap scan. Keep both for the exact same
+        // detailed-zoom fade below.
+        val distances = scratch.gridDistances(count)
+        val infinity = (width + height).toFloat()
+        for (i in 0 until count) {
+            // Anti-aliased polygon coverage counts as a visited pixel. This keeps
+            // 1-pixel-scale cells perceptible on zoomed-out maps.
+            distances[i] = if ((pixels[i] and 0xff) > 0) 0f else infinity
         }
         val diagonal = 1.41421356f
         for (y in 0 until height) {

@@ -40,6 +40,23 @@ class FogGridTest {
         assertEquals(16, next.size)
     }
 
+    @Test fun databaseUniqueCellsProduceIdenticalSquaresWithoutAnotherDeduplication() {
+        val centers = listOf(
+            FogGrid.cell(39.95, -75.0)!!,
+            FogGrid.cell(39.97, -75.01)!!,
+            FogGrid.cell(0.0, 179.999)!!,
+            FogGrid.cell(0.0, -179.999)!!
+        ).distinct().map { FogGrid.center(it) }
+        val coordinates = centers.flatMap { listOf(it.first, it.second) }.toDoubleArray()
+        assertArrayEquals(
+            FogGrid.visitedCorners(coordinates),
+            FogGrid.uniqueVisitedCorners(coordinates),
+            0.0
+        )
+        assertArrayEquals(doubleArrayOf(),
+            FogGrid.uniqueVisitedCorners(doubleArrayOf(Double.NaN, 0.0)), 0.0)
+    }
+
     @Test fun antimeridianTilesProjectIntoTheNearestWorldCopy() {
         val westOfDateLine = FogGrid.corners(0.0, -179.999)
         val nearEastSide = FogGrid.nearLongitude(westOfDateLine, 179.9)

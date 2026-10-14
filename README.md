@@ -1,4 +1,4 @@
-# Road Conquest 1.0 Beta 43
+# Road Conquest 1.0 Beta 44
 
 Road Conquest remembers the roads you drive and the places you visit, revealing them through a
 cloud-textured fog map.
@@ -7,9 +7,7 @@ cloud-textured fog map.
 [Source and issues](https://github.com/AntnyGamer/RoadConquest-Beta) ·
 [GNU AGPL v3 license](LICENSE)
 
-Beta 43 improves starting-location discovery, official nationwide municipality
-lookup, post-deletion privacy, on-road departure counting, fog efficiency, and
-verified-drive retries. Earlier road, exploration, and map improvements remain
+Beta 44 adds optional one-time VIP ($2.99 US, configured through Google Play), improves the public OSRM request safeguards, and fixes municipality boundary reloads and fog performance. Beta 43's starting-location discovery, privacy, driving and verified-drive fixes remain included. Earlier road, exploration, and map improvements remain
 included. Previously unlocked roads, exploration, purchases, and scoring are
 preserved when installing a signed update over an existing installation.
 
@@ -28,7 +26,7 @@ Grant Precise location. For automatic background tracking, choose Allow all the 
 location settings and allow background battery use. Settings includes shortcuts to the relevant
 Android screens. Allow notifications to see the tracking notification and its Stop tracking control.
 
-This release uses Android application ID `com.roadconquest.app` and internal version code 69.
+This release uses Android application ID `com.roadconquest.app` and internal version code 70.
 The app shows its exact version in Settings → About. Treat the application ID as permanent once
 the Google Play listing is created; changing it later would create a different app.
 
@@ -53,6 +51,7 @@ the Google Play listing is created; changing it later would create a different a
 - Open Garage & Shop to buy and equip car shapes, car colors, road colors, or the Golden
   Road Conquest UI and launcher icon. Purchases are one-time and equipped cosmetics can be changed later.
 - Choose Streets, Minimal, Night or Satellite maps, and a Light, Dark or phone-controlled appearance.
+- **VIP (one-time $2.99 US purchase through Google Play, configured separately in Play Console):** permanently remove in-app banners and rewarded-ad offers, and equip the Gold car color, Gold road color, and Golden Road Conquest UI without spending points. Existing point purchases stay owned and non-gold items still use earned points. Play restores VIP from the purchasing Google account after reinstall. VIP is unavailable until the `vip_lifetime` one-time product is active in Play Console (see [VIP setup](PLAY_VIP_SETUP.md)).
 - Use the map overlay button to highlight explored countries in blue, states/regions in purple, or towns in green. Only one overlay type is active at a time; tap a highlighted area for population, area, first visit and last visit when available.
 - Tap an unlocked road for its name, saved length, first-unlocked time, last-driven time and times driven.
 - Browse achievements by **Road Conquest**, **Mileage**, **Exploration**, **Ad Rewards**, and **Bonus** categories. Battery challenges live under Bonus; ad milestones have their own Ad Rewards category.
@@ -160,7 +159,20 @@ Keep the signing backup outside the repository and release assets. Each release 
 Override the account endpoint with the Gradle property
 `ROADCONQUEST_ACCOUNT_API_URL=https://accounts.example.com`. Local matching defaults to the public
 OSRM demo; a compatible controlled matcher can be selected with
-`ROADCONQUEST_OSRM_API_URL=https://roads.example.com`. Administrative overlay boundaries are requested only after the user enables an overlay; results are cached and requests are throttled. The APK reads the active provider from `OVERLAY_PROVIDER.txt` on this repository’s `main` branch so the service can be switched or disabled without an app update. Custom builds can point at another remote config with `ROADCONQUEST_PLACE_OVERLAY_CONFIG_URL=https://example.com/overlay-provider.txt`.
+`ROADCONQUEST_OSRM_API_URL=https://roads.example.com`.
+
+**OSRM provider limits:** The default endpoint is a shared *demo*, not a
+production routing contract. It limits requests to one per second and offers
+no uptime or commercial-use guarantee. Road Conquest now paces requests to the
+demo, respects HTTP 429/503 cooldowns, and preserves unmatched GPS data for
+later retries instead of repeatedly requesting unavailable matching.
+This per-device pacing does **not** reserve any of the demo's global capacity
+for multiple installed phones. For a growing, ad-supported public launch,
+arrange a production-authorized OSRM-compatible hosted matcher and set
+`ROADCONQUEST_OSRM_API_URL`. Other hosted products cannot simply be swapped
+in without checking licensing, map-display restrictions, and response format.
+
+Administrative overlay boundaries are requested only after the user enables an overlay; results are cached and requests are throttled. The APK reads the active provider from `OVERLAY_PROVIDER.txt` on this repository’s `main` branch so the service can be switched or disabled without an app update. Custom builds can point at another remote config with `ROADCONQUEST_PLACE_OVERLAY_CONFIG_URL=https://example.com/overlay-provider.txt`.
 See [server setup](server/README.md) and the [physical-device checklist](ANDROID_TEST_CHECKLIST.md).
 
 ## Google Play submission

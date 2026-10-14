@@ -9,6 +9,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
+import com.roadconquest.app.billing.VipEntitlement
 import com.roadconquest.app.data.ProgressionRepository
 import com.roadconquest.app.util.Prefs
 
@@ -92,7 +93,10 @@ object Cosmetics {
     }
 
     fun equip(context: Context, item: ShopItem): Boolean {
-        if (item.cost > 0 && !ProgressionRepository(context).isPurchased(item.id)) return false
+        if (item.cost > 0 &&
+            !(VipEntitlement.isActive(context) && VipEntitlement.isGoldIncluded(item.id)) &&
+            !ProgressionRepository(context).isPurchased(item.id)
+        ) return false
         when (item.type) {
             CosmeticType.CAR_STYLE -> Prefs.setCarStyle(context, item.value)
             CosmeticType.CAR_COLOR -> Prefs.setCarColor(context, item.value)

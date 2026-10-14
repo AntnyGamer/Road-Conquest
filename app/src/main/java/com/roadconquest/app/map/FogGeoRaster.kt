@@ -34,15 +34,48 @@ internal class FogGeoRaster private constructor(
     fun project(gridCorners: DoubleArray): DoubleArray {
         val result = DoubleArray(gridCorners.size)
         for (i in gridCorners.indices step 2) {
-            val lat = gridCorners[i].coerceIn(-MAX_LATITUDE, MAX_LATITUDE)
-            val lon = gridCorners[i + 1]
-            val x = RADIUS * Math.toRadians(lon)
-            val wrappedX = x + floor((centerX - x) / WORLD_METERS + 0.5) * WORLD_METERS
-            result[i] = (wrappedX - westMeters) / metersPerPixel
-            val y = RADIUS * ln(tan(PI / 4 + Math.toRadians(lat) / 2))
-            result[i + 1] = (northMeters - y) / metersPerPixel
+            result[i] = projectedLongitude(gridCorners[i + 1])
+            result[i + 1] = projectedLatitude(gridCorners[i])
         }
         return result
+    }
+
+    /**
+     * FogGrid.visitedCorners() always emits north-west, north-east,
+     * south-east, south-west. Those four vertices share just two latitudes
+     * and two longitudes. Compute each Mercator conversion once per cell;
+     * unlike filtering/cropping this preserves every projected coordinate.
+     */
+    fun projectGridCorners(corners: DoubleArray): DoubleArray {
+        require(corners.size % 8 == 0)
+        val result = DoubleArray(corners.size)
+        for (i in corners.indices step 8) {
+            val west = projectedLongitude(corners[i + 1])
+            val east = projectedLongitude(corners[i + 3])
+            val north = projectedLatitude(corners[i])
+            val south = projectedLatitude(corners[i + 4])
+            result[i] = west
+            result[i + 1] = north
+            result[i + 2] = east
+            result[i + 3] = north
+            result[i + 4] = east
+            result[i + 5] = south
+            result[i + 6] = west
+            result[i + 7] = south
+        }
+        return result
+    }
+
+    private fun projectedLongitude(longitude: Double): Double {
+        val x = RADIUS * Math.toRadians(longitude)
+        val wrappedX = x + floor((centerX - x) / WORLD_METERS + 0.5) * WORLD_METERS
+        return (wrappedX - westMeters) / metersPerPixel
+    }
+
+    private fun projectedLatitude(latitude: Double): Double {
+        val lat = latitude.coerceIn(-MAX_LATITUDE, MAX_LATITUDE)
+        val y = RADIUS * ln(tan(PI / 4 + Math.toRadians(lat) / 2))
+        return (northMeters - y) / metersPerPixel
     }
 
     /**

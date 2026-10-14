@@ -129,14 +129,37 @@ class OsrmNetworkTest {
         }
     }
 
-    @Test fun rateLimitAndInvalidJsonAreRecoverableFailures() {
+    @Test fun rateLimitStopsFurtherRequestsUntilRetryWindowExpires() {
         MockWebServer().use { server ->
-            server.enqueue(MockResponse().setResponseCode(429))
+            server.enqueue(MockResponse().setResponseCode(429).addHeader("Retry-After", "120"))
             server.enqueue(MockResponse().setBody("not json"))
+            server.start()
+            val endpoint = server.url("/").toString().trimEnd('/')
+            val matcher = OsrmMatcher(endpoint)
+            assertNull(matcher.match(points))
+            assertTrue("Respect the server's two-minute retry window",
+                matcher.rateLimitRemainingMs() in 110_000L..120_000L)
+            assertNull(matcher.match(points))
+            assertEquals("A throttled matcher must not send another request", 1, server.requestCount)
+
+            // Invalid payloads are recoverable too, but shouldn't create a
+            // global cooldown unrelated to the responding server's status.
+            val other = OsrmMatcher(endpoint)
+            assertNull(other.match(points))
+            assertEquals(2, server.requestCount)
+            assertEquals(0L, other.rateLimitRemainingMs())
+        }
+    }
+
+    @Test fun temporarilyUnavailableProviderHonorsRetryAfterWithoutBursting() {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setResponseCode(503).addHeader("Retry-After", "90"))
             server.start()
             val matcher = OsrmMatcher(server.url("/").toString().trimEnd('/'))
             assertNull(matcher.match(points))
+            assertTrue(matcher.rateLimitRemainingMs() in 80_000L..90_000L)
             assertNull(matcher.match(points))
+            assertEquals(1, server.requestCount)
         }
     }
 

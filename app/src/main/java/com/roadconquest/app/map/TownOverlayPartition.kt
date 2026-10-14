@@ -30,14 +30,30 @@ internal object TownOverlayPartition {
 
     private val factory = GeometryFactory()
 
-    fun render(data: List<PlaceOverlayData>): Result {
+    fun render(data: List<PlaceOverlayData>): Result = render(data, officialUs = false)
+
+    /**
+     * If Census incorporated/consolidated places overlap county subdivisions,
+     * show only one translucent fill. Prioritize incorporated municipalities
+     * without changing any authoritative cached source polygon or reward.
+     */
+    fun renderOfficialUs(data: List<PlaceOverlayData>): Result = render(data, officialUs = true)
+
+    private fun render(data: List<PlaceOverlayData>, officialUs: Boolean): Result {
         data class Candidate(val overlay: PlaceOverlayData, val geometry: Geometry)
         val candidates = data.distinctBy(PlaceOverlayData::key).mapNotNull { overlay ->
             val geometry = runCatching {
                 polygonal(GeometryFixer.fix(decode(JSONObject(overlay.geometryJson))))
             }.getOrNull()
             geometry?.takeUnless { it.isEmpty }?.let { Candidate(overlay, it) }
-        }.sortedWith(compareBy<Candidate> { it.geometry.area }.thenBy { it.overlay.key })
+        }.sortedWith(compareBy<Candidate> {
+            if (!officialUs) 0 else when {
+                "|census-4-" in it.overlay.key -> 0
+                "|census-3-" in it.overlay.key -> 1
+                "|census-1-" in it.overlay.key -> 2
+                else -> 3
+            }
+        }.thenBy { it.geometry.area }.thenBy { it.overlay.key })
 
         val placed = ArrayList<Candidate>(candidates.size)
         for (candidate in candidates) {
@@ -47,12 +63,19 @@ internal object TownOverlayPartition {
             val overlapping = placed.asSequence().map(Candidate::geometry)
                 .filter { it.envelopeInternal.intersects(candidateBounds) }
                 .toList()
-            val clipped = runCatching {
-                val remaining = if (overlapping.isEmpty()) candidate.geometry else {
-                    candidate.geometry.difference(UnaryUnionOp.union(overlapping))
-                }
-                polygonal(GeometryFixer.fix(remaining))
-            }.getOrNull() ?: continue
+            // Each candidate was already fixed and reduced to polygons above.
+            // With no geometric overlap, re-running the costly topology fixer
+            // cannot change the visible result and needlessly reconstructs it.
+            val clipped = if (overlapping.isEmpty()) candidate.geometry else {
+                runCatching {
+                    val remaining = if (overlapping.size == 1) {
+                        candidate.geometry.difference(overlapping[0])
+                    } else {
+                        candidate.geometry.difference(UnaryUnionOp.union(overlapping))
+                    }
+                    polygonal(GeometryFixer.fix(remaining))
+                }.getOrNull() ?: continue
+            }
             if (!clipped.isEmpty && clipped.area > 0.0) {
                 placed += Candidate(candidate.overlay, clipped)
             }
@@ -89,8 +112,7 @@ internal object TownOverlayPartition {
     }
 
     /**
-     * Official NJ municipal geometry must never be clipped or partitioned.
-     * Only dissolve coincident outline strokes (shared municipal borders).
+     * Dissolve coincident borders when no cross-layer visual partition is necessary.
      */
     fun authoritativeOutlines(data: List<PlaceOverlayData>): String {
         val edges = data.mapNotNull { overlay ->

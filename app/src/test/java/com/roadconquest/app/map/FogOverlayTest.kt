@@ -317,6 +317,31 @@ class FogOverlayTest {
         }
     }
 
+    @Test fun remoteExplorationCellsSkipFogMaskButEdgeCellsKeepTheirFade() {
+        val base = request(metersPerPixel = 5.0).copy(gridMode = true)
+        val coords = doubleArrayOf(0.01, -0.01, 0.01, 0.01, -0.01, 0.01, -0.01, -0.01)
+        val far = base.copy(
+            gridCoordinates = coords,
+            gridScreen = doubleArrayOf(2000.0, 2000.0, 2100.0, 2000.0,
+                2100.0, 2100.0, 2000.0, 2100.0)
+        )
+        assertFalse(FogBitmapRenderer.gridCellMayAffectBitmap(far, 0))
+        val original = FogBitmapRenderer.render(base)
+        val outside = FogBitmapRenderer.render(far)
+        for (y in listOf(0, 200, 639)) for (x in listOf(0, 200, 639)) {
+            assertEquals("Distant recorded tiles cannot change fog", original.getPixel(x, y),
+                outside.getPixel(x, y))
+        }
+        val edge = base.copy(
+            gridCoordinates = coords,
+            gridScreen = doubleArrayOf(600.0, 280.0, 700.0, 280.0,
+                700.0, 380.0, 600.0, 380.0)
+        )
+        assertTrue(FogBitmapRenderer.gridCellMayAffectBitmap(edge, 0))
+        assertEquals(0, Color.alpha(FogBitmapRenderer.render(edge).getPixel(620, 320)))
+        assertEquals(204, Color.alpha(FogBitmapRenderer.render(edge).getPixel(100, 100)))
+    }
+
     @Test fun subpixelMileCellsAtWorldZoomCannotMakeEnormousClearSquare() {
         // One visited mile is much smaller than a 78-km Mercator-world texel
         // at a 512px overview. Anti-aliased fractional coverage must remain

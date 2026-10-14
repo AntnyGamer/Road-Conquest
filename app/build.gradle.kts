@@ -20,8 +20,8 @@ android {
         applicationId = "com.roadconquest.app"
         minSdk = 31
         targetSdk = 37
-        versionCode = 69
-        versionName = "1.0-beta.43"
+        versionCode = 70
+        versionName = "1.0-beta.44"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         testInstrumentationRunnerArguments["timeout_msec"] = "120000"
         val escapedAccountApiUrl = accountApiUrl.replace("\\", "\\\\").replace("\"", "\\\"")
@@ -81,6 +81,7 @@ tasks.withType<Test>().configureEach {
 }
 
 dependencies {
+    implementation("com.android.billingclient:billing:9.1.0")
     implementation("com.google.android.gms:play-services-ads:25.5.0")
     implementation("com.google.android.ump:user-messaging-platform:4.0.0")
     implementation("com.google.android.play:integrity:1.6.0")

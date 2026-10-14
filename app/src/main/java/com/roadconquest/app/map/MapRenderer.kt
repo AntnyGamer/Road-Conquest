@@ -97,8 +97,8 @@ class MapRenderer(
     private var appliedRoadColor = ""
     private var fogEnabled = Prefs.isFogEnabled(context)
     private var overlayMode = Prefs.placeOverlayMode(context)
-    private var shownOverlayKeys = emptyList<String>()
-    private var shownOverlayCacheGeneration = -1L
+    @Volatile private var shownOverlayKeys = emptyList<String>()
+    @Volatile private var shownOverlayCacheGeneration = -1L
     private val overlayClient = PlaceOverlayClient()
     @Volatile private var overlayGeneration = 0
     @Volatile private var destroyed = false
@@ -112,20 +112,7 @@ class MapRenderer(
     private var savedGridCoordinates = doubleArrayOf()
     private var loadedRoadBounds: RoadQueryBounds? = null
     private var loadedPlaceBounds: RoadQueryBounds? = null
-    private var roadDataRevision = 0
     private var placeDataRevision = 0
-    private var roadProjectionDataRevision = -1
-    private var roadProjectionViewportRevision = -1
-    private var placeProjectionDataRevision = -1
-    private var placeProjectionViewportRevision = -1
-    private var roadProjectionWidth = -1
-    private var roadProjectionHeight = -1
-    private var placeProjectionWidth = -1
-    private var placeProjectionHeight = -1
-    private var roadScreenCache = doubleArrayOf()
-    private var placeScreenCache = doubleArrayOf()
-    private val liveCoordinates = DoubleArray(2)
-    private val liveScreenCache = DoubleArray(2)
     private var detailedFogCoordinates: DoubleArray? = null
     private var regionalFogCoordinates: DoubleArray? = null
     private val fogCoverageScreen = DoubleArray(8)
@@ -343,9 +330,9 @@ class MapRenderer(
         mainHandler.removeCallbacks(expireLocation)
         mainHandler.postDelayed(expireLocation, LiveLocation.MAX_AGE_MS - ageMillis)
 
-        // Equal live fixes can still be newer and must extend expiry, but they do not need
-        // another MapLibre source upload or fog bitmap render. Only skip work when every
-        // user-visible value is exactly unchanged.
+        // Equal live fixes can still be newer and must extend expiry without another
+        // MapLibre source upload. The exploration-only fog never uses live GPS
+        // coordinates; persisted cell updates and camera changes schedule its redraw.
         val currentVisual = liveLocation.current(now)
         val positionChanged = previousVisual == null || currentVisual == null ||
             previousVisual.latitude != currentVisual.latitude ||
@@ -354,7 +341,6 @@ class MapRenderer(
             previousVisual.bearing != currentVisual.bearing
         if (positionChanged) {
             updateCarLayer()
-            scheduleFogRender()
         } else if (bearingChanged) {
             // Heading-only updates still rotate the marker, but do not re-upload identical
             // GeoJSON or rebuild fog because neither depends on bearing.
@@ -401,11 +387,10 @@ class MapRenderer(
         if (destroyed) return
         mainHandler.removeCallbacks(expireLocation)
         // refreshControls can ask for a clear repeatedly while Location stays unavailable.
-        // Once the fix is already gone, another MapLibre upload and fog render cannot change
-        // anything visible, so skip that work entirely.
+        // Once the fix is already gone, another MapLibre marker upload cannot
+        // change anything visible, so skip that work entirely.
         if (!liveLocation.clear()) return
         updateCarLayer()
-        scheduleFogRender()
     }
 
     fun refreshViewport() = refreshViewport(loadRoads = true)
@@ -620,9 +605,13 @@ class MapRenderer(
                         if (it.overlay != null && it.features != null && !queryRoadsAgain) {
                             loadedRoadBounds = it.roadBounds
                             setDisplayedRoads(it.overlay, it.features)
-                        } else {
-                            scheduleFogRender()
                         }
+                        // A new camera footprint needs a fog capture even when the
+                        // loaded grid cells are unchanged. captureFog() compares
+                        // geographic keys before projecting them, so this check is cheap
+                        // when there is nothing to redraw. Do not couple this to road
+                        // source updates or to whether the cell list changed.
+                        scheduleFogRender()
                     }
                 }
                 if (queryAgain || revision != viewportRevision) {
@@ -700,13 +689,21 @@ class MapRenderer(
         // Polygon conversion can be expensive for many visited municipalities.
         // Build immutable GeoJSON on overlayExecutor instead of blocking the map's UI thread.
         val snapshot = data.toList()
+        val keys = snapshot.map { "${it.key}:${it.geometryJson.hashCode()}" }
+        // This gets called after normal activity refreshes as well as during
+        // incremental downloads. If the complete geometry set is already drawn,
+        // skip costly JTS polygon clipping and GeoJSON serialization altogether.
+        // These state fields are written on the UI thread and read here on the
+        // serial overlay executor; volatility keeps the early check up to date.
+        if (keys == shownOverlayKeys &&
+            expectedCacheGeneration == shownOverlayCacheGeneration
+        ) return
         // Existing boundaries can overlap due to mismatched or historical OSM
         // polygons. Partition only town shapes so their translucent fills never
         // stack or paint an overlapping boundary twice.
-        // Official US Census boundaries are used as supplied.
-        // Clipping individual municipalities invents slivers and gaps; only
-        // shared boundary linework is dissolved. Other countries retain
-        // the verified administrative OpenStreetMap fallback.
+        // Keep official Census polygons unchanged in storage. Where different
+        // Census municipal layers overlap, partition only the rendered fills
+        // so an incorporated city and its parent subdivision cannot double shade.
         val officialUs = if (kind == com.roadconquest.app.data.PlaceKind.TOWN) {
             snapshot.filter { UnitedStatesMunicipalBoundaries.isUnitedStatesKey(it.key) }
         } else emptyList()
@@ -716,17 +713,32 @@ class MapRenderer(
         val otherPartition = if (kind == com.roadconquest.app.data.PlaceKind.TOWN &&
             other.isNotEmpty()
         ) TownOverlayPartition.render(other) else null
-        val keys = snapshot.map { "${it.key}:${it.geometryJson.hashCode()}" }
+        val censusLayers = officialUs.mapNotNull {
+            when {
+                "|census-4-" in it.key -> 4
+                "|census-3-" in it.key -> 3
+                "|census-1-" in it.key -> 1
+                else -> null
+            }
+        }.toSet()
+        // A single layer cannot overlap itself in normal Census geography.
+        // Avoid unnecessary polygon differences on ordinary single-layer maps.
+        val officialPartition = if (censusLayers.size > 1) {
+            TownOverlayPartition.renderOfficialUs(officialUs)
+        } else null
+        val officialFills = officialPartition?.fills ?: overlayFeatureCollection(officialUs)
+        val officialBorders = officialPartition?.outlines ?:
+            TownOverlayPartition.authoritativeOutlines(officialUs)
         val fillFeatures = when {
             officialUs.isNotEmpty() && otherPartition != null ->
-                mergeOverlayCollections(overlayFeatureCollection(officialUs), otherPartition.fills)
-            officialUs.isNotEmpty() -> overlayFeatureCollection(officialUs)
+                mergeOverlayCollections(officialFills, otherPartition.fills)
+            officialUs.isNotEmpty() -> officialFills
             else -> otherPartition?.fills ?: overlayFeatureCollection(snapshot)
         }
         val boundaries = when {
             officialUs.isNotEmpty() && otherPartition != null ->
-                mergeOverlayCollections(TownOverlayPartition.authoritativeOutlines(officialUs), otherPartition.outlines)
-            officialUs.isNotEmpty() -> TownOverlayPartition.authoritativeOutlines(officialUs)
+                mergeOverlayCollections(officialBorders, otherPartition.outlines)
+            officialUs.isNotEmpty() -> officialBorders
             else -> otherPartition?.outlines ?: overlayBoundaryFeatureCollection(snapshot)
         }
         mainHandler.post {
@@ -1006,9 +1018,8 @@ class MapRenderer(
     private fun setDisplayedRoads(roads: OverlayRoads, features: FeatureCollection) {
         displayedRoads = roads
         displayedRoadFeatures = features
-        roadDataRevision++
         (map.style?.getSource(ROAD_SOURCE_ID) as? GeoJsonSource)?.setGeoJson(features)
-        scheduleFogRender()
+        // Blue roads render in their own source and do not clear exploration-only fog.
     }
 
     private fun setDisplayedPlaces(places: DoubleArray) {
@@ -1016,51 +1027,8 @@ class MapRenderer(
         displayedPlaces = places
         // Stored one-mile grid centers are authoritative; legacy samples were backfilled
         // once into this table. Scoring and road matching remain independent.
-        savedGridCoordinates = FogGrid.visitedCorners(places)
+        savedGridCoordinates = FogGrid.uniqueVisitedCorners(places)
         placeDataRevision++
-    }
-
-    private fun projectRoads(roads: OverlayRoads): DoubleArray {
-        if (roads.coordinates.isEmpty()) return roads.coordinates
-        val width = mapView.width
-        val height = mapView.height
-        if (roadProjectionDataRevision != roadDataRevision ||
-            roadProjectionViewportRevision != viewportRevision ||
-            roadProjectionWidth != width || roadProjectionHeight != height ||
-            roadScreenCache.size != roads.coordinates.size
-        ) {
-            if (roadScreenCache.size != roads.coordinates.size) {
-                roadScreenCache = DoubleArray(roads.coordinates.size)
-            }
-            map.projection.toScreenLocations(roads.coordinates, roadScreenCache)
-            roadProjectionDataRevision = roadDataRevision
-            roadProjectionViewportRevision = viewportRevision
-            roadProjectionWidth = width
-            roadProjectionHeight = height
-        }
-        return roadScreenCache
-    }
-
-    private fun projectPlaces(places: DoubleArray): DoubleArray {
-        if (places.isEmpty()) return places
-        val width = mapView.width
-        val height = mapView.height
-        if (placeProjectionDataRevision != placeDataRevision ||
-            placeProjectionViewportRevision != viewportRevision ||
-            placeProjectionWidth != width || placeProjectionHeight != height ||
-            placeScreenCache.size != places.size
-        ) {
-            if (placeScreenCache.size != places.size) {
-                placeScreenCache = DoubleArray(places.size)
-            }
-            val centerLongitude = map.cameraPosition.target?.longitude ?: 0.0
-            map.projection.toScreenLocations(FogGrid.nearLongitude(places, centerLongitude), placeScreenCache)
-            placeProjectionDataRevision = placeDataRevision
-            placeProjectionViewportRevision = viewportRevision
-            placeProjectionWidth = width
-            placeProjectionHeight = height
-        }
-        return placeScreenCache
     }
 
     private fun updateCarLayer() {
@@ -1091,7 +1059,16 @@ class MapRenderer(
             mainHandler.postDelayed(renderFog, delay)
             return
         }
-        val capture = captureFog() ?: return
+        val captureResult = captureFog() ?: return
+        if (captureResult is FogCaptureResult.Unchanged) {
+            if (captureResult.world && savedGridCoordinates.isEmpty() && !worldFogHasExploration) {
+                updateFogCoverage(force = true)
+            } else if (!cameraMoving) {
+                scheduleRegionalFogRender()
+            }
+            return
+        }
+        val capture = (captureResult as FogCaptureResult.Changed).capture
         // An identical ready world raster was installed with the map style.
         // Keep its GPU texture untouched while zooming if there are no cleared
         // grid cells. But after a deletion, replace any previously revealed
@@ -1101,14 +1078,8 @@ class MapRenderer(
             updateFogCoverage(force = true)
             return
         }
-        // MapLibre already animates this georeferenced ImageSource in native
-        // coordinates. Do not repaint/replace an identical cloud rectangle on
-        // each 120ms pan callback: that caused needless texture uploads and
-        // could flash an otherwise stable clearing on the GPU.
-        if (capture.key == installedFogKey) {
-            if (!cameraMoving) scheduleRegionalFogRender()
-            return
-        }
+        // An unchanged raster is rejected in captureFog() before projecting
+        // potentially thousands of visited-cell corners.
         lastFogRenderAt = SystemClock.elapsedRealtime()
         fogAgain = false
         fogRunning = true
@@ -1174,8 +1145,9 @@ class MapRenderer(
         if (destroyed || !viewportActive || !fogEnabled || cameraMoving ||
             regionalFogRunning || fogRunning
         ) return
-        val capture = captureFog(regional = true) ?: return
-        if (capture.key == installedRegionalFogKey) return
+        val captureResult = captureFog(regional = true) ?: return
+        if (captureResult is FogCaptureResult.Unchanged) return
+        val capture = (captureResult as FogCaptureResult.Changed).capture
         regionalFogRunning = true
         val reusable = reusableRegionalFogBitmap
         reusableRegionalFogBitmap = null
@@ -1215,7 +1187,7 @@ class MapRenderer(
         }
     }
 
-    private fun captureFog(regional: Boolean = false): FogCapture? {
+    private fun captureFog(regional: Boolean = false): FogCaptureResult? {
         if (mapView.width <= 0 || mapView.height <= 0 || map.style == null) return null
         val position = map.cameraPosition
         val center = position.target ?: return null
@@ -1247,8 +1219,18 @@ class MapRenderer(
         // The live marker is not authoritative exploration: its current preview
         // can wander while parked or immediately after reopening the app.
         // Only persisted, movement-validated mile cells may clear the fog.
+        val key = FogKey(
+            styleGeneration, world, raster.westMeters, raster.northMeters,
+            raster.metersPerPixel, size, placeDataRevision, null
+        )
+        // Most pan callbacks keep the exact same snapped north-up raster.
+        // Checking the cheap scalar key first avoids reprojecting all unlocked
+        // mile cells and reallocating a screen-coordinate array unnecessarily.
+        if (key == (if (regional) installedRegionalFogKey else installedFogKey)) {
+            return FogCaptureResult.Unchanged(world)
+        }
         val corners = savedGridCoordinates
-        val screen = raster.project(corners)
+        val screen = raster.projectGridCorners(corners)
         val geographic = raster.corners()
         val quad = LatLngQuad(
             LatLng(geographic[0], geographic[1]),
@@ -1256,11 +1238,7 @@ class MapRenderer(
             LatLng(geographic[4], geographic[5]),
             LatLng(geographic[6], geographic[7])
         )
-        val key = FogKey(
-            styleGeneration, world, raster.westMeters, raster.northMeters,
-            raster.metersPerPixel, size, placeDataRevision, null
-        )
-        return FogCapture(styleGeneration, quad, FogBitmapRenderer.Request(
+        return FogCaptureResult.Changed(FogCapture(styleGeneration, quad, FogBitmapRenderer.Request(
             bitmapWidth = size,
             bitmapHeight = size,
             screenLeft = 0f,
@@ -1278,7 +1256,7 @@ class MapRenderer(
             gridMode = true,
             gridCoordinates = corners,
             gridScreen = screen
-        ), world = world, key = key)
+        ), world = world, key = key))
     }
 
     private fun currentFogQuad(): LatLngQuad {
@@ -1369,6 +1347,11 @@ class MapRenderer(
         val visitedRevision: Int,
         val liveCellKey: Long?
     )
+
+    private sealed interface FogCaptureResult {
+        data class Changed(val capture: FogCapture) : FogCaptureResult
+        data class Unchanged(val world: Boolean) : FogCaptureResult
+    }
 
     private data class FogCapture(
         val styleGeneration: Int,

@@ -43,6 +43,25 @@ class FogGeoRasterTest {
         }
     }
 
+    @Test fun optimizedSquareProjectionExactlyMatchesOriginalAtAnyLongitude() {
+        for ((latitude, longitude) in listOf(
+            39.96 to -75.02, 0.0 to 179.999, 0.0 to -179.999,
+            79.0 to 10.0, -80.0 to 15.0
+        )) {
+            val corners = FogGrid.visitedCorners(doubleArrayOf(
+                latitude, longitude, latitude + 0.02, longitude + 0.01
+            ))
+            val rasters = listOf(
+                FogGeoRaster.fullWorld(512),
+                FogGeoRaster.around(latitude, longitude, 15.0, 1024)
+            )
+            for (raster in rasters) {
+                assertArrayEquals("Optimization must preserve every fog pixel coordinate",
+                    raster.project(corners), raster.projectGridCorners(corners), 0.0)
+            }
+        }
+    }
+
     @Test fun fogTexturePhaseRemainsConstantAtSameWorldPointWhenPanning() {
         val a = FogGeoRaster.around(40.0, -74.0, 16.0, 1024)
         val b = FogGeoRaster.around(40.015, -73.99, 16.0, 1024)

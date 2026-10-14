@@ -16,7 +16,7 @@ import kotlin.math.hypot
  * Official nationwide U.S. Census TIGERweb administrative geography.
  *
  * All states, INCLUDING NEW JERSEY, use the same Census incorporated-place
- * (layer 4) and county-subdivision (layer 1) features and identical checks.
+ * (layer 4), consolidated-city (layer 3), and county-subdivision (layer 1) features.
  * Incorporated cities/boroughs are in layer 4; townships and New England
  * towns usually appear in layer 1. There are no state-specific providers.
  *
@@ -30,6 +30,14 @@ internal object UnitedStatesMunicipalBoundaries {
     private const val MAX_CHARS = 16 * 1024 * 1024
     private const val MAX_SAVED_ERROR_METERS = 1_800.0
     private val WHITESPACE_RE = Regex("\\s+")
+    private val OFFICIAL_CENSUS_ID_RE = Regex("""\|census-(1|3|4)-(\d+)$""")
+    // State files published by Census for the CONCITY layer (2025 vintage).
+    // Other states have no consolidated-city polygons, so do not make an
+    // otherwise empty additional network request for every driven town.
+    private val CONSOLIDATED_CITY_STATES = setOf("09", "13", "18", "20", "21", "30", "47")
+
+    internal fun hasConsolidatedCities(stateFips: String): Boolean =
+        stateFips in CONSOLIDATED_CITY_STATES
     private val MUNICIPAL_SUFFIXES = listOf(
         " township" to "township", " twp" to "township",
         " borough" to "borough", " boro" to "borough",
@@ -130,8 +138,10 @@ internal object UnitedStatesMunicipalBoundaries {
         require(applies(place))
         val normalized = municipalityIdentity(place.displayName)
         val state = stateCode(place.countryName, place.parentName) ?: return null
-        val name = normalized.first
-        if (name.length !in 2..90) return null
+        val officialIdentity = OFFICIAL_CENSUS_ID_RE.find(place.key)
+        // Names may change after the original Census GEOID was discovered.
+        // An authoritative saved identity must not depend on the old label.
+        if (officialIdentity == null && normalized.first.length !in 2..90) return null
         // Limit a query by the actual geographic neighborhood instead of
         // relying on case-sensitive DB string comparisons across whole states.
         // The saved first-visit position in older builds can be off by ~1km.
@@ -142,23 +152,36 @@ internal object UnitedStatesMunicipalBoundaries {
             place.longitude - longitudePad, place.latitude - latitudePad,
             place.longitude + longitudePad, place.latitude + latitudePad
         ).joinToString(",")
-        val where = "STATE = '$state'"
-        val officialLayer = Regex("""\|census-(1|4)-(\d+)$""")
-            .find(place.key)?.groupValues?.get(1)?.toIntOrNull()
+        val officialLayer = officialIdentity?.groupValues?.get(1)?.toIntOrNull()
+        // A saved official GEOID is already an exact identifier, so don't fetch
+        // every nearby Census polygon and discard all but one on the client.
+        // Legacy name-only visits must retain the broader search.
+        val where = municipalityWhereClause(state, officialIdentity?.groupValues?.get(2))
         val layerOrder = if (officialLayer != null) listOf(officialLayer) else if (normalized.second == "township" ||
             normalized.second == "town" &&
             place.parentName.trim().lowercase(Locale.ROOT) in setOf(
                 "connecticut", "massachusetts", "maine", "new hampshire",
                 "rhode island", "vermont", "new york", "wisconsin"
             )
-        ) listOf(1, 4) else listOf(4, 1)
-        for (layer in layerOrder) {
-            val url = Uri.parse("$BASE/$layer/query").buildUpon()
+        ) listOf(1, 4, 3) else listOf(4, 3, 1)
+        val relevantLayers = if (officialLayer == null && !hasConsolidatedCities(state)) {
+            layerOrder.filterNot { it == 3 }
+        } else layerOrder
+        for (layer in relevantLayers) {
+            val query = Uri.parse("$BASE/$layer/query").buildUpon()
                 .appendQueryParameter("where", where)
-                .appendQueryParameter("geometry", envelope)
-                .appendQueryParameter("geometryType", "esriGeometryEnvelope")
-                .appendQueryParameter("inSR", "4326")
-                .appendQueryParameter("spatialRel", "esriSpatialRelIntersects")
+            // For legacy name-only records, the nearby envelope prevents
+            // thousands of same-state results. For a verified Census GEOID the
+            // indexed identity is already unique: do not also require the
+            // originally visited GPS point to remain near a subsequently
+            // revised municipal boundary.
+            if (officialLayer == null) {
+                query.appendQueryParameter("geometry", envelope)
+                    .appendQueryParameter("geometryType", "esriGeometryEnvelope")
+                    .appendQueryParameter("inSR", "4326")
+                    .appendQueryParameter("spatialRel", "esriSpatialRelIntersects")
+            }
+            val url = query
                 .appendQueryParameter("outFields",
                     "BASENAME,NAME,STATE,GEOID,LSADC,FUNCSTAT,AREALAND,AREAWATER")
                 .appendQueryParameter("returnGeometry", "true")
@@ -198,8 +221,13 @@ internal object UnitedStatesMunicipalBoundaries {
         return null
     }
 
+    internal fun municipalityWhereClause(stateFips: String, officialGeoid: String?): String =
+        if (officialGeoid != null && officialGeoid.all(Char::isDigit)) {
+            "STATE = '$stateFips' AND GEOID = '$officialGeoid'"
+        } else "STATE = '$stateFips'"
+
     internal fun parseResponse(place: PlaceDiscovery, body: String, layer: Int): PlaceOverlayData? {
-        if (!applies(place) || layer !in setOf(1, 4)) return null
+        if (!applies(place) || layer !in setOf(1, 3, 4)) return null
         val doc = JSONObject(body)
         if (doc.has("error")) throw IOException("Census municipal service error")
         if (doc.optString("type") != "FeatureCollection") {
@@ -211,7 +239,7 @@ internal object UnitedStatesMunicipalBoundaries {
         val state = stateCode(place.countryName, place.parentName) ?: return null
         // New verified discovery keys bind overlays to a single Census polygon.
         // Legacy name-only keys retain the existing name-and-position fallback.
-        val officialIdentity = Regex("""\|census-(1|4)-(\d+)$""").find(place.key)
+        val officialIdentity = OFFICIAL_CENSUS_ID_RE.find(place.key)
         val requestedLayer = officialIdentity?.groupValues?.get(1)?.toIntOrNull()
         val requestedGeoid = officialIdentity?.groupValues?.get(2)
         var selected: PlaceOverlayData? = null
@@ -225,19 +253,24 @@ internal object UnitedStatesMunicipalBoundaries {
             ) continue
             val geometry = feature.optJSONObject("geometry") ?: continue
             if (geometry.optString("type") !in setOf("Polygon", "MultiPolygon")) continue
-            val actual = municipalityIdentity(
-                props.optString("NAME").ifBlank { props.optString("BASENAME") }
-            )
-            val bare = municipalityIdentity(props.optString("BASENAME"))
-            if (actual.first != wanted.first && bare.first != wanted.first) continue
-            val actualType = actual.second
-            // Basenames alone cannot prove a township is a city, or vice versa.
-            if (wanted.second != null && actualType != null && wanted.second != actualType) continue
-            if (wanted.second == "township" && layer != 1) continue
-            if (wanted.second in setOf("city", "borough", "village") && layer != 4) continue
-            val nearest = distanceToPolygonMeters(
-                geometry, place.latitude, place.longitude
-            )
+            // Exact official IDs already verify both Census layer and GEOID above.
+            // The display name may have changed between Census vintages; a name,
+            // municipal suffix or positional heuristic must not reject this same
+            // identified polygon. Keep the strict legacy-name checks below for
+            // records without a trustworthy official ID.
+            val nearest = if (requestedLayer != null) 0.0 else {
+                val actual = municipalityIdentity(
+                    props.optString("NAME").ifBlank { props.optString("BASENAME") }
+                )
+                val bare = municipalityIdentity(props.optString("BASENAME"))
+                if (actual.first != wanted.first && bare.first != wanted.first) continue
+                val actualType = actual.second
+                if (wanted.second != null && actualType != null && wanted.second != actualType) continue
+                if (wanted.second == "township" && layer != 1) continue
+                if (wanted.second == "city" && layer !in setOf(3, 4)) continue
+                if (wanted.second in setOf("borough", "village") && layer != 4) continue
+                distanceToPolygonMeters(geometry, place.latitude, place.longitude)
+            }
             if (!nearest.isFinite() || nearest > MAX_SAVED_ERROR_METERS || nearest >= distance) {
                 continue
             }
