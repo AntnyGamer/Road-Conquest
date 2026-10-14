@@ -93,9 +93,7 @@ class AchievementsActivity : Activity() {
                     onSuccess = { (progression, achievements) ->
                         points.text = String.format(Locale.getDefault(), "⚔ %,d points", progression.balance)
                         text.visibility = android.view.View.GONE
-                        this.achievements = Achievements.visibleAchievements(
-                            achievements, VipEntitlement.isActive(this@AchievementsActivity)
-                        )
+                        this.achievements = achievements
                         renderCategory(list)
                     },
                     onFailure = {
@@ -111,7 +109,7 @@ class AchievementsActivity : Activity() {
 
     private fun renderCategory(container: LinearLayout) {
         container.removeAllViews()
-        achievements.asSequence()
+        Achievements.visibleAchievements(achievements, VipEntitlement.isActive(this)).asSequence()
             .filter { it.category == selectedCategory }
             .forEach { addAchievement(container, it) }
         updateCategoryButtons()
@@ -124,7 +122,7 @@ class AchievementsActivity : Activity() {
             // but do not show an empty page of impossible locked challenges.
             button.visibility = if (category == AchievementCategory.ADS &&
                 VipEntitlement.isActive(this) && achievements.none {
-                    it.category == AchievementCategory.ADS
+                    it.category == AchievementCategory.ADS && it.unlocked
                 }
             ) android.view.View.GONE else android.view.View.VISIBLE
         }
@@ -193,6 +191,16 @@ class AchievementsActivity : Activity() {
     override fun onResume() {
         super.onResume()
         ads.onResume()
+        // Returning after a VIP purchase/refund changes which ad-only
+        // challenges are attainable; refresh without resetting progress.
+        if (categoryButtons.isNotEmpty()) {
+            if (selectedCategory == AchievementCategory.ADS &&
+                VipEntitlement.isActive(this) && achievements.none {
+                    it.category == AchievementCategory.ADS && it.unlocked
+                }
+            ) selectedCategory = AchievementCategory.ROADS
+            renderCategory(findViewById(R.id.achievementsList))
+        }
     }
 
     override fun onPause() {
