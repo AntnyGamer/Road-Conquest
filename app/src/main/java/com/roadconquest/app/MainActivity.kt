@@ -701,7 +701,7 @@ class MainActivity : Activity() {
         if (deletionPending || trackingPaused || !hasPreciseLocation || !locationEnabled) {
             renderer?.clearCurrentLocation()
         }
-        statusText.text = when {
+        val statusLabel = when {
             deletionPending -> "Finishing device data deletion…"
             trackingPaused -> getString(R.string.tracking_paused)
             !hasPreciseLocation && hasApproximateLocation -> "Precise location required"
@@ -710,6 +710,8 @@ class MainActivity : Activity() {
             active -> "Tracking your driving"
             else -> "Not tracking"
         }
+        // Avoid repeating the same live-region announcement on each data refresh.
+        if (statusText.text.toString() != statusLabel) statusText.text = statusLabel
 
         val generation = ++summaryGeneration
         summaryExecutor.execute {
