@@ -133,6 +133,7 @@ class TripHistoryActivity : Activity() {
         val status = TextView(this).also {
             routeStatus = it
             it.text = "Choose a drive to watch your route unfold."
+            it.accessibilityLiveRegion = android.view.View.ACCESSIBILITY_LIVE_REGION_POLITE
             it.textSize = 14f
             it.setTextColor(Appearance.color(this@TripHistoryActivity, R.attr.rcTextSecondary))
             it.setPadding(0, 0, 0, dp(12))

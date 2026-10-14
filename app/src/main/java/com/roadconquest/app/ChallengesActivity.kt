@@ -21,7 +21,8 @@ import com.roadconquest.app.data.WeeklyChallenges
 import com.roadconquest.app.util.Appearance
 import com.roadconquest.app.util.ForegroundSession
 import com.roadconquest.app.util.FeatureFlags
-import java.time.Instant
+import java.text.DateFormat
+import java.util.Date
 import java.util.Locale
 import java.util.concurrent.Executors
 
@@ -125,7 +126,7 @@ class ChallengesActivity : Activity() {
             val goals = runCatching {
                 val week = WeeklyChallenges.status(applicationContext)
                 buildString {
-                    append("Resets ${Instant.ofEpochMilli(week.endsAt)}\n\n")
+                    append("Resets ${DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(week.endsAt))} (local time)\n\n")
                     week.challenges.forEach {
                         append("${it.title}\n${it.progress.coerceAtMost(it.target)} / ${it.target} · ${it.reward} points")
                         append(if (it.rewarded) " · Reward earned\n\n" else "\n\n")
