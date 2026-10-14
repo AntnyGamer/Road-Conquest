@@ -119,7 +119,7 @@ class AchievementsActivity : Activity() {
         categoryButtons.forEach { (category, button) ->
             // Show the active filter clearly while allowing it to be tapped again.
             val selected = category == selectedCategory
-            button.isEnabled = true
+            button.isEnabled = !selected
             button.isSelected = selected
             button.setBackgroundResource(if (selected) R.drawable.primary_button_background else R.drawable.settings_action_background)
             button.setTextColor(Appearance.color(this,
