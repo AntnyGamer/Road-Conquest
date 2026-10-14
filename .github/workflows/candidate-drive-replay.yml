@@ -48,7 +48,7 @@ jobs:
           sha256sum "$RUNNER_TEMP/candidate-drive/candidate.apk" | cut -d ' ' -f 1 > "$RUNNER_TEMP/candidate-drive/sha256.txt"
           git rev-parse HEAD > "$RUNNER_TEMP/candidate-drive/source-commit.txt"
       - name: Save candidate APK for this exact source
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: disposable-drive-test-apk
           path: ${{ runner.temp }}/candidate-drive/
@@ -88,7 +88,7 @@ jobs:
           script: python3 tools/emulator-drive-replay.py --apk "$RUNNER_TEMP/candidate-drive/candidate.apk" --expected-sha256 "$(cat "$RUNNER_TEMP/candidate-drive/sha256.txt")" --out "$RUNNER_TEMP/drive-evidence" --keep-location-on
       - name: Save candidate driving data, screenshots and diagnostics
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: candidate-drive-api-35
           path: ${{ runner.temp }}/drive-evidence/
