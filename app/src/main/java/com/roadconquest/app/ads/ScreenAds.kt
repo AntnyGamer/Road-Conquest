@@ -98,7 +98,7 @@ class ScreenAds(
         // Restore a prior Play purchase before initializing/loading ads. A
         // cached offline VIP entitlement also suppresses ads immediately.
         if (VipEntitlement.isActive(activity)) suspendAdsForVip()
-        vipBilling.refresh()
+        vipBilling.refresh(includeOffer = false)
     }
 
     private fun resumeAfterVipCheck() {
