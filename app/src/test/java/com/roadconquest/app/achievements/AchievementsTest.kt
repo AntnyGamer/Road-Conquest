@@ -54,6 +54,19 @@ class AchievementsTest {
         assertFalse(progress.first { it.id == "ads_25" }.unlocked)
     }
 
+    @Test fun vipHidesOnlyLockedAdMilestonesWithoutGrantingPoints() {
+        val items = Achievements.progress(
+            DataSummary(0, 0, null, null, 0.0, 0),
+            AchievementMetrics(adsWatched = 10)
+        )
+        val visible = Achievements.visibleAchievements(items, vip = true)
+        assertTrue(visible.any { it.id == "ads_5" && it.unlocked })
+        assertTrue(visible.any { it.id == "ads_10" && it.unlocked })
+        assertFalse(visible.any { it.id == "ads_25" })
+        assertTrue(visible.any { it.id == "roads_10" })
+        assertEquals(items, Achievements.visibleAchievements(items, vip = false))
+    }
+
     @Test fun correctedRoadGroupingCannotRelockAnEarnedMilestone() {
         val context = RuntimeEnvironment.getApplication()
         Achievements.reset(context)
