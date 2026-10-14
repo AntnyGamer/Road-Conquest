@@ -34,5 +34,11 @@ and backups are never used as verified evidence. Hidden profiles stay out of ran
 Local goals award points independently of verified friend standings; no winner prize is
 advertised or awarded by friend rankings.
 
+The current beta temporarily hides public and friend leaderboards, leaderboard privacy
+controls and verified-drive sharing with `FeatureFlags.LEADERBOARDS_VISIBLE = false`.
+No verification evidence is collected or uploaded while hidden. Local weekly goals and
+friend management remain available; the ranking implementation and existing scores are
+retained for a later enabled build.
+
 Trip replay respects raw GPS gaps even when the displayed route is downsampled. A trip
 selected before data deletion/restore cannot replay unrelated replacement history.

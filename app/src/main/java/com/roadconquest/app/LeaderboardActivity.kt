@@ -14,6 +14,7 @@ import com.roadconquest.app.account.AccountClient
 import com.roadconquest.app.account.AccountStore
 import com.roadconquest.app.util.Appearance
 import com.roadconquest.app.util.ForegroundSession
+import com.roadconquest.app.util.FeatureFlags
 import java.util.Locale
 import java.util.concurrent.Executors
 
@@ -28,6 +29,10 @@ class LeaderboardActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         setTheme(Appearance.themeRes(this))
         super.onCreate(savedInstanceState)
+        if (!FeatureFlags.LEADERBOARDS_VISIBLE) {
+            finish()
+            return
+        }
         WindowCompat.enableEdgeToEdge(window)
         val lightSystemBars = !Appearance.isDark(this)
         WindowCompat.getInsetsController(window, window.decorView).apply {
@@ -53,7 +58,10 @@ class LeaderboardActivity : Activity() {
         ForegroundSession.app.onStart()
     }
 
-    override fun onResume() { super.onResume(); refresh(); ads.onResume() }
+    override fun onResume() {
+        super.onResume()
+        if (::ads.isInitialized) { refresh(); ads.onResume() }
+    }
 
     private fun refresh() {
         val current = ++generation
@@ -96,7 +104,7 @@ class LeaderboardActivity : Activity() {
         super.onStop()
     }
 
-    override fun onPause() { ads.onPause(); super.onPause() }
+    override fun onPause() { if (::ads.isInitialized) ads.onPause(); super.onPause() }
 
-    override fun onDestroy() { ads.destroy(); generation++; executor.shutdownNow(); super.onDestroy() }
+    override fun onDestroy() { if (::ads.isInitialized) ads.destroy(); generation++; executor.shutdownNow(); super.onDestroy() }
 }

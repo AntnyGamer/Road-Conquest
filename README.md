@@ -1,4 +1,4 @@
-# Road Conquest 1.0 Beta 44
+# Road Conquest 1.0 Beta 45
 
 Road Conquest remembers the roads you drive and the places you visit, revealing them through a
 cloud-textured fog map.
@@ -7,8 +7,11 @@ cloud-textured fog map.
 [Source and issues](https://github.com/AntnyGamer/RoadConquest-Beta) ·
 [GNU AGPL v3 license](LICENSE)
 
-Beta 44 adds optional one-time VIP ($2.99 US, configured through Google Play), improves the public OSRM request safeguards, and fixes municipality boundary reloads and fog performance. Beta 43's starting-location discovery, privacy, driving and verified-drive fixes remain included. Earlier road, exploration, and map improvements remain
-included. Previously unlocked roads, exploration, purchases, and scoring are
+Beta 45 adds validated progress restore with a recovery backup, weekly road and town
+challenges, friend requests, and saved-trip replay. It improves VIP achievement eligibility
+and background place discovery, and temporarily hides competitive rankings and verification
+uploads. Beta 44's VIP, road-matching, municipality and map improvements remain included.
+See [backup and challenges details](BACKUP_AND_CHALLENGES.md). Previously unlocked roads, exploration, purchases, and scoring are
 preserved when installing a signed update over an existing installation.
 
 ## Install
@@ -26,7 +29,7 @@ Grant Precise location. For automatic background tracking, choose Allow all the 
 location settings and allow background battery use. Settings includes shortcuts to the relevant
 Android screens. Allow notifications to see the tracking notification and its Stop tracking control.
 
-This release uses Android application ID `com.roadconquest.app` and internal version code 70.
+This release uses Android application ID `com.roadconquest.app` and internal version code 71. Google Play permanently reserves every uploaded version code, including codes used by drafts or testing tracks; Beta 45 replaces the code-70 Beta 44 bundle for new Play uploads.
 The app shows its exact version in Settings → About. Treat the application ID as permanent once
 the Google Play listing is created; changing it later would create a different app.
 
@@ -86,6 +89,12 @@ OSM-way or matcher-fragment count.
 
 ## Accounts and leaderboards
 
+This beta hides public and friend rankings, visibility controls and live verified-drive
+sharing through `FeatureFlags.LEADERBOARDS_VISIBLE = false`. No verification evidence is
+collected or uploaded while hidden. Local weekly goals and friend management remain available.
+The retained competition implementation requires production verification infrastructure
+before it can be enabled.
+
 The app defaults to the existing live HTTPS account service. Usernames are unique without regard
 to capitalization. Passwords are salted and scrypt-hashed on the server; Android stores an encrypted
 session token. Local exploration does not require an account.
@@ -126,7 +135,7 @@ These choices keep the progression system from adding continuous background netw
 ## Build and verify
 
 Open the project in Android Studio with JDK 21 or newer, Android SDK 37.0 and Build Tools 36.0.0.
-The wrapper pins Gradle 9.6.1 with a verified checksum and Android Gradle Plugin 9.4.1.
+The wrapper pins Gradle 9.8.1 with a verified checksum and Android Gradle Plugin 9.4.1.
 
 ```sh
 ./gradlew :app:testDebugUnitTest :app:lintDebug :app:lintRelease :app:assembleDebug :app:assembleRelease :app:bundleRelease

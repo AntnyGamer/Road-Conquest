@@ -30,6 +30,37 @@ class PlaceResolverTest {
         this.subAdminArea = subAdminArea
     }
 
+    @Test fun partialUsAddressUsesOfficialStateInsteadOfLosingDiscovery() {
+        val context = org.robolectric.RuntimeEnvironment.getApplication()
+        val partial = Address(Locale.US).apply { countryCode = "US"; countryName = "United States" }
+        var stateLookups = 0
+        val places = PlaceResolver.resolve(context, candidate,
+            addressesOverride = listOf(partial),
+            stateLookup = { _, _ -> stateLookups++; "New Jersey" },
+            townLookup = { null })!!
+        assertEquals(1, stateLookups)
+        assertEquals(listOf("us", "us|new jersey"), places.map { it.key })
+        assertFalse(places.any { it.kind == PlaceKind.TOWN })
+    }
+
+    @Test fun officialFallbackNeverOverwritesAKnownNonUsCountry() {
+        val context = org.robolectric.RuntimeEnvironment.getApplication()
+        val french = Address(Locale.FRANCE).apply { countryCode = "FR"; countryName = "France" }
+        val places = PlaceResolver.resolve(context, candidate,
+            addressesOverride = listOf(french),
+            stateLookup = { _, _ -> fail("A known non-US address must not trigger Census"); null },
+            townLookup = { fail("No town has been identified"); null })!!
+        assertEquals(listOf("fr"), places.map { it.key })
+    }
+
+    @Test fun partialAddressRemainsPendingWhenOfficialFallbackFails() {
+        val context = org.robolectric.RuntimeEnvironment.getApplication()
+        assertNull(PlaceResolver.resolve(context, candidate,
+            addressesOverride = listOf(Address(Locale.US).apply { countryCode = "US" }),
+            stateLookup = { _, _ -> throw java.io.IOException("offline") },
+            townLookup = { fail("State lookup failed"); null }))
+    }
+
     @Test fun abbreviatedAndFullStateNamesResolveToIdenticalUSVisitKeys() {
         val abbreviated = address("Woodbury", "Deptford Township").apply { adminArea = "NJ" }
         val full = address("Woodbury", "Deptford Township")

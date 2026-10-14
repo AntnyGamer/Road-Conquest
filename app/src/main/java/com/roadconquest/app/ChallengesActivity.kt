@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.text.InputFilter
+import android.view.View
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -19,6 +20,7 @@ import com.roadconquest.app.account.AccountStore
 import com.roadconquest.app.data.WeeklyChallenges
 import com.roadconquest.app.util.Appearance
 import com.roadconquest.app.util.ForegroundSession
+import com.roadconquest.app.util.FeatureFlags
 import java.time.Instant
 import java.util.Locale
 import java.util.concurrent.Executors
@@ -54,15 +56,18 @@ class ChallengesActivity : Activity() {
         label("Weekly challenges", 24f)
         label("Weeks run Monday to Monday at 00:00 UTC. Local goals use new road and town discoveries. Points are added automatically once per goal.")
         local = label("Loading this week's progress…")
-        label("Friends competition", 22f)
-        label("Compete on this week's verified driving miles or newly unlocked verified road sections. Both people must accept the friendship. Hidden profiles do not appear. Imported history is never uploaded for credit.")
-        val tabs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; root.addView(this) }
-        listOf("roads" to "New roads", "miles" to "Miles").forEach { (key, title) ->
-            tabs.addView(Button(this).apply {
-                text = title; setOnClickListener { metric = key; refresh() }
-            }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        label("Friends", 22f)
+        label("Add friends by username. Both people must accept the friendship.")
+        if (FeatureFlags.LEADERBOARDS_VISIBLE) {
+            label("Compete on this week's verified driving miles or newly unlocked verified road sections. Hidden profiles do not appear. Imported history is never uploaded for credit.")
+            val tabs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; root.addView(this) }
+            listOf("roads" to "New roads", "miles" to "Miles").forEach { (key, title) ->
+                tabs.addView(Button(this).apply {
+                    text = title; setOnClickListener { metric = key; refresh() }
+                }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            }
         }
-        ranking = label("")
+        ranking = label("").apply { visibility = if (FeatureFlags.LEADERBOARDS_VISIBLE) View.VISIBLE else View.GONE }
         status = label("")
         invite = Button(this).apply {
             text = "Add friend by username"
@@ -105,18 +110,20 @@ class ChallengesActivity : Activity() {
             if (session == null) {
                 runOnUiThread {
                     if (!isDestroyed && expected == generation) {
-                        ranking.text = "Sign in to add friends and view verified weekly rankings."
+                        status.text = "Sign in to add friends."
+                        ranking.text = if (FeatureFlags.LEADERBOARDS_VISIBLE) "Sign in to view verified weekly rankings." else ""
                         invite.text = "Sign in"; friends.removeAllViews()
                     }
                 }
                 return@execute
             }
             val friendList = runCatching { AccountClient.friends(session.token).getJSONArray("friends") }
-            val standings = runCatching { AccountClient.friendWeek(session.token, selected) }
+            val standings = if (FeatureFlags.LEADERBOARDS_VISIBLE) runCatching { AccountClient.friendWeek(session.token, selected) } else null
             runOnUiThread {
                 if (isDestroyed || expected != generation || AccountStore.load(this)?.token != session.token) return@runOnUiThread
                 invite.text = "Add friend by username"
                 friends.removeAllViews()
+                status.text = ""
                 friendList.fold({ rows ->
                     for (i in 0 until rows.length()) {
                         val row = rows.getJSONObject(i)
@@ -139,7 +146,7 @@ class ChallengesActivity : Activity() {
                     }
                     if (rows.length() == 0) friends.addView(TextView(this).apply { text = "No friends or requests yet." })
                 }, { status.text = serviceError(it) })
-                ranking.text = standings.fold({ body ->
+                ranking.text = standings?.fold({ body ->
                     if (!body.optBoolean("available")) "Verified friend competitions are not active on the server yet. Local challenges still work."
                     else buildString {
                         append("Verified ${if (selected == "roads") "new road sections" else "miles"} · week of ${body.getString("week_start")} UTC\n\n")
@@ -152,7 +159,7 @@ class ChallengesActivity : Activity() {
                                 row.getLong("rank"), row.getString("username"), row.getDouble("miles"), row.getLong("roads")))
                         }
                     }
-                }, { serviceError(it) })
+                }, { serviceError(it) }).orEmpty()
             }
         }
     }

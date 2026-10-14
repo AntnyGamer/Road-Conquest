@@ -8,6 +8,7 @@ import com.google.android.gms.tasks.Tasks
 import com.google.android.play.core.integrity.IntegrityManagerFactory
 import com.google.android.play.core.integrity.StandardIntegrityManager
 import com.roadconquest.app.util.Prefs
+import com.roadconquest.app.util.FeatureFlags
 import org.json.JSONArray
 import org.json.JSONObject
 import java.security.MessageDigest
@@ -17,7 +18,8 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 /** Only live fixes enter competition. Saved history/imports and local totals are never uploaded. */
-class VerifiedDriving(context: Context) {
+class VerifiedDriving internal constructor(context: Context, private val competitionsEnabled: () -> Boolean) {
+    constructor(context: Context) : this(context, { FeatureFlags.LEADERBOARDS_VISIBLE })
     private val context = context.applicationContext
     private val executor = Executors.newSingleThreadScheduledExecutor()
     private val busy = AtomicBoolean(false)
@@ -37,7 +39,7 @@ class VerifiedDriving(context: Context) {
     // Location callbacks only copy into a bounded in-memory queue. Slow account or Play
     // Integrity calls cannot make the foreground service drop every fix received meanwhile.
     fun offer(location: Location) {
-        if (!accepting || !Prefs.isDriveVerificationEnabled(context) || !AccountClient.isConfigured()) return
+        if (!competitionsEnabled() || !accepting || !Prefs.isDriveVerificationEnabled(context) || !AccountClient.isConfigured()) return
         // Tracking intentionally listens to fused + GPS for local reliability, but verified
         // scoring only ever accepts live GPS fixes with usable accuracy/speed metadata. Reject
         // permanently-ineligible fixes before copying/enqueueing them; accept() repeats these
@@ -99,7 +101,7 @@ class VerifiedDriving(context: Context) {
 
     private fun accept(location: Location) {
         val session = AccountStore.load(context)
-        if (session == null || !Prefs.isDriveVerificationEnabled(context)) { reset(); return }
+        if (!competitionsEnabled() || session == null || !Prefs.isDriveVerificationEnabled(context)) { reset(); return }
         val currentConsent = Prefs.driveVerificationConsentVersion(context)
         if (accountToken == null) {
             // State is empty after construction/reset, so binding the current account must not
@@ -218,7 +220,7 @@ class VerifiedDriving(context: Context) {
                 drainQueuedLocations()
                 closed = true
                 val token = accountToken
-                if (token != null && provider != null && run != null && points.size >= 2 && Prefs.isDriveVerificationEnabled(context)) {
+                if (competitionsEnabled() && token != null && provider != null && run != null && points.size >= 2 && Prefs.isDriveVerificationEnabled(context)) {
                     if (pendingEvidence == null) prepareEvidence()
                     submit(token, finishing = true)
                 }

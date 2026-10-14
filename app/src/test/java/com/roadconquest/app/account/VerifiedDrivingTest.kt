@@ -42,7 +42,7 @@ class VerifiedDrivingTest {
 
     @Test fun retryCooldownKeepsFreshFixesBufferedInsteadOfDiscardingThem() {
         val context = RuntimeEnvironment.getApplication()
-        val verified = VerifiedDriving(context)
+        val verified = VerifiedDriving(context) { true }
         VerifiedDriving::class.java.getDeclaredField("retryAfter").apply { isAccessible = true }
             .setLong(verified, SystemClock.elapsedRealtime() + 60_000L)
 
@@ -65,7 +65,7 @@ class VerifiedDrivingTest {
 
     @Test fun permanentlyIneligibleFixesNeverEnterVerifiedQueue() {
         val context = RuntimeEnvironment.getApplication()
-        val verified = VerifiedDriving(context)
+        val verified = VerifiedDriving(context) { true }
         val busy = VerifiedDriving::class.java.getDeclaredField("busy").apply { isAccessible = true }
             .get(verified) as AtomicBoolean
         busy.set(true)
@@ -101,7 +101,7 @@ class VerifiedDrivingTest {
 
     @Test fun busyVerificationBuffersTheNewestLiveFixesWithinABound() {
         val context = RuntimeEnvironment.getApplication()
-        val verified = VerifiedDriving(context)
+        val verified = VerifiedDriving(context) { true }
         val busy = VerifiedDriving::class.java.getDeclaredField("busy").apply { isAccessible = true }
             .get(verified) as AtomicBoolean
         busy.set(true)
@@ -127,6 +127,21 @@ class VerifiedDrivingTest {
         busy.set(false)
         Prefs.setDriveVerificationEnabled(context, false)
         AccountClient.endpointOverrideForTests = ""
+        verified.close()
+    }
+
+    @Test fun hiddenLeaderboardsRejectLiveEvidenceEvenWithOldSharingConsent() {
+        val context = RuntimeEnvironment.getApplication()
+        val verified = VerifiedDriving(context)
+        verified.offer(Location("gps").apply {
+            latitude = 40.0; longitude = -74.0; accuracy = 5f; speed = 10f
+            time = System.currentTimeMillis()
+            elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos().coerceAtLeast(1L)
+        })
+        @Suppress("UNCHECKED_CAST")
+        val queue = VerifiedDriving::class.java.getDeclaredField("pendingLocations").apply { isAccessible = true }
+            .get(verified) as ArrayDeque<Location>
+        assertEquals(0, queue.size)
         verified.close()
     }
 }
