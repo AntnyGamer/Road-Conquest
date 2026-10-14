@@ -40,6 +40,11 @@ and enable Play Integrity's strong label. Enable flags only on a test deployment
 and internal Play build first. Verify real-phone credit, borders, replay/teleport
 rejection, privacy and deletion before enabling public competition.
 
+For that internal build, pass `-PROADCONQUEST_LEADERBOARDS_VISIBLE=true` and
+`-PROADCONQUEST_ACCOUNT_API_URL=<test deployment HTTPS URL>` to
+`./gradlew :app:bundleRelease`. The visibility property defaults to `false`;
+it never selects a fake verifier or changes the server's verification requirements.
+
 Production has no selectable test verifier. CI/emulators cannot establish Google
 eligibility. Rankings remain hidden until setup succeeds. `server/README.md`
 lists the settings and scoring rules.

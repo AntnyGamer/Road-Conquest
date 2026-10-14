@@ -11,6 +11,9 @@ val osrmApiUrl = providers.gradleProperty("ROADCONQUEST_OSRM_API_URL").getOrElse
 val placeOverlayConfigUrl = providers.gradleProperty("ROADCONQUEST_PLACE_OVERLAY_CONFIG_URL").getOrElse(
     "https://raw.githubusercontent.com/AntnyGamer/RoadConquest-Beta/main/OVERLAY_PROVIDER.txt"
 )
+// Explicit opt-in for an internal Play build; ordinary builds remain hidden.
+val leaderboardsVisible = providers.gradleProperty("ROADCONQUEST_LEADERBOARDS_VISIBLE")
+    .getOrElse("false").toBooleanStrict()
 
 android {
     namespace = "com.roadconquest.app"
@@ -30,6 +33,7 @@ android {
         buildConfigField("String", "ACCOUNT_API_URL", "\"$escapedAccountApiUrl\"")
         buildConfigField("String", "OSRM_API_URL", "\"$escapedOsrmApiUrl\"")
         buildConfigField("String", "PLACE_OVERLAY_CONFIG_URL", "\"$escapedPlaceOverlayConfigUrl\"")
+        buildConfigField("boolean", "LEADERBOARDS_VISIBLE", leaderboardsVisible.toString())
     }
 
     buildFeatures {

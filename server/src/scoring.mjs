@@ -14,7 +14,7 @@ export function distance(a, b) {
 
 // Every value that affects credit is inside the exact UTF-8 string bound to Play Integrity.
 // No client cell IDs, totals, geometry, or restored progress are accepted.
-export function parseEvidence(text, now = Date.now()) {
+export function parseEvidence(text, now = Date.now(), requireFresh = true) {
   if (typeof text !== "string" || Buffer.byteLength(text) > 12000) throw new EvidenceError("Invalid evidence.");
   let body;
   try { body = JSON.parse(text); } catch { throw new EvidenceError("Invalid evidence."); }
@@ -31,7 +31,8 @@ export function parseEvidence(text, now = Date.now()) {
         !Number.isFinite(f.lat) || Math.abs(f.lat) > 90 || !Number.isFinite(f.lon) || Math.abs(f.lon) > 180 ||
         !Number.isFinite(f.accuracy) || f.accuracy <= 0 || f.accuracy > 25 ||
         !Number.isFinite(f.speed) || f.speed < 0 || f.speed > 65 || f.mock !== false ||
-        !Number.isSafeInteger(f.time) || now - f.time < -10000 || now - f.time > 150000 ||
+        !Number.isSafeInteger(f.time) || f.time < 0 ||
+        (requireFresh && (now - f.time < -10000 || now - f.time > 150000)) ||
         !Number.isSafeInteger(f.elapsed) || f.elapsed < 0) throw new EvidenceError("Poor or stale GPS evidence.");
     if (i > 0) {
       const p = body.fixes[i - 1];

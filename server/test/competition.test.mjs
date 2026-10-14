@@ -68,6 +68,17 @@ test("real PostgreSQL protects simultaneous scoring, retries, derived cells, pri
     const beforeRetry = verifications;
     assert.deepEqual(await service.submit(alpha, evidence, "same token"), results[0]);
     assert.equal(verifications, beforeRetry); // Response loss does not require decoding a replayed token.
+    const realNow = Date.now;
+    try {
+      Date.now = () => realNow() + 180000;
+      assert.deepEqual(await service.submit(alpha, evidence, "same token"), results[0]);
+      assert.equal(verifications, beforeRetry);
+      const staleUncommitted = JSON.stringify({ ...challenge, sequence: 1, fixes: points });
+      await assert.rejects(service.submit(alpha, staleUncommitted, "test"), /stale GPS/u);
+      assert.equal(verifications, beforeRetry);
+      await assert.rejects(service.submit(alpha, JSON.stringify({ ...challenge,
+        fixes: points.map(f => ({ ...f, speed: 12 })) }), "test"), /already used/u);
+    } finally { Date.now = realNow; }
     await assert.rejects(service.submit(alpha, JSON.stringify({ ...challenge, fixes: points.map(f => ({ ...f, speed: 12 })) }), "test"), /already used/u);
     await assert.rejects(service.submit(beta, evidence, "test"), /challenge/u);
     assert.equal((await service.leaderboard("cells")).entries[0].username, "Alpha");

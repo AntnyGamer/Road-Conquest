@@ -143,9 +143,9 @@ class VerifiedDriving internal constructor(context: Context, private val competi
         }
         // Retry the same evidence rather than rebuilding a batch that may already have earned credit.
         if (pendingEvidence != null) {
-            if (System.currentTimeMillis() - JSONObject(pendingEvidence!!).getJSONArray("fixes").getJSONObject(0).getLong("time") > 120_000L) {
-                reset(); return
-            }
+            // The server may already have committed this batch before the network
+            // failed. It can acknowledge an exact receipt after GPS ages out;
+            // stale uncommitted evidence still fails its freshness checks.
             // Finish the exact previously-committed evidence first, then continue with this
             // live fix. If this fix was already the old batch's last point, the timestamp
             // de-duplication below drops it; if it arrived while the retry was pending, it is

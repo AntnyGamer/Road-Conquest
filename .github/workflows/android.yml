@@ -99,6 +99,8 @@ jobs:
           if [ "${#packages[@]}" -gt 0 ]; then
             "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "${packages[@]}"
           fi
+      - name: Verify internal competition build configuration
+        run: ./gradlew :app:compileReleaseKotlin -PROADCONQUEST_LEADERBOARDS_VISIBLE=true --no-daemon --console=plain
       - name: Test, lint and build
         run: ./gradlew :app:testDebugUnitTest :app:lintDebug :app:lintRelease :app:assembleRelease :app:bundleRelease --no-daemon --console=plain
       - name: Verify Play deobfuscation metadata

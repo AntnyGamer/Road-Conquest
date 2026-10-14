@@ -73,11 +73,14 @@ export async function createCompetition(pool, config, dependencies = {}) {
     },
     async submit(user, evidence, integrityToken) {
       await eligible(pool, user);
-      const body = parseEvidence(evidence);
+      // Validate shape/motion before looking up a receipt, but do not age out an
+      // exact committed retry. Only new credit requires fresh GPS and attestation.
+      const body = parseEvidence(evidence, Date.now(), false);
       const hash = evidenceHash(evidence);
       // A committed retry needs no second Google decode (standard tokens have replay protection).
       const previous = await receipt(pool, user, body, hash);
       if (previous) return previous;
+      parseEvidence(evidence);
       const active = await pool.query(
         `SELECT 1 FROM cell_runs WHERE user_id = $1 AND id = $2 AND nonce = $3 AND sequence = $4
          AND dataset = $5 AND expires_at > CURRENT_TIMESTAMP

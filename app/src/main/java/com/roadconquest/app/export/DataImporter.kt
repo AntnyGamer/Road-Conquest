@@ -292,7 +292,13 @@ object DataImporter {
             "place_candidates" -> { coordinates(); require(v.getAsLong("attempts") in 0..Int.MAX_VALUE.toLong()) }
             "progression_rewards" -> { nonempty("reward_key"); require(v.getAsLong("points") in 1..1_000_000_000_000L) }
             "progression_purchases" -> { nonempty("item_id"); require(v.getAsLong("points_spent") in 0..1_000_000_000_000L) }
-            "progression_counters" -> nonempty("counter_key")
+            "progression_counters" -> {
+                nonempty("counter_key")
+                require(v.getAsLong("value") in 0..1_000_000_000_000_000L) { "Invalid progression counter" }
+                if (v.getAsString("counter_key") == "lowest_battery_percent") {
+                    require(v.getAsLong("value") in 0..100) { "Invalid battery counter" }
+                }
+            }
         }
     }
 

@@ -3,7 +3,7 @@ import { createSign } from "node:crypto";
 import { boundedJson, EvidenceError, verifyIntegrityVerdict } from "./scoring.mjs";
 
 // Credentials are a server-only service-account file, never an APK property or a database row.
-export async function createIntegrityVerifier(config) {
+export async function createIntegrityVerifier(config, request = fetch) {
   const credentials = config.credentialsJson
     ? JSON.parse(config.credentialsJson)
     : JSON.parse(await readFile(config.credentialsFile, "utf8"));
@@ -23,7 +23,7 @@ export async function createIntegrityVerifier(config) {
         aud: "https://oauth2.googleapis.com/token", iat: now, exp: now + 3600
       })}`;
       const signature = createSign("RSA-SHA256").update(claims).sign(credentials.private_key, "base64url");
-      const json = await boundedJson(await fetch("https://oauth2.googleapis.com/token", {
+      const json = await boundedJson(await request("https://oauth2.googleapis.com/token", {
         method: "POST", redirect: "error", signal: AbortSignal.timeout(8000),
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion: `${claims}.${signature}` })
@@ -36,13 +36,20 @@ export async function createIntegrityVerifier(config) {
   }
   return async (token, hash) => {
     if (typeof token !== "string" || token.length < 20 || token.length > 16000) throw new EvidenceError("Integrity token required.", 403);
-    const payload = await boundedJson(await fetch(
+    const response = await request(
       `https://playintegrity.googleapis.com/v1/${config.packageName}:decodeIntegrityToken`, {
         method: "POST", redirect: "error", signal: AbortSignal.timeout(8000),
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${await accessToken()}` },
         body: JSON.stringify({ integrity_token: token })
       }
-    ), 32768);
+    );
+    // Google returns 400 for a malformed/invalid token. Retrying that token as
+    // a service outage wastes requests; credential/quota/server failures stay retryable.
+    if (response.status === 400) {
+      await response.body?.cancel();
+      throw new EvidenceError("App/device verification failed.", 403);
+    }
+    const payload = await boundedJson(response, 32768);
     verifyIntegrityVerdict(payload.tokenPayloadExternal, hash, config);
   };
 }
