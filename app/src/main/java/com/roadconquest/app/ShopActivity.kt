@@ -252,13 +252,20 @@ class ShopActivity : Activity() {
     }
 
     private fun onItemPressed(item: ShopItem, alreadyOwned: Boolean) {
-        if (alreadyOwned) {
+        if (alreadyOwned || (VipEntitlement.isActive(this) && VipEntitlement.isGoldIncluded(item.id))) {
             equipAndRefresh(item)
             return
         }
         val current = ++generation
         executor.execute {
-            val result = runCatching { ProgressionRepository(this).purchase(item.id, item.cost) }
+            // A Google Play purchase can finish while a stale "Buy" card is
+            // still visible. Check again before spending local points so VIP
+            // gold benefits never accidentally charge the player.
+            val result = runCatching {
+                if (VipEntitlement.isActive(this) && VipEntitlement.isGoldIncluded(item.id)) {
+                    PurchaseResult.OWNED
+                } else ProgressionRepository(this).purchase(item.id, item.cost)
+            }
             runOnUiThread {
                 if (isDestroyed || current != generation) return@runOnUiThread
                 result.fold(
