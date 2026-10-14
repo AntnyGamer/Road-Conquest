@@ -187,6 +187,27 @@ class PlaceResolverTest {
         }.find(subdivision))
     }
 
+    @Test fun missingAndroidGeocoderStillResolvesVerifiedUsStateWithoutGuessingTown() {
+        val context = org.robolectric.RuntimeEnvironment.getApplication()
+        val result = PlaceResolver.resolveWithoutGeocoder(
+            context, candidate, com.roadconquest.app.map.PlaceOverlayCache.generation(),
+            municipalCache = PlaceResolver.VerifiedMunicipalCache { mutableListOf() },
+            stateLookup = { lat, lon ->
+                assertEquals(candidate.latitude, lat, 0.0)
+                assertEquals(candidate.longitude, lon, 0.0)
+                "New Jersey"
+            },
+            townLookup = { null }
+        )
+        assertEquals(listOf("us", "us|new jersey"), result?.map { it.key })
+        assertEquals(listOf(PlaceKind.COUNTRY, PlaceKind.STATE), result?.map { it.kind })
+        assertNull(PlaceResolver.resolveWithoutGeocoder(
+            context, candidate, com.roadconquest.app.map.PlaceOverlayCache.generation(),
+            stateLookup = { _, _ -> null },
+            townLookup = { throw AssertionError("No US state means no town lookup") }
+        ))
+    }
+
     @Test fun newTownBecomesReusableImmediatelyWithoutReloading() {
         val town = PlaceDiscovery(
             PlaceKind.TOWN, "us|texas|census-4-4801234", "Actual city",
