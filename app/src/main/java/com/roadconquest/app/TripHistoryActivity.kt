@@ -162,7 +162,7 @@ class TripHistoryActivity : Activity() {
                     result.fold({ trips ->
                         if (trips.isEmpty()) {
                             column.addView(TextView(this@TripHistoryActivity).apply {
-                                text = "No completed drives yet. Your saved GPS history will appear here."
+                                text = "No saved drives yet. Your recorded GPS history will appear here."
                             })
                         }
                         trips.forEach { trip ->

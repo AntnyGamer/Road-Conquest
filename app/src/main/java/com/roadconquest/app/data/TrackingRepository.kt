@@ -18,6 +18,8 @@ class TrackingRepository(context: Context) {
     private val dbHelper = AppDatabase.get(context)
     private val historyGeneration = synchronized(dbHelper.historyLock) { dbHelper.historyGeneration }
 
+    internal fun isHistoryCurrent(): Boolean = historyGeneration == dbHelper.historyGeneration
+
     /** A visited cell reveals fog only; it never enters driving history or road matching. */
     @Synchronized
     fun recordExploredPlace(location: Location): Boolean {

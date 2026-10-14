@@ -41,38 +41,46 @@ object WeeklyChallenges {
             val db = helper.writableDatabase
             db.beginTransaction()
             try {
-                // A new section of an OLD road does not turn it into a new weekly road.
-                val roads = db.rawQuery(
-                    """SELECT COUNT(*) FROM (
-                      SELECT MIN(first_unlocked_at) AS first_seen FROM roads
-                      WHERE road_group_id NOT LIKE 'x2|%'
-                      GROUP BY CASE WHEN road_group_id = '' THEN segment_id ELSE road_group_id END
-                      HAVING first_seen >= ? AND first_seen < ? AND first_seen <= ?
-                    )""", arrayOf(start.toString(), end.toString(), now.toString())
-                ).use { it.moveToFirst(); it.getLong(0) }
-                val towns = db.rawQuery(
-                    """SELECT COUNT(*) FROM visited_places v WHERE kind = 'TOWN'
-                      AND first_visited_at >= ? AND first_visited_at < ? AND first_visited_at <= ?
-                      AND EXISTS (SELECT 1 FROM progression_rewards r
-                        WHERE r.reward_key = 'place:town:' || v.place_key)""",
-                    arrayOf(start.toString(), end.toString(), now.toString())
-                ).use { it.moveToFirst(); it.getLong(0) }
-                val challenges = listOf(
-                    WeeklyChallenge("roads", "Unlock 25 new roads", roads, 25, 250, false),
-                    WeeklyChallenge("towns", "Explore 3 new towns", towns, 3, 300, false)
-                ).map { challenge ->
-                    val key = "weekly:$start:${challenge.id}"
-                    if (challenge.progress >= challenge.target) {
-                        db.insertWithOnConflict("progression_rewards", null, ContentValues().apply {
-                            put("reward_key", key); put("points", challenge.reward); put("awarded_at", now)
-                        }, SQLiteDatabase.CONFLICT_IGNORE)
+                fun evaluate(week: Long): List<WeeklyChallenge> {
+                    val weekEnd = week + 7 * 86_400_000L
+                    // Reuse the last-driven/group indexes and inspect this week's
+                    // candidates rather than regrouping every historical road.
+                    val roads = db.rawQuery(
+                        """SELECT COUNT(DISTINCT CASE WHEN r.road_group_id = '' THEN r.segment_id ELSE r.road_group_id END)
+                          FROM roads r WHERE r.last_driven_at >= ? AND r.first_unlocked_at >= ?
+                          AND r.first_unlocked_at < ? AND r.first_unlocked_at <= ?
+                          AND r.road_group_id NOT LIKE 'x2|%'
+                          AND (r.road_group_id = '' OR NOT EXISTS (SELECT 1 FROM roads old
+                            WHERE old.road_group_id = r.road_group_id AND old.first_unlocked_at < ?))""",
+                        arrayOf(week.toString(), week.toString(), weekEnd.toString(), now.toString(), week.toString())
+                    ).use { it.moveToFirst(); it.getLong(0) }
+                    val towns = db.rawQuery(
+                        """SELECT COUNT(*) FROM visited_places v WHERE kind = 'TOWN'
+                          AND first_visited_at >= ? AND first_visited_at < ? AND first_visited_at <= ?
+                          AND EXISTS (SELECT 1 FROM progression_rewards r
+                            WHERE r.reward_key = 'place:town:' || v.place_key)""",
+                        arrayOf(week.toString(), weekEnd.toString(), now.toString())
+                    ).use { it.moveToFirst(); it.getLong(0) }
+                    return listOf(
+                        WeeklyChallenge("roads", "Unlock 25 new roads", roads, 25, 250, false),
+                        WeeklyChallenge("towns", "Explore 3 new towns", towns, 3, 300, false)
+                    ).map { challenge ->
+                        val key = "weekly:$week:${challenge.id}"
+                        if (challenge.progress >= challenge.target) {
+                            db.insertWithOnConflict("progression_rewards", null, ContentValues().apply {
+                                put("reward_key", key); put("points", challenge.reward); put("awarded_at", now)
+                            }, SQLiteDatabase.CONFLICT_IGNORE)
+                        }
+                        challenge.copy(rewarded = db.rawQuery("SELECT 1 FROM progression_rewards WHERE reward_key = ?", arrayOf(key)).use { it.moveToFirst() })
                     }
-                    challenge.copy(rewarded = db.rawQuery("SELECT 1 FROM progression_rewards WHERE reward_key = ?", arrayOf(key)).use { it.moveToFirst() })
                 }
+                val challenges = evaluate(start)
+                // One-week grace for delayed matching/geocoding after Sunday drives.
+                // Do not mint rewards for the entire imported historical archive.
+                evaluate(start - 7 * 86_400_000L)
                 db.setTransactionSuccessful()
                 ChallengeWeek(start, end, challenges)
             } finally { db.endTransaction() }
         }
     }
-
 }

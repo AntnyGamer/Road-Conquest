@@ -93,7 +93,7 @@ class TripHistoryRepository(context: Context) {
                     position++
                 }
             }
-            last?.let { if (selected.lastOrNull()?.timestamp != it.timestamp) selected += it }
+            last?.let { if (selected.lastOrNull() != it) selected += it }
             selected
         }
 

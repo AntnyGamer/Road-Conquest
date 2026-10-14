@@ -23,6 +23,7 @@ data class PlaceResolutionResult(
 )
 
 object ProgressionManager {
+    private val placeResolutionLock = Any()
     fun sync(context: Context, summary: DataSummary): ProgressionSnapshot {
         val repository = ProgressionRepository(context)
         var snapshot = repository.snapshot()
@@ -90,8 +91,9 @@ object ProgressionManager {
     fun resolvePendingPlaces(context: Context, limit: Int = 6): Int =
         resolvePendingPlacesWithDetails(context, limit).added
 
-    fun resolvePendingPlacesWithDetails(context: Context, limit: Int = 6): PlaceResolutionResult {
+    fun resolvePendingPlacesWithDetails(context: Context, limit: Int = 6): PlaceResolutionResult = synchronized(placeResolutionLock) {
         require(limit > 0)
+        if (Thread.currentThread().isInterrupted) return@synchronized PlaceResolutionResult(0, 0L, false)
         val repository = ProgressionRepository(context)
         // Limit polygon parsing and database reads to one set per foreground batch.
         val municipalCache by lazy { PlaceResolver.VerifiedMunicipalCache(context) }
@@ -123,7 +125,7 @@ object ProgressionManager {
                 if (processed >= limit) break
             }
         }
-        return PlaceResolutionResult(added, newestVisitAt, placesUpdated)
+        PlaceResolutionResult(added, newestVisitAt, placesUpdated)
     }
 
     /**

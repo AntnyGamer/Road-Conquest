@@ -157,6 +157,31 @@ Keep the API role unable to alter schema, change password hashes directly, or mo
 catalogs. The HTTP and serverless integration tests run with a restricted role rather than the
 database owner to exercise these permissions.
 
+## Friends and weekly competitions
+
+Apply the updated `schema.sql` as the database owner before deploying the account function.
+Existing restricted runtime roles need `SELECT, INSERT, UPDATE, DELETE` on the two new
+tables `friendships` and `competition_weeks`; they do not need catalog or schema write access.
+
+`GET /v1/friends` lists only the authenticated account's relationships. `POST /v1/friends`
+accepts exactly `{username, action}` where action is `request`, `accept`, or `remove`.
+Incoming requests require acceptance by the other person; either person can remove a
+relationship. Pending and accepted relationships are bounded to 50 per account. Stable
+user IDs preserve friendships through username changes; account deletion cascades them.
+
+`GET /v1/friends/weekly?metric=roads|miles` returns the current UTC Monday-to-Monday week
+for the caller and accepted friends. Hidden/ineligible accounts are excluded, ties share a
+rank, and client totals/imports cannot contribute. Distance uses accepted verified batches;
+roads count only first-ever unlocks in the pinned dataset. A batch spanning the week boundary
+belongs to the week containing its final verified fix. Score, weekly credit and retry receipt
+commit together, so retries cannot add credit twice. Historical weeks are not backfilled.
+
+Friend management works without verified scoring. When verification is disabled, weekly
+rankings return `{available:false, entries:[]}`. Enabling competition still requires the
+existing private matcher, pinned catalog and Google Play Integrity configuration below.
+The app's local 25-road/3-town challenges and their one-time 250/300-point rewards work offline
+and do not imply that server-verified competition is active.
+
 ## Verified scoring and leaderboards
 
 The implementation is included, but **disabled by default** (`LEADERBOARDS_ENABLED` is unset).

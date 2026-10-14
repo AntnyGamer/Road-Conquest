@@ -113,7 +113,7 @@ object DataImporter {
                     require(size == entry.size && crc.value == entry.crc) { "Backup checksum failed" }
                 }
                 var metadata = JSONObject()
-                readEntry("metadata.json") { metadata = JSONObject(it.readBytes().toString(Charsets.UTF_8)) }
+                readEntry("metadata.json") { metadata = JSONObject(Charsets.UTF_8.newDecoder().decode(java.nio.ByteBuffer.wrap(it.readBytes())).toString()) }
                 require(metadata.getString("app") == "Road Conquest" && metadata.getInt("schema_version") in 9..10) {
                     "Unsupported backup format; use a current Road Conquest export"
                 }
@@ -193,6 +193,7 @@ object DataImporter {
             }
             try {
                 temporaryBackup.outputStream().use { DataExporter.writeZip(app, TrackingRepository(app), it) }
+                java.io.FileOutputStream(temporaryBackup, true).use { it.fd.sync() }
                 check(temporaryBackup.renameTo(previousBackup(app))) { "Could not save recovery backup" }
             } finally { temporaryBackup.delete() }
             val live = helper.writableDatabase
@@ -220,17 +221,24 @@ object DataImporter {
             helper.historyGeneration++
             helper.trackSummaryCache = null; helper.roadSummaryCache = null; helper.lastTrackPointCache = null
         }
-        // Cached public boundaries and preferences cannot grant VIP or upload restored GPS.
-        Achievements.reset(app)
-        PlaceOverlayCache.clear(app)
-        Prefs.resetCosmetics(app)
-        val meta = prepared.metadata
-        MapMode.entries.firstOrNull { it.name == meta.optString("map_mode") }?.let { Prefs.setMapMode(app, it) }
-        UiTheme.entries.firstOrNull { it.name == meta.optString("ui_theme") }?.let { Prefs.setUiTheme(app, it) }
-        Prefs.setFogEnabled(app, meta.optBoolean("fog_enabled", true))
-        val selected = setOf("car_style_${meta.optString("car_style")}", "car_color_${meta.optString("car_color")}",
-            "road_color_${meta.optString("road_color")}", if (meta.optBoolean("gold_ui_enabled")) "ui_gold" else "ui_standard")
-        ShopCatalog.items.filter { it.id in selected }.forEach { Cosmetics.equip(app, it) }
+        // A cosmetic/icon failure after COMMIT must not claim that data was rolled back.
+        // Serialize against a subsequent deletion, which must take precedence.
+        synchronized(helper.historyLock) {
+            if (!Prefs.isDeviceDataDeletionPending(app) && helper.historyGeneration == prepared.generation + 1) {
+                runCatching {
+                    Achievements.reset(app)
+                    PlaceOverlayCache.clear(app)
+                    Prefs.resetCosmetics(app)
+                    val meta = prepared.metadata
+                    MapMode.entries.firstOrNull { it.name == meta.optString("map_mode") }?.let { Prefs.setMapMode(app, it) }
+                    UiTheme.entries.firstOrNull { it.name == meta.optString("ui_theme") }?.let { Prefs.setUiTheme(app, it) }
+                    Prefs.setFogEnabled(app, meta.optBoolean("fog_enabled", true))
+                    val selected = setOf("car_style_${meta.optString("car_style")}", "car_color_${meta.optString("car_color")}",
+                        "road_color_${meta.optString("road_color")}", if (meta.optBoolean("gold_ui_enabled")) "ui_gold" else "ui_standard")
+                    ShopCatalog.items.filter { it.id in selected }.forEach { Cosmetics.equip(app, it) }
+                }.onFailure { android.util.Log.w("RoadConquest", "Progress restored; appearance could not be fully restored", it) }
+            }
+        }
     }
 
     private fun count(db: SQLiteDatabase, table: String) = db.rawQuery("SELECT COUNT(*) FROM $table", null).use { it.moveToFirst(); it.getLong(0) }

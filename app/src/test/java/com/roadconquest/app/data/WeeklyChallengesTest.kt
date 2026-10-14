@@ -48,4 +48,15 @@ class WeeklyChallengesTest {
         assertEquals(monday, WeeklyChallenges.weekStart(monday + 7 * 86_400_000L - 1))
         assertEquals(monday + 7 * 86_400_000L, WeeklyChallenges.weekStart(monday + 7 * 86_400_000L))
     }
+
+    @Test fun delayedDiscoveriesCanFinishPreviousWeekWithoutInflatingCurrentProgress() {
+        repeat(25) { road("delayed$it", "g$it", monday - 1000) }
+        val repository = ProgressionRepository(context)
+        repeat(3) { repository.recordPlace(PlaceDiscovery(PlaceKind.TOWN, "late$it", "Late $it", visitedAt = monday - 1000, latitude = 0.0, longitude = 0.0)) }
+        val before = repository.snapshot().balance
+        assertEquals(listOf(0L, 0L), WeeklyChallenges.status(context, monday + 1000).challenges.map { it.progress })
+        assertEquals(before + 550, repository.snapshot().balance)
+        WeeklyChallenges.status(context, monday + 2000)
+        assertEquals(before + 550, repository.snapshot().balance)
+    }
 }

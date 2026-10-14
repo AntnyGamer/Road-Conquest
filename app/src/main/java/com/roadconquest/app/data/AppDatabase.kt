@@ -9,7 +9,7 @@ class AppDatabase private constructor(context: Context) :
     SQLiteOpenHelper(context, DB_NAME, null, DB_VERSION) {
 
     internal val historyLock = Any()
-    internal var historyGeneration = 0L
+    @Volatile internal var historyGeneration = 0L
 
     // Summary reads happen frequently while the UI is open. Keep exact in-memory aggregates
     // between writes so large driving histories do not need to be rescanned just to redraw stats.

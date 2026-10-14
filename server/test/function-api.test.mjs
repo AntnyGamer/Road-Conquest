@@ -57,6 +57,17 @@ test("serverless accounts enforce authentication, privacy, limits and TLS with r
     assert.deepEqual(ranking.body, { metric: "roads", dataset: null, entries: [], verification_available: false });
     assert.equal((await call("/v1/leaderboard?metric=invalid")).status, 400);
     assert.equal((await call("/v1/verified/batch", "POST", { miles: 999999 }, login.body.token)).status, 404);
+    assert.equal((await call("/v1/friends")).status, 401);
+    assert.deepEqual((await call("/v1/friends", "GET", undefined, login.body.token)).body, { friends: [] });
+    const friend = await call("/v1/signup", "POST", { username: "FriendDriver", password: credentials.password });
+    assert.equal(friend.status, 201);
+    assert.equal((await call("/v1/friends", "POST", { username: "FriendDriver", action: "request" }, login.body.token)).status, 200);
+    assert.equal((await call("/v1/friends", "POST", { username: "FriendDriver", action: "accept" }, login.body.token)).status, 409);
+    assert.equal((await call("/v1/friends", "POST", { username: credentials.username, action: "accept" }, friend.body.token)).status, 200);
+    assert.deepEqual((await call("/v1/friends", "GET", undefined, login.body.token)).body.friends, [{ username: "FriendDriver", status: "accepted" }]);
+    assert.deepEqual((await call("/v1/friends/weekly", "GET", undefined, login.body.token)).body, { available: false, entries: [] });
+    assert.equal((await call("/v1/friends/weekly?metric=invalid", "GET", undefined, login.body.token)).status, 400);
+    assert.equal((await call("/v1/friends", "POST", { username: "FriendDriver", action: "remove", user_id: 999 }, login.body.token)).status, 400);
     assert.equal((await call("/v1/privacy", "PUT", { oversized: "x".repeat(33 * 1024) }, login.body.token)).status, 413);
     const renamed = await call("/v1/username", "PUT", { username: "FunctionRenamed", password: credentials.password }, login.body.token);
     assert.equal(renamed.status, 200);
@@ -67,6 +78,7 @@ test("serverless accounts enforce authentication, privacy, limits and TLS with r
     assert.equal((await call("/v1/me", "GET", undefined, login.body.token)).status, 200);
     assert.equal((await call("/v1/account", "DELETE", { password: "wrong password" }, login.body.token)).status, 403);
     assert.equal((await call("/v1/account", "DELETE", { password: credentials.password }, login.body.token)).status, 200);
+    assert.deepEqual((await call("/v1/friends", "GET", undefined, friend.body.token)).body, { friends: [] });
     assert.equal((await call("/v1/me", "GET", undefined, signup.body.token)).status, 401);
     assert.equal((await call("/v1/logout", "POST", {}, login.body.token)).status, 200);
     assert.equal((await call("/v1/me", "GET", undefined, login.body.token)).status, 401);
