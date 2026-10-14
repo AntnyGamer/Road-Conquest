@@ -34,6 +34,15 @@ object VipEntitlement {
     fun addListener(listener: () -> Unit) { listeners.add(listener) }
     fun removeListener(listener: () -> Unit) { listeners.remove(listener) }
 
+    /**
+     * Ignore responses issued before another Billing client processed a new
+     * purchase/refund. Compare and apply under the same lock to avoid races
+     * between the check and the shared entitlement update.
+     */
+    @Synchronized internal fun updateIfCurrent(context: Context, owned: Boolean, expectedRevision: Long) {
+        if (ownershipRevision == expectedRevision) updateFromPlay(context, owned)
+    }
+
     @Synchronized internal fun updateFromPlay(context: Context, owned: Boolean) {
         if (isActive(context) == owned) return
         // Update the in-process generation before notifying listeners so a
