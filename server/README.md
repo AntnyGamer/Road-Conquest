@@ -51,7 +51,8 @@ npm test
 npm start
 ```
 
-The CI job runs the security tests against a temporary PostgreSQL 17 service, including a
+The CI job runs the security tests against an isolated PostgreSQL cluster using the
+Ubuntu runner's preinstalled binaries, avoiding container-registry download quotas. It includes a
 concurrent duplicate-signup constraint test.
 
 ## Free Neon deployment

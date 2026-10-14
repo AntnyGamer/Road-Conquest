@@ -11,26 +11,10 @@ concurrency:
   cancel-in-progress: true
 jobs:
   account-server:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
-    services:
-      postgres:
-        # Docker Hub's shared CI IPs are rate-limited. Use the same upstream
-        # Docker Official Image mirrored on AWS Public ECR instead.
-        image: public.ecr.aws/docker/library/postgres:17-alpine
-        env:
-          POSTGRES_DB: roadconquest_test
-          POSTGRES_USER: roadconquest
-          POSTGRES_PASSWORD: test-only-password
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U roadconquest -d roadconquest_test"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
     env:
-      DATABASE_URL: postgresql://roadconquest:test-only-password@127.0.0.1:5432/roadconquest_test
+      DATABASE_URL: postgresql://roadconquest:test-only-password@127.0.0.1:54329/roadconquest_test
       PASSWORD_PEPPER: ci-test-pepper-not-for-production
     steps:
       - name: Check out source
@@ -53,6 +37,25 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
+      - name: Start isolated PostgreSQL test database
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The Ubuntu runner already includes PostgreSQL binaries. Avoid both
+          # Docker Hub and ECR's shared-runner download limits entirely.
+          ci_pg_bin="$(pg_config --bindir)"
+          ci_pg_data="$RUNNER_TEMP/roadconquest-pgdata"
+          ci_pg_password="$RUNNER_TEMP/roadconquest-pg-password"
+          trap 'rm -f "$ci_pg_password"' EXIT
+          printf '%s\n' 'test-only-password' > "$ci_pg_password"
+          chmod 600 "$ci_pg_password"
+          "$ci_pg_bin/initdb" -D "$ci_pg_data" --username=roadconquest \
+            --auth-local=trust --auth-host=scram-sha-256 --pwfile="$ci_pg_password" \
+            --encoding=UTF8 --no-locale
+          "$ci_pg_bin/pg_ctl" -D "$ci_pg_data" -l "$RUNNER_TEMP/roadconquest-postgres.log" \
+            -o "-h 127.0.0.1 -p 54329 -k $ci_pg_data" -w start
+          PGPASSWORD=test-only-password "$ci_pg_bin/createdb" \
+            -h 127.0.0.1 -p 54329 -U roadconquest roadconquest_test
       - name: Install account server dependencies
         working-directory: server
         run: npm ci --ignore-scripts --no-audit --no-fund
@@ -65,6 +68,14 @@ jobs:
           name: account-function
           path: server/dist/index.mjs
           retention-days: 14
+      - name: Stop isolated PostgreSQL test database
+        if: always()
+        shell: bash
+        run: |
+          ci_pg_data="$RUNNER_TEMP/roadconquest-pgdata"
+          if [ -f "$ci_pg_data/postmaster.pid" ]; then
+            "$(pg_config --bindir)/pg_ctl" -D "$ci_pg_data" -m fast -w stop
+          fi
 
   verify:
     runs-on: ubuntu-latest
