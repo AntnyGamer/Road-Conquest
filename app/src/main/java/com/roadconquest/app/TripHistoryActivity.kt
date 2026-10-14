@@ -5,6 +5,7 @@ import android.content.Context
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.MotionEvent
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.LinearLayout
@@ -88,11 +89,23 @@ class TripHistoryActivity : Activity() {
             isAppearanceLightNavigationBars = lightSystemBars
         }
         MapLibre.getInstance(this)
+        // On short screens, a fixed map plus player could leave the trip list
+        // with zero space. Allow the whole screen to scroll in that case.
+        val compact = resources.displayMetrics.heightPixels / resources.displayMetrics.density < 600f ||
+            resources.configuration.fontScale > 1.25f
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(20), dp(18), dp(12))
         }
-        setContentView(root)
+        if (compact) {
+            setContentView(ScrollView(this).apply {
+                fillViewport = true
+                addView(root, ScrollView.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            })
+        } else {
+            setContentView(root)
+        }
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val safe = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
             view.setPadding(dp(18) + safe.left, dp(20) + safe.top, dp(18) + safe.right, dp(12) + safe.bottom)
@@ -123,6 +136,15 @@ class TripHistoryActivity : Activity() {
         val screenHeightDp = resources.displayMetrics.heightPixels / resources.displayMetrics.density
         val mapHeightDp = (screenHeightDp * 0.27f).toInt().coerceIn(120, 250)
         mapView = MapView(this).also { view ->
+            if (compact) {
+                // Map gestures take priority over the surrounding scroll view.
+                view.setOnTouchListener { target, event ->
+                    target.parent?.requestDisallowInterceptTouchEvent(
+                        event.actionMasked != MotionEvent.ACTION_UP &&
+                            event.actionMasked != MotionEvent.ACTION_CANCEL)
+                    false
+                }
+            }
             root.addView(view, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(mapHeightDp)).apply { bottomMargin = dp(10) })
             view.onCreate(savedInstanceState)
@@ -169,15 +191,24 @@ class TripHistoryActivity : Activity() {
                     handler.post(tick)
                 }
             }
-            root.addView(this, LinearLayout.LayoutParams(-1, dp(52)).apply { bottomMargin = dp(10) })
+            minHeight = dp(52)
+            root.addView(this, LinearLayout.LayoutParams(-1, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                bottomMargin = dp(10)
+            })
         }
-        root.addView(ScrollView(this).apply {
-            val column = LinearLayout(this@TripHistoryActivity).apply {
-                orientation = LinearLayout.VERTICAL
-            }
-            addView(column)
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        if (compact) {
+            root.addView(column, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        } else {
+            root.addView(ScrollView(this).apply {
+                addView(column)
+            }, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        }
+        run {
             val formatter = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT)
             worker.execute {
                 val result = runCatching { TripHistoryRepository(applicationContext).recentTrips() }
