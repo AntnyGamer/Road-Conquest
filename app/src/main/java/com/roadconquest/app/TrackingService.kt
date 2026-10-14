@@ -51,6 +51,15 @@ class TrackingService : Service(), LocationListener {
         setRemoveOnCancelPolicy(true)
     }
     private val storageExecutor = Executors.newSingleThreadExecutor()
+    // No geocoder or Census HTTP work on the location callback, storage writer,
+    // or road-matching executor. One coalesced background discovery batch only
+    // when the map UI isn't already resolving candidates.
+    private val placeExecutor = ScheduledThreadPoolExecutor(1).apply {
+        setRemoveOnCancelPolicy(true)
+        setExecuteExistingDelayedTasksAfterShutdownPolicy(false)
+    }
+    private val backgroundPlaceQueued = AtomicBoolean(false)
+    private var lastBackgroundPlaceRunMs = 0L
     private val highAccuracyLocationRequest by lazy(LazyThreadSafetyMode.NONE) {
         LocationRequest.Builder(LOCATION_INTERVAL_MS)
             .setMinUpdateIntervalMillis(LOCATION_MIN_UPDATE_INTERVAL_MS)
@@ -238,6 +247,7 @@ class TrackingService : Service(), LocationListener {
         matchingExecutor.execute {
             if (ready) maybeRunMatching(force = true)
         }
+        maybeResolvePlacesInBackground()
         return START_STICKY
     }
 
@@ -264,6 +274,7 @@ class TrackingService : Service(), LocationListener {
                 try {
                     if (progressionRepository.recordBaselineCandidate(baseline)) {
                         sendUiBroadcast(ACTION_EXPLORATION_UPDATED)
+                        maybeResolvePlacesInBackground()
                     }
                 } catch (error: Exception) {
                     Log.e("RoadConquest", "Could not save starting place location", error)
@@ -393,6 +404,7 @@ class TrackingService : Service(), LocationListener {
                             // Resolve actual new crossing candidates while the map is open,
                             // even inside a previously cleared mile-sized fog tile.
                             sendUiBroadcast(ACTION_PLACE_CANDIDATE_UPDATED)
+                            maybeResolvePlacesInBackground()
                         }
                     } catch (error: Exception) {
                         // Optional municipal lookups must never interrupt recorded
@@ -518,6 +530,7 @@ class TrackingService : Service(), LocationListener {
         } else {
             matchingExecutor.shutdownNow()
         }
+        placeExecutor.shutdownNow()
         if (::verifiedDriving.isInitialized) verifiedDriving.close()
         // Drain accepted samples even when the user stops tracking. They were copied before enqueueing.
         storageExecutor.shutdown()
@@ -802,6 +815,38 @@ class TrackingService : Service(), LocationListener {
         }
     }
 
+    /**
+     * Background tracking can accumulate town crossings for hours without opening
+     * MainActivity. Resolve a bounded batch at most once per five minutes, not on
+     * every GPS callback. Current screens retain the existing faster foreground path.
+     * Persistent candidate rows are kept for retry if the provider is offline.
+     */
+    private fun maybeResolvePlacesInBackground() {
+        if (!ready || Prefs.isDeviceDataDeletionPending(this) ||
+            MainActivity.trackingReceiverRegistered ||
+            !backgroundPlaceQueued.compareAndSet(false, true)) return
+        val now = SystemClock.elapsedRealtime()
+        val wait = (lastBackgroundPlaceRunMs + BACKGROUND_PLACE_INTERVAL_MS - now).coerceAtLeast(0L)
+        val delay = if (lastBackgroundPlaceRunMs == 0L) BACKGROUND_PLACE_START_DELAY_MS else wait
+        runCatching {
+            placeExecutor.schedule({
+                try {
+                    if (ready && !MainActivity.trackingReceiverRegistered &&
+                        !Prefs.isDeviceDataDeletionPending(this)
+                    ) {
+                        lastBackgroundPlaceRunMs = SystemClock.elapsedRealtime()
+                        val resolved = ProgressionManager.resolvePendingPlacesWithDetails(this, limit = 3)
+                        if (resolved.placesUpdated) sendUiBroadcast(ACTION_EXPLORATION_UPDATED)
+                    }
+                } catch (error: Exception) {
+                    Log.w("RoadConquest", "Deferred place discovery will retry on next drive/map open", error)
+                } finally {
+                    backgroundPlaceQueued.set(false)
+                }
+            }, delay, TimeUnit.MILLISECONDS)
+        }.onFailure { backgroundPlaceQueued.set(false) }
+    }
+
     private fun scheduleBacklogContinuation() {
         if (!backlogContinuationScheduled.compareAndSet(false, true)) return
         runCatching {
@@ -934,6 +979,8 @@ class TrackingService : Service(), LocationListener {
         // Retry on the normal matching cadence so turn holes close while the drive is still live.
         private const val MATCH_RETRY_AFTER_PARTIAL_MS = MATCH_INTERVAL_MS
         private const val MATCH_RETRY_AFTER_FAILURE_MS = 5 * 60 * 1000L
+        private const val BACKGROUND_PLACE_INTERVAL_MS = 5 * 60 * 1000L
+        private const val BACKGROUND_PLACE_START_DELAY_MS = 15_000L
         private const val MATCH_SINGLE_POINT_DEFERRAL_MS = 30_000L
         private const val MATCH_BACKLOG_CONTINUATION_MS = 30_000L
         private const val MATCH_BATCH_SIZE = OsrmMatcher.MAX_MATCH_POINTS
