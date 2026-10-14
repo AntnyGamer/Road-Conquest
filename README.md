@@ -100,9 +100,9 @@ to capitalization. Passwords are salted and scrypt-hashed on the server; Android
 session token. Local exploration does not require an account.
 
 Account availability and competitive scoring are separate. Verified leaderboard credit requires
-the production Play Integrity credentials and a pinned private road matcher/catalog. Until those
+production Play Integrity credentials and a checkpoint encryption key. Rankings count the app's existing exploration cells, without a competitive road matcher/catalog. Until those
 are configured, the leaderboard reports verification as unavailable and does not rank local totals.
-Competitive roads count distinct OSM way sections, rather than whole named streets.
+Global rankings count unique verified cells; weekly friend rankings count newly verified cells.
 
 Leaderboard visibility and live GPS sharing are separate settings. New accounts can be visible on
 leaderboards, but verified-drive GPS sharing remains off until the user explicitly enables it in Settings.

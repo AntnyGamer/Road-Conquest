@@ -52,9 +52,9 @@ test("serverless accounts enforce authentication, privacy, limits and TLS with r
     assert.equal((await call("/v1/me", "GET", undefined, login.body.token)).body.leaderboard_visible, false);
     assert.equal((await call("/v1/privacy", "PUT", { leaderboard_visible: true }, login.body.token)).body.leaderboard_visible, true);
     assert.deepEqual((await call("/v1/competition")).body, { available: false });
-    const ranking = await call("/v1/leaderboard?metric=roads");
+    const ranking = await call("/v1/leaderboard?metric=cells");
     assert.equal(ranking.status, 200);
-    assert.deepEqual(ranking.body, { metric: "roads", dataset: null, entries: [], verification_available: false });
+    assert.deepEqual(ranking.body, { metric: "cells", dataset: null, entries: [], verification_available: false });
     assert.equal((await call("/v1/leaderboard?metric=invalid")).status, 400);
     assert.equal((await call("/v1/verified/batch", "POST", { miles: 999999 }, login.body.token)).status, 404);
     assert.equal((await call("/v1/friends")).status, 401);

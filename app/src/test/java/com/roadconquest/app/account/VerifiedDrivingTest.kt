@@ -3,6 +3,8 @@ package com.roadconquest.app.account
 import android.location.Location
 import android.os.SystemClock
 import com.roadconquest.app.util.Prefs
+import com.roadconquest.app.map.FogGrid
+import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -17,6 +19,17 @@ import java.util.concurrent.atomic.AtomicBoolean
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31, 37], manifest = Config.NONE)
 class VerifiedDrivingTest {
+    @Test fun stationaryAndConfirmedCellsSkipUploadsButNewMovingCellsRemainEligible() {
+        fun point(lat: Double = 40.0, speed: Double = 10.0) = JSONObject()
+            .put("lat", lat).put("lon", -75.0).put("speed", speed)
+        val confirmed = setOf(FogGrid.cell(40.0, -75.0)!!.key)
+        assertEquals(false, VerifiedDriving.shouldSubmitCells(listOf(point()), emptySet()))
+        assertEquals(false, VerifiedDriving.shouldSubmitCells(listOf(point(speed = 0.0), point(speed = 0.0)), emptySet()))
+        assertEquals(false, VerifiedDriving.shouldSubmitCells(listOf(point(), point()), confirmed))
+        assertEquals(true, VerifiedDriving.shouldSubmitCells(listOf(point(), point(40.1)), confirmed))
+        assertEquals(true, VerifiedDriving.shouldSubmitCells(listOf(point(), point()), emptySet()))
+    }
+
     @Before fun setup() {
         val context = RuntimeEnvironment.getApplication()
         AccountClient.endpointOverrideForTests = "https://example.com"

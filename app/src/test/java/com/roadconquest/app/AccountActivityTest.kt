@@ -239,11 +239,12 @@ class AccountActivityTest {
     }
 
     @Test fun competitiveResponsesCannotSubstituteLegacyOrUnverifiedAccountScores() {
-        AccountClient.requireVerifiedPolicy(org.json.JSONObject().put("verified", true).put("scoring_policy", 2))
+        AccountClient.requireVerifiedPolicy(org.json.JSONObject().put("verified", true).put("scoring_policy", 3).put("dataset", "fog-grid-v1"))
         for (body in listOf(org.json.JSONObject(),
-            org.json.JSONObject().put("verified", false).put("scoring_policy", 2),
-            org.json.JSONObject().put("verified", "true").put("scoring_policy", 2),
-            org.json.JSONObject().put("verified", true).put("scoring_policy", 1))) {
+            org.json.JSONObject().put("verified", false).put("scoring_policy", 3),
+            org.json.JSONObject().put("verified", "true").put("scoring_policy", 3),
+            org.json.JSONObject().put("verified", true).put("scoring_policy", 2),
+            org.json.JSONObject().put("verified", true).put("scoring_policy", 3).put("dataset", "other"))) {
             try {
                 AccountClient.requireVerifiedPolicy(body)
                 fail("Competitive scores must have the hardened verified policy")

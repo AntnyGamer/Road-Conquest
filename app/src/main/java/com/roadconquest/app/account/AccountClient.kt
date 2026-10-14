@@ -1,6 +1,7 @@
 package com.roadconquest.app.account
 
 import com.roadconquest.app.BuildConfig
+import com.roadconquest.app.map.FogGrid
 import org.json.JSONObject
 import java.net.URI
 import javax.net.ssl.HttpsURLConnection
@@ -78,9 +79,8 @@ object AccountClient {
         if (it.optBoolean("available")) requireVerifiedPolicy(it)
     }
 
-    fun leaderboard(metric: String): JSONObject {
-        require(metric == "miles" || metric == "roads")
-        return request("/v1/leaderboard?metric=$metric", "GET", null, null).also {
+    fun leaderboard(): JSONObject {
+        return request("/v1/leaderboard?metric=cells", "GET", null, null).also {
             if (it.optBoolean("verification_available", true)) requireVerifiedPolicy(it)
             else if (it.getJSONArray("entries").length() != 0) throw ApiException("Unverified scores cannot enter a leaderboard.")
         }
@@ -100,15 +100,14 @@ object AccountClient {
     fun changeFriend(token: String, username: String, action: String): JSONObject = request("/v1/friends", "POST",
         JSONObject().put("username", username).put("action", action), token)
 
-    fun friendWeek(token: String, metric: String): JSONObject {
-        require(metric == "miles" || metric == "roads")
-        return request("/v1/friends/weekly?metric=$metric", "GET", null, token).also {
+    fun friendWeek(token: String): JSONObject {
+        return request("/v1/friends/weekly?metric=cells", "GET", null, token).also {
             if (it.optBoolean("available")) requireVerifiedPolicy(it)
         }
     }
 
     internal fun requireVerifiedPolicy(body: JSONObject) {
-        if (body.opt("verified") != true || body.opt("scoring_policy") != 2) {
+        if (body.opt("verified") != true || body.opt("scoring_policy") != 3 || body.optString("dataset") != FogGrid.VERSION) {
             throw ApiException("Verified competition requires the updated scoring service.")
         }
     }

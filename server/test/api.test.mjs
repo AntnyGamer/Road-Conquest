@@ -148,8 +148,9 @@ test("signup/login/privacy/logout are server-enforced and duplicate usernames ar
 
     const leaderboard = await json(baseUrl, "/v1/leaderboard", "GET");
     assert.equal(leaderboard.status, 200);
-    assert.deepEqual(leaderboard.payload, { metric: "miles", dataset: null, entries: [], verification_available: false });
-    assert.equal((await json(baseUrl, "/v1/leaderboard?metric=roads", "GET")).payload.metric, "roads");
+    assert.deepEqual(leaderboard.payload, { metric: "cells", dataset: null, entries: [], verification_available: false });
+    assert.equal((await json(baseUrl, "/v1/leaderboard?metric=roads", "GET")).status, 400);
+    assert.equal((await json(baseUrl, "/v1/leaderboard?metric=miles", "GET")).status, 400);
     assert.equal((await json(baseUrl, "/v1/leaderboard?metric=invalid", "GET")).status, 400);
     const competition = await json(baseUrl, "/v1/competition", "GET");
     assert.deepEqual(competition.payload, { available: false });
@@ -177,6 +178,11 @@ test("signup/login/privacy/logout are server-enforced and duplicate usernames ar
     await pool.query("INSERT INTO competition_runs(user_id, id, nonce, dataset) VALUES ($1, $2, $3, $4)", [owner, runId, "n".repeat(43), dataset]);
     await pool.query("INSERT INTO competition_receipts(run_id, sequence, user_id, evidence_hash, response) VALUES ($1, 0, $2, $3, '{}')", [runId, owner, "h".repeat(43)]);
 
+    await pool.query("INSERT INTO cell_scores(user_id,dataset,cells) VALUES ($1,'fog-grid-v1',1)", [owner]);
+    await pool.query("INSERT INTO competition_cells VALUES ($1,'fog-grid-v1',1000,1000)", [owner]);
+    await pool.query("INSERT INTO cell_runs(user_id,id,nonce,dataset) VALUES ($1,$2,$3,'fog-grid-v1')", [owner, runId, "n".repeat(43)]);
+    await pool.query("INSERT INTO cell_receipts(run_id,sequence,user_id,evidence_hash,response) VALUES ($1,0,$2,$3,'{}')", [runId, owner, "h".repeat(43)]);
+    await pool.query("INSERT INTO cell_weeks VALUES ($1,'fog-grid-v1',date_trunc('week',CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date,1)", [owner]);
     const originalToken = signup.payload.token;
     assert.equal((await json(baseUrl, "/v1/username", "PUT", { username: "invalid name", password }, originalToken)).status, 400);
     assert.equal((await json(baseUrl, "/v1/username", "PUT", { username: "NewDriver", password: "wrong password" }, originalToken)).status, 403);
@@ -202,7 +208,7 @@ test("signup/login/privacy/logout are server-enforced and duplicate usernames ar
     for (const token of [originalToken, newLogin.payload.token]) {
       assert.equal((await json(baseUrl, "/v1/me", "GET", undefined, token)).status, 401);
     }
-    for (const table of ["sessions", "competition_scores", "competition_roads", "competition_runs", "competition_receipts"]) {
+    for (const table of ["sessions", "competition_scores", "competition_roads", "competition_runs", "competition_receipts", "cell_scores", "competition_cells", "cell_runs", "cell_receipts", "cell_weeks"]) {
       assert.equal((await pool.query(`SELECT count(*) FROM ${table} WHERE user_id = $1`, [owner])).rows[0].count, "0");
     }
     assert.equal((await pool.query("SELECT count(*) FROM users WHERE id = $1", [owner])).rows[0].count, "0");

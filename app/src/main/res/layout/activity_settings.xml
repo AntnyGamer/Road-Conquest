@@ -237,7 +237,7 @@
                 android:minHeight="64dp"
                 android:paddingStart="14dp"
                 android:paddingEnd="12dp"
-                android:text="Send live driving evidence for verified scores"
+                android:text="Share live GPS to verify explored cells"
                 android:textColor="?attr/rcTextPrimary"
                 android:textSize="15sp" />
 

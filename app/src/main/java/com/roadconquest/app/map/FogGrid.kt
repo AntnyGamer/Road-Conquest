@@ -15,6 +15,7 @@ import kotlin.math.roundToInt
  * junctions or gaps at a row boundary.
  */
 internal object FogGrid {
+    const val VERSION = "fog-grid-v1"
     private const val MILE_METERS = 1609.344
     private const val METERS_PER_LATITUDE_DEGREE = 111_195.0
     private const val LATITUDE_STEP = MILE_METERS / METERS_PER_LATITUDE_DEGREE

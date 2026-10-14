@@ -7,6 +7,7 @@ import android.util.Base64
 import com.google.android.gms.tasks.Tasks
 import com.google.android.play.core.integrity.IntegrityManagerFactory
 import com.google.android.play.core.integrity.StandardIntegrityManager
+import com.roadconquest.app.map.FogGrid
 import com.roadconquest.app.util.Prefs
 import com.roadconquest.app.util.FeatureFlags
 import org.json.JSONArray
@@ -33,6 +34,8 @@ class VerifiedDriving internal constructor(context: Context, private val competi
     private var provider: StandardIntegrityManager.StandardIntegrityTokenProvider? = null
     private var pendingEvidence: String? = null
     private var retryAfter = 0L
+    private var challengeExpiresAt = 0L
+    private val confirmedCells = linkedSetOf<Long>()
     @Volatile private var accepting = true
     @Volatile private var closed = false
 
@@ -87,7 +90,7 @@ class VerifiedDriving internal constructor(context: Context, private val competi
             } catch (_: Exception) {
                 // Keep a committed-but-unacknowledged batch and every still-fresh queued fix.
                 // Retry after a short cooldown; never turn an account/Integrity outage into a
-                // permanent hole in otherwise valid competitive mileage.
+                // permanent hole in otherwise valid competitive exploration.
                 provider = null
                 retryAfter = maxOf(retryAfter, SystemClock.elapsedRealtime() + RETRY_AFTER_FAILURE_MS)
                 synchronized(queueLock) {
@@ -134,6 +137,7 @@ class VerifiedDriving internal constructor(context: Context, private val competi
             )
             if (run == null) {
                 run = AccountClient.startVerifiedDrive(session.token)
+                challengeExpiresAt = SystemClock.elapsedRealtime() + 150_000L
                 return // Only fixes captured after issuance of the server challenge are eligible.
             }
         }
@@ -145,7 +149,7 @@ class VerifiedDriving internal constructor(context: Context, private val competi
             // Finish the exact previously-committed evidence first, then continue with this
             // live fix. If this fix was already the old batch's last point, the timestamp
             // de-duplication below drops it; if it arrived while the retry was pending, it is
-            // preserved instead of creating an avoidable hole in verified mileage.
+            // preserved instead of creating an avoidable hole in verified exploration.
             submit(session.token)
         }
         // An aged-out trigger may retry an existing batch, but may not be added
@@ -157,12 +161,24 @@ class VerifiedDriving internal constructor(context: Context, private val competi
         val previous = points.lastOrNull()
         if (previous != null) {
             val elapsed = point.getLong("time") - previous.getLong("time")
-            if (elapsed < 2_000L) return
+            if (elapsed < 4_000L) return
             if (elapsed > 15_000L) points.clear()
         }
         points += point
         if (points.size < 2 || (points.size < 24 &&
-            point.getLong("time") - points.first().getLong("time") < 60_000L)) return
+            point.getLong("time") - points.first().getLong("time") < 90_000L)) return
+        if (!shouldSubmitCells(points, confirmedCells)) {
+            val anchor = points.last()
+            points.clear()
+            points += anchor
+            return
+        }
+        if (SystemClock.elapsedRealtime() >= challengeExpiresAt) {
+            run = AccountClient.startVerifiedDrive(session.token)
+            challengeExpiresAt = SystemClock.elapsedRealtime() + 150_000L
+            points.clear() // The replacement challenge only authorizes later observations.
+            return
+        }
         prepareEvidence()
         submit(session.token)
     }
@@ -186,6 +202,13 @@ class VerifiedDriving internal constructor(context: Context, private val competi
         try {
             val result = AccountClient.submitVerifiedDrive(token, evidence, integrity)
             requireNotNull(run).put("sequence", result.getInt("sequence"))
+            challengeExpiresAt = SystemClock.elapsedRealtime() + 150_000L
+            val accepted = result.getJSONArray("accepted_cells")
+            for (i in 0 until accepted.length()) {
+                val cell = accepted.getJSONObject(i)
+                confirmedCells += FogGrid.Cell(cell.getInt("row"), cell.getInt("column")).key
+            }
+            while (confirmedCells.size > 8192) confirmedCells.remove(confirmedCells.first())
             val anchor = points.last()
             points.clear()
             points += anchor
@@ -202,6 +225,8 @@ class VerifiedDriving internal constructor(context: Context, private val competi
         points.clear()
         pendingEvidence = null
         run = null
+        challengeExpiresAt = 0L
+        confirmedCells.clear()
         provider = null
         accountToken = null
         consentVersion = -1L
@@ -221,7 +246,7 @@ class VerifiedDriving internal constructor(context: Context, private val competi
                 drainQueuedLocations()
                 closed = true
                 val token = accountToken
-                if (competitionsEnabled() && token != null && provider != null && run != null && points.size >= 2 && Prefs.isDriveVerificationEnabled(context)) {
+                if (competitionsEnabled() && token != null && provider != null && run != null && (pendingEvidence != null || shouldSubmitCells(points, confirmedCells)) && Prefs.isDriveVerificationEnabled(context)) {
                     if (pendingEvidence == null) prepareEvidence()
                     submit(token, finishing = true)
                 }
@@ -232,6 +257,15 @@ class VerifiedDriving internal constructor(context: Context, private val competi
     }
 
     companion object {
+        // This is only an upload optimization. The server derives IDs and decides credit.
+        internal fun shouldSubmitCells(points: List<JSONObject>, confirmed: Set<Long>): Boolean {
+            if (points.size < 2) return false
+            return points.any { point ->
+                point.getDouble("speed") >= 3 &&
+                    FogGrid.cell(point.getDouble("lat"), point.getDouble("lon"))?.key?.let { it !in confirmed } == true
+            }
+        }
+
         internal fun canResumePreparedEvidence(hasPreparedEvidence: Boolean, freshValidFix: Boolean): Boolean =
             hasPreparedEvidence || freshValidFix
 

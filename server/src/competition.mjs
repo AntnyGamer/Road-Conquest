@@ -1,43 +1,34 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { createIntegrityVerifier } from "./integrity.mjs";
-import { edgeKey, EvidenceError, evidenceHash, matchEvidence, parseEvidence, scoreMatch } from "./scoring.mjs";
+import { EvidenceError, evidenceHash, parseEvidence } from "./scoring.mjs";
 
+import { GRID_ID, scoreCells } from "./cells.mjs";
 import { sealCheckpoint, verifyContinuity } from "./checkpoints.mjs";
 
 export function competitionConfig(env) {
   if (env.LEADERBOARDS_ENABLED !== "1") return null;
   const config = {
-    dataset: env.ROAD_DATASET_SHA256, dataVersion: env.OSRM_DATA_VERSION,
-    osrmUrl: env.VERIFIED_OSRM_URL, credentialsFile: env.PLAY_SERVICE_ACCOUNT_FILE, credentialsJson: env.PLAY_SERVICE_ACCOUNT_JSON,
-    osrmToken: env.VERIFIED_OSRM_BEARER_TOKEN,
+    dataset: GRID_ID, credentialsFile: env.PLAY_SERVICE_ACCOUNT_FILE, credentialsJson: env.PLAY_SERVICE_ACCOUNT_JSON,
     packageName: "com.roadconquest.app", certificates: (env.PLAY_CERTIFICATES || "").split(",").filter(Boolean),
     versions: (env.PLAY_VERSION_CODES || "").split(",").filter(Boolean),
     cloudProject: env.PLAY_CLOUD_PROJECT_NUMBER,
     checkpointKey: env.VERIFIED_EVIDENCE_KEY
   };
-  const url = config.osrmUrl ? new URL(config.osrmUrl) : null;
-  if (!/^[a-f0-9]{64}$/u.test(config.dataset || "") || !config.dataVersion ||
-      !url || url.protocol !== "https:" || url.username || url.password || url.search || url.hash ||
-      url.pathname !== "/" || url.hostname === "router.project-osrm.org" ||
-      typeof config.osrmToken !== "string" || !/^[A-Za-z0-9_-]{43}$/u.test(config.osrmToken) ||
-      (!config.credentialsFile && !config.credentialsJson) ||
+  if ((!config.credentialsFile && !config.credentialsJson) ||
       !config.certificates.length || config.certificates.some(c => !/^[A-Za-z0-9_-]{43}$/u.test(c)) ||
       !config.versions.length || config.versions.some(v => !/^[1-9][0-9]*$/u.test(v) || !Number.isSafeInteger(Number(v)) || Number(v) < 71) ||
       !/^[1-9][0-9]{5,14}$/u.test(config.cloudProject || "") ||
       typeof config.checkpointKey !== "string" || !/^[A-Za-z0-9_-]{43}$/u.test(config.checkpointKey) ||
       Buffer.from(config.checkpointKey, "base64url").length !== 32) {
-    throw new Error("Leaderboards require pinned roads, authenticated private HTTPS OSRM, checkpoint encryption, and production Play Integrity configuration");
+    throw new Error("Leaderboards require checkpoint encryption and production Play Integrity configuration");
   }
   return config;
 }
 
 export async function createCompetition(pool, config, dependencies = {}) {
   if (!config) return null;
-  const catalog = await pool.query("SELECT data_version FROM road_catalogs WHERE dataset = $1", [config.dataset]);
-  const edges = await pool.query("SELECT 1 FROM road_edges WHERE dataset = $1 LIMIT 1", [config.dataset]);
-  if (catalog.rows[0]?.data_version !== config.dataVersion || !edges.rowCount) throw new Error("Pinned catalog missing or mismatched");
+  if (config.dataset !== GRID_ID) throw new Error("Unsupported exploration grid");
   const verify = dependencies.verify || await createIntegrityVerifier(config);
-  const match = dependencies.match || (fixes => matchEvidence(fixes, config));
   async function eligible(db, user, lock = false) {
     const result = await db.query(`SELECT leaderboard_eligible FROM users WHERE id=$1${lock ? " FOR UPDATE" : ""}`, [user.id]);
     if (result.rows[0]?.leaderboard_eligible !== true) throw new EvidenceError("Account is not eligible for verified competition.", 403);
@@ -45,12 +36,12 @@ export async function createCompetition(pool, config, dependencies = {}) {
 
   async function receipt(db, user, body, hash) {
     const result = await db.query(
-      "SELECT evidence_hash, response FROM competition_receipts WHERE run_id = $1 AND sequence = $2 AND user_id = $3",
+      "SELECT evidence_hash, response FROM cell_receipts WHERE run_id = $1 AND sequence = $2 AND user_id = $3",
       [body.run, body.sequence, user.id]
     );
     if (!result.rowCount) return null;
     if (result.rows[0].evidence_hash !== hash) throw new EvidenceError("Batch sequence already used.", 409);
-    if (result.rows[0].response?.scoring_policy !== 2 || result.rows[0].response?.verified !== true) {
+    if (result.rows[0].response?.scoring_policy !== 3 || result.rows[0].response?.verified !== true) {
       throw new EvidenceError("Batch belongs to an older scoring policy.", 409);
     }
     return result.rows[0].response;
@@ -58,25 +49,22 @@ export async function createCompetition(pool, config, dependencies = {}) {
 
   async function totals(db, userId) {
     const result = await db.query(
-      `SELECT s.verified_distance_mm AS distance_mm, (SELECT COUNT(*) FROM competition_roads r WHERE r.user_id = s.user_id AND r.dataset = s.dataset AND r.verified) AS roads
-       FROM competition_scores s WHERE s.user_id = $1 AND s.dataset = $2`, [userId, config.dataset]
+      "SELECT cells FROM cell_scores WHERE user_id = $1 AND dataset = $2", [userId, config.dataset]
     );
-    const row = result.rows[0];
-    return { verified: true, scoring_policy: 2, miles: Number(row?.distance_mm || 0) / 1609344, roads: Number(row?.roads || 0) };
+    return { verified: true, scoring_policy: 3, dataset: config.dataset, cells: Number(result.rows[0]?.cells || 0) };
   }
 
   return {
-    status: () => ({ available: true, verified: true, scoring_policy: 2, ranking_policy: "verified-only", dataset: config.dataset, cloud_project: config.cloudProject,
-      eligibility: "Google Play installed, licensed app on a device meeting strong integrity. Live driving evidence is required.",
-      miles_definition: "Server-matched driving distance estimate; repeat trips count.",
-      roads_definition: "Unique OSM way sections with at least 20 matched meters in an accepted batch." }),
+    status: () => ({ available: true, verified: true, scoring_policy: 3, ranking_policy: "verified-only", dataset: config.dataset, cloud_project: config.cloudProject,
+      eligibility: "Google Play installed, licensed app on a device meeting strong integrity. Live GPS evidence is required.",
+      cells_definition: "Unique squares from the app's exploration grid, confirmed by two accurate moving GPS fixes inside the same square. Repeat visits add no credit." }),
     totals: user => totals(pool, user.id),
     async begin(user) {
       await eligible(pool, user);
       const id = randomUUID();
       const nonce = randomBytes(32).toString("base64url");
       await pool.query(
-        `INSERT INTO competition_runs(user_id, id, nonce, dataset) VALUES ($1,$2,$3,$4)
+        `INSERT INTO cell_runs(user_id, id, nonce, dataset) VALUES ($1,$2,$3,$4)
          ON CONFLICT (user_id) DO UPDATE SET id = EXCLUDED.id, nonce = EXCLUDED.nonce, dataset = EXCLUDED.dataset,
            sequence = 0, created_at = CURRENT_TIMESTAMP, expires_at = CURRENT_TIMESTAMP + INTERVAL '3 minutes'`,
         [user.id, id, nonce, config.dataset]
@@ -91,7 +79,7 @@ export async function createCompetition(pool, config, dependencies = {}) {
       const previous = await receipt(pool, user, body, hash);
       if (previous) return previous;
       const active = await pool.query(
-        `SELECT 1 FROM competition_runs WHERE user_id = $1 AND id = $2 AND nonce = $3 AND sequence = $4
+        `SELECT 1 FROM cell_runs WHERE user_id = $1 AND id = $2 AND nonce = $3 AND sequence = $4
          AND dataset = $5 AND expires_at > CURRENT_TIMESTAMP
          AND created_at <= to_timestamp($6::double precision / 1000) + INTERVAL '10 seconds'`,
         [user.id, body.run, body.nonce, body.sequence, config.dataset, body.fixes[0].time]
@@ -103,27 +91,7 @@ export async function createCompetition(pool, config, dependencies = {}) {
         throw new EvidenceError("Drive challenge expired or changed.", 409);
       }
       await verify(integrityToken, hash);
-      const root = await match(body.fixes);
-      if (root?.code !== "Ok" || root.data_version !== config.dataVersion || !Array.isArray(root.matchings) ||
-          root.matchings.length !== 1 || !Array.isArray(root.matchings[0]?.legs) ||
-          root.matchings[0].legs.length !== body.fixes.length - 1 ||
-          root.matchings[0].legs.some(l => !Array.isArray(l?.annotation?.nodes) || l.annotation.nodes.length > 2049)) {
-        throw new EvidenceError("Invalid road match shape.");
-      }
-      const pairs = [...new Map((root?.matchings || []).flatMap(m => (m.legs || []).flatMap(l => {
-        const nodes = l.annotation?.nodes || [];
-        return nodes.slice(1).map((b, i) => [edgeKey(nodes[i], b), [Math.min(nodes[i], b), Math.max(nodes[i], b)]]);
-      }))).values()];
-      if (pairs.length > 4096 || pairs.some(([a, b]) => !Number.isSafeInteger(a) || !Number.isSafeInteger(b) || a <= 0 || b <= a)) {
-        throw new EvidenceError("Invalid road catalog lookup.");
-      }
-      const found = await pool.query(
-        `SELECT node_low, node_high, way_id FROM road_edges WHERE dataset = $1
-         AND (node_low, node_high) IN (SELECT * FROM unnest($2::bigint[], $3::bigint[]))`,
-        [config.dataset, pairs.map(p => p[0]), pairs.map(p => p[1])]
-      );
-      const roads = new Map(found.rows.filter(r => r.way_id).map(r => [edgeKey(Number(r.node_low), Number(r.node_high)), r.way_id]));
-      const score = scoreMatch(root, body.fixes, roads, config.dataVersion);
+      const cells = scoreCells(body.fixes);
       const db = await pool.connect();
       try {
         await db.query("BEGIN");
@@ -131,80 +99,71 @@ export async function createCompetition(pool, config, dependencies = {}) {
         await eligible(db, user, true);
         const concurrentReceipt = await receipt(db, user, body, hash);
         if (concurrentReceipt) { await db.query("COMMIT"); return concurrentReceipt; }
-        const runs = await db.query("SELECT * FROM competition_runs WHERE user_id = $1 FOR UPDATE", [user.id]);
+        const runs = await db.query("SELECT * FROM cell_runs WHERE user_id = $1 FOR UPDATE", [user.id]);
         const run = runs.rows[0];
         if (!run || run.id !== body.run || run.nonce !== body.nonce || run.sequence !== body.sequence ||
             run.dataset !== config.dataset || run.expires_at.getTime() <= Date.now() ||
             body.fixes[0].time < run.created_at.getTime() - 10000) throw new EvidenceError("Drive challenge expired or changed.", 409);
-        await db.query("INSERT INTO competition_scores(user_id, dataset) VALUES ($1,$2) ON CONFLICT DO NOTHING", [user.id, config.dataset]);
-        const old = await db.query("SELECT last_verified_fix FROM competition_scores WHERE user_id = $1 AND dataset = $2", [user.id, config.dataset]);
-        const scope = `2:${user.id}:${config.dataset}`;
+        await db.query("INSERT INTO cell_scores(user_id, dataset) VALUES ($1,$2) ON CONFLICT DO NOTHING", [user.id, config.dataset]);
+        const old = await db.query("SELECT last_verified_fix FROM cell_scores WHERE user_id = $1 AND dataset = $2", [user.id, config.dataset]);
+        const scope = `3:${user.id}:${config.dataset}`;
         verifyContinuity(old.rows[0].last_verified_fix, body.fixes[0], body.run, scope, config.checkpointKey);
-        await db.query(
-          "UPDATE competition_scores SET verified_distance_mm = verified_distance_mm + $1, last_verified_fix = $2 WHERE user_id = $3 AND dataset = $4",
-          [score.millimeters, JSON.stringify(sealCheckpoint(body.fixes.at(-1), body.run, scope, config.checkpointKey)), user.id, config.dataset]
+        const newCells = await db.query(
+          `INSERT INTO competition_cells(user_id,dataset,grid_row,grid_col)
+           SELECT $1,$2,* FROM unnest($3::integer[],$4::integer[])
+           ON CONFLICT DO NOTHING RETURNING grid_row`,
+          [user.id, config.dataset, cells.map(c => c.row), cells.map(c => c.column)]
         );
-        const newRoads = await db.query(
-          `INSERT INTO competition_roads(user_id,dataset,way_id,verified) SELECT $1,$2,unnest($3::bigint[]),TRUE
-           ON CONFLICT (user_id,dataset,way_id) DO UPDATE SET verified=TRUE WHERE NOT competition_roads.verified RETURNING way_id`,
-          [user.id, config.dataset, score.roads]
+        await db.query(
+          "UPDATE cell_scores SET cells = cells + $1, last_verified_fix = $2 WHERE user_id = $3 AND dataset = $4",
+          [newCells.rowCount, JSON.stringify(sealCheckpoint(body.fixes.at(-1), body.run, scope, config.checkpointKey)), user.id, config.dataset]
         );
         // Batches spanning Monday midnight belong to the week of their final fix.
         // The timestamp is already freshness-checked and bound by Play Integrity.
         const week = new Date(body.fixes.at(-1).time);
         week.setUTCHours(0, 0, 0, 0);
         week.setUTCDate(week.getUTCDate() - (week.getUTCDay() + 6) % 7);
-        await db.query(
-          `INSERT INTO competition_weeks(user_id,dataset,week_start,verified_distance_mm,verified_new_roads) VALUES ($1,$2,$3,$4,$5)
+        if (newCells.rowCount) await db.query(
+          `INSERT INTO cell_weeks(user_id,dataset,week_start,new_cells) VALUES ($1,$2,$3,$4)
            ON CONFLICT (user_id,dataset,week_start) DO UPDATE
-           SET verified_distance_mm = competition_weeks.verified_distance_mm + EXCLUDED.verified_distance_mm,
-               verified_new_roads = competition_weeks.verified_new_roads + EXCLUDED.verified_new_roads`,
-          [user.id, config.dataset, week.toISOString().slice(0, 10), score.millimeters, newRoads.rowCount]
+           SET new_cells = cell_weeks.new_cells + EXCLUDED.new_cells`,
+          [user.id, config.dataset, week.toISOString().slice(0, 10), newCells.rowCount]
         );
-        await db.query("UPDATE competition_runs SET sequence = sequence + 1, expires_at = CURRENT_TIMESTAMP + INTERVAL '3 minutes' WHERE user_id = $1", [user.id]);
-        const result = { sequence: body.sequence + 1, credited_miles: score.millimeters / 1609344, ...await totals(db, user.id) };
-        await db.query("INSERT INTO competition_receipts(run_id,sequence,user_id,evidence_hash,response) VALUES ($1,$2,$3,$4,$5)",
+        await db.query("UPDATE cell_runs SET sequence = sequence + 1, expires_at = CURRENT_TIMESTAMP + INTERVAL '3 minutes' WHERE user_id = $1", [user.id]);
+        const result = { sequence: body.sequence + 1, credited_cells: newCells.rowCount, accepted_cells: cells, ...await totals(db, user.id) };
+        await db.query("INSERT INTO cell_receipts(run_id,sequence,user_id,evidence_hash,response) VALUES ($1,$2,$3,$4,$5)",
           [body.run, body.sequence, user.id, hash, JSON.stringify(result)]);
         await db.query("COMMIT");
         return result;
       } catch (error) { await db.query("ROLLBACK"); throw error; }
       finally { db.release(); }
     },
-    async friendWeek(user, metric) {
-      if (metric !== "miles" && metric !== "roads") throw new EvidenceError("Choose miles or roads.", 400);
-      const column = metric === "miles" ? "distance_mm" : "new_roads";
+    async friendWeek(user, metric = "cells") {
+      if (metric !== "cells") throw new EvidenceError("Choose cells.", 400);
       const week = (await pool.query("SELECT to_char(date_trunc('week', CURRENT_TIMESTAMP AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS week")).rows[0].week;
       const result = await pool.query(
         `WITH scores AS (
-          SELECT u.username_display AS username, u.username_key,
-            COALESCE(w.verified_distance_mm,0) AS distance_mm, COALESCE(w.verified_new_roads,0) AS new_roads
-          FROM users u LEFT JOIN competition_weeks w ON w.user_id = u.id AND w.dataset = $2 AND w.week_start = $3
-          WHERE u.leaderboard_visible AND u.leaderboard_eligible AND (u.id = $1 OR EXISTS (
+          SELECT u.username_display AS username,u.username_key,COALESCE(w.new_cells,0) AS cells
+          FROM users u LEFT JOIN cell_weeks w ON w.user_id=u.id AND w.dataset=$2 AND w.week_start=$3::date
+          WHERE u.leaderboard_visible AND u.leaderboard_eligible AND (u.id=$1 OR EXISTS (
             SELECT 1 FROM friendships f WHERE f.accepted AND
-              ((f.user_low = $1 AND f.user_high = u.id) OR (f.user_high = $1 AND f.user_low = u.id))
-          ))
-        ) SELECT username,distance_mm,new_roads,RANK() OVER (ORDER BY ${column} DESC) AS rank
-          FROM scores ORDER BY ${column} DESC, username_key LIMIT 51`, [user.id, config.dataset, week]
+            ((f.user_low=$1 AND f.user_high=u.id) OR (f.user_high=$1 AND f.user_low=u.id))))
+         ) SELECT username,cells,RANK() OVER (ORDER BY cells DESC) AS rank
+           FROM scores ORDER BY cells DESC,username_key ASC LIMIT 51`, [user.id, config.dataset, week]
       );
-      return { available: true, verified: true, scoring_policy: 2, week_start: week, dataset: config.dataset, metric,
-        entries: result.rows.map(r => ({ username: r.username, rank: Number(r.rank),
-          miles: Number(r.distance_mm) / 1609344, roads: Number(r.new_roads) })) };
+      return { available: true, verified: true, scoring_policy: 3, metric, dataset: config.dataset, week_start: week,
+        entries: result.rows.map(r => ({ username: r.username, rank: Number(r.rank), cells: Number(r.cells) })) };
     },
-    async leaderboard(metric) {
-      if (metric !== "miles" && metric !== "roads") throw new EvidenceError("Choose miles or roads.", 400);
-      const column = metric === "miles" ? "distance_mm" : "roads";
+    async leaderboard(metric = "cells") {
+      if (metric !== "cells") throw new EvidenceError("Choose cells.", 400);
       const result = await pool.query(
-        `WITH scores AS (
-           SELECT u.username_display AS username, u.username_key, s.verified_distance_mm AS distance_mm,
-             (SELECT COUNT(*) FROM competition_roads r WHERE r.user_id = u.id AND r.dataset = s.dataset AND r.verified) AS roads
-           FROM competition_scores s JOIN users u ON u.id = s.user_id
-           WHERE s.dataset = $1 AND u.leaderboard_visible AND u.leaderboard_eligible AND s.verified_distance_mm > 0
-         ) SELECT username, distance_mm, roads, RANK() OVER (ORDER BY ${column} DESC) AS rank
-           FROM scores ORDER BY ${column} DESC, username_key ASC LIMIT 50`, [config.dataset]
+        `SELECT u.username_display AS username,s.cells,RANK() OVER (ORDER BY s.cells DESC) AS rank
+         FROM cell_scores s JOIN users u ON u.id=s.user_id
+         WHERE s.dataset=$1 AND s.cells>0 AND u.leaderboard_visible AND u.leaderboard_eligible
+         ORDER BY s.cells DESC,u.username_key ASC LIMIT 50`, [config.dataset]
       );
-      return { verified: true, scoring_policy: 2, metric, dataset: config.dataset, entries: result.rows.map(r => ({
-        username: r.username, rank: Number(r.rank), miles: Number(r.distance_mm) / 1609344, roads: Number(r.roads)
-      })) };
+      return { verified: true, scoring_policy: 3, metric, dataset: config.dataset,
+        entries: result.rows.map(r => ({ username: r.username, rank: Number(r.rank), cells: Number(r.cells) })) };
     }
   };
 }

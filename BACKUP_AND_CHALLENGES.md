@@ -28,8 +28,8 @@ The previous week has a one-week grace period for late road matching or town res
 Local challenges run during ordinary progress refreshes, with no extra GPS fixes or timer.
 
 Friends can request, accept, decline/cancel and remove relationships by username. Weekly
-friend rankings compare verified miles or new verified road sections. They require the
-updated account function and the existing verified-scoring infrastructure; local history
+friend rankings compare newly verified exploration cells using the app's existing grid. They require the
+updated account function and Google Play verification, with no competitive road matcher/catalog; local history
 and backups are never used as verified evidence. Hidden profiles stay out of rankings.
 Local goals award points independently of verified friend standings; no winner prize is
 advertised or awarded by friend rankings.

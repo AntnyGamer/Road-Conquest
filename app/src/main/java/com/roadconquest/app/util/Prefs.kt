@@ -88,7 +88,7 @@ object Prefs {
     fun hasEverStarted(context: Context): Boolean = prefs(context).getBoolean(KEY_EVER_STARTED, false)
 
     fun isDriveVerificationEnabled(context: Context): Boolean = prefs(context).let {
-        it.getBoolean("verify_drives", false) && it.getInt("verification_policy", 0) == 2
+        it.getBoolean("verify_drives", false) && it.getInt("verification_policy", 0) == 3
     }
 
     @Synchronized
@@ -100,7 +100,7 @@ object Prefs {
         // version and accidentally authorize already prepared location evidence.
         val preferences = prefs(context)
         preferences.edit().putBoolean("verify_drives", permitted)
-            .putInt("verification_policy", if (permitted) 2 else 0)
+            .putInt("verification_policy", if (permitted) 3 else 0)
             .putLong("verification_consent_version",
                 preferences.getLong("verification_consent_version", 0L) + 1L).commit()
     }

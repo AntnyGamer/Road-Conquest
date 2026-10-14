@@ -28,7 +28,6 @@ import java.util.concurrent.Executors
 class ChallengesActivity : Activity() {
     private val worker = Executors.newSingleThreadExecutor()
     private var generation = 0
-    private var metric = "roads"
     private lateinit var local: TextView
     private lateinit var ranking: TextView
     private lateinit var friends: LinearLayout
@@ -59,13 +58,7 @@ class ChallengesActivity : Activity() {
         label("Friends", 22f)
         label("Add friends by username. Both people must accept the friendship.")
         if (FeatureFlags.LEADERBOARDS_VISIBLE) {
-            label("Compete on this week's verified driving miles or newly unlocked verified road sections. Hidden profiles do not appear. Imported history is never uploaded for credit.")
-            val tabs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; root.addView(this) }
-            listOf("roads" to "New roads", "miles" to "Miles").forEach { (key, title) ->
-                tabs.addView(Button(this).apply {
-                    text = title; setOnClickListener { metric = key; refresh() }
-                }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-            }
+            label("Compete on this week's newly verified exploration cells. Each cell counts once. Hidden profiles do not appear. Imported history never earns competitive credit.")
         }
         ranking = label("").apply { visibility = if (FeatureFlags.LEADERBOARDS_VISIBLE) View.VISIBLE else View.GONE }
         status = label("")
@@ -91,7 +84,6 @@ class ChallengesActivity : Activity() {
 
     private fun refresh() {
         val expected = ++generation
-        val selected = metric
         val session = AccountStore.load(this)
         worker.execute {
             val goals = runCatching {
@@ -118,7 +110,7 @@ class ChallengesActivity : Activity() {
                 return@execute
             }
             val friendList = runCatching { AccountClient.friends(session.token).getJSONArray("friends") }
-            val standings = if (FeatureFlags.LEADERBOARDS_VISIBLE) runCatching { AccountClient.friendWeek(session.token, selected) } else null
+            val standings = if (FeatureFlags.LEADERBOARDS_VISIBLE) runCatching { AccountClient.friendWeek(session.token) } else null
             runOnUiThread {
                 if (isDestroyed || expected != generation || AccountStore.load(this)?.token != session.token) return@runOnUiThread
                 invite.text = "Add friend by username"
@@ -149,14 +141,14 @@ class ChallengesActivity : Activity() {
                 ranking.text = standings?.fold({ body ->
                     if (!body.optBoolean("available")) "Verified friend competitions are not active on the server yet. Local challenges still work."
                     else buildString {
-                        append("Verified ${if (selected == "roads") "new road sections" else "miles"} · week of ${body.getString("week_start")} UTC\n\n")
+                        append("New verified cells · week of ${body.getString("week_start")} UTC\n\n")
                         if (!session.leaderboardVisible) append("Your profile is hidden. Change leaderboard visibility in Settings to appear.\n\n")
                         val rows = body.getJSONArray("entries")
                         if (rows.length() == 0) append("No visible verified participants yet.")
                         for (i in 0 until rows.length()) {
                             val row = rows.getJSONObject(i)
-                            append(String.format(Locale.getDefault(), "%d. %s · %.2f mi · %d new road sections\n",
-                                row.getLong("rank"), row.getString("username"), row.getDouble("miles"), row.getLong("roads")))
+                            append(String.format(Locale.getDefault(), "%d. %s · %d new cells\n",
+                                row.getLong("rank"), row.getString("username"), row.getLong("cells")))
                         }
                     }
                 }, { serviceError(it) }).orEmpty()

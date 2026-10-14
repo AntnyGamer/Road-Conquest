@@ -1,62 +1,49 @@
-# Verified-only competitive scores
+# Verified exploration cells
 
-Every account's public and friend rankings use scoring policy 2. The server computes
-distance from trusted road matching and counts canonical road IDs from its pinned catalog.
-Local points, saved GPS, restored backups, uploaded totals and old scoring columns cannot
-contribute. Older totals remain stored without being promoted to verified credit.
+Policy 3 ranks unique verified cells from the app's existing `FogGrid`. Weekly
+friend rankings count first-ever newly verified cells in the current UTC week.
+Local totals, imported backups and old road scores cannot enter either ranking.
 
-Before accepting a batch, the server requires an authenticated eligible account, a fresh
-server-issued run/nonce/sequence, and a Google-decoded integrity token bound to the exact
-evidence bytes. The token must identify the approved Play app-signing certificate, a tested
-version code of 71 or later, `PLAY_RECOGNIZED`, `LICENSED`, `MEETS_DEVICE_INTEGRITY` and
-`MEETS_STRONG_INTEGRITY`. Sideloaded and weak-integrity devices cannot compete. Strong
-integrity also requires recent patches on Android 13+; some otherwise usable phones will
-therefore be ineligible for ranked competition.
+The server calculates row/column IDs directly from GPS using `fog-grid-v1`, with
+the same latitude step, 19054 longitude columns, date-line wrapping and map limits
+as Android. Shared fixtures check cross-platform identity. The map is unchanged.
+Cell widths vary with latitude; this counts grid visits, not uniform explored area.
 
-GPS fixes must be fresh, non-mock, accurate, ordered and physically plausible, with a
-consistent monotonic clock. Every matched trace must be complete and unambiguous and
-use the pinned dataset. The private matcher requires a server-only bearer secret. Changing
-client road names, distance, road IDs or matcher URLs cannot influence scoring.
+Credit requires two consecutive accurate moving fixes safely inside one cell.
+Stationary jitter, uncertain borders and interpolated cells do not count. Unique
+keys prevent repeat credit. Count, weekly credit, encrypted checkpoint and retry
+receipt commit together under account lock.
 
-The latest accepted fix is encrypted with AES-256-GCM and scoped to the account and map.
-Continuity is checked across batches, restarts, sessions and devices. A live drive must
-remain plausible for ground travel; separate drives may follow plausible air travel.
-No unobserved gap earns distance. Corrupt checkpoints fail closed rather than resetting
-the replay boundary. Keep the dedicated encryption key stable; key rotation needs an
-explicit checkpoint migration.
+Fresh server challenges and Google-decoded Integrity hashes bind exact evidence.
+Approved package, certificate, tested version (71+), recognition, licensing, and
+both device/strong integrity remain mandatory. Account eligibility is checked
+before verification and again under lock. Overlaps, altered retries, cross-account
+runs, impossible motion and corrupt checkpoints fail closed. Starting another
+run never clears the encrypted account/grid-bound continuity checkpoint.
 
-Account row locks serialize changes. Exact retries return the same committed receipt;
-altered sequences, overlaps, old-policy receipts, impossible jumps and moderated accounts
-cannot add credit. Eligibility is checked again inside the transaction after remote
-verification. Distance, road flags, weekly counts and the receipt commit together.
+Android requires policy 3 and the exact grid version, with no local-score fallback.
+Sharing needs explicit new consent. Samples are batched about every 90 seconds;
+stationary and session-confirmed cells are skipped using bounded memory. No extra
+GPS job or saved-history backfill is added. Fewer submissions give less continuous
+travel evidence; this is a cost/security tradeoff, not proof of physical location.
 
-The Android app requires policy-2 verified responses for competitive scores. Having an
-account never enables a local-score fallback. Live GPS sharing still needs consent;
-turning it off stops competitive credit. Older sharing consent does not activate policy 2;
-the user must explicitly opt in again. Local exploration remains usable. Account
-deletion removes the encrypted checkpoint and competitive records.
+Public/friend responses expose only username, rank and count. Coarse visited-cell
+IDs remain private until account deletion, alongside counts and the encrypted
+latest GPS fix. Full routes are not saved. Phone deletion leaves cloud scores.
 
-## Activation requirements
+## Activation
 
-Leaderboards remain hidden until all of the following are actually operational:
+No private road matcher, worldwide road catalog, H3 or town service is required.
+Apply the additive cell schema/runtime grants, configure the stable checkpoint
+key and server-only Google credentials/project/certificate/version allowlist,
+and enable Play Integrity's strong label. Enable flags only on a test deployment
+and internal Play build first. Verify real-phone credit, borders, replay/teleport
+rejection, privacy and deletion before enabling public competition.
 
-1. An immutable road snapshot, its database catalog and the matching OSRM data version.
-2. An authenticated private HTTPS matcher tested against real reference drives.
-3. Play Integrity enabled for this Play app and the strong-integrity label opted in.
-4. Server-only Google credentials, project number, app-signing certificate and approved
-   version list, plus separate random matcher and checkpoint secrets.
-5. A successful end-to-end submission from the actual Play-installed release on a real
-   eligible phone, and rejected tampering/retry/privacy cases against that deployment.
+Production has no selectable test verifier. CI/emulators cannot establish Google
+eligibility. Rankings remain hidden until setup succeeds. `server/README.md`
+lists the settings and scoring rules.
 
-`server/README.md` lists the required environment variables. Once infrastructure is ready,
-enable `LEADERBOARDS_ENABLED=1` on a test deployment and `LEADERBOARDS_VISIBLE` in an
-internal Google Play test build. Verify a real eligible phone without simulated verdict
-overrides. After the end-to-end checks pass, enable the tested setup for public competition.
-Deterministic test verifiers and emulator tests do not establish real Google eligibility.
-
-## Practical limit
-
-These checks make common cheating substantially harder; they cannot prove physical GPS
-truth or that the phone owner was driving. External GNSS spoofing on a genuine phone,
-device farms and sophisticated attacks remain possible. Do not advertise the system as
-unfakeable. Review unusual winners before introducing valuable competitive prizes.
+These checks cannot prove real GPS truth or car travel. External GNSS spoofing
+and device farms remain possible. Review unusual winners before valuable prizes;
+do not advertise scores as unfakeable. Hosting and Integrity quotas still apply.

@@ -32,14 +32,14 @@ const PRIVACY_HTML = `<!doctype html>
 <p>Road Conquest collects precise location data to record driven roads and reveal visited places, including in the background when automatic tracking is enabled and the app is closed or not in use. It also uses location to display your live map position. Precise driving history, explored places, points, purchases, and cosmetics are stored on your device unless you export them.</p>
 <h2>Data sent to services</h2>
 <p>Road matching sends small GPS coordinate batches to the configured OSRM service. Map providers receive requests for areas you view. While the app is in the foreground or its location-tracking service is active, Android's system geocoder may process saved coordinates for place names, and U.S. Census TIGERweb receives individual saved GPS coordinates to verify the exact municipality visited. Outside the U.S., place names may be sent to the configured OpenStreetMap boundary service. Enabling place overlays also downloads and locally caches public boundaries for discovered places.</p>
-<p>Optional Road Conquest accounts send your username and password over HTTPS for signup/login; passwords are salted and scrypt-hashed on the server and are not stored in plaintext. Android stores an encrypted session token. If you explicitly enable verified scoring, live non-mock GPS evidence and Google Play Integrity evidence are sent to the Road Conquest account service for server-side road matching and leaderboard credit. Ordinary local driving history is not uploaded for leaderboard scoring.</p>
+<p>Optional Road Conquest accounts send your username and password over HTTPS for signup/login; passwords are salted and scrypt-hashed on the server and are not stored in plaintext. Android stores an encrypted session token. If you explicitly enable verified scoring, live non-mock GPS evidence and Google Play Integrity evidence are sent to the Road Conquest account service to verify visits to the app's exploration cells and award leaderboard credit. Ordinary local driving history is not uploaded for leaderboard scoring.</p>
 <h2>Advertising and rewards</h2>
 <p>Road Conquest uses Google AdMob for banner ads on the Garage, Achievements, Leaderboards, and Settings screens, and optional rewarded ads in the Garage. The Google Mobile Ads SDK can collect and share IP addresses (which may estimate general location), device or account identifiers such as the advertising ID and app-set ID, app and ad interactions, and diagnostics for advertising, analytics, and fraud prevention. Google encrypts these transmissions in transit. Road Conquest does not pass recorded routes, GPS coordinates, or Road Conquest account credentials to its ad requests.</p>
 <p>Where required, Google's User Messaging Platform presents privacy choices before ads can load. You can reopen applicable choices using Ad privacy choices on these screens. The driving map has no ads. Rewarded ads are voluntary: the Garage shows the point reward before playback, and a completed ad earns local points only after the ad SDK confirms the reward. See <a href="https://policies.google.com/privacy">Google's Privacy Policy</a> for Google's data practices.</p>
 <h2>Retention and deletion</h2>
-<p>Competitive accounts use only server-verified live-drive scores. Older totals and imported or local progress cannot enter hardened rankings. For anti-cheating continuity, the account service keeps one latest accepted GPS fix encrypted with an account-bound server key, plus its timestamp and keyed fingerprint. It is replaced by the next accepted batch and removed with account deletion. Full GPS traces are processed transiently for verification rather than stored in the ranking database.</p>
-<p>Importing a backup validates and replaces local progress without uploading that history for verified scores. Before replacement, the app keeps one private recovery ZIP on this phone. Delete all data and uninstalling remove this recovery copy. Google Play VIP ownership and account credentials are not imported. Weekly local challenges award local points; accepted friends can compare server-verified weekly distance and newly unlocked road sections. Friendships require consent, may be removed by either person, and are deleted with the account. Hiding a profile hides it from friend rankings as well as public leaderboards. Weekly verified totals remain with the account until account deletion.</p>
-<p>Local app data remains on your device until you use Delete all data, uninstall the app, or otherwise clear app storage. Delete all data requires typing the exact in-app confirmation phrase and removes local Road Conquest data while keeping the cloud account and leaderboard scores; it does not require account sign-in or network access. Exported files are controlled by you and must be deleted separately. Delete account requires the current account password and removes the cloud account, sessions, leaderboard scores, verified-road records, live runs, and verification receipts while leaving saved device history in place. Some short-lived anti-abuse and verification records expire automatically.</p>
+<p>Competitive accounts count only server-verified exploration cells. Private visited-cell identifiers and weekly cell counts are stored until account deletion; these identifiers describe coarse geographic areas. Older totals and imported or local progress cannot enter hardened rankings. For anti-cheating continuity, the account service keeps one latest accepted GPS fix encrypted with an account-bound server key, plus its timestamp and keyed fingerprint. It is replaced by the next accepted batch and removed with account deletion. Full GPS traces are processed transiently for verification rather than stored in the ranking database.</p>
+<p>Importing a backup validates and replaces local progress without uploading that history for verified scores. Before replacement, the app keeps one private recovery ZIP on this phone. Delete all data and uninstalling remove this recovery copy. Google Play VIP ownership and account credentials are not imported. Weekly local challenges award local points; accepted friends can compare newly verified exploration cells each week. Friendships require consent, may be removed by either person, and are deleted with the account. Hiding a profile hides it from friend rankings as well as public leaderboards. Weekly verified totals remain with the account until account deletion.</p>
+<p>Local app data remains on your device until you use Delete all data, uninstall the app, or otherwise clear app storage. Delete all data requires typing the exact in-app confirmation phrase and removes local Road Conquest data while keeping the cloud account and leaderboard scores; it does not require account sign-in or network access. Exported files are controlled by you and must be deleted separately. Delete account requires the current account password and removes the cloud account, sessions, leaderboard scores, visited-cell and legacy verified-road records, live runs, and verification receipts while leaving saved device history in place. Some short-lived anti-abuse and verification records expire automatically.</p>
 <h2>Security and choices</h2>
 <p>Network account traffic uses HTTPS. You can use Road Conquest without an account, hide yourself from leaderboards, leave verified-drive sharing off, use manual tracking, export your data, delete only your cloud account, or delete all local Road Conquest data while keeping your account.</p>
 <h2>Privacy inquiries</h2>
@@ -51,7 +51,7 @@ const DELETE_ACCOUNT_HTML = `<!doctype html>
 <title>Delete Road Conquest Account</title>
 <style>body{font:16px system-ui,sans-serif;max-width:640px;margin:40px auto;padding:0 20px;line-height:1.5}label,input,button{display:block;width:100%;box-sizing:border-box}input,button{font:inherit;padding:10px;margin:6px 0 16px}button{cursor:pointer}#status{min-height:1.5em}</style></head>
 <body><h1>Delete Road Conquest Account</h1>
-<p>This permanently deletes your Road Conquest cloud account, active sessions, leaderboard scores, verified-road records, live runs, and verification receipts. Data stored only on a phone or in exported files must be deleted separately.</p>
+<p>This permanently deletes your Road Conquest cloud account, active sessions, leaderboard scores, visited-cell and legacy verified-road records, live runs, and verification receipts. Data stored only on a phone or in exported files must be deleted separately.</p>
 <form id="deleteForm"><label>Username<input id="username" autocomplete="username" required minlength="3" maxlength="24"></label>
 <label>Password<input id="password" type="password" autocomplete="current-password" required minlength="8" maxlength="128"></label>
 <button type="submit">Delete account permanently</button></form>
@@ -130,7 +130,9 @@ async function cleanupExpiredState() {
     pool.query("DELETE FROM sessions WHERE expires_at <= CURRENT_TIMESTAMP"),
     pool.query("DELETE FROM auth_rate_limits WHERE window_started_at < CURRENT_TIMESTAMP - INTERVAL '2 hours'"),
     pool.query("DELETE FROM competition_receipts WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '1 day'"),
-    pool.query("DELETE FROM competition_runs WHERE expires_at < CURRENT_TIMESTAMP - INTERVAL '1 day'")
+    pool.query("DELETE FROM competition_runs WHERE expires_at < CURRENT_TIMESTAMP - INTERVAL '1 day'"),
+    pool.query("DELETE FROM cell_receipts WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '1 day'"),
+    pool.query("DELETE FROM cell_runs WHERE expires_at < CURRENT_TIMESTAMP - INTERVAL '1 day'")
   ]);
 }
 
@@ -252,8 +254,8 @@ async function handle(req, res) {
     const user = await authenticatedUser(req);
     if (!user) return send(res, 401, { error: "Authentication required." });
     if (req.method === "GET" && url.pathname === "/v1/friends/weekly") {
-      const metric = url.searchParams.get("metric") || "roads";
-      if (metric !== "miles" && metric !== "roads") return send(res, 400, { error: "Choose miles or roads." });
+      const metric = url.searchParams.get("metric") || "cells";
+      if (metric !== "cells") return send(res, 400, { error: "Choose cells." });
       return send(res, 200, competition ? await competition.friendWeek(user, metric) : { available: false, entries: [] });
     }
     if (req.method === "GET" && url.pathname === "/v1/friends") return send(res, 200, await friends.list(user));
@@ -267,8 +269,8 @@ async function handle(req, res) {
   }
   if (req.method === "GET" && url.pathname === "/v1/leaderboard") {
     if (!await rateLimit("competition-ip", ip, 180, 60 * 1000)) return send(res, 429, { error: "Try again later." });
-    const metric = url.searchParams.get("metric") || "miles";
-    if (metric !== "miles" && metric !== "roads") return send(res, 400, { error: "Choose miles or roads." });
+    const metric = url.searchParams.get("metric") || "cells";
+    if (metric !== "cells") return send(res, 400, { error: "Choose cells." });
     // The public page can load before verification is provisioned. No scores are invented,
     // and every drive-writing endpoint below remains gated on strict competition setup.
     return send(res, 200, competition
