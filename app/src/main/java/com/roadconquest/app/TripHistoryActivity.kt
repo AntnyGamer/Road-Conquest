@@ -185,7 +185,7 @@ class TripHistoryActivity : Activity() {
                                 text = String.format(Locale.getDefault(), "%s  •  %.1f mi  •  %d fixes",
                                     formatter.format(Date(trip.startedAt)), miles, trip.pointCount)
                                 setOnClickListener { loadTrip(trip) }
-                            }, LinearLayout.LayoutParams(-1, dp(56)).apply { bottomMargin = dp(8) })
+                            }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
                         }
                     }, {
                         status.text = "Trip history is temporarily unavailable."
@@ -221,7 +221,16 @@ class TripHistoryActivity : Activity() {
     }
 
     private fun renderReplay() {
-        if (!mapReady || points.size < 2) return
+        if (!mapReady) return
+        if (points.size < 2) {
+            map?.style?.getSourceAs<GeoJsonSource>(ROUTE)?.setGeoJson(
+                FeatureCollection.fromFeatures(emptyList())
+            )
+            map?.style?.getSourceAs<GeoJsonSource>(MARKER)?.setGeoJson(
+                FeatureCollection.fromFeatures(emptyList())
+            )
+            return
+        }
         // No route is exposed on selection: the replay draws only the traversed prefix.
         showPosition(seek?.progress ?: 0)
         val bounds = LatLngBounds.Builder()

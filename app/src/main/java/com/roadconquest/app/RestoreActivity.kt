@@ -36,8 +36,6 @@ class RestoreActivity : Activity() {
         WindowCompat.enableEdgeToEdge(window)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            val padding = (20 * resources.displayMetrics.density).toInt()
-            setPadding(padding, padding, padding, padding)
         }
         setContentView(ScrollView(this).apply { addView(root) })
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
