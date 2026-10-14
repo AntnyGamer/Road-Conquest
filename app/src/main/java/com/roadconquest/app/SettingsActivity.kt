@@ -132,6 +132,9 @@ class SettingsActivity : Activity() {
         findViewById<Button>(R.id.shopButton).setOnClickListener {
             startActivity(Intent(this, ShopActivity::class.java))
         }
+        findViewById<Button>(R.id.tripHistoryButton).setOnClickListener {
+            startActivity(Intent(this, TripHistoryActivity::class.java))
+        }
         leaderboardPrivacySwitch.setOnCheckedChangeListener { _, visible ->
             if (!renderingAccountPrivacy) updateLeaderboardPrivacy(visible)
         }
