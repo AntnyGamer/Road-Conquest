@@ -26,6 +26,16 @@ class TripReplayRouteTest {
         assertTrue(TripReplayRoute.visibleRanges(emptyList(), 100).isEmpty())
     }
 
+    @Test fun consecutiveBreaksNeverCreateSpuriousBridges() {
+        val separated = (0..6).map { i ->
+            SavedTripPoint(40.0, i.toDouble(), i.toLong(), breakBefore = i in setOf(1, 2, 5))
+        }
+        assertEquals(listOf(2..4, 5..6), TripReplayRoute.visibleRanges(separated, 6))
+        assertEquals(listOf(2..4), TripReplayRoute.visibleRanges(separated, 5))
+        assertEquals(listOf(2..3), TripReplayRoute.visibleRanges(separated, 3))
+        assertTrue(TripReplayRoute.visibleRanges(separated.take(2), 1).isEmpty())
+    }
+
     @Test fun firstRecordedPointAfterBreakStartsANewLine() {
         val short = listOf(
             SavedTripPoint(0.0, 0.0, 0L),

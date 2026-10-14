@@ -5,6 +5,7 @@ import android.content.Context
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.text.format.DateUtils
 import android.view.MotionEvent
 import android.view.ViewGroup
 import android.widget.Button
@@ -56,7 +57,10 @@ class TripHistoryActivity : Activity() {
     private var seek: SeekBar? = null
     private var playButton: Button? = null
     private var routeStatus: TextView? = null
+    private var replayProgress: TextView? = null
+    private var selectedTripButton: Button? = null
     private var points: List<SavedTripPoint> = emptyList()
+    private var routeCoordinates: List<Point> = emptyList()
     private var playing = false
     private var generation = 0
     private var lastRenderedIndex = -1
@@ -179,6 +183,14 @@ class TripHistoryActivity : Activity() {
                 override fun onStartTrackingTouch(bar: SeekBar) { pauseReplay() }
                 override fun onStopTrackingTouch(bar: SeekBar) {}
             })
+            contentDescription = "Replay position"
+            root.addView(this)
+        }
+        replayProgress = TextView(this).apply {
+            text = "Choose a drive to replay"
+            textSize = 13f
+            setTextColor(Appearance.color(this@TripHistoryActivity, R.attr.rcTextSecondary))
+            setPadding(0, 0, 0, dp(8))
             root.addView(this)
         }
         playButton = Button(this).apply {
@@ -227,7 +239,20 @@ class TripHistoryActivity : Activity() {
                                 R.style.RoadConquest_SettingsAction).apply {
                                 text = String.format(Locale.getDefault(), "%s  •  %.1f mi  •  %d fixes",
                                     formatter.format(Date(trip.startedAt)), miles, trip.pointCount)
-                                setOnClickListener { loadTrip(trip) }
+                                setOnClickListener {
+                                    selectedTripButton?.apply {
+                                        isSelected = false
+                                        contentDescription = null
+                                        setBackgroundResource(R.drawable.settings_action_background)
+                                        setTextColor(Appearance.color(this@TripHistoryActivity, R.attr.rcTextPrimary))
+                                    }
+                                    selectedTripButton = this
+                                    isSelected = true
+                                    contentDescription = "$text, selected trip"
+                                    setBackgroundResource(R.drawable.selected_filter_background)
+                                    setTextColor(Appearance.color(this@TripHistoryActivity, R.attr.rcOnAccent))
+                                    loadTrip(trip)
+                                }
                             }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
                         }
                     }, {
@@ -244,18 +269,23 @@ class TripHistoryActivity : Activity() {
         // Clear the previous drive immediately; never show its track or marker
         // while the next drive is loading or if loading fails.
         points = emptyList()
+        routeCoordinates = emptyList()
         lastRenderedIndex = -1
         seek?.isEnabled = false
         playButton?.isEnabled = false
         seek?.progress = 0
         renderReplay()
         routeStatus?.text = "Loading drive…"
+        replayProgress?.text = "Loading drive…"
         worker.execute {
             val result = runCatching { TripHistoryRepository(applicationContext).replay(trip) }
             runOnUiThread {
                 if (isDestroyed || expected != generation) return@runOnUiThread
                 result.fold({ loaded ->
                     points = loaded
+                    // Cache MapLibre geometries once instead of reconstructing
+                    // every previously travelled point on every animation tick.
+                    routeCoordinates = loaded.map { Point.fromLngLat(it.longitude, it.latitude) }
                     lastRenderedIndex = -1
                     seek?.isEnabled = loaded.size >= 2
                     playButton?.isEnabled = loaded.size >= 2
@@ -267,7 +297,12 @@ class TripHistoryActivity : Activity() {
                             (trip.endedAt - trip.startedAt).coerceAtLeast(0L) / 60_000,
                             trip.pointCount)
                     renderReplay()
-                }, { routeStatus?.text = "Could not load the selected drive." })
+                    if (loaded.size < 2) replayProgress?.text = "Drive unavailable"
+                    else if (!mapReady) replayProgress?.text = "Preparing replay map…"
+                }, {
+                    routeStatus?.text = "Could not load the selected drive."
+                    replayProgress?.text = "Replay unavailable"
+                })
             }
         }
     }
@@ -276,6 +311,7 @@ class TripHistoryActivity : Activity() {
         if (!mapReady) return
         if (points.size < 2) {
             lastRenderedIndex = -1
+            if (points.isEmpty()) replayProgress?.text = "Choose a drive to replay"
             map?.style?.getSourceAs<GeoJsonSource>(ROUTE)?.setGeoJson(
                 FeatureCollection.fromFeatures(emptyList())
             )
@@ -308,10 +344,14 @@ class TripHistoryActivity : Activity() {
         val style = map?.style ?: return
         lastRenderedIndex = index
         style.getSourceAs<GeoJsonSource>(MARKER)?.setGeoJson(
-            Feature.fromGeometry(Point.fromLngLat(point.longitude, point.latitude))
+            Feature.fromGeometry(routeCoordinates[index])
         )
+        val firstTimestamp = points.first().timestamp
+        val totalSeconds = ((points.last().timestamp - firstTimestamp).coerceAtLeast(0L)) / 1000L
+        val elapsedSeconds = ((point.timestamp - firstTimestamp).coerceIn(0L, totalSeconds * 1000L)) / 1000L
+        replayProgress?.text = "${DateUtils.formatElapsedTime(elapsedSeconds)} / ${DateUtils.formatElapsedTime(totalSeconds)}"
         val visible = TripReplayRoute.visibleRanges(points, index).map { range ->
-            range.map { i -> Point.fromLngLat(points[i].longitude, points[i].latitude) }
+            routeCoordinates.subList(range.first, range.last + 1)
         }
         val source = style.getSourceAs<GeoJsonSource>(ROUTE) ?: return
         if (visible.isEmpty()) {

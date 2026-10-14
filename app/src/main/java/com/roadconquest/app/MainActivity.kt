@@ -786,35 +786,34 @@ class MainActivity : Activity() {
     }
 
     private fun showOverlayPicker() {
-        val choices = arrayOf("Countries — blue", "States and regions — purple", "Towns — green")
-        val modes = arrayOf(PlaceOverlayMode.COUNTRY, PlaceOverlayMode.STATE, PlaceOverlayMode.TOWN)
+        // Overlays are mutually exclusive. A single-choice list makes this clear
+        // and also provides a discoverable way to return to the plain map.
+        val modes = arrayOf(
+            PlaceOverlayMode.NONE,
+            PlaceOverlayMode.COUNTRY,
+            PlaceOverlayMode.STATE,
+            PlaceOverlayMode.TOWN
+        )
+        val choices = arrayOf("No overlay", "Countries — blue", "States and regions — purple", "Towns — green")
         val current = renderer?.placeOverlayMode() ?: Prefs.placeOverlayMode(this)
-        val checked = BooleanArray(modes.size) { modes[it] == current }
-        lateinit var dialog: AlertDialog
-        dialog = AlertDialog.Builder(this)
-            .setTitle("Map overlay — choose one")
-            .setMultiChoiceItems(choices, checked) { _, which, isChecked ->
-                val next = if (isChecked) modes[which] else PlaceOverlayMode.NONE
-                for (index in modes.indices) {
-                    val selected = isChecked && index == which
-                    checked[index] = selected
-                    if (dialog.listView.isItemChecked(index) != selected) {
-                        dialog.listView.setItemChecked(index, selected)
+        val selected = modes.indexOf(current).coerceAtLeast(0)
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Map overlay")
+            .setSingleChoiceItems(choices, selected) { dialog, which ->
+                val next = modes[which]
+                if (next != current) {
+                    renderer?.setPlaceOverlayMode(next) ?: Prefs.setPlaceOverlayMode(this, next)
+                    if (next != PlaceOverlayMode.NONE) {
+                        showFreshCachedLocation()
+                        lastPreviewLocation?.takeIf(::isFreshLocation)?.let {
+                            ProgressionRepository(this).recordPlaceCandidate(it)
+                        }
+                        resolvePendingPlaces()
                     }
                 }
-                renderer?.setPlaceOverlayMode(next) ?: Prefs.setPlaceOverlayMode(this, next)
-                if (next != PlaceOverlayMode.NONE) {
-                    // A fresh cached fix can queue ordinary place discovery immediately.
-                    // Fresh/reset baseline selection remains stricter: only a new live fix produced
-                    // after the current location request can define the zero-point starter place.
-                    showFreshCachedLocation()
-                    lastPreviewLocation?.takeIf(::isFreshLocation)?.let {
-                        ProgressionRepository(this).recordPlaceCandidate(it)
-                    }
-                    resolvePendingPlaces()
-                }
+                dialog.dismiss()
             }
-            .setPositiveButton("Done", null)
+            .setNegativeButton("Cancel", null)
             .create()
         dialog.show()
     }
