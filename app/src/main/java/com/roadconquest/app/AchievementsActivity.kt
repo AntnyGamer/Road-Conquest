@@ -117,7 +117,13 @@ class AchievementsActivity : Activity() {
 
     private fun updateCategoryButtons() {
         categoryButtons.forEach { (category, button) ->
-            button.isEnabled = category != selectedCategory
+            // Show the active filter clearly while allowing it to be tapped again.
+            val selected = category == selectedCategory
+            button.isEnabled = true
+            button.isSelected = selected
+            button.setBackgroundResource(if (selected) R.drawable.primary_button_background else R.drawable.settings_action_background)
+            button.setTextColor(Appearance.color(this,
+                if (selected) R.attr.rcOnAccent else R.attr.rcTextPrimary))
             // VIP has no rewarded-ad offers: preserve earned ad milestones,
             // but do not show an empty page of impossible locked challenges.
             button.visibility = if (category == AchievementCategory.ADS &&
@@ -136,7 +142,7 @@ class AchievementsActivity : Activity() {
             setPadding(padding, padding, padding, padding)
         }
         card.addView(TextView(this).apply {
-            text = (if (item.unlocked) "UNLOCKED  " else "LOCKED  ") + item.title
+            text = (if (item.unlocked) "✓  " else "○  ") + item.title
             setTextColor(Appearance.color(this@AchievementsActivity, R.attr.rcTextPrimary))
             textSize = 17f
             setTypeface(typeface, android.graphics.Typeface.BOLD)

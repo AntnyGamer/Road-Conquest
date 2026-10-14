@@ -49,18 +49,39 @@ class ChallengesActivity : Activity() {
             view.setPadding(p + safe.left, p + safe.top, p + safe.right, p + safe.bottom)
             insets
         }
+        val density = resources.displayMetrics.density
+        fun dp(value: Int) = (value * density + 0.5f).toInt()
         fun label(text: String, size: Float = 16f) = TextView(this).apply {
-            this.text = text; textSize = size; setPadding(0, 12, 0, 12); root.addView(this)
+            this.text = text
+            textSize = size
+            setTextColor(Appearance.color(this@ChallengesActivity,
+                if (size >= 22f) R.attr.rcTextPrimary else R.attr.rcTextSecondary))
+            if (size >= 22f) setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setPadding(0, dp(8), 0, dp(8))
+            root.addView(this)
         }
-        label("Weekly challenges", 24f)
+        label("YOUR WEEK", 12f).apply {
+            setTextColor(Appearance.color(this@ChallengesActivity, R.attr.rcAccent))
+            letterSpacing = 0.14f
+        }
+        label("Weekly challenges", 28f)
         label("Weeks run Monday to Monday at 00:00 UTC. Local goals use new road and town discoveries. Points are added automatically once per goal.")
-        local = label("Loading this week's progress…")
+        local = label("Loading this week's progress…").apply {
+            textSize = 15f
+            setTextColor(Appearance.color(this@ChallengesActivity, R.attr.rcTextPrimary))
+            setBackgroundResource(R.drawable.settings_card_background)
+            setPadding(dp(16), dp(16), dp(16), dp(16))
+        }
         label("Friends", 22f)
         label("Add friends by username. Both people must accept the friendship.")
         if (FeatureFlags.LEADERBOARDS_VISIBLE) {
             label("Compete on this week's newly verified exploration cells. Each cell counts once. Hidden profiles do not appear. Imported history never earns competitive credit.")
         }
-        ranking = label("").apply { visibility = if (FeatureFlags.LEADERBOARDS_VISIBLE) View.VISIBLE else View.GONE }
+        ranking = label("").apply {
+            visibility = if (FeatureFlags.LEADERBOARDS_VISIBLE) View.VISIBLE else View.GONE
+            setBackgroundResource(R.drawable.settings_card_background)
+            setPadding(dp(16), dp(16), dp(16), dp(16))
+        }
         status = label("")
         invite = Button(this).apply {
             text = "Add friend by username"
@@ -76,10 +97,18 @@ class ChallengesActivity : Activity() {
                         .setPositiveButton("Request") { _, _ -> changeFriend(input.text.toString().trim(), "request") }.show()
                 }
             }
-            root.addView(this)
+            root.addView(this, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(8) })
         }
-        friends = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; root.addView(this) }
-        root.addView(Button(this).apply { text = "Refresh"; setOnClickListener { refresh() } })
+        friends = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundResource(R.drawable.settings_card_background)
+            setPadding(dp(16), dp(10), dp(16), dp(16))
+            root.addView(this, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+        }
+        root.addView(Button(this, null, 0, R.style.RoadConquest_SettingsAction).apply {
+            text = "Refresh"
+            setOnClickListener { refresh() }
+        }, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(12) })
     }
 
     private fun refresh() {
@@ -121,7 +150,12 @@ class ChallengesActivity : Activity() {
                         val row = rows.getJSONObject(i)
                         val username = row.getString("username")
                         val relation = row.getString("status")
-                        friends.addView(TextView(this).apply { text = "$username · $relation"; textSize = 16f })
+                        friends.addView(TextView(this).apply {
+                            text = "$username · $relation"
+                            textSize = 16f
+                            setTextColor(Appearance.color(this@ChallengesActivity, R.attr.rcTextPrimary))
+                            setPadding(0, dp(12), 0, dp(6))
+                        })
                         if (relation == "incoming") friends.addView(Button(this).apply {
                             text = "Accept $username"; isEnabled = !changingFriend
                             setOnClickListener { changeFriend(username, "accept") }
