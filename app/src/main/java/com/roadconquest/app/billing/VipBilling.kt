@@ -187,9 +187,7 @@ class VipBilling(
                 // A purchase callback or another screen may have confirmed a
                 // newer state while this async query was in flight. In that
                 // case don't let this potentially stale result revoke/grant VIP.
-                if (revisionAtRequest == VipEntitlement.revision()) {
-                    VipEntitlement.updateFromPlay(appContext, owned)
-                }
+                VipEntitlement.updateIfCurrent(appContext, owned, revisionAtRequest)
                 vipPurchases.filter { it.purchaseState == Purchase.PurchaseState.PURCHASED }
                     .forEach(::acknowledge)
                 message = if (vipPurchases.any { it.purchaseState == Purchase.PurchaseState.PENDING } &&
