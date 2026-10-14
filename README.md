@@ -12,11 +12,15 @@ challenges, friend requests, and saved-trip replay. It improves VIP achievement 
 and background place discovery, and temporarily hides competitive rankings and verification
 uploads. Beta 44's VIP, road-matching, municipality and map improvements remain included.
 See [backup and challenges details](BACKUP_AND_CHALLENGES.md). Previously unlocked roads, exploration, purchases, and scoring are
-preserved when installing a signed update over an existing installation.
+preserved when installing an update signed with the same app identity over an existing installation.
 
 ## Install
 
 Android 12 or newer is required. Download the signed APK from Releases for direct installation.
+The GitHub APK uses the permanent upload key and updates compatible GitHub-installed betas.
+For an app installed through Google Play, update through Play instead: Play uses its separate
+app-signing key. Do not uninstall or clear app data to work around a signature error.
+Export a progress backup before changing installation channels.
 For Google Play, download the **signed** `RoadConquest-<version>.aab` from the [GitHub Releases](https://github.com/AntnyGamer/RoadConquest-Beta/releases) page, not the unsigned intermediate from GitHub Actions. The Actions artifact is named `android-build-inputs-unsigned` and contains `app-release-UNSIGNED-DO-NOT-UPLOAD.aab`, which Google Play cannot accept. Each release also includes the Android Studio project and SHA-256 checksums.
 
 If Play still reports an invalid signature for the **signed release** bundle, compare the SHA-256 fingerprint under Play Console → Test and release → App integrity → **Upload key certificate** (not the separate Google Play **App signing key certificate**) with the release upload key:
