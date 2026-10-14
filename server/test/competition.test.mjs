@@ -41,6 +41,9 @@ test("real PostgreSQL protects simultaneous scoring, retries, canonical roads, p
     assert.deepEqual(results[0], results[1]);
     assert.equal(results[0].roads, 2);
     assert.equal(results[0].miles, 50000 / 1609344);
+    const weekScore = (await pool.query("SELECT distance_mm,new_roads FROM competition_weeks WHERE user_id=$1", [alpha.id])).rows[0];
+    assert.equal(Number(weekScore.distance_mm), 50000);
+    assert.equal(Number(weekScore.new_roads), 2);
     const watermark = (await pool.query(
       "SELECT last_fix FROM competition_scores WHERE user_id=$1 AND dataset=$2", [alpha.id, dataset]
     )).rows[0].last_fix;
@@ -68,6 +71,9 @@ test("real PostgreSQL protects simultaneous scoring, retries, canonical roads, p
     const repeat = await service.submit(alpha, second, "test");
     assert.equal(repeat.roads, 2);
     assert.equal(repeat.miles, 100000 / 1609344);
+    const repeatedWeek = (await pool.query("SELECT distance_mm,new_roads FROM competition_weeks WHERE user_id=$1", [alpha.id])).rows[0];
+    assert.equal(Number(repeatedWeek.distance_mm), 100000);
+    assert.equal(Number(repeatedWeek.new_roads), 2);
     const betaRun = await service.begin(beta);
     await service.submit(beta, JSON.stringify({ ...betaRun, fixes: points }), "test");
     const ties = (await service.leaderboard("roads")).entries;

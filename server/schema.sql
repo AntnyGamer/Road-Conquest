@@ -80,3 +80,28 @@ CREATE TABLE IF NOT EXISTS competition_receipts (
     PRIMARY KEY (run_id, sequence)
 );
 CREATE INDEX IF NOT EXISTS competition_receipts_age_idx ON competition_receipts(created_at);
+
+-- Written in the same transaction as a verified batch and its idempotency receipt.
+CREATE TABLE IF NOT EXISTS competition_weeks (
+    user_id BIGINT NOT NULL,
+    dataset VARCHAR(64) NOT NULL,
+    week_start DATE NOT NULL,
+    distance_mm BIGINT NOT NULL DEFAULT 0 CHECK (distance_mm >= 0),
+    new_roads BIGINT NOT NULL DEFAULT 0 CHECK (new_roads >= 0),
+    PRIMARY KEY (user_id, dataset, week_start),
+    FOREIGN KEY (user_id, dataset) REFERENCES competition_scores(user_id, dataset) ON DELETE CASCADE,
+    CHECK (EXTRACT(ISODOW FROM week_start) = 1)
+);
+
+-- Both users must consent. Username changes leave the relationship intact.
+CREATE TABLE IF NOT EXISTS friendships (
+    user_low BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_high BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    requested_by BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    accepted BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_low, user_high),
+    CHECK (user_low < user_high),
+    CHECK (requested_by IN (user_low, user_high))
+);
+CREATE INDEX IF NOT EXISTS friendships_high_idx ON friendships(user_high);

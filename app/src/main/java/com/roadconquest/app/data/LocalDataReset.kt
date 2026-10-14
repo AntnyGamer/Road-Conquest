@@ -30,6 +30,10 @@ object LocalDataReset {
             TrackingRepository(app).clearHistory()
             ProgressionManager.resetLocalProgression(app)
             DataExporter.clearTemporarySnapshots(app)
+            listOf(com.roadconquest.app.export.DataImporter.previousBackup(app),
+                java.io.File(app.filesDir, "before-restore.tmp.zip")).forEach {
+                check(!it.exists() || it.delete()) { "Could not remove restore recovery data" }
+            }
             for (action in listOf(
                 TrackingService.ACTION_STATS_UPDATED,
                 TrackingService.ACTION_ROADS_UPDATED,

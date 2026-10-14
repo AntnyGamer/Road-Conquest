@@ -90,6 +90,16 @@ object AccountClient {
         JSONObject().put("evidence", evidence).put("integrity_token", integrityToken), token
     )
 
+    fun friends(token: String): JSONObject = request("/v1/friends", "GET", null, token)
+
+    fun changeFriend(token: String, username: String, action: String): JSONObject = request("/v1/friends", "POST",
+        JSONObject().put("username", username).put("action", action), token)
+
+    fun friendWeek(token: String, metric: String): JSONObject {
+        require(metric == "miles" || metric == "roads")
+        return request("/v1/friends/weekly?metric=$metric", "GET", null, token)
+    }
+
     private fun request(path: String, method: String, body: JSONObject?, token: String?): JSONObject {
         val url = endpoint(path) ?: throw ApiException("Account service is not configured in this build.")
         val connection = url.toURL().openConnection() as HttpsURLConnection

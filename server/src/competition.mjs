@@ -144,9 +144,21 @@ export async function createCompetition(pool, config, dependencies = {}) {
           "UPDATE competition_scores SET distance_mm = distance_mm + $1, last_fix = $2 WHERE user_id = $3 AND dataset = $4",
           [score.millimeters, JSON.stringify(fixWatermark(body.fixes.at(-1), config.watermarkKey)), user.id, config.dataset]
         );
-        await db.query(
-          "INSERT INTO competition_roads(user_id,dataset,way_id) SELECT $1,$2,unnest($3::bigint[]) ON CONFLICT DO NOTHING",
+        const newRoads = await db.query(
+          "INSERT INTO competition_roads(user_id,dataset,way_id) SELECT $1,$2,unnest($3::bigint[]) ON CONFLICT DO NOTHING RETURNING way_id",
           [user.id, config.dataset, score.roads]
+        );
+        // Batches spanning Monday midnight belong to the week of their final fix.
+        // The timestamp is already freshness-checked and bound by Play Integrity.
+        const week = new Date(body.fixes.at(-1).time);
+        week.setUTCHours(0, 0, 0, 0);
+        week.setUTCDate(week.getUTCDate() - (week.getUTCDay() + 6) % 7);
+        await db.query(
+          `INSERT INTO competition_weeks(user_id,dataset,week_start,distance_mm,new_roads) VALUES ($1,$2,$3,$4,$5)
+           ON CONFLICT (user_id,dataset,week_start) DO UPDATE
+           SET distance_mm = competition_weeks.distance_mm + EXCLUDED.distance_mm,
+               new_roads = competition_weeks.new_roads + EXCLUDED.new_roads`,
+          [user.id, config.dataset, week.toISOString().slice(0, 10), score.millimeters, newRoads.rowCount]
         );
         await db.query("UPDATE competition_runs SET sequence = sequence + 1, expires_at = CURRENT_TIMESTAMP + INTERVAL '3 minutes' WHERE user_id = $1", [user.id]);
         const result = { sequence: body.sequence + 1, credited_miles: score.millimeters / 1609344, ...await totals(db, user.id) };
@@ -156,6 +168,26 @@ export async function createCompetition(pool, config, dependencies = {}) {
         return result;
       } catch (error) { await db.query("ROLLBACK"); throw error; }
       finally { db.release(); }
+    },
+    async friendWeek(user, metric) {
+      if (metric !== "miles" && metric !== "roads") throw new EvidenceError("Choose miles or roads.", 400);
+      const column = metric === "miles" ? "distance_mm" : "new_roads";
+      const week = (await pool.query("SELECT to_char(date_trunc('week', CURRENT_TIMESTAMP AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS week")).rows[0].week;
+      const result = await pool.query(
+        `WITH scores AS (
+          SELECT u.username_display AS username, u.username_key,
+            COALESCE(w.distance_mm,0) AS distance_mm, COALESCE(w.new_roads,0) AS new_roads
+          FROM users u LEFT JOIN competition_weeks w ON w.user_id = u.id AND w.dataset = $2 AND w.week_start = $3
+          WHERE u.leaderboard_visible AND u.leaderboard_eligible AND (u.id = $1 OR EXISTS (
+            SELECT 1 FROM friendships f WHERE f.accepted AND
+              ((f.user_low = $1 AND f.user_high = u.id) OR (f.user_high = $1 AND f.user_low = u.id))
+          ))
+        ) SELECT username,distance_mm,new_roads,RANK() OVER (ORDER BY ${column} DESC) AS rank
+          FROM scores ORDER BY ${column} DESC, username_key LIMIT 51`, [user.id, config.dataset, week]
+      );
+      return { available: true, week_start: week, dataset: config.dataset, metric,
+        entries: result.rows.map(r => ({ username: r.username, rank: Number(r.rank),
+          miles: Number(r.distance_mm) / 1609344, roads: Number(r.new_roads) })) };
     },
     async leaderboard(metric) {
       if (metric !== "miles" && metric !== "roads") throw new EvidenceError("Choose miles or roads.", 400);

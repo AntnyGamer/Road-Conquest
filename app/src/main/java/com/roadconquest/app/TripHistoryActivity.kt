@@ -11,6 +11,9 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.TextView
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import com.roadconquest.app.data.SavedTrip
 import com.roadconquest.app.data.SavedTripPoint
 import com.roadconquest.app.data.TripHistoryRepository
@@ -33,7 +36,7 @@ import org.maplibre.android.style.layers.PropertyFactory.lineWidth
 import org.maplibre.android.style.sources.GeoJsonSource
 import org.maplibre.geojson.Feature
 import org.maplibre.geojson.FeatureCollection
-import org.maplibre.geojson.LineString
+import org.maplibre.geojson.MultiLineString
 import org.maplibre.geojson.Point
 import java.text.DateFormat
 import java.util.Date
@@ -75,12 +78,18 @@ class TripHistoryActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         setTheme(Appearance.themeRes(this))
         super.onCreate(savedInstanceState)
+        WindowCompat.enableEdgeToEdge(window)
         MapLibre.getInstance(this)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(12), dp(16), dp(12), dp(8))
         }
         setContentView(root)
+        ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
+            val safe = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            view.setPadding(dp(12) + safe.left, dp(16) + safe.top, dp(12) + safe.right, dp(8) + safe.bottom)
+            insets
+        }
         root.addView(TextView(this).apply {
             text = "Trip history"
             textSize = 24f
@@ -201,9 +210,18 @@ class TripHistoryActivity : Activity() {
     private fun renderReplay() {
         if (!mapReady || points.size < 2) return
         val style = map?.style ?: return
-        val path = points.map { Point.fromLngLat(it.longitude, it.latitude) }
+        val paths = ArrayList<List<Point>>()
+        var path = ArrayList<Point>()
+        points.forEachIndexed { index, point ->
+            if (index > 0 && point.breakBefore) {
+                if (path.size >= 2) paths += path
+                path = ArrayList()
+            }
+            path += Point.fromLngLat(point.longitude, point.latitude)
+        }
+        if (path.size >= 2) paths += path
         style.getSourceAs<GeoJsonSource>(ROUTE)?.setGeoJson(
-            Feature.fromGeometry(LineString.fromLngLats(path))
+            Feature.fromGeometry(MultiLineString.fromLngLats(paths))
         )
         showPosition(seek?.progress ?: 0)
         val bounds = LatLngBounds.Builder()

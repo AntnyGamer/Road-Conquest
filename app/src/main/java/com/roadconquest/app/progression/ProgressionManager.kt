@@ -45,7 +45,8 @@ object ProgressionManager {
                 ) || changed
             }
         }
-        return if (changed) repository.snapshot() else snapshot
+        val weeklyChanged = com.roadconquest.app.data.WeeklyChallenges.sync(context, summary, snapshot)
+        return if (changed || weeklyChanged) repository.snapshot() else snapshot
     }
 
     fun recordBatteryFromSystem(context: Context): Boolean {

@@ -58,7 +58,7 @@ class DataExporterTest {
         val metadata = JSONObject(entries.getValue("metadata.json"))
         assertEquals(1L, metadata.getLong("track_point_count"))
         assertEquals(1L, metadata.getLong("road_segment_count"))
-        assertEquals(9, metadata.getInt("schema_version"))
+        assertEquals(10, metadata.getInt("schema_version"))
         assertEquals(1L, metadata.getLong("explored_mile_grid_count"))
         assertEquals(com.roadconquest.app.BuildConfig.VERSION_NAME, metadata.getString("app_version"))
         assertEquals(com.roadconquest.app.BuildConfig.VERSION_CODE, metadata.getInt("app_version_code"))

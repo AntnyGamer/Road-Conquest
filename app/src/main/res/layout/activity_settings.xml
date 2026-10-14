@@ -307,6 +307,11 @@
                 android:layout_marginTop="8dp"
                 android:text="Trip history and replay" />
 
+            <Button android:id="@+id/challengesButton"
+                style="@style/RoadConquest.SettingsAction"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="8dp" android:text="Weekly challenges and friends" />
+
             <TextView
                 android:id="@+id/dataSummaryText"
                 android:layout_width="match_parent"
@@ -359,6 +364,11 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
                 android:text="Export my data (.zip)" />
+
+            <Button android:id="@+id/importButton"
+                style="@style/RoadConquest.SettingsAction"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="8dp" android:text="Import and restore progress" />
 
             <Button
                 android:id="@+id/deleteDeviceDataButton"

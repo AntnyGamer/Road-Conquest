@@ -10,9 +10,10 @@ data class SavedTrip(
     val startedAt: Long,
     val endedAt: Long,
     val pointCount: Int,
-    val distanceMeters: Double
+    val distanceMeters: Double,
+    val historyGeneration: Long = -1L
 )
-data class SavedTripPoint(val latitude: Double, val longitude: Double, val timestamp: Long)
+data class SavedTripPoint(val latitude: Double, val longitude: Double, val timestamp: Long, val breakBefore: Boolean = false)
 
 class TripHistoryRepository(context: Context) {
     private val helper = AppDatabase.get(context.applicationContext)
@@ -29,7 +30,7 @@ class TripHistoryRepository(context: Context) {
         var distance = 0.0
         fun addCurrent() {
             if (count >= 2 && lastTime >= firstTime) {
-                output += SavedTrip(firstId, lastId, firstTime, lastTime, count, distance)
+                output += SavedTrip(firstId, lastId, firstTime, lastTime, count, distance, helper.historyGeneration)
             }
         }
         helper.readableDatabase.rawQuery(
@@ -63,6 +64,7 @@ class TripHistoryRepository(context: Context) {
     fun replay(trip: SavedTrip, maxPoints: Int = 2500): List<SavedTripPoint> =
         synchronized(helper.historyLock) {
             require(maxPoints in 2..5000)
+            if (trip.historyGeneration != helper.historyGeneration) return@synchronized emptyList()
             val db = helper.readableDatabase
             val bounds = arrayOf(trip.firstId.toString(), trip.lastId.toString())
             val count = db.rawQuery(
@@ -72,18 +74,26 @@ class TripHistoryRepository(context: Context) {
             val selected = ArrayList<SavedTripPoint>(minOf(maxPoints, count.toInt()))
             var position = 0L
             var last: SavedTripPoint? = null
+            var previousTime: Long? = null
+            var gapSinceSample = false
             db.rawQuery(
                 "SELECT latitude, longitude, timestamp_ms FROM track_points " +
                     "WHERE id BETWEEN ? AND ? ORDER BY id ASC", bounds
             ).use { cursor ->
                 while (cursor.moveToNext()) {
-                    val point = SavedTripPoint(cursor.getDouble(0), cursor.getDouble(1), cursor.getLong(2))
-                    if (position % stride == 0L && selected.size < maxPoints - 1) selected += point
+                    val time = cursor.getLong(2)
+                    previousTime?.let { if (time <= it || time - it > 30_000L) gapSinceSample = true }
+                    val point = SavedTripPoint(cursor.getDouble(0), cursor.getDouble(1), time, gapSinceSample)
+                    if (position % stride == 0L && selected.size < maxPoints - 1) {
+                        selected += point
+                        gapSinceSample = false
+                    }
                     last = point
+                    previousTime = time
                     position++
                 }
             }
-            last?.let { if (selected.lastOrNull() != it) selected += it }
+            last?.let { if (selected.lastOrNull()?.timestamp != it.timestamp) selected += it }
             selected
         }
 

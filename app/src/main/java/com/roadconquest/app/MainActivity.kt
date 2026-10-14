@@ -224,6 +224,7 @@ class MainActivity : Activity() {
                     LocalDataReset.clearStoppedData(applicationContext)
                 } else {
                     DataExporter.clearTemporarySnapshots(applicationContext)
+                    com.roadconquest.app.export.DataImporter.clearTemporaryFiles(applicationContext)
                 }
             }
             cleanup.exceptionOrNull()?.let {

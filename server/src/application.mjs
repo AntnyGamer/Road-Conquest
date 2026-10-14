@@ -12,6 +12,7 @@ import {
   verifyPassword
 } from "./security.mjs";
 import { competitionConfig, createCompetition } from "./competition.mjs";
+import { createFriends } from "./friends.mjs";
 
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -81,6 +82,7 @@ if (process.env.APPLY_SCHEMA_ON_STARTUP !== "0") {
   await pool.query(await readFile(schemaPath, "utf8"));
 }
 const competition = await createCompetition(pool, competitionConfig(process.env));
+const friends = createFriends(pool);
 
 const dummy = await hashPassword("this is only a constant dummy password", PEPPER);
 
@@ -242,6 +244,24 @@ async function handle(req, res) {
   const ip = clientIp(req);
   if (req.method === "GET" && url.pathname === "/v1/competition") {
     return send(res, 200, competition?.status() || { available: false });
+  }
+  if (url.pathname === "/v1/friends" || url.pathname === "/v1/friends/weekly") {
+    if (!await rateLimit("friends-ip", ip, 120, 60 * 1000)) return send(res, 429, { error: "Try again later." });
+    const user = await authenticatedUser(req);
+    if (!user) return send(res, 401, { error: "Authentication required." });
+    if (req.method === "GET" && url.pathname === "/v1/friends/weekly") {
+      const metric = url.searchParams.get("metric") || "roads";
+      if (metric !== "miles" && metric !== "roads") return send(res, 400, { error: "Choose miles or roads." });
+      return send(res, 200, competition ? await competition.friendWeek(user, metric) : { available: false, entries: [] });
+    }
+    if (req.method === "GET" && url.pathname === "/v1/friends") return send(res, 200, await friends.list(user));
+    if (req.method === "POST" && url.pathname === "/v1/friends") {
+      if (!await rateLimit("friends-write", String(user.id), 30, 60 * 1000)) return send(res, 429, { error: "Try again later." });
+      const body = await readJson(req);
+      if (Object.keys(body).sort().join(",") !== "action,username") return send(res, 400, { error: "Username and action required." });
+      return send(res, 200, await friends.change(user, body.username, body.action));
+    }
+    return send(res, 405, { error: "Method not allowed." });
   }
   if (req.method === "GET" && url.pathname === "/v1/leaderboard") {
     if (!await rateLimit("competition-ip", ip, 180, 60 * 1000)) return send(res, 429, { error: "Try again later." });
