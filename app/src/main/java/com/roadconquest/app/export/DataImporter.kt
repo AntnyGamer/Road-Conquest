@@ -31,7 +31,7 @@ import java.util.zip.ZipFile
 object DataImporter {
     private const val MAX_BYTES = 512L * 1024 * 1024
     private const val PREFIX = "roadconquest-import-"
-    private val restoreLock = Any()
+    internal val operationLock = Any()
     private var temporaryFilesInitialized = false
     private val tables = listOf("track_points", "roads", "road_visits", "explored_places", "explored_grid",
         "visited_places", "place_candidates", "progression_rewards", "progression_purchases", "progression_counters")
@@ -178,7 +178,7 @@ object DataImporter {
     }
 
     /** All ten tables change in one transaction. Old asynchronous writers become no-ops. */
-    fun restore(context: Context, prepared: Prepared) = synchronized(restoreLock) {
+    fun restore(context: Context, prepared: Prepared) = synchronized(operationLock) {
         val app = context.applicationContext
         check(!Prefs.isDeviceDataDeletionPending(app)) { "Device data deletion is in progress" }
         val helper = AppDatabase.get(app)
@@ -187,7 +187,7 @@ object DataImporter {
         Prefs.setTrackingPaused(app, false)
         Prefs.setDriveVerificationEnabled(app, false)
         app.stopService(Intent(app, TrackingService::class.java))
-        synchronized(helper.historyLock) {
+        DataExporter.withSnapshotLock { synchronized(helper.historyLock) {
             check(helper.historyGeneration == prepared.generation && !Prefs.isDeviceDataDeletionPending(app)) {
                 "Device data changed; select the backup again"
             }
@@ -220,24 +220,23 @@ object DataImporter {
             }
             helper.historyGeneration++
             helper.trackSummaryCache = null; helper.roadSummaryCache = null; helper.lastTrackPointCache = null
-        }
+        } }
         // A cosmetic/icon failure after COMMIT must not claim that data was rolled back.
-        // Serialize against a subsequent deletion, which must take precedence.
-        synchronized(helper.historyLock) {
-            if (!Prefs.isDeviceDataDeletionPending(app) && helper.historyGeneration == prepared.generation + 1) {
-                runCatching {
-                    Achievements.reset(app)
-                    PlaceOverlayCache.clear(app)
-                    Prefs.resetCosmetics(app)
-                    val meta = prepared.metadata
-                    MapMode.entries.firstOrNull { it.name == meta.optString("map_mode") }?.let { Prefs.setMapMode(app, it) }
-                    UiTheme.entries.firstOrNull { it.name == meta.optString("ui_theme") }?.let { Prefs.setUiTheme(app, it) }
-                    Prefs.setFogEnabled(app, meta.optBoolean("fog_enabled", true))
-                    val selected = setOf("car_style_${meta.optString("car_style")}", "car_color_${meta.optString("car_color")}",
-                        "road_color_${meta.optString("road_color")}", if (meta.optBoolean("gold_ui_enabled")) "ui_gold" else "ui_standard")
-                    ShopCatalog.items.filter { it.id in selected }.forEach { Cosmetics.equip(app, it) }
-                }.onFailure { android.util.Log.w("RoadConquest", "Progress restored; appearance could not be fully restored", it) }
-            }
+        // operationLock serializes reset/restore without holding historyLock while
+        // taking Achievements' preference lock (its reads take these in reverse order).
+        if (!Prefs.isDeviceDataDeletionPending(app) && helper.historyGeneration == prepared.generation + 1) {
+            runCatching {
+                Achievements.reset(app)
+                PlaceOverlayCache.clear(app)
+                Prefs.resetCosmetics(app)
+                val meta = prepared.metadata
+                MapMode.entries.firstOrNull { it.name == meta.optString("map_mode") }?.let { Prefs.setMapMode(app, it) }
+                UiTheme.entries.firstOrNull { it.name == meta.optString("ui_theme") }?.let { Prefs.setUiTheme(app, it) }
+                Prefs.setFogEnabled(app, meta.optBoolean("fog_enabled", true))
+                val selected = setOf("car_style_${meta.optString("car_style")}", "car_color_${meta.optString("car_color")}",
+                    "road_color_${meta.optString("road_color")}", if (meta.optBoolean("gold_ui_enabled")) "ui_gold" else "ui_standard")
+                ShopCatalog.items.filter { it.id in selected }.forEach { Cosmetics.equip(app, it) }
+            }.onFailure { android.util.Log.w("RoadConquest", "Progress restored; appearance could not be fully restored", it) }
         }
     }
 

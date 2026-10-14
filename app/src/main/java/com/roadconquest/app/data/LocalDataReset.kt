@@ -23,7 +23,7 @@ object LocalDataReset {
         app.stopService(Intent(app, TrackingService::class.java))
     }
 
-    fun clearStoppedData(context: Context) {
+    fun clearStoppedData(context: Context) = synchronized(com.roadconquest.app.export.DataImporter.operationLock) {
         val app = context.applicationContext
         var cleared = false
         try {

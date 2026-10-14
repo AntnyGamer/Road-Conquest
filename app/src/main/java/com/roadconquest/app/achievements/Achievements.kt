@@ -9,7 +9,9 @@ data class AchievementMetrics(
     val states: Long = 0L,
     val countries: Long = 0L,
     val adsWatched: Long = 0L,
-    val lowestBatteryPercent: Int = 101
+    val lowestBatteryPercent: Int = 101,
+    val rewardedRoads: Long = 0L,
+    val rewardedAchievements: Set<String> = emptySet()
 )
 
 enum class AchievementCategory(val label: String) {
@@ -53,7 +55,7 @@ object Achievements {
 
     fun progress(summary: DataSummary, metrics: AchievementMetrics = AchievementMetrics()): List<AchievementProgress> {
         val miles = summary.distanceMeters / METERS_PER_MILE
-        val roads = summary.roadsUnlockedCount.toDouble()
+        val roads = maxOf(summary.roadsUnlockedCount, metrics.rewardedRoads).toDouble()
         val battery5 = if (metrics.lowestBatteryPercent <= 5) 1.0 else 0.0
         val battery1 = if (metrics.lowestBatteryPercent <= 1) 1.0 else 0.0
         return listOf(
@@ -82,7 +84,11 @@ object Achievements {
             AchievementProgress("ads_25", "Ad Supporter", "Watch 25 ads", AchievementCategory.ADS, metrics.adsWatched.toDouble(), 25.0, "ads", 500),
             AchievementProgress("ads_50", "Ad Veteran", "Watch 50 ads", AchievementCategory.ADS, metrics.adsWatched.toDouble(), 50.0, "ads", 1_000),
             AchievementProgress("ads_100", "Ad Legend", "Watch 100 ads", AchievementCategory.ADS, metrics.adsWatched.toDouble(), 100.0, "ads", 2_500)
-        )
+        ).map { item ->
+            // Road/place deduplication can reduce current totals. The durable
+            // reward ledger preserves earned milestones across full restores.
+            if (item.id in metrics.rewardedAchievements) item.copy(progress = maxOf(item.progress, item.goal)) else item
+        }
     }
 
     fun progress(

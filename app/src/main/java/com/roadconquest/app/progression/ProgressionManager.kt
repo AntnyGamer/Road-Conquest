@@ -175,7 +175,9 @@ object ProgressionManager {
         states = snapshot.states,
         countries = snapshot.countries,
         adsWatched = snapshot.adsWatched,
-        lowestBatteryPercent = snapshot.lowestBatteryPercent
+        lowestBatteryPercent = snapshot.lowestBatteryPercent,
+        rewardedRoads = snapshot.rewardedRoads,
+        rewardedAchievements = snapshot.rewardedAchievements
     )
 }
 

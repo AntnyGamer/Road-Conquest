@@ -56,6 +56,7 @@ class DataImporterTest {
         progression.recordPlaceCandidate(fix(1_005_000))
         progression.recordBatteryPercent(5)
         progression.syncRoadRewards(1)
+        progression.awardAchievement("roads_100", 350)
         val original = export()
         val stale = TrackingRepository(context)
         DataImporter.prepare(context, ByteArrayInputStream(original)).use { backup ->
@@ -70,6 +71,9 @@ class DataImporterTest {
         assertFalse(Prefs.isDriveVerificationEnabled(context))
         assertEquals(-1L, stale.insertLocation(fix(3_000_000)))
         assertEquals(2L, TrackingRepository(context).getSummary().trackPointCount)
+        assertTrue(com.roadconquest.app.achievements.Achievements.progress(context,
+            TrackingRepository(context).getSummary(), com.roadconquest.app.progression.ProgressionManager.metrics(
+                ProgressionRepository(context).snapshot())).single { it.id == "roads_100" }.unlocked)
         // Re-importing the same reward ledger does not mint another copy of the points.
         val points = ProgressionRepository(context).snapshot().balance
         DataImporter.prepare(context, ByteArrayInputStream(original)).use { DataImporter.restore(context, it) }
@@ -111,5 +115,42 @@ class DataImporterTest {
         values["metadata.json"] = JSONObject(values.getValue("metadata.json")).put("schema_version", 9).toString()
         DataImporter.prepare(context, ByteArrayInputStream(repack(values))).use { DataImporter.restore(context, it) }
         assertEquals(values.getValue("place_candidates.csv"), entries(export()).getValue("place_candidates.csv"))
+    }
+
+    @Test fun restoreWaitingForAnExportDoesNotDeadlockOrdinaryHistoryReaders() {
+        TrackingRepository(context).insertLocation(fix(1_000_000))
+        DataImporter.prepare(context, ByteArrayInputStream(export())).use { backup ->
+            val reader = TrackingRepository(context)
+            val writing = java.util.concurrent.CountDownLatch(1)
+            val finishExport = java.util.concurrent.CountDownLatch(1)
+            val failures = java.util.concurrent.ConcurrentLinkedQueue<Throwable>()
+            val exporter = Thread {
+                runCatching {
+                    DataExporter.writeZip(context, TrackingRepository(context), object : java.io.OutputStream() {
+                        override fun write(value: Int) {
+                            writing.countDown()
+                            check(finishExport.await(10, java.util.concurrent.TimeUnit.SECONDS))
+                        }
+                    })
+                }.exceptionOrNull()?.let { failures.add(it) }
+            }
+            exporter.start()
+            assertTrue(writing.await(5, java.util.concurrent.TimeUnit.SECONDS))
+            val restorer = Thread { runCatching { DataImporter.restore(context, backup) }.exceptionOrNull()?.let { failures.add(it) } }
+            val executor = java.util.concurrent.Executors.newSingleThreadExecutor()
+            try {
+                restorer.start()
+                val deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(3)
+                while (restorer.state != Thread.State.BLOCKED && System.nanoTime() < deadline) Thread.sleep(5)
+                assertEquals(Thread.State.BLOCKED, restorer.state)
+                assertEquals(1L, executor.submit<Long> { reader.getSummary().trackPointCount }.get(3, java.util.concurrent.TimeUnit.SECONDS).toLong())
+            } finally {
+                finishExport.countDown()
+                exporter.join(5000); restorer.join(5000)
+                executor.shutdownNow()
+            }
+            assertFalse(exporter.isAlive || restorer.isAlive)
+            assertTrue(failures.toString(), failures.isEmpty())
+        }
     }
 }

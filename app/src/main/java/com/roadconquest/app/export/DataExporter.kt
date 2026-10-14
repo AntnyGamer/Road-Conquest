@@ -18,6 +18,9 @@ object DataExporter {
     private const val SNAPSHOT_SUFFIX = ".db"
     private val snapshotLock = Any()
 
+    /** Restore takes this before historyLock, matching the ordinary export lock order. */
+    internal fun <T> withSnapshotLock(block: () -> T): T = synchronized(snapshotLock) { block() }
+
     fun writeZip(context: Context, repository: TrackingRepository, output: OutputStream): Unit =
         synchronized(snapshotLock) {
             // A killed process cannot execute the previous export's finally block. Remove any
