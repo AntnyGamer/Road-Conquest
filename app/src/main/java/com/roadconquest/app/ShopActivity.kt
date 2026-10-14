@@ -41,11 +41,21 @@ class ShopActivity : Activity() {
     private var vipMessage: String? = null
     private var lastSnapshot: ProgressionSnapshot? = null
     private var appliedGoldUi = false
+    private var vipThemeRecreationRequested = false
+    /** Avoid duplicate recreates when Shop and banner Billing clients report the same refund. */
+    private fun refreshVipThemeIfNeeded(): Boolean {
+        if (vipThemeRecreationRequested) return true
+        if (appliedGoldUi != Prefs.isGoldUiEnabled(this)) {
+            vipThemeRecreationRequested = true
+            recreate()
+            return true
+        }
+        return false
+    }
     private val vipEntitlementListener: () -> Unit = {
         runOnUiThread {
             if (!isDestroyed && !isFinishing) {
-                if (appliedGoldUi != Prefs.isGoldUiEnabled(this)) recreate()
-                else lastSnapshot?.let(::render)
+                if (!refreshVipThemeIfNeeded()) lastSnapshot?.let(::render)
             }
         }
     }
@@ -78,8 +88,7 @@ class ShopActivity : Activity() {
             // A refund can revoke a VIP-only Golden UI while Garage is open.
             // Rebuild the theme immediately instead of showing stale gold
             // surfaces until the user leaves and reopens the screen.
-            if (appliedGoldUi != Prefs.isGoldUiEnabled(this)) recreate()
-            else lastSnapshot?.let(::render)
+            if (!refreshVipThemeIfNeeded()) lastSnapshot?.let(::render)
         }
         ads = ScreenAds(this, findViewById(R.id.shopRoot), findViewById(R.id.shopRewardButton), ::refresh)
     }
@@ -91,10 +100,7 @@ class ShopActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        if (appliedGoldUi != Prefs.isGoldUiEnabled(this)) {
-            recreate()
-            return
-        }
+        if (refreshVipThemeIfNeeded()) return
         if (::items.isInitialized) refresh()
         if (::vipBilling.isInitialized) vipBilling.refresh()
         if (::ads.isInitialized) ads.onResume()
