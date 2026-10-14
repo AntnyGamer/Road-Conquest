@@ -57,6 +57,11 @@ class VipBilling(
                     message = null
                     notifyStatus()
                 }
+                BillingClient.BillingResponseCode.ITEM_ALREADY_OWNED -> {
+                    // The Play account may have bought VIP on another device
+                    // before this screen refreshed its local entitlement.
+                    queryOwnership()
+                }
                 else -> {
                     message = "Google Play could not complete this purchase."
                     notifyStatus()
@@ -114,9 +119,14 @@ class VipBilling(
                             activity, BillingFlowParams.newBuilder()
                                 .setProductDetailsParamsList(listOf(params)).build()
                         )
-                        if (launch.responseCode != BillingClient.BillingResponseCode.OK) {
-                            message = "Google Play could not open the purchase screen."
-                            notifyStatus()
+                        when (launch.responseCode) {
+                            BillingClient.BillingResponseCode.OK -> Unit
+                            BillingClient.BillingResponseCode.ITEM_ALREADY_OWNED ->
+                                queryOwnership()
+                            else -> {
+                                message = "Google Play could not open the purchase screen."
+                                notifyStatus()
+                            }
                         }
                     }
                 }
