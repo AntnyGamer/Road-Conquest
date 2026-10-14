@@ -967,6 +967,8 @@ class MainActivity : Activity() {
             val available = (root.width - safeLeft - safeRight - dpToPx(104f)).coerceAtLeast(dpToPx(100f))
             val target = minOf(dpToPx(210f), available)
             if ((stats as TextView).maxWidth != target) stats.maxWidth = target
+            // Long balances should wrap rather than cover the right-side map controls.
+            if ((points as TextView).maxWidth != target) points.maxWidth = target
         }
 
         // The stats card can grow with font scaling and longer mileage/road totals.
