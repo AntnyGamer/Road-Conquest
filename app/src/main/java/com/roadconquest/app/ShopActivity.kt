@@ -41,6 +41,14 @@ class ShopActivity : Activity() {
     private var vipMessage: String? = null
     private var lastSnapshot: ProgressionSnapshot? = null
     private var appliedGoldUi = false
+    private val vipEntitlementListener: () -> Unit = {
+        runOnUiThread {
+            if (!isDestroyed && !isFinishing) {
+                if (appliedGoldUi != Prefs.isGoldUiEnabled(this)) recreate()
+                else lastSnapshot?.let(::render)
+            }
+        }
+    }
     @Volatile private var generation = 0
 
     override fun attachBaseContext(newBase: Context) {
@@ -62,6 +70,7 @@ class ShopActivity : Activity() {
         pointsText = findViewById(R.id.shopPointsText)
         progressText = findViewById(R.id.shopProgressText)
         items = findViewById(R.id.shopItems)
+        VipEntitlement.addListener(vipEntitlementListener)
         vipBilling = VipBilling(this) { offer, checked, status ->
             vipOffer = offer
             vipChecked = checked
@@ -307,6 +316,7 @@ class ShopActivity : Activity() {
     override fun onDestroy() {
         generation++
         if (::ads.isInitialized) ads.destroy()
+        VipEntitlement.removeListener(vipEntitlementListener)
         if (::vipBilling.isInitialized) vipBilling.close()
         // A purchase the user already confirmed is a local state mutation and should finish
         // even if the Garage screen closes immediately afterward. Stale UI callbacks are
