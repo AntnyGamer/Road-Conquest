@@ -35,6 +35,8 @@ class ChallengesActivity : Activity() {
     private lateinit var invite: Button
     private var changingFriend = false
 
+    private fun dp(value: Int) = (value * resources.displayMetrics.density + 0.5f).toInt()
+
     override fun attachBaseContext(newBase: Context) { super.attachBaseContext(Appearance.wrap(newBase)) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -49,8 +51,6 @@ class ChallengesActivity : Activity() {
             view.setPadding(p + safe.left, p + safe.top, p + safe.right, p + safe.bottom)
             insets
         }
-        val density = resources.displayMetrics.density
-        fun dp(value: Int) = (value * density + 0.5f).toInt()
         fun label(text: String, size: Float = 16f) = TextView(this).apply {
             this.text = text
             textSize = size
