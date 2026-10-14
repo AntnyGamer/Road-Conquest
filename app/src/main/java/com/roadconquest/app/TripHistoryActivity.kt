@@ -100,7 +100,7 @@ class TripHistoryActivity : Activity() {
         }
         if (compact) {
             setContentView(ScrollView(this).apply {
-                fillViewport = true
+                isFillViewport = true
                 addView(root, FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
             })
