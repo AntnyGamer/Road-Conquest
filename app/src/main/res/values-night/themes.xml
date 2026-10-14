@@ -15,5 +15,6 @@
         <item name="rcAccent">@color/road_blue</item>
         <item name="rcOutline">@color/outline</item>
         <item name="rcMutedBg">@color/muted_surface</item>
+        <item name="rcOnAccent">@color/text_on_accent</item>
     </style>
 </resources>

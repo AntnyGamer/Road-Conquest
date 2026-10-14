@@ -13,5 +13,7 @@
     <color name="gold_accent">#986C00</color>
     <color name="gold_outline">#EADAB1</color>
     <color name="gold_muted_surface">#FFF0CA</color>
+    <color name="text_on_accent">#FFFFFF</color>
+    <color name="gold_on_accent">#FFFFFF</color>
     <color name="danger">#B93A46</color>
 </resources>

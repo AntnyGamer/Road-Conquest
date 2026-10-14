@@ -6,7 +6,7 @@
         <item name="android:fontFamily">sans-serif-medium</item>
         <item name="android:textSize">15sp</item>
         <item name="android:background">@drawable/primary_button_background</item>
-        <item name="android:textColor">@android:color/white</item>
+        <item name="android:textColor">?attr/rcOnAccent</item>
         <item name="android:paddingStart">12dp</item>
         <item name="android:paddingEnd">12dp</item>
     </style>
@@ -56,6 +56,7 @@
         <item name="rcAccent">@color/road_blue</item>
         <item name="rcOutline">@color/outline</item>
         <item name="rcMutedBg">@color/muted_surface</item>
+        <item name="rcOnAccent">@color/text_on_accent</item>
     </style>
 
     <style name="Theme.RoadConquest.Gold" parent="android:style/Theme.Material.Light.NoActionBar">
@@ -74,5 +75,6 @@
         <item name="rcAccent">@color/gold_accent</item>
         <item name="rcOutline">@color/gold_outline</item>
         <item name="rcMutedBg">@color/gold_muted_surface</item>
+        <item name="rcOnAccent">@color/gold_on_accent</item>
     </style>
 </resources>

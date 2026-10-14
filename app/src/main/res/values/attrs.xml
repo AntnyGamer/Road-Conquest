@@ -6,4 +6,5 @@
     <attr name="rcAccent" format="color" />
     <attr name="rcOutline" format="color" />
     <attr name="rcMutedBg" format="color" />
+    <attr name="rcOnAccent" format="color" />
 </resources>

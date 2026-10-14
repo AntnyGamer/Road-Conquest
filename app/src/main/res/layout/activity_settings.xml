@@ -4,7 +4,8 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:clipToPadding="false">
+    android:clipToPadding="false"
+    android:background="?attr/rcScreenBg">
     <ScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:fillViewport="true">
 
     <LinearLayout
@@ -12,16 +13,26 @@
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:paddingStart="16dp"
-        android:paddingTop="18dp"
+        android:paddingTop="24dp"
         android:paddingEnd="16dp"
         android:paddingBottom="28dp">
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:text="YOUR ROAD CONQUEST"
+            android:letterSpacing="0.14"
+            android:fontFamily="sans-serif-medium"
+            android:textColor="?attr/rcAccent"
+            android:textSize="12sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
             android:text="Settings"
             android:textColor="?attr/rcTextPrimary"
-            android:textSize="32sp"
+            android:textSize="30sp"
             android:textStyle="bold" />
 
         <TextView
@@ -376,7 +387,7 @@
 
             <Button
                 android:id="@+id/deleteDeviceDataButton"
-                style="@style/RoadConquest.SettingsAction"
+                style="@style/RoadConquest.DangerAction"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"

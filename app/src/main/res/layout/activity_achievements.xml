@@ -10,11 +10,21 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="20dp">
+        android:padding="22dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="YOUR MILESTONES"
+            android:letterSpacing="0.14"
+            android:textSize="12sp"
+            android:fontFamily="sans-serif-medium"
+            android:textColor="?attr/rcAccent" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
             android:text="Achievements"
             android:textColor="?attr/rcTextPrimary"
             android:textSize="28sp"
@@ -51,11 +61,11 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal">
 
-                <Button android:id="@+id/achievementRoadsButton" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Road Conquest" />
-                <Button android:id="@+id/achievementDistanceButton" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:text="Mileage" />
-                <Button android:id="@+id/achievementPlacesButton" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:text="Exploration" />
-                <Button android:id="@+id/achievementAdsButton" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:text="Ad Rewards" />
-                <Button android:id="@+id/achievementExtraButton" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:text="Bonus" />
+                <Button style="@style/RoadConquest.FilterAction" android:id="@+id/achievementRoadsButton" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Road Conquest" />
+                <Button style="@style/RoadConquest.FilterAction" android:id="@+id/achievementDistanceButton" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:text="Mileage" />
+                <Button style="@style/RoadConquest.FilterAction" android:id="@+id/achievementPlacesButton" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:text="Exploration" />
+                <Button style="@style/RoadConquest.FilterAction" android:id="@+id/achievementAdsButton" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:text="Ad Rewards" />
+                <Button style="@style/RoadConquest.FilterAction" android:id="@+id/achievementExtraButton" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:text="Bonus" />
             </LinearLayout>
         </HorizontalScrollView>
 

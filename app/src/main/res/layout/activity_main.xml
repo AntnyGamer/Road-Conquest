@@ -59,7 +59,8 @@
         android:contentDescription="@string/settings"
         android:elevation="6dp"
         android:padding="13dp"
-        android:src="@drawable/ic_settings" />
+        android:src="@drawable/ic_settings"
+        android:tint="?attr/rcTextPrimary" />
 
     <ImageButton
         android:id="@+id/centerCarButton"
@@ -72,7 +73,8 @@
         android:contentDescription="@string/center_on_car"
         android:elevation="6dp"
         android:padding="13dp"
-        android:src="@drawable/ic_my_location" />
+        android:src="@drawable/ic_my_location"
+        android:tint="?attr/rcTextPrimary" />
 
     <ImageButton
         android:id="@+id/overlayButton"
@@ -85,7 +87,8 @@
         android:contentDescription="Map layers and overlays"
         android:elevation="6dp"
         android:padding="13dp"
-        android:src="@drawable/ic_layers" />
+        android:src="@drawable/ic_layers"
+        android:tint="?attr/rcTextPrimary" />
 
     <LinearLayout
         android:id="@+id/controlPanel"
