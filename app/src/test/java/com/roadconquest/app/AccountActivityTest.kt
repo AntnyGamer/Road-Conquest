@@ -53,6 +53,17 @@ class AccountActivityTest {
         assertTrue(collecting > initial)
     }
 
+    @Test fun olderSharingConsentCannotResumeUploadsUnderANewVerificationPolicy() {
+        val context = RuntimeEnvironment.getApplication()
+        context.getSharedPreferences("roadconquest_preferences", 0).edit()
+            .putBoolean("verify_drives", true).remove("verification_policy").commit()
+        assertFalse(Prefs.isDriveVerificationEnabled(context))
+        Prefs.setDriveVerificationEnabled(context, true)
+        assertTrue(Prefs.isDriveVerificationEnabled(context))
+        Prefs.setDriveVerificationEnabled(context, false)
+        assertFalse(Prefs.isDriveVerificationEnabled(context))
+    }
+
     @Test fun verificationCannotBeEnabledDuringPendingDeviceDataDeletion() {
         val context = RuntimeEnvironment.getApplication()
         Prefs.setDeviceDataDeletionPending(context, false)
@@ -131,7 +142,7 @@ class AccountActivityTest {
         assertTrue(text.contains("<redacted>"))
     }
 
-    @Test fun settingsLinksToAccountAndAlwaysExposesLeaderboardPage() {
+    @Test fun settingsKeepsAccountAndLocalChallengesWhileHidingCompetitiveControls() {
         val controller = Robolectric.buildActivity(SettingsActivity::class.java).create().start().resume()
         try {
             val activity = controller.get()
@@ -140,13 +151,57 @@ class AccountActivityTest {
             assertFalse(privacy.isEnabled)
             assertFalse(activity.findViewById<Switch>(R.id.verifyDrivesSwitch).isChecked)
             assertFalse(activity.findViewById<Switch>(R.id.verifyDrivesSwitch).isEnabled)
-            assertEquals(View.VISIBLE, activity.findViewById<View>(R.id.leaderboardsButton).visibility)
+            for (id in listOf(R.id.leaderboardsButton, R.id.leaderboardPrivacySwitch,
+                R.id.verifyDrivesSwitch, R.id.verificationStatusText)) {
+                assertEquals(View.GONE, activity.findViewById<View>(id).visibility)
+            }
+            assertEquals(View.VISIBLE, activity.findViewById<View>(R.id.challengesButton).visibility)
 
             activity.findViewById<Button>(R.id.accountButton).performClick()
             val launched = org.robolectric.Shadows.shadowOf(activity).nextStartedActivity
             assertEquals(AccountActivity::class.java.name, launched.component?.className)
         } finally {
             controller.pause().stop().destroy()
+        }
+    }
+
+    @Test fun hiddenLeaderboardDirectLaunchFinishesThroughTheWholeLifecycle() {
+        val controller = Robolectric.buildActivity(LeaderboardActivity::class.java).create().start().resume()
+        try {
+            assertTrue(controller.get().isFinishing)
+        } finally {
+            controller.pause().stop().destroy()
+        }
+    }
+
+    @Test fun accountHidesLeaderboardPrivacyAndItsHelp() {
+        val controller = Robolectric.buildActivity(AccountActivity::class.java).create().start().resume()
+        try {
+            for (id in listOf(R.id.accountLeaderboardSwitch, R.id.accountLeaderboardPrivacyHelp)) {
+                assertEquals(View.GONE, controller.get().findViewById<View>(id).visibility)
+            }
+        } finally {
+            controller.pause().stop().destroy()
+        }
+    }
+
+    @Test fun challengesKeepLocalGoalsAndFriendsWithoutRankingControls() {
+        val controller = Robolectric.buildActivity(ChallengesActivity::class.java).create()
+        try {
+            val texts = mutableListOf<String>()
+            fun collect(view: View) {
+                if (view.visibility != View.VISIBLE) return
+                if (view is TextView) texts += view.text.toString()
+                if (view is android.view.ViewGroup) for (index in 0 until view.childCount) collect(view.getChildAt(index))
+            }
+            collect(controller.get().findViewById(android.R.id.content))
+            assertTrue(texts.contains("Weekly challenges"))
+            assertTrue(texts.contains("Add friend by username"))
+            assertFalse(texts.contains("New roads"))
+            assertFalse(texts.contains("Miles"))
+            assertFalse(texts.any { it.contains("verified", ignoreCase = true) })
+        } finally {
+            controller.destroy()
         }
     }
 
@@ -181,6 +236,20 @@ class AccountActivityTest {
         assertFalse(AccountClient.isConfigured())
         AccountClient.endpointOverrideForTests = "https://example.org/base/"
         assertTrue(AccountClient.isConfigured())
+    }
+
+    @Test fun competitiveResponsesCannotSubstituteLegacyOrUnverifiedAccountScores() {
+        AccountClient.requireVerifiedPolicy(org.json.JSONObject().put("verified", true).put("scoring_policy", 3).put("dataset", "fog-grid-v1"))
+        for (body in listOf(org.json.JSONObject(),
+            org.json.JSONObject().put("verified", false).put("scoring_policy", 3),
+            org.json.JSONObject().put("verified", "true").put("scoring_policy", 3),
+            org.json.JSONObject().put("verified", true).put("scoring_policy", 2),
+            org.json.JSONObject().put("verified", true).put("scoring_policy", 3).put("dataset", "other"))) {
+            try {
+                AccountClient.requireVerifiedPolicy(body)
+                fail("Competitive scores must have the hardened verified policy")
+            } catch (_: AccountClient.ApiException) { }
+        }
     }
 
     @Test fun liveAccountEndpointIsConfiguredByDefault() {

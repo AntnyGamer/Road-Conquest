@@ -51,7 +51,8 @@ npm test
 npm start
 ```
 
-The CI job runs the security tests against a temporary PostgreSQL 17 service, including a
+The CI job runs the security tests against an isolated PostgreSQL cluster using the
+Ubuntu runner's preinstalled binaries, avoiding container-registry download quotas. It includes a
 concurrent duplicate-signup constraint test.
 
 ## Free Neon deployment
@@ -157,124 +158,126 @@ Keep the API role unable to alter schema, change password hashes directly, or mo
 catalogs. The HTTP and serverless integration tests run with a restricted role rather than the
 database owner to exercise these permissions.
 
+## Friends and weekly competitions
+
+Apply the updated `schema.sql` as the database owner before deploying the account function.
+The additive hardened-score columns default to zero/false; migration never awards legacy credit.
+Existing restricted runtime roles need `SELECT, INSERT, UPDATE, DELETE` on the friendship and cell-score
+tables listed below; they do not need catalog or schema write access.
+
+`GET /v1/friends` lists only the authenticated account's relationships. `POST /v1/friends`
+accepts exactly `{username, action}` where action is `request`, `accept`, or `remove`.
+Incoming requests require acceptance by the other person; either person can remove a
+relationship. Pending and accepted relationships are bounded to 50 per account. Stable
+user IDs preserve friendships through username changes; account deletion cascades them.
+
+`GET /v1/friends/weekly?metric=cells` ranks first-ever newly verified exploration
+cells in the current UTC Monday-to-Monday week. Only the caller and accepted
+friends appear. Hidden/ineligible accounts are excluded; ties share a rank.
+Revisits, retries and older weeks cannot inflate new-cell totals. Local 25-road
+and 3-town goals still award local points offline. Friend management works while
+competitive scoring is disabled; unavailable standings contain no entries.
+
 ## Verified scoring and leaderboards
 
-The implementation is included, but **disabled by default** (`LEADERBOARDS_ENABLED` is unset).
-No uploaded total can enter a ranking. There is no endpoint accepting mileage, road IDs, local
-matching results, saved-history imports, or client road names as scores.
+Policy 3 has one metric: **cells explored**, using exactly Android's existing
+`map/FogGrid.kt` squares (`fog-grid-v1`). Public rankings count unique verified
+cells; weekly friend rankings count first-ever newly verified cells that week.
+Personal roads, mileage, towns and local points are unchanged.
 
-The Android upload switch is separate from profile visibility and defaults off. Account creation does not enable it; the user must explicitly opt in from Settings. It collects
-only live non-mock GPS fixes with measured speed, binds each exact evidence string to a SHA-256
-Play Integrity request hash, and submits batches under a server-issued run/nonce/sequence.
-A small final batch is attempted on a normal tracking stop. Missing networks, killed processes,
-low-quality GPS, ambiguous matches, failed attestation and short/slow motion earn no credit;
-there is no offline-history backfill or estimated-credit fallback.
+### Grid and evidence
 
-The server requires the exact Android package `com.roadconquest.app`, the correct request hash, an approved version and signing certificate, a fresh token timestamp, and `MEETS_DEVICE_INTEGRITY`. Play-installed builds must be `PLAY_RECOGNIZED` and `LICENSED`; the exact official signed sideload build may use Google's `UNRECOGNIZED_VERSION` verdict with an `UNLICENSED` or `UNEVALUATED` licensing verdict while still matching the approved certificate/version. Production has **no test verifier or client-provided verdict endpoint**.
-CI injects a deterministic verifier directly into the scoring module to test database behavior;
-that dependency is never selectable through environment variables or HTTP.
+Latitude step is `1609.344 / 111195`; there are 19054 longitude columns, calculated
+as `round(360 * 111195 * cos(40 degrees) / 1609.344)`. Server and Android share
+fixtures at cell edges, both hemispheres, date-line wrapping and Mercator limits.
+Cells are approximately one mile per side near 40 degrees latitude; longitude
+width varies with latitude. Counts do not claim uniform explored area or prove
+car travel. Changing the grid requires a new version and scoring dataset.
 
-Independent OSRM matching must have at least 0.95 confidence, complete unambiguous tracepoints,
-consistent distances/annotations, reasonable snap distances and speed, and the pinned map version.
-Only the private HTTPS server chosen by the operator is contacted; clients cannot choose a URL.
-Unknown or ambiguous catalog edges reject the batch. Distance is summed from validated matched
-legs, rounded to millimeters per leg and stored as PostgreSQL BIGINT. Repeat drives add mileage.
-A road unlock is a distinct **OSM way ID** with at least 20 matched meters in an accepted batch;
-separate streets with the same name remain distinct, and driving in reverse cannot create a new ID.
-One real street may contain multiple OSM way sections: the UI states this definition explicitly.
+Credit requires two consecutive accurate moving GPS fixes inside the same cell,
+with their accuracy envelopes plus 5 meters clear of every edge. They must be
+at least two seconds apart, move at least 10 meters or summed accuracy, average
+at least 2.5 m/s, and report speed at least 3 m/s on one fix. Stationary jitter,
+uncertain borders, gaps and interpolated cells receive no speculative credit.
+Only the server calculates IDs; client cells/totals/imports are never accepted.
 
-Each account's score mutations are serialized inside a database transaction. Unique receipts
-make response-loss retries idempotent; altered sequence reuse, cross-account runs, expired
-challenges, overlapping time ranges and changed boundary anchors are rejected. Starting another
-run never clears the account's replay watermark. Road unlocks have a database UNIQUE key.
-Public results filter current visibility and eligibility, have deterministic tie ordering, equal
-ranks for equal scores, and return only usernames, ranks and aggregate metrics. No route, user ID,
-last coordinate or hidden-profile rank is exposed. Responses disable caching.
+Fresh server runs/nonces/sequences bind the exact evidence to Google Play
+Integrity. Approved package, app-signing certificate and version (71+), fresh
+verdict, `PLAY_RECOGNIZED`, `LICENSED`, `MEETS_DEVICE_INTEGRITY` and
+`MEETS_STRONG_INTEGRITY` are mandatory. Accuracy, speed, acceleration and
+chronological/monotonic timing are checked. Moderation is rechecked under lock.
+Some otherwise usable phones cannot meet strong integrity. Production has no
+HTTP/environment-selectable test verifier.
 
-These are **server-authoritative verified estimates**, not a proof of actual car travel. GPS can
-be inaccurate, honest drives can lose credit, cycling can resemble driving, and sophisticated
-external GNSS spoofing is not prevented by Play Integrity. Do not market this as fraud-proof or
-exact odometer mileage. Keep public rankings disabled if those limitations are unacceptable.
+Account locks serialize the unique cell insert, cached count, weekly count,
+encrypted latest fix and retry receipt in one transaction. Exact retries need
+no second Google decode. Overlaps, altered sequences, cross-account evidence,
+impossible travel and corrupt checkpoints fail closed. AES-256-GCM checkpoints
+are scoped to the account/grid. Keep the independent encryption key stable;
+rotation requires a checkpoint migration. Legacy road-score records remain
+retained but never contribute to policy-3 scores.
+
+Android requires policy 3 and the exact grid ID. Sharing requires new explicit
+consent; earlier policy-2 consent does not enable it. Evidence is sampled at
+four-second intervals, bounded to 24 fixes/about 90 seconds, and kept in memory.
+Stationary and already-confirmed-cell batches are skipped, using a bounded
+8192-cell verification-session cache cleared on account/consent changes. After
+skipping past challenge expiry, a fresh challenge authorizes later observations.
+No extra location listener, polling job or history backfill is added. Fewer
+uploads provide less continuous travel evidence, a deliberate cost/security tradeoff.
 
 ### Required production setup
 
-Public `GET /v1/leaderboard?metric=miles|roads` is available even before verification setup,
-returning empty entries and `verification_available: false`. It never substitutes phone totals
-or fabricated scores. Drive-writing endpoints remain disabled until the strict configuration
-and pinned catalog checks pass. The Android page displays this availability explicitly.
-
-Besides the account service environment, configure:
+No private OSRM, road snapshot/catalog import, H3 or global town dataset is needed
+for competitive cells. Existing personal road/place matching remains unchanged.
+In addition to existing account-service settings, configure:
 
 ```text
 LEADERBOARDS_ENABLED=1
-VERIFIED_OSRM_URL=https://your-private-osrm.example.com
-OSRM_DATA_VERSION=<exact data_version ISO timestamp>
-ROAD_DATASET_SHA256=<SHA256 of the immutable OSM XML used for both builds>
-PLAY_SERVICE_ACCOUNT_FILE=/run/secrets/play-integrity.json
-# or PLAY_SERVICE_ACCOUNT_JSON=<service-account JSON stored as a secret env var>
+VERIFIED_EVIDENCE_KEY=<32 random bytes encoded as unpadded base64url>
+PLAY_SERVICE_ACCOUNT_JSON=<service-account JSON stored as a secret env var>
+# or PLAY_SERVICE_ACCOUNT_FILE=/run/secrets/play-integrity.json
 PLAY_CLOUD_PROJECT_NUMBER=<numeric linked Google Cloud project>
-PLAY_CERTIFICATES=<base64url SHA256 app-signing certificate, without padding>
-PLAY_VERSION_CODES=26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70
+PLAY_CERTIFICATES=<base64url SHA256 Play app-signing certificate without padding>
+PLAY_VERSION_CODES=71
 ```
 
-Configure and authorize the Google Cloud project for Play Integrity token decoding. Play-installed
-builds require Play recognition/licensing. The official signed sideload APK can pass the separate
-allowlisted policy only when Google supplies its exact package, version, certificate and device verdict.
-Credentials, database passwords and pepper belong in your deployment's secret manager; none go
-in Git or the APK. The APK only receives the HTTPS account URL as a Gradle property. The default
-unsigned or debug-signed build cannot pass the approved-certificate policy. Validate token decoding
-from the actual release APK before enabling rankings; the deterministic test verifier does not
-establish that the deployed Google configuration works.
+Apply `schema.sql` as the database owner. Restricted API roles need
+`SELECT, INSERT, UPDATE, DELETE` on `cell_scores`, `competition_cells`,
+`cell_runs`, `cell_receipts` and `cell_weeks`, plus existing account/friend
+privileges. Runtime must remain unable to moderate eligibility or alter schema.
+Link the Cloud project to this Play app, enable the strong-integrity label and
+keep credentials in private server settings; none go in Git or the APK.
 
-Build OSRM with the car profile from one trusted immutable `.osm` XML snapshot. Enable a matching
-`data_version` during extraction. Import identities from exactly that same XML, before startup:
-
-```sh
-python3 tools/catalog.py snapshot.osm --data-version 2026-10-01T00:00:00Z > catalog.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f catalog.sql
-```
-
-Apply `schema.sql` first. The importer emits `ROAD_DATASET_SHA256` to stderr and refuses an empty
-catalog. Duplicate node pairs from different ways stay ambiguous and cannot earn credit. Restrict
-catalog tables to the importer/admin; the API database role needs SELECT only on road catalogs
-and edges, plus the existing account/competition write privileges. Keep OSRM private to the API,
-never silently change its extract, and monitor coverage/annotation compatibility with actual
-reference drives before enabling public rankings. Changing the snapshot creates a new map season
-and starts separate scores; it never adds incompatible IDs to the old season. Only the operator
-may change dataset, approved signing identities/versions or `leaderboard_eligible` moderation.
-
-Endpoint summary:
+Flags remain disabled until actual setup works. Enable the server flag on a test
+deployment and `LEADERBOARDS_VISIBLE` in an internal Play build, then test a real
+eligible Play-installed phone. Check credit, borders, replay/teleport rejection,
+privacy and deletion before enabling public competition. CI/emulator verifier
+substitutes cannot establish real Google eligibility.
 
 | Endpoint | Behavior |
 | --- | --- |
-| `GET /v1/competition` | Availability and scoring definitions, never credentials |
-| `POST /v1/verified/start` | Authenticated fresh challenge; replaces the account's old run |
-| `POST /v1/verified/batch` | Authenticated `{evidence, integrity_token}`; verified credit only |
-| `GET /v1/verified/me` | Authenticated private scores for the current map season |
-| `GET /v1/leaderboard?metric=miles` | Top 50 visible eligible profiles by verified distance |
-| `GET /v1/leaderboard?metric=roads` | Top 50 visible eligible profiles by unique way sections |
-| `POST /v1/reauth` | Authenticated current-password check without changing account/session state |
-| `PUT /v1/privacy` | Existing authenticated visibility setting; immediate public exclusion |
+| `GET /v1/competition` | Availability, policy/grid, definition and Cloud project number |
+| `POST /v1/verified/start` | Authenticated fresh run/nonce/sequence |
+| `POST /v1/verified/batch` | Verified evidence; privately returns count and accepted IDs |
+| `GET /v1/verified/me` | Private verified cell count |
+| `GET /v1/leaderboard?metric=cells` | Top 50 visible eligible profiles |
+| `GET /v1/friends/weekly?metric=cells` | Current week's newly verified cells |
 
-Precise evidence is processed in memory, not saved as a route. Boundary validation persists only
-the last accepted timestamp plus a server-keyed HMAC-SHA-256 fingerprint of that fix; the precise coordinate is not
-stored. Receipt hashes/responses and expired runs are cleaned after one day; cleanup runs at
-process/function startup as well as periodically. Aggregate scores/road IDs
-remain until account deletion. Configure proxy/access logging to avoid request bodies, authorization
-headers and OSRM coordinate-bearing URLs, and set a 32 KiB body limit at the proxy as well.
-Back up the database encrypted and keep catalog/version configuration with backups. Configure
-monitoring for quota failures and 503/422 responses: failures must never grant speculative credit.
+Unavailable rankings contain no scores; miles/roads metrics are rejected.
+Public/friend entries expose only username, rank and count, with caching disabled.
+Coarse visited-cell IDs remain private and are retained until account deletion,
+alongside counts and one encrypted latest GPS fix. Full GPS routes are processed
+transiently, not saved. Receipts/expired runs are cleaned after one day. Account
+deletion cascades all current and legacy records; phone deletion leaves cloud scores.
+Keep backups encrypted and avoid logging evidence, authorization or coordinates.
 
-### Verification and remaining deployment checks
+`npm test` checks the bundled function and security; CI supplies temporary real
+PostgreSQL and runs database tests without skips. Android also checks shared grid
+fixtures. Releases attach the tested account-function bundle. Actual Google
+decoding and real-phone behavior still require field testing.
 
-`npm ci --ignore-scripts && npm test` runs security/scoring tests. With `DATABASE_URL`, it also
-runs real PostgreSQL constraint races, transaction/retry races, visibility, ties, road de-duplication,
-overlap and account-boundary tests. CI always supplies PostgreSQL, so those tests are not skipped.
-`python3 -m unittest discover -s test -p '*_test.py'` checks the streaming catalog importer.
-Each GitHub app release also attaches the exact tested `account-function` bundle. Deploy that artifact (or a byte-identical build) before treating the hosted API as matching the release.\n\nActual Google token decoding, your OSRM extract/annotation behavior, geographic coverage, and
-physical-phone GPS still require production integration/field verification. Do not enable public
-rankings solely because deterministic automated tests passed.
-
-Primary protocol references: [Play Integrity standard requests](https://developer.android.com/google/play/integrity/standard),
-[Google verdicts](https://developer.android.com/google/play/integrity/verdicts), and
-[OSRM HTTP API](https://project-osrm.org/docs/v26.4.0/http).
+These are verified GPS-based visits, not proof of physical travel. External GNSS
+spoofing and sophisticated attacks remain possible. Do not advertise this as
+unfakeable. Monitor hosting and Integrity quotas; smaller backend requirements
+do not guarantee unlimited free service.

@@ -7,7 +7,9 @@ import android.util.Base64
 import com.google.android.gms.tasks.Tasks
 import com.google.android.play.core.integrity.IntegrityManagerFactory
 import com.google.android.play.core.integrity.StandardIntegrityManager
+import com.roadconquest.app.map.FogGrid
 import com.roadconquest.app.util.Prefs
+import com.roadconquest.app.util.FeatureFlags
 import org.json.JSONArray
 import org.json.JSONObject
 import java.security.MessageDigest
@@ -17,7 +19,8 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 /** Only live fixes enter competition. Saved history/imports and local totals are never uploaded. */
-class VerifiedDriving(context: Context) {
+class VerifiedDriving internal constructor(context: Context, private val competitionsEnabled: () -> Boolean) {
+    constructor(context: Context) : this(context, { FeatureFlags.LEADERBOARDS_VISIBLE })
     private val context = context.applicationContext
     private val executor = Executors.newSingleThreadScheduledExecutor()
     private val busy = AtomicBoolean(false)
@@ -31,13 +34,15 @@ class VerifiedDriving(context: Context) {
     private var provider: StandardIntegrityManager.StandardIntegrityTokenProvider? = null
     private var pendingEvidence: String? = null
     private var retryAfter = 0L
+    private var challengeExpiresAt = 0L
+    private val confirmedCells = linkedSetOf<Long>()
     @Volatile private var accepting = true
     @Volatile private var closed = false
 
     // Location callbacks only copy into a bounded in-memory queue. Slow account or Play
     // Integrity calls cannot make the foreground service drop every fix received meanwhile.
     fun offer(location: Location) {
-        if (!accepting || !Prefs.isDriveVerificationEnabled(context) || !AccountClient.isConfigured()) return
+        if (!competitionsEnabled() || !accepting || !Prefs.isDriveVerificationEnabled(context) || !AccountClient.isConfigured()) return
         // Tracking intentionally listens to fused + GPS for local reliability, but verified
         // scoring only ever accepts live GPS fixes with usable accuracy/speed metadata. Reject
         // permanently-ineligible fixes before copying/enqueueing them; accept() repeats these
@@ -85,9 +90,9 @@ class VerifiedDriving(context: Context) {
             } catch (_: Exception) {
                 // Keep a committed-but-unacknowledged batch and every still-fresh queued fix.
                 // Retry after a short cooldown; never turn an account/Integrity outage into a
-                // permanent hole in otherwise valid competitive mileage.
+                // permanent hole in otherwise valid competitive exploration.
                 provider = null
-                retryAfter = SystemClock.elapsedRealtime() + RETRY_AFTER_FAILURE_MS
+                retryAfter = maxOf(retryAfter, SystemClock.elapsedRealtime() + RETRY_AFTER_FAILURE_MS)
                 synchronized(queueLock) {
                     if (pendingLocations.size >= MAX_BUFFERED_FIXES) pendingLocations.removeLast()
                     pendingLocations.addFirst(location)
@@ -99,7 +104,7 @@ class VerifiedDriving(context: Context) {
 
     private fun accept(location: Location) {
         val session = AccountStore.load(context)
-        if (session == null || !Prefs.isDriveVerificationEnabled(context)) { reset(); return }
+        if (!competitionsEnabled() || session == null || !Prefs.isDriveVerificationEnabled(context)) { reset(); return }
         val currentConsent = Prefs.driveVerificationConsentVersion(context)
         if (accountToken == null) {
             // State is empty after construction/reset, so binding the current account must not
@@ -132,18 +137,19 @@ class VerifiedDriving(context: Context) {
             )
             if (run == null) {
                 run = AccountClient.startVerifiedDrive(session.token)
+                challengeExpiresAt = SystemClock.elapsedRealtime() + 150_000L
                 return // Only fixes captured after issuance of the server challenge are eligible.
             }
         }
         // Retry the same evidence rather than rebuilding a batch that may already have earned credit.
         if (pendingEvidence != null) {
-            if (System.currentTimeMillis() - JSONObject(pendingEvidence!!).getJSONArray("fixes").getJSONObject(0).getLong("time") > 120_000L) {
-                reset(); return
-            }
+            // The server may already have committed this batch before the network
+            // failed. It can acknowledge an exact receipt after GPS ages out;
+            // stale uncommitted evidence still fails its freshness checks.
             // Finish the exact previously-committed evidence first, then continue with this
             // live fix. If this fix was already the old batch's last point, the timestamp
             // de-duplication below drops it; if it arrived while the retry was pending, it is
-            // preserved instead of creating an avoidable hole in verified mileage.
+            // preserved instead of creating an avoidable hole in verified exploration.
             submit(session.token)
         }
         // An aged-out trigger may retry an existing batch, but may not be added
@@ -155,12 +161,24 @@ class VerifiedDriving(context: Context) {
         val previous = points.lastOrNull()
         if (previous != null) {
             val elapsed = point.getLong("time") - previous.getLong("time")
-            if (elapsed < 2_000L) return
+            if (elapsed < 4_000L) return
             if (elapsed > 15_000L) points.clear()
         }
         points += point
         if (points.size < 2 || (points.size < 24 &&
-            point.getLong("time") - points.first().getLong("time") < 60_000L)) return
+            point.getLong("time") - points.first().getLong("time") < 90_000L)) return
+        if (!shouldSubmitCells(points, confirmedCells)) {
+            val anchor = points.last()
+            points.clear()
+            points += anchor
+            return
+        }
+        if (SystemClock.elapsedRealtime() >= challengeExpiresAt) {
+            run = AccountClient.startVerifiedDrive(session.token)
+            challengeExpiresAt = SystemClock.elapsedRealtime() + 150_000L
+            points.clear() // The replacement challenge only authorizes later observations.
+            return
+        }
         prepareEvidence()
         submit(session.token)
     }
@@ -179,17 +197,25 @@ class VerifiedDriving(context: Context) {
             StandardIntegrityManager.StandardIntegrityTokenRequest.builder().setRequestHash(hash).build()
         ), 10, TimeUnit.SECONDS).token()
         // Recheck consent/account after the asynchronous attestation, before uploading any GPS.
-        if (!Prefs.isDriveVerificationEnabled(context) || Prefs.driveVerificationConsentVersion(context) != consentVersion ||
+        if (!competitionsEnabled() || !Prefs.isDriveVerificationEnabled(context) || Prefs.driveVerificationConsentVersion(context) != consentVersion ||
             AccountStore.load(context)?.token != token || (closed && !finishing)) { reset(); return }
         try {
             val result = AccountClient.submitVerifiedDrive(token, evidence, integrity)
             requireNotNull(run).put("sequence", result.getInt("sequence"))
+            challengeExpiresAt = SystemClock.elapsedRealtime() + 150_000L
+            val accepted = result.getJSONArray("accepted_cells")
+            for (i in 0 until accepted.length()) {
+                val cell = accepted.getJSONObject(i)
+                confirmedCells += FogGrid.Cell(cell.getInt("row"), cell.getInt("column")).key
+            }
+            while (confirmedCells.size > 8192) confirmedCells.remove(confirmedCells.first())
             val anchor = points.last()
             points.clear()
             points += anchor
             pendingEvidence = null
         } catch (error: AccountClient.ApiException) {
             if (error.status == 403 || error.status == 409 || error.status == 422 || error.status == 401) reset()
+            if (error.status == 403) retryAfter = SystemClock.elapsedRealtime() + 300_000L
             throw error
         }
     }
@@ -199,6 +225,8 @@ class VerifiedDriving(context: Context) {
         points.clear()
         pendingEvidence = null
         run = null
+        challengeExpiresAt = 0L
+        confirmedCells.clear()
         provider = null
         accountToken = null
         consentVersion = -1L
@@ -218,7 +246,7 @@ class VerifiedDriving(context: Context) {
                 drainQueuedLocations()
                 closed = true
                 val token = accountToken
-                if (token != null && provider != null && run != null && points.size >= 2 && Prefs.isDriveVerificationEnabled(context)) {
+                if (competitionsEnabled() && token != null && provider != null && run != null && (pendingEvidence != null || shouldSubmitCells(points, confirmedCells)) && Prefs.isDriveVerificationEnabled(context)) {
                     if (pendingEvidence == null) prepareEvidence()
                     submit(token, finishing = true)
                 }
@@ -229,6 +257,15 @@ class VerifiedDriving(context: Context) {
     }
 
     companion object {
+        // This is only an upload optimization. The server derives IDs and decides credit.
+        internal fun shouldSubmitCells(points: List<JSONObject>, confirmed: Set<Long>): Boolean {
+            if (points.size < 2) return false
+            return points.any { point ->
+                point.getDouble("speed") >= 3 &&
+                    FogGrid.cell(point.getDouble("lat"), point.getDouble("lon"))?.key?.let { it !in confirmed } == true
+            }
+        }
+
         internal fun canResumePreparedEvidence(hasPreparedEvidence: Boolean, freshValidFix: Boolean): Boolean =
             hasPreparedEvidence || freshValidFix
 

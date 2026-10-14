@@ -28,6 +28,11 @@
         <activity
             android:name=".SettingsActivity"
             android:exported="false" />
+        <activity
+            android:name=".TripHistoryActivity"
+            android:exported="false" />
+        <activity android:name=".RestoreActivity" android:exported="false" />
+        <activity android:name=".ChallengesActivity" android:exported="false" />
 
         <activity
             android:name=".AccountActivity"

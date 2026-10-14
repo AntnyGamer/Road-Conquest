@@ -104,7 +104,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
-                android:text="Usernames are unique regardless of capitalization. Passwords must be 8-128 characters. New accounts are visible on leaderboards by default. Verified-drive sharing stays off unless you enable it in Settings."
+                android:text="Usernames are unique regardless of capitalization. Passwords must be 8-128 characters."
                 android:textColor="?attr/rcTextSecondary"
                 android:textSize="13sp" />
 
@@ -138,8 +138,17 @@
                 android:textSize="18sp"
                 android:textStyle="bold" />
 
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="Competitive scores count server-verified exploration cells only. Local points and restored history never count toward rankings. Sharing live driving evidence requires your consent."
+                android:textColor="?attr/rcTextSecondary"
+                android:textSize="13sp" />
+
             <Switch
                 android:id="@+id/accountLeaderboardSwitch"
+                android:visibility="gone"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
@@ -152,6 +161,8 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
                 android:text="Turn this off to hide your profile without deleting your account."
+                android:id="@+id/accountLeaderboardPrivacyHelp"
+                android:visibility="gone"
                 android:textColor="?attr/rcTextSecondary"
                 android:textSize="13sp" />
 

@@ -1,6 +1,7 @@
 package com.roadconquest.app.account
 
 import com.roadconquest.app.BuildConfig
+import com.roadconquest.app.map.FogGrid
 import org.json.JSONObject
 import java.net.URI
 import javax.net.ssl.HttpsURLConnection
@@ -74,21 +75,42 @@ object AccountClient {
 
     fun publicPage(path: String): String? = endpoint(path)?.toString()
 
-    fun competition(): JSONObject = request("/v1/competition", "GET", null, null)
-
-    fun leaderboard(metric: String): JSONObject {
-        require(metric == "miles" || metric == "roads")
-        return request("/v1/leaderboard?metric=$metric", "GET", null, null)
+    fun competition(): JSONObject = request("/v1/competition", "GET", null, null).also {
+        if (it.optBoolean("available")) requireVerifiedPolicy(it)
     }
 
-    fun verifiedTotals(token: String): JSONObject = request("/v1/verified/me", "GET", null, token)
+    fun leaderboard(): JSONObject {
+        return request("/v1/leaderboard?metric=cells", "GET", null, null).also {
+            if (it.optBoolean("verification_available", true)) requireVerifiedPolicy(it)
+            else if (it.getJSONArray("entries").length() != 0) throw ApiException("Unverified scores cannot enter a leaderboard.")
+        }
+    }
+
+    fun verifiedTotals(token: String): JSONObject = request("/v1/verified/me", "GET", null, token).also(::requireVerifiedPolicy)
 
     fun startVerifiedDrive(token: String): JSONObject = request("/v1/verified/start", "POST", JSONObject(), token)
 
     fun submitVerifiedDrive(token: String, evidence: String, integrityToken: String): JSONObject = request(
         "/v1/verified/batch", "POST",
         JSONObject().put("evidence", evidence).put("integrity_token", integrityToken), token
-    )
+    ).also(::requireVerifiedPolicy)
+
+    fun friends(token: String): JSONObject = request("/v1/friends", "GET", null, token)
+
+    fun changeFriend(token: String, username: String, action: String): JSONObject = request("/v1/friends", "POST",
+        JSONObject().put("username", username).put("action", action), token)
+
+    fun friendWeek(token: String): JSONObject {
+        return request("/v1/friends/weekly?metric=cells", "GET", null, token).also {
+            if (it.optBoolean("available")) requireVerifiedPolicy(it)
+        }
+    }
+
+    internal fun requireVerifiedPolicy(body: JSONObject) {
+        if (body.opt("verified") != true || body.opt("scoring_policy") != 3 || body.optString("dataset") != FogGrid.VERSION) {
+            throw ApiException("Verified competition requires the updated scoring service.")
+        }
+    }
 
     private fun request(path: String, method: String, body: JSONObject?, token: String?): JSONObject {
         val url = endpoint(path) ?: throw ApiException("Account service is not configured in this build.")

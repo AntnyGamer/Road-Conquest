@@ -132,6 +132,15 @@ class SettingsActivity : Activity() {
         findViewById<Button>(R.id.shopButton).setOnClickListener {
             startActivity(Intent(this, ShopActivity::class.java))
         }
+        findViewById<Button>(R.id.tripHistoryButton).setOnClickListener {
+            startActivity(Intent(this, TripHistoryActivity::class.java))
+        }
+        findViewById<Button>(R.id.challengesButton).setOnClickListener {
+            startActivity(Intent(this, ChallengesActivity::class.java))
+        }
+        findViewById<Button>(R.id.importButton).setOnClickListener {
+            startActivity(Intent(this, RestoreActivity::class.java))
+        }
         leaderboardPrivacySwitch.setOnCheckedChangeListener { _, visible ->
             if (!renderingAccountPrivacy) updateLeaderboardPrivacy(visible)
         }
@@ -282,7 +291,7 @@ class SettingsActivity : Activity() {
         val dialog = AlertDialog.Builder(this)
             .setTitle("Delete all data?")
             .setMessage(
-                "This permanently deletes all saved Road Conquest data on this phone, including trips, mileage, roads, explored places, points, purchases and cosmetics. Your cloud account and leaderboard scores stay. Tracking stops and verified-drive sharing turns off. Exported files must be deleted separately. This cannot be undone.\n\nType exactly:\n$DELETE_LOCAL_DATA_CONFIRMATION"
+                "This permanently deletes all saved Road Conquest data on this phone, including trips, mileage, roads, explored places, points, purchases and cosmetics. Your cloud account stays. Tracking stops and verified-drive sharing turns off. Exported files must be deleted separately. This cannot be undone.\n\nType exactly:\n$DELETE_LOCAL_DATA_CONFIRMATION"
             )
             .setView(fields)
             .setNegativeButton("Cancel", null)
@@ -387,14 +396,19 @@ class SettingsActivity : Activity() {
         verifySwitch.setOnCheckedChangeListener { _, enabled ->
             Prefs.setDriveVerificationEnabled(this, enabled)
         }
-        leaderboardsButton.visibility = View.VISIBLE
+        val competitionVisible = com.roadconquest.app.util.FeatureFlags.LEADERBOARDS_VISIBLE
+        val competitionVisibility = if (competitionVisible) View.VISIBLE else View.GONE
+        leaderboardsButton.visibility = competitionVisibility
+        leaderboardPrivacySwitch.visibility = competitionVisibility
+        verifySwitch.visibility = competitionVisibility
+        verificationStatus.visibility = competitionVisibility
         leaderboardsButton.setOnClickListener { startActivity(Intent(this, LeaderboardActivity::class.java)) }
         verificationStatus.text = if (accountConfigured) {
             "Checking verified scoring…"
         } else {
             "Verified scoring is unavailable."
         }
-        if (accountConfigured) {
+        if (accountConfigured && competitionVisible) {
             accountExecutor.execute {
                 val status = runCatching { AccountClient.competition() }
                 runOnUiThread {

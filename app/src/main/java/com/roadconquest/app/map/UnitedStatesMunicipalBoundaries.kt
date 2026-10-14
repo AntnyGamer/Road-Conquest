@@ -94,6 +94,13 @@ internal object UnitedStatesMunicipalBoundaries {
     )
     private val officialStateNameByLowercase =
         stateNamesByPostal.values.associateBy { it.lowercase(Locale.ROOT) }
+    private val officialStateNameByFips =
+        stateFips.entries.associate { (name, fips) ->
+            fips to (officialStateNameByLowercase[name] ?: name)
+        }
+
+    /** Translate an official Census coordinate lookup into our canonical state identity. */
+    internal fun stateNameFromFips(fips: String): String? = officialStateNameByFips[fips]
     private val postalCodeByOfficialStateName =
         stateNamesByPostal.entries.associate { (postal, name) -> name.lowercase(Locale.ROOT) to postal }
 

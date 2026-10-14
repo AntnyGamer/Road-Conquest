@@ -51,6 +51,11 @@ class TrackingService : Service(), LocationListener {
         setRemoveOnCancelPolicy(true)
     }
     private val storageExecutor = Executors.newSingleThreadExecutor()
+    private val placeDiscoveryExecutor = ScheduledThreadPoolExecutor(1).apply {
+        setExecuteExistingDelayedTasksAfterShutdownPolicy(false)
+        setRemoveOnCancelPolicy(true)
+    }
+    private val placeDiscoveryScheduled = AtomicBoolean(false)
     private val highAccuracyLocationRequest by lazy(LazyThreadSafetyMode.NONE) {
         LocationRequest.Builder(LOCATION_INTERVAL_MS)
             .setMinUpdateIntervalMillis(LOCATION_MIN_UPDATE_INTERVAL_MS)
@@ -264,6 +269,7 @@ class TrackingService : Service(), LocationListener {
                 try {
                     if (progressionRepository.recordBaselineCandidate(baseline)) {
                         sendUiBroadcast(ACTION_EXPLORATION_UPDATED)
+                        scheduleBackgroundPlaceDiscovery()
                     }
                 } catch (error: Exception) {
                     Log.e("RoadConquest", "Could not save starting place location", error)
@@ -393,6 +399,7 @@ class TrackingService : Service(), LocationListener {
                             // Resolve actual new crossing candidates while the map is open,
                             // even inside a previously cleared mile-sized fog tile.
                             sendUiBroadcast(ACTION_PLACE_CANDIDATE_UPDATED)
+                            scheduleBackgroundPlaceDiscovery()
                         }
                     } catch (error: Exception) {
                         // Optional municipal lookups must never interrupt recorded
@@ -479,6 +486,7 @@ class TrackingService : Service(), LocationListener {
         // Flip readiness before shutting down the scheduler so an in-flight matcher cannot
         // enqueue more work while teardown is in progress.
         ready = false
+        placeDiscoveryExecutor.shutdownNow()
         locationMonitorHandler.removeCallbacks(locationMonitor)
         locationMonitorStarted = false
         if (providerReceiverRegistered) runCatching { unregisterReceiver(providerReceiver) }
@@ -652,6 +660,46 @@ class TrackingService : Service(), LocationListener {
         } else {
             to.time - from.time
         }
+
+    /**
+     * Resolve at most one persisted discovery per five minutes while the GPS
+     * foreground service is running without the map UI. No additional location
+     * sampling, wake locks or periodic Android background jobs are introduced.
+     * The normal MainActivity resolver takes priority when the map is open.
+     */
+    private fun scheduleBackgroundPlaceDiscovery() {
+        if (!ready || MainActivity.trackingReceiverRegistered ||
+            !placeDiscoveryScheduled.compareAndSet(false, true)
+        ) return
+        runCatching {
+            placeDiscoveryExecutor.schedule({
+                try {
+                    if (ready && !MainActivity.trackingReceiverRegistered &&
+                        !Prefs.isDeviceDataDeletionPending(this)
+                    ) {
+                        val due = progressionRepository.nextPlaceCandidateAttemptMillis()
+                        if (due != null && due <= System.currentTimeMillis()) {
+                            ProgressionManager.resolvePendingPlacesWithDetails(this, 1)
+                        }
+                    }
+                } catch (error: Exception) {
+                    Log.w("RoadConquest", "Deferred place discovery will retry", error)
+                } finally {
+                    placeDiscoveryScheduled.set(false)
+                    // Persistent retries survive network/geocoder outages, but
+                    // stop when the service stops or MainActivity handles them.
+                    if (ready && !MainActivity.trackingReceiverRegistered &&
+                        !Prefs.isDeviceDataDeletionPending(this)
+                    ) {
+                        val next = runCatching {
+                            progressionRepository.nextPlaceCandidateAttemptMillis()
+                        }.getOrNull()
+                        if (next != null) scheduleBackgroundPlaceDiscovery()
+                    }
+                }
+            }, BACKGROUND_PLACE_DISCOVERY_INTERVAL_MS, TimeUnit.MILLISECONDS)
+        }.onFailure { placeDiscoveryScheduled.set(false) }
+    }
 
     private fun maybeRunMatching(force: Boolean = false) {
         if (!ready || matcher.rateLimitRemainingMs() > 0L) return
@@ -927,6 +975,7 @@ class TrackingService : Service(), LocationListener {
         private const val MAX_LOCATION_AGE_MS = 60_000L
         private const val MAX_LOCATION_AGE_NANOS = MAX_LOCATION_AGE_MS * 1_000_000L
         private const val MAX_START_ANCHOR_AGE_MS = 10_000L
+        private const val BACKGROUND_PLACE_DISCOVERY_INTERVAL_MS = 5 * 60_000L
         private const val MATCH_INTERVAL_MS = 10_000L
         private const val PLACE_CANDIDATE_MIN_DISTANCE_M = 55f
         private const val MAX_EXPLORED_CELL_CACHE = 4_096

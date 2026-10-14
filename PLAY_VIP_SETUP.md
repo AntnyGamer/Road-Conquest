@@ -11,7 +11,7 @@ Road Conquest contains a one-time, non-consumable Google Play Billing purchase:
 
 ## Enable in Google Play Console
 
-1. Upload a signed Android App Bundle with the billing integration to the **internal testing** track, with app ID `com.roadconquest.app` and a version code greater than earlier releases.
+1. Upload a signed Android App Bundle with the billing integration to an **internal or closed testing** track, with app ID `com.roadconquest.app` and a previously unused version code. For Beta 45, use the GitHub Releases bundle with **version code 71**; code 70 has already been reserved by Google Play, including across testing tracks and draft releases.
 2. In **Monetize with Play → Products → One-time products**, create the product `vip_lifetime` and a buy purchase option. Set the US price to **$2.99** and select the countries where it should be sold.
 3. Activate/publish the product and purchase option. The product ID must match *exactly*; once published, the app reads the user's real local price from Play before enabling the checkout button.
 4. Under **Settings → License testing**, add tester Google accounts. Enroll those accounts in the internal test and install the Play-distributed build. Test purchases can use Play's test payment methods without real charges.

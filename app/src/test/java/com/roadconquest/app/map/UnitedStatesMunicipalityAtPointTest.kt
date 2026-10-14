@@ -44,6 +44,19 @@ class UnitedStatesMunicipalityAtPointTest {
         ))
     }
 
+    @Test fun censusStatePointFallbackRejectsAmbiguousOrUnrecognizedStates() {
+        assertEquals("New Jersey", UnitedStatesMunicipalityAtPoint.parseStateResponse(
+            """{"features":[{"attributes":{"STATE":"34"}}]}"""
+        ))
+        assertNull(UnitedStatesMunicipalityAtPoint.parseStateResponse("""{"features":[]}"""))
+        assertNull(UnitedStatesMunicipalityAtPoint.parseStateResponse(
+            """{"features":[{"attributes":{"STATE":"34"}},{"attributes":{"STATE":"42"}}]}"""
+        ))
+        assertNull(UnitedStatesMunicipalityAtPoint.parseStateResponse(
+            """{"features":[{"attributes":{"STATE":"99"}}]}"""
+        ))
+    }
+
     @Test fun consolidatedCityQueriesOnlyWhereTheCensusPublishesThatGeography() {
         assertTrue(UnitedStatesMunicipalBoundaries.hasConsolidatedCities("18"))
         assertTrue(UnitedStatesMunicipalBoundaries.hasConsolidatedCities("13"))

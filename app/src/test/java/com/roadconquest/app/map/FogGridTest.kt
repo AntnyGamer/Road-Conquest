@@ -5,6 +5,17 @@ import org.junit.Test
 import kotlin.math.cos
 
 class FogGridTest {
+    @Test fun competitiveServerFixturesUseTheExistingExplorationGrid() {
+        assertEquals("fog-grid-v1", FogGrid.VERSION)
+        javaClass.getResourceAsStream("/fog-grid-cells.csv")!!.bufferedReader().useLines { lines ->
+            lines.forEach { line ->
+                val values = line.split(',')
+                assertEquals(line, FogGrid.Cell(values[2].toInt(), values[3].toInt()),
+                    FogGrid.cell(values[0].toDouble(), values[1].toDouble()))
+            }
+        }
+    }
+
     @Test fun gridCellsStayAlignedAndAreMileSquareNearFortyDegreesLatitude() {
         for (latitude in listOf(39.0, 40.0, 41.0)) {
             val corners = FogGrid.corners(latitude, -74.0)

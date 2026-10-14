@@ -83,14 +83,16 @@ object PlaceResolver {
     @Suppress("DEPRECATION")
     internal fun resolve(
         context: Context, candidate: PendingPlaceCandidate,
-        municipalCache: VerifiedMunicipalCache? = null
+        municipalCache: VerifiedMunicipalCache? = null,
+        addressesOverride: List<android.location.Address>? = null,
+        stateLookup: (Double, Double) -> String? = UnitedStatesMunicipalityAtPoint::stateNameAt,
+        townLookup: (PlaceDiscovery) -> UnitedStatesMunicipalityAtPoint.Result? = UnitedStatesMunicipalityAtPoint::fetch
     ): List<PlaceDiscovery>? {
         // Capture BEFORE geocoding and network I/O. Clearing local data changes
         // this generation; older in-flight lookups must never recreate erased
         // precise-location boundary caches when their responses finally arrive.
         val cacheGeneration = PlaceOverlayCache.generation()
-        if (!Geocoder.isPresent()) return null
-        val addresses = try {
+        val addresses = addressesOverride ?: if (Geocoder.isPresent()) try {
             Geocoder(context.applicationContext, Locale.US)
                 .getFromLocation(candidate.latitude, candidate.longitude, MAX_RESULTS)
                 .orEmpty()
@@ -98,14 +100,23 @@ object PlaceResolver {
             emptyList()
         } catch (_: IllegalArgumentException) {
             emptyList()
+        } else emptyList()
+        if (addresses.isEmpty()) {
+            return resolveWithoutGeocoder(context, candidate, cacheGeneration, municipalCache, stateLookup, townLookup)
         }
-        if (addresses.isEmpty()) return null
         val parsed = resolveAddresses(candidate, addresses)
         // U.S. postal localities can differ from actual incorporated municipalities,
         // particularly on short crossings. Resolve by GPS coordinate using the SAME
         // official Census dataset that draws the green polygon, in every U.S. state.
         val state = parsed.firstOrNull { it.kind == PlaceKind.STATE }
         val country = parsed.firstOrNull { it.kind == PlaceKind.COUNTRY }
+        // Partial Android addresses need the same official fallback as a missing
+        // provider. Preserve explicitly non-US results rather than replacing them.
+        val knownOutsideUs = country != null &&
+            !UnitedStatesMunicipalBoundaries.isUnitedStatesCountry(country.displayName)
+        if (!knownOutsideUs && (state == null || country == null)) {
+            return resolveWithoutGeocoder(context, candidate, cacheGeneration, municipalCache, stateLookup, townLookup)
+        }
         if (state != null && country != null &&
             UnitedStatesMunicipalBoundaries.stateCode(country.displayName, state.displayName) != null
         ) {
@@ -120,7 +131,7 @@ object PlaceResolver {
                 return parsed.filterNot { it.kind == PlaceKind.TOWN } + town
             }
             val result = try {
-                UnitedStatesMunicipalityAtPoint.fetch(seed)
+                townLookup(seed)
             } catch (_: IOException) {
                 // Retry an unreachable provider rather than permanently discard a town.
                 return null
@@ -177,6 +188,46 @@ object PlaceResolver {
         // No verified town here. State/country remain eligible and a later driven
         // position can confirm the correct municipality when GPS is further inside it.
         return parsed.filterNot { it.kind == PlaceKind.TOWN }
+    }
+
+    /**
+     * A few Android devices have no working reverse Geocoder, even with good
+     * GPS. Fall back only to verified US Census coordinates; keep candidates
+     * pending elsewhere rather than guessing a country/town from position.
+     */
+    internal fun resolveWithoutGeocoder(
+        context: Context,
+        candidate: PendingPlaceCandidate,
+        cacheGeneration: Long,
+        municipalCache: VerifiedMunicipalCache? = null,
+        stateLookup: (Double, Double) -> String? = UnitedStatesMunicipalityAtPoint::stateNameAt,
+        townLookup: (PlaceDiscovery) -> UnitedStatesMunicipalityAtPoint.Result? =
+            UnitedStatesMunicipalityAtPoint::fetch
+    ): List<PlaceDiscovery>? {
+        val state = try {
+            stateLookup(candidate.latitude, candidate.longitude)
+        } catch (_: IOException) {
+            return null
+        } ?: return null
+        val country = discovery(candidate, PlaceKind.COUNTRY,
+            "us", "United States", "", "United States")
+        val stateKey = "us|" + canonical(state)
+        val statePlace = discovery(candidate, PlaceKind.STATE,
+            stateKey, state, "United States", "United States")
+        val seed = discovery(candidate, PlaceKind.TOWN,
+            "$stateKey|gps", "", state, "United States")
+        val cached = (municipalCache ?: VerifiedMunicipalCache(context)).find(seed)
+        val town = cached ?: try {
+            townLookup(seed)?.let { official ->
+                if (!PlaceOverlayCache.writeOfficialUs(
+                        context, official.place, official.overlay, cacheGeneration
+                    )) return null
+                official.place
+            }
+        } catch (_: IOException) {
+            return null
+        }
+        return listOfNotNull(country, statePlace, town)
     }
 
     /** Prefer an explicitly named municipality over a nearby postal locality. */

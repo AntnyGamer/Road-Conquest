@@ -3,6 +3,8 @@ package com.roadconquest.app.account
 import android.location.Location
 import android.os.SystemClock
 import com.roadconquest.app.util.Prefs
+import com.roadconquest.app.map.FogGrid
+import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -17,6 +19,17 @@ import java.util.concurrent.atomic.AtomicBoolean
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31, 37], manifest = Config.NONE)
 class VerifiedDrivingTest {
+    @Test fun stationaryAndConfirmedCellsSkipUploadsButNewMovingCellsRemainEligible() {
+        fun point(lat: Double = 40.0, speed: Double = 10.0) = JSONObject()
+            .put("lat", lat).put("lon", -75.0).put("speed", speed)
+        val confirmed = setOf(FogGrid.cell(40.0, -75.0)!!.key)
+        assertEquals(false, VerifiedDriving.shouldSubmitCells(listOf(point()), emptySet()))
+        assertEquals(false, VerifiedDriving.shouldSubmitCells(listOf(point(speed = 0.0), point(speed = 0.0)), emptySet()))
+        assertEquals(false, VerifiedDriving.shouldSubmitCells(listOf(point(), point()), confirmed))
+        assertEquals(true, VerifiedDriving.shouldSubmitCells(listOf(point(), point(40.1)), confirmed))
+        assertEquals(true, VerifiedDriving.shouldSubmitCells(listOf(point(), point()), emptySet()))
+    }
+
     @Before fun setup() {
         val context = RuntimeEnvironment.getApplication()
         AccountClient.endpointOverrideForTests = "https://example.com"
@@ -42,7 +55,7 @@ class VerifiedDrivingTest {
 
     @Test fun retryCooldownKeepsFreshFixesBufferedInsteadOfDiscardingThem() {
         val context = RuntimeEnvironment.getApplication()
-        val verified = VerifiedDriving(context)
+        val verified = VerifiedDriving(context) { true }
         VerifiedDriving::class.java.getDeclaredField("retryAfter").apply { isAccessible = true }
             .setLong(verified, SystemClock.elapsedRealtime() + 60_000L)
 
@@ -65,7 +78,7 @@ class VerifiedDrivingTest {
 
     @Test fun permanentlyIneligibleFixesNeverEnterVerifiedQueue() {
         val context = RuntimeEnvironment.getApplication()
-        val verified = VerifiedDriving(context)
+        val verified = VerifiedDriving(context) { true }
         val busy = VerifiedDriving::class.java.getDeclaredField("busy").apply { isAccessible = true }
             .get(verified) as AtomicBoolean
         busy.set(true)
@@ -101,7 +114,7 @@ class VerifiedDrivingTest {
 
     @Test fun busyVerificationBuffersTheNewestLiveFixesWithinABound() {
         val context = RuntimeEnvironment.getApplication()
-        val verified = VerifiedDriving(context)
+        val verified = VerifiedDriving(context) { true }
         val busy = VerifiedDriving::class.java.getDeclaredField("busy").apply { isAccessible = true }
             .get(verified) as AtomicBoolean
         busy.set(true)
@@ -127,6 +140,21 @@ class VerifiedDrivingTest {
         busy.set(false)
         Prefs.setDriveVerificationEnabled(context, false)
         AccountClient.endpointOverrideForTests = ""
+        verified.close()
+    }
+
+    @Test fun hiddenLeaderboardsRejectLiveEvidenceEvenWithOldSharingConsent() {
+        val context = RuntimeEnvironment.getApplication()
+        val verified = VerifiedDriving(context)
+        verified.offer(Location("gps").apply {
+            latitude = 40.0; longitude = -74.0; accuracy = 5f; speed = 10f
+            time = System.currentTimeMillis()
+            elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos().coerceAtLeast(1L)
+        })
+        @Suppress("UNCHECKED_CAST")
+        val queue = VerifiedDriving::class.java.getDeclaredField("pendingLocations").apply { isAccessible = true }
+            .get(verified) as ArrayDeque<Location>
+        assertEquals(0, queue.size)
         verified.close()
     }
 }

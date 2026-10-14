@@ -24,7 +24,9 @@ object AccountOnboarding {
         }
         return AlertDialog.Builder(activity)
             .setTitle("Create your Road Conquest account")
-            .setMessage("Create an account or sign in to use global leaderboards. You can continue without an account; your saved map stays on this device.")
+            .setMessage(if (com.roadconquest.app.util.FeatureFlags.LEADERBOARDS_VISIBLE)
+                "Create an account or sign in to add friends and use verified leaderboards. You can continue without an account; your saved map stays on this device."
+                else "Create an account or sign in to add friends. You can continue without an account; your saved map stays on this device.")
             .setPositiveButton("Create account") { _, _ -> chooseAccount() }
             .setNeutralButton("Sign in") { _, _ -> chooseAccount() }
             .setNegativeButton("Not now") { _, _ -> continueLocally() }

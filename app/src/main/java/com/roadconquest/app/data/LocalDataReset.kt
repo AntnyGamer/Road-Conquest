@@ -23,13 +23,17 @@ object LocalDataReset {
         app.stopService(Intent(app, TrackingService::class.java))
     }
 
-    fun clearStoppedData(context: Context) {
+    fun clearStoppedData(context: Context) = synchronized(com.roadconquest.app.export.DataImporter.operationLock) {
         val app = context.applicationContext
         var cleared = false
         try {
             TrackingRepository(app).clearHistory()
             ProgressionManager.resetLocalProgression(app)
             DataExporter.clearTemporarySnapshots(app)
+            listOf(com.roadconquest.app.export.DataImporter.previousBackup(app),
+                java.io.File(app.filesDir, "before-restore.tmp.zip")).forEach {
+                check(!it.exists() || it.delete()) { "Could not remove restore recovery data" }
+            }
             for (action in listOf(
                 TrackingService.ACTION_STATS_UPDATED,
                 TrackingService.ACTION_ROADS_UPDATED,

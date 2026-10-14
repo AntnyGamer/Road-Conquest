@@ -224,6 +224,7 @@ class MainActivity : Activity() {
                     LocalDataReset.clearStoppedData(applicationContext)
                 } else {
                     DataExporter.clearTemporarySnapshots(applicationContext)
+                    com.roadconquest.app.export.DataImporter.clearTemporaryFiles(applicationContext)
                 }
             }
             cleanup.exceptionOrNull()?.let {
@@ -309,6 +310,11 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        if (!repository.isHistoryCurrent()) {
+            recreatingForAppearance = true
+            recreate()
+            return
+        }
         // Closing the notification shade only resumes an already-started activity.
         val resumeStoppedTracking = enteredForeground && Prefs.shouldResumePausedTracking(this)
         enteredForeground = false

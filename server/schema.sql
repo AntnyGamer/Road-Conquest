@@ -54,6 +54,9 @@ CREATE TABLE IF NOT EXISTS competition_scores (
     last_fix JSONB,
     PRIMARY KEY (user_id, dataset)
 );
+-- Legacy totals remain stored, but cannot enter hardened verified-only rankings.
+ALTER TABLE competition_scores ADD COLUMN IF NOT EXISTS verified_distance_mm BIGINT NOT NULL DEFAULT 0 CHECK (verified_distance_mm >= 0);
+ALTER TABLE competition_scores ADD COLUMN IF NOT EXISTS last_verified_fix JSONB;
 CREATE TABLE IF NOT EXISTS competition_roads (
     user_id BIGINT NOT NULL,
     dataset VARCHAR(64) NOT NULL,
@@ -61,6 +64,8 @@ CREATE TABLE IF NOT EXISTS competition_roads (
     PRIMARY KEY (user_id, dataset, way_id),
     FOREIGN KEY (user_id, dataset) REFERENCES competition_scores(user_id, dataset) ON DELETE CASCADE
 );
+ALTER TABLE competition_roads ADD COLUMN IF NOT EXISTS verified BOOLEAN NOT NULL DEFAULT FALSE;
+CREATE INDEX IF NOT EXISTS competition_verified_roads_idx ON competition_roads(user_id, dataset) WHERE verified;
 CREATE TABLE IF NOT EXISTS competition_runs (
     user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     id UUID NOT NULL UNIQUE,
@@ -80,3 +85,76 @@ CREATE TABLE IF NOT EXISTS competition_receipts (
     PRIMARY KEY (run_id, sequence)
 );
 CREATE INDEX IF NOT EXISTS competition_receipts_age_idx ON competition_receipts(created_at);
+
+-- Written in the same transaction as a verified batch and its idempotency receipt.
+CREATE TABLE IF NOT EXISTS competition_weeks (
+    user_id BIGINT NOT NULL,
+    dataset VARCHAR(64) NOT NULL,
+    week_start DATE NOT NULL,
+    distance_mm BIGINT NOT NULL DEFAULT 0 CHECK (distance_mm >= 0),
+    new_roads BIGINT NOT NULL DEFAULT 0 CHECK (new_roads >= 0),
+    PRIMARY KEY (user_id, dataset, week_start),
+    FOREIGN KEY (user_id, dataset) REFERENCES competition_scores(user_id, dataset) ON DELETE CASCADE,
+    CHECK (EXTRACT(ISODOW FROM week_start) = 1)
+);
+ALTER TABLE competition_weeks ADD COLUMN IF NOT EXISTS verified_distance_mm BIGINT NOT NULL DEFAULT 0 CHECK (verified_distance_mm >= 0);
+ALTER TABLE competition_weeks ADD COLUMN IF NOT EXISTS verified_new_roads BIGINT NOT NULL DEFAULT 0 CHECK (verified_new_roads >= 0);
+
+-- Both users must consent. Username changes leave the relationship intact.
+CREATE TABLE IF NOT EXISTS friendships (
+    user_low BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_high BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    requested_by BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    accepted BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_low, user_high),
+    CHECK (user_low < user_high),
+    CHECK (requested_by IN (user_low, user_high))
+);
+CREATE INDEX IF NOT EXISTS friendships_high_idx ON friendships(user_high);
+
+-- Policy 3: the existing app exploration grid; no road dataset or matcher is required.
+CREATE TABLE IF NOT EXISTS cell_scores (
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    dataset VARCHAR(32) NOT NULL,
+    cells BIGINT NOT NULL DEFAULT 0 CHECK (cells >= 0),
+    last_verified_fix JSONB,
+    PRIMARY KEY (user_id, dataset)
+);
+CREATE INDEX IF NOT EXISTS cell_scores_ranking_idx ON cell_scores(dataset, cells DESC) WHERE cells > 0;
+CREATE TABLE IF NOT EXISTS competition_cells (
+    user_id BIGINT NOT NULL,
+    dataset VARCHAR(32) NOT NULL,
+    grid_row INTEGER NOT NULL CHECK (grid_row BETWEEN 341 AND 12094),
+    grid_col INTEGER NOT NULL CHECK (grid_col BETWEEN 0 AND 19053),
+    PRIMARY KEY (user_id, dataset, grid_row, grid_col),
+    FOREIGN KEY (user_id, dataset) REFERENCES cell_scores(user_id, dataset) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS cell_runs (
+    user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    id UUID NOT NULL UNIQUE,
+    nonce VARCHAR(43) NOT NULL,
+    dataset VARCHAR(32) NOT NULL,
+    sequence INTEGER NOT NULL DEFAULT 0 CHECK (sequence >= 0),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP + INTERVAL '3 minutes'
+);
+CREATE TABLE IF NOT EXISTS cell_receipts (
+    run_id UUID NOT NULL,
+    sequence INTEGER NOT NULL CHECK (sequence >= 0),
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    evidence_hash VARCHAR(43) NOT NULL,
+    response JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (run_id, sequence)
+);
+CREATE INDEX IF NOT EXISTS cell_receipts_age_idx ON cell_receipts(created_at);
+CREATE TABLE IF NOT EXISTS cell_weeks (
+    user_id BIGINT NOT NULL,
+    dataset VARCHAR(32) NOT NULL,
+    week_start DATE NOT NULL,
+    new_cells BIGINT NOT NULL DEFAULT 0 CHECK (new_cells >= 0),
+    PRIMARY KEY (user_id, dataset, week_start),
+    FOREIGN KEY (user_id, dataset) REFERENCES cell_scores(user_id, dataset) ON DELETE CASCADE,
+    CHECK (EXTRACT(ISODOW FROM week_start) = 1)
+);

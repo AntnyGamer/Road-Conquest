@@ -213,6 +213,7 @@
 
             <Switch
                 android:id="@+id/leaderboardPrivacySwitch"
+                android:visibility="gone"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
@@ -227,6 +228,7 @@
 
             <Switch
                 android:id="@+id/verifyDrivesSwitch"
+                android:visibility="gone"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
@@ -235,12 +237,13 @@
                 android:minHeight="64dp"
                 android:paddingStart="14dp"
                 android:paddingEnd="12dp"
-                android:text="Send live driving evidence for verified scores"
+                android:text="Share live GPS to verify explored cells"
                 android:textColor="?attr/rcTextPrimary"
                 android:textSize="15sp" />
 
             <TextView
                 android:id="@+id/verificationStatusText"
+                android:visibility="gone"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="7dp"
@@ -250,6 +253,7 @@
 
             <Button
                 android:id="@+id/leaderboardsButton"
+                android:visibility="gone"
                 style="@style/RoadConquest.SettingsAction"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -298,6 +302,19 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:text="Garage and points shop" />
+
+            <Button
+                android:id="@+id/tripHistoryButton"
+                style="@style/RoadConquest.SettingsAction"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Trip history and replay" />
+
+            <Button android:id="@+id/challengesButton"
+                style="@style/RoadConquest.SettingsAction"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="8dp" android:text="Weekly challenges and friends" />
 
             <TextView
                 android:id="@+id/dataSummaryText"
@@ -352,6 +369,11 @@
                 android:layout_marginTop="12dp"
                 android:text="Export my data (.zip)" />
 
+            <Button android:id="@+id/importButton"
+                style="@style/RoadConquest.SettingsAction"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="8dp" android:text="Import and restore progress" />
+
             <Button
                 android:id="@+id/deleteDeviceDataButton"
                 style="@style/RoadConquest.SettingsAction"
@@ -364,7 +386,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="7dp"
-                android:text="Permanently deletes this phone’s trips, mileage, roads, explored places, points, purchases and cosmetics. Your cloud account and leaderboard scores stay. You must type the exact confirmation phrase shown before deletion."
+                android:text="Permanently deletes this phone’s trips, mileage, roads, explored places, points, purchases and cosmetics. Your cloud account stays. You must type the exact confirmation phrase shown before deletion."
                 android:textColor="?attr/rcTextSecondary"
                 android:textSize="12sp" />
 
