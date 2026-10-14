@@ -257,6 +257,19 @@ class MainActivity : Activity() {
             }
         }
         overlayButton.setOnClickListener { showOverlayPicker() }
+        // Quick destinations remain available from the map without changing driving state.
+        findViewById<Button>(R.id.tripsNavButton).setOnClickListener {
+            startActivity(Intent(this, TripHistoryActivity::class.java))
+        }
+        findViewById<Button>(R.id.goalsNavButton).setOnClickListener {
+            startActivity(Intent(this, AchievementsActivity::class.java))
+        }
+        findViewById<Button>(R.id.garageNavButton).setOnClickListener {
+            startActivity(Intent(this, ShopActivity::class.java))
+        }
+        findViewById<Button>(R.id.friendsNavButton).setOnClickListener {
+            startActivity(Intent(this, ChallengesActivity::class.java))
+        }
         applySafeAreaInsets(settingsButton, centerButton, overlayButton, controlPanel, statsText, pointsText)
         enableButton.setOnClickListener { handleEnableButton() }
 
