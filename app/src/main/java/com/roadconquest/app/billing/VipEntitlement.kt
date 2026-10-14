@@ -19,6 +19,10 @@ object VipEntitlement {
     private const val PREFERENCES = "roadconquest_play_entitlements"
     private const val VIP_KEY = "vip_lifetime_owned"
     private val listeners = CopyOnWriteArraySet<() -> Unit>()
+    @Volatile private var ownershipRevision = 0L
+
+    /** Discard Play queries started before another client confirmed a change. */
+    internal fun revision(): Long = ownershipRevision
 
     fun isActive(context: Context): Boolean =
         context.applicationContext.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
@@ -30,10 +34,13 @@ object VipEntitlement {
     fun addListener(listener: () -> Unit) { listeners.add(listener) }
     fun removeListener(listener: () -> Unit) { listeners.remove(listener) }
 
-    internal fun updateFromPlay(context: Context, owned: Boolean) {
+    @Synchronized internal fun updateFromPlay(context: Context, owned: Boolean) {
         if (isActive(context) == owned) return
+        // Update the in-process generation before notifying listeners so a
+        // competing older Play query cannot undo an already confirmed change.
         context.applicationContext.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
             .edit().putBoolean(VIP_KEY, owned).apply()
+        ownershipRevision++
         if (!owned) {
             // An authoritative Play refund/revocation removes VIP-only equipped
             // colors and themes. Never remove a gold item purchased with points.
