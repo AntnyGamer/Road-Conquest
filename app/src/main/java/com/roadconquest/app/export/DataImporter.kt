@@ -234,7 +234,7 @@ object DataImporter {
                 UiTheme.entries.firstOrNull { it.name == meta.optString("ui_theme") }?.let { Prefs.setUiTheme(app, it) }
                 Prefs.setFogEnabled(app, meta.optBoolean("fog_enabled", true))
                 val selected = setOf("car_style_${meta.optString("car_style")}", "car_color_${meta.optString("car_color")}",
-                    "road_color_${meta.optString("road_color")}", if (meta.optBoolean("gold_ui_enabled")) "ui_gold" else "ui_standard")
+                    "road_color_${meta.optString("road_color")}", "ui_standard", if (meta.optBoolean("gold_ui_enabled")) "ui_gold" else "ui_standard")
                 ShopCatalog.items.filter { it.id in selected }.forEach { Cosmetics.equip(app, it) }
             }.onFailure { android.util.Log.w("RoadConquest", "Progress restored; appearance could not be fully restored", it) }
         }
