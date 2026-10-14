@@ -174,6 +174,7 @@ class VipBilling(
 
     private fun queryOwnership() {
         if (closed || !client.isReady) return
+        val revisionAtRequest = VipEntitlement.revision()
         client.queryPurchasesAsync(
             QueryPurchasesParams.newBuilder()
                 .setProductType(BillingClient.ProductType.INAPP).build()
@@ -183,7 +184,12 @@ class VipBilling(
             if (result.responseCode == BillingClient.BillingResponseCode.OK) {
                 val vipPurchases = purchases.filter { VipEntitlement.PRODUCT_ID in it.products }
                 val owned = vipPurchases.any { it.purchaseState == Purchase.PurchaseState.PURCHASED }
-                VipEntitlement.updateFromPlay(appContext, owned)
+                // A purchase callback or another screen may have confirmed a
+                // newer state while this async query was in flight. In that
+                // case don't let this potentially stale result revoke/grant VIP.
+                if (revisionAtRequest == VipEntitlement.revision()) {
+                    VipEntitlement.updateFromPlay(appContext, owned)
+                }
                 vipPurchases.filter { it.purchaseState == Purchase.PurchaseState.PURCHASED }
                     .forEach(::acknowledge)
                 message = if (vipPurchases.any { it.purchaseState == Purchase.PurchaseState.PENDING } &&
