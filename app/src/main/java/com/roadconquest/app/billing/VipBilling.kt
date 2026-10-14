@@ -205,8 +205,12 @@ class VipBilling(
         fun permanent(offer: ProductDetails.OneTimePurchaseOfferDetails) =
             offer.rentalDetails == null && offer.preorderDetails == null &&
                 offer.offerToken.isNotBlank()
-        return details.oneTimePurchaseOfferDetailsList?.firstOrNull(::permanent)
-            ?: details.oneTimePurchaseOfferDetails?.takeIf(::permanent)
+        val eligibleOffers = details.oneTimePurchaseOfferDetailsList
+        // An available list is authoritative, even when it contains only
+        // rentals or preorders. Fall back only for older single-offer Play
+        // configurations that do not return a list at all.
+        return if (eligibleOffers != null) eligibleOffers.firstOrNull(::permanent)
+        else details.oneTimePurchaseOfferDetails?.takeIf(::permanent)
     }
 
     private fun queryOffer() {
