@@ -1,4 +1,4 @@
-# Road Conquest 1.0 Beta 44
+# Road Conquest 1.0 Beta 45
 
 Road Conquest remembers the roads you drive and the places you visit, revealing them through a
 cloud-textured fog map.
@@ -7,7 +7,7 @@ cloud-textured fog map.
 [Source and issues](https://github.com/AntnyGamer/RoadConquest-Beta) ·
 [GNU AGPL v3 license](LICENSE)
 
-Beta 44 adds optional one-time VIP ($2.99 US, configured through Google Play), improves the public OSRM request safeguards, and fixes municipality boundary reloads and fog performance. Beta 43's starting-location discovery, privacy, driving and verified-drive fixes remain included. Earlier road, exploration, and map improvements remain
+Beta 45 keeps Beta 44's optional one-time VIP ($2.99 US, configured through Google Play), improves the public OSRM request safeguards, and fixes municipality boundary reloads and fog performance. Beta 43's starting-location discovery, privacy, driving and verified-drive fixes remain included. Earlier road, exploration, and map improvements remain
 included. Previously unlocked roads, exploration, purchases, and scoring are
 preserved when installing a signed update over an existing installation.
 
@@ -26,7 +26,7 @@ Grant Precise location. For automatic background tracking, choose Allow all the 
 location settings and allow background battery use. Settings includes shortcuts to the relevant
 Android screens. Allow notifications to see the tracking notification and its Stop tracking control.
 
-This release uses Android application ID `com.roadconquest.app` and internal version code 70.
+This release uses Android application ID `com.roadconquest.app` and internal version code 71. Google Play permanently reserves every uploaded version code, including codes used by drafts or testing tracks; Beta 45 replaces the code-70 Beta 44 bundle for new Play uploads.
 The app shows its exact version in Settings → About. Treat the application ID as permanent once
 the Google Play listing is created; changing it later would create a different app.
 
