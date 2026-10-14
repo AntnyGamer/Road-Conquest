@@ -10,6 +10,7 @@ import com.roadconquest.app.map.PlaceOverlayCache
 import com.roadconquest.app.map.PlaceOverlayClient
 import com.roadconquest.app.map.UnitedStatesMunicipalBoundaries
 import com.roadconquest.app.map.UnitedStatesMunicipalityAtPoint
+import com.roadconquest.app.map.UnitedStatesStateAtPoint
 import com.roadconquest.app.map.PlaceGeometry
 import org.json.JSONObject
 import java.io.IOException
@@ -89,8 +90,7 @@ object PlaceResolver {
         // this generation; older in-flight lookups must never recreate erased
         // precise-location boundary caches when their responses finally arrive.
         val cacheGeneration = PlaceOverlayCache.generation()
-        if (!Geocoder.isPresent()) return null
-        val addresses = try {
+        val addresses = if (Geocoder.isPresent()) try {
             Geocoder(context.applicationContext, Locale.US)
                 .getFromLocation(candidate.latitude, candidate.longitude, MAX_RESULTS)
                 .orEmpty()
@@ -98,8 +98,11 @@ object PlaceResolver {
             emptyList()
         } catch (_: IllegalArgumentException) {
             emptyList()
-        }
-        if (addresses.isEmpty()) return null
+        } else emptyList()
+        // Android's Geocoder is optional and can fail even when a device has
+        // internet access. Use a verified U.S. Census point query as a fallback,
+        // rather than leaving all zero-point and town rewards unresolved.
+        if (addresses.isEmpty()) return resolveWithoutGeocoder(context, candidate, cacheGeneration, municipalCache)
         val parsed = resolveAddresses(candidate, addresses)
         // U.S. postal localities can differ from actual incorporated municipalities,
         // particularly on short crossings. Resolve by GPS coordinate using the SAME
@@ -177,6 +180,40 @@ object PlaceResolver {
         // No verified town here. State/country remain eligible and a later driven
         // position can confirm the correct municipality when GPS is further inside it.
         return parsed.filterNot { it.kind == PlaceKind.TOWN }
+    }
+
+    private fun resolveWithoutGeocoder(
+        context: Context,
+        candidate: PendingPlaceCandidate,
+        cacheGeneration: Long,
+        municipalCache: VerifiedMunicipalCache?
+    ): List<PlaceDiscovery>? {
+        val state = try {
+            UnitedStatesStateAtPoint.fetch(candidate.latitude, candidate.longitude)
+        } catch (_: IOException) {
+            return null
+        } ?: return null // Not a verified U.S. state: do not guess non-U.S. country/region.
+        val country = "United States"
+        val countryPlace = discovery(candidate, PlaceKind.COUNTRY, "us", country, "", country)
+        val statePlace = discovery(
+            candidate, PlaceKind.STATE, "us|${canonical(state)}", state, country, country
+        )
+        val seed = discovery(
+            candidate, PlaceKind.TOWN, "us|${canonical(state)}|gps", "", state, country
+        )
+        val known = municipalCache ?: VerifiedMunicipalCache(context)
+        val town = known.find(seed) ?: try {
+            UnitedStatesMunicipalityAtPoint.fetch(seed)?.let { verified ->
+                if (!PlaceOverlayCache.writeOfficialUs(
+                        context, verified.place, verified.overlay, cacheGeneration
+                    )) return null
+                known.remember(verified)
+                verified.place
+            }
+        } catch (_: IOException) {
+            return null
+        }
+        return listOfNotNull(countryPlace, statePlace, town)
     }
 
     /** Prefer an explicitly named municipality over a nearby postal locality. */
