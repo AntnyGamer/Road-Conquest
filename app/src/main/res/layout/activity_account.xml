@@ -107,7 +107,7 @@
                     android:layout_height="54dp"
                     android:layout_weight="1"
                     android:autofillHints="newPassword"
-                    android:hint="Confirm password (sign up only)"
+                    android:hint="Confirm password"
                     android:inputType="textPassword"
                     android:maxLength="128"
                     android:saveEnabled="false"

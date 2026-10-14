@@ -62,7 +62,7 @@ class TripHistoryActivity : Activity() {
     private var points: List<SavedTripPoint> = emptyList()
     private var routeCoordinates: List<Point> = emptyList()
     private var playing = false
-    private var generation = 0
+    @Volatile private var generation = 0
     private var lastRenderedIndex = -1
     private val tick = object : Runnable {
         override fun run() {
@@ -279,6 +279,9 @@ class TripHistoryActivity : Activity() {
         routeStatus?.text = "Loading drive…"
         replayProgress?.text = "Loading drive…"
         worker.execute {
+            // Drop queued requests superseded by a newer selection before
+            // touching the database, not merely after completing the work.
+            if (expected != generation) return@execute
             val result = runCatching { TripHistoryRepository(applicationContext).replay(trip) }
             runOnUiThread {
                 if (isDestroyed || expected != generation) return@runOnUiThread

@@ -103,7 +103,8 @@ class ChallengesActivity : Activity() {
                         .setPositiveButton("Request") { _, _ -> changeFriend(input.text.toString().trim(), "request") }.show()
                 }
             }
-            root.addView(this, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(8) })
+            minHeight = dp(52)
+            root.addView(this, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
         }
         friends = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -114,7 +115,7 @@ class ChallengesActivity : Activity() {
         root.addView(Button(this, null, 0, R.style.RoadConquest_SettingsAction).apply {
             text = "Refresh"
             setOnClickListener { refresh() }
-        }, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(12) })
+        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
     }
 
     private fun refresh() {
