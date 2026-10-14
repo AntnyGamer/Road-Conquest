@@ -70,7 +70,7 @@ class ChallengesActivity : Activity() {
             setTextColor(Appearance.color(this@ChallengesActivity, R.attr.rcAccent))
             letterSpacing = 0.14f
         }
-        label("Weekly challenges", 28f)
+        label("Weekly challenges", 28f).apply { isAccessibilityHeading = true }
         label("Weeks run Monday to Monday at 00:00 UTC. Local goals use new road and town discoveries. Points are added automatically once per goal.")
         local = label("Loading this week's progress…").apply {
             textSize = 15f

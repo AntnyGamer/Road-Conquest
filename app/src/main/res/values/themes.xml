@@ -18,7 +18,7 @@
         <item name="android:paddingStart">16dp</item>
         <item name="android:paddingEnd">16dp</item>
         <item name="android:background">@drawable/settings_action_background</item>
-        <item name="android:textColor">?attr/rcTextPrimary</item>
+        <item name="android:textColor">@color/secondary_button_text</item>
         <item name="android:textSize">15sp</item>
     </style>
 

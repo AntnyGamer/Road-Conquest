@@ -124,6 +124,7 @@ class TripHistoryActivity : Activity() {
         })
         root.addView(TextView(this).apply {
             text = "Trip history"
+            isAccessibilityHeading = true
             textSize = 28f
             setTypeface(typeface, android.graphics.Typeface.BOLD)
             setTextColor(Appearance.color(this@TripHistoryActivity, R.attr.rcTextPrimary))

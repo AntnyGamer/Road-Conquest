@@ -59,6 +59,7 @@ class RestoreActivity : Activity() {
         })
         root.addView(TextView(this).apply {
             text = "Restore your progress"
+            isAccessibilityHeading = true
             textSize = 28f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(Appearance.color(this@RestoreActivity, R.attr.rcTextPrimary))

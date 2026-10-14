@@ -25,6 +25,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:text="Account"
+            android:accessibilityHeading="true"
             android:textColor="?attr/rcTextPrimary"
             android:textSize="28sp"
             android:textStyle="bold" />
