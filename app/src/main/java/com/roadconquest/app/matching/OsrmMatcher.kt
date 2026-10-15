@@ -78,8 +78,11 @@ class OsrmMatcher(
         val bearings = buildBearingGuidance(points)
         // The driving filter already removes bad fixes. Preserve dense accepted samples;
         // server-side tidy can turn otherwise usable samples into unmatched tracepoints.
+        // Parsing uses each step's full geometry, not the duplicate route overview.
+        // Hints are never consumed by RoadConquest. Suppress both unused response
+        // fields without removing a single GPS fix, step, or matching constraint.
         val path = "$baseUrl/match/v1/driving/$coordinates" +
-            "?steps=true&geometries=geojson&overview=full&annotations=false&tidy=false&gaps=ignore" +
+            "?steps=true&geometries=geojson&overview=false&annotations=false&generate_hints=false&tidy=false&gaps=ignore" +
             "&waypoints=$waypoints&timestamps=$timestamps&radiuses=$radiuses"
         val first = requestMatch(URI(path + (bearings?.let { "&bearings=$it" } ?: "")).toURL(), points)
         // Retry a supported, anchored turn without heading constraints first. If the
