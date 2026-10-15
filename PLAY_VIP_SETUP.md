@@ -5,7 +5,7 @@ Road Conquest contains a one-time, non-consumable Google Play Billing purchase:
 - **Product ID:** `vip_lifetime`
 - **Type:** One-time product / in-app product; **buy** purchase option (not a subscription and not consumable)
 - **US price to configure in Play Console:** **$2.99 USD**; local prices and taxes are controlled by Google Play
-- **Benefits:** ad-free Garage, Achievements, Leaderboard, and Settings screens; rewarded-ad button hidden; Gold car color, Gold road color, and Golden Road Conquest UI/launcher icon available to equip without spending points
+- **Benefits:** ad-free eligible screens; rewarded-ad offers hidden; Gold car, Gold roads and Golden Road Conquest UI/launcher icon available without points; plus access to up to 500 recent trips (100 free), text summary sharing and user-selected GPX export with endpoint privacy options. Basic trip history, animated replay, basic trip summaries and complete progress ZIP backup/restore remain free
 - **Existing point purchases:** unchanged; VIP does not refund points already spent or grant free non-gold cosmetics
 - **Ownership:** attached to the purchaser's Google Play account, not the optional Road Conquest account
 
@@ -15,7 +15,7 @@ Road Conquest contains a one-time, non-consumable Google Play Billing purchase:
 2. In **Monetize with Play → Products → One-time products**, create the product `vip_lifetime` and a buy purchase option. Set the US price to **$2.99** and select the countries where it should be sold.
 3. Activate/publish the product and purchase option. The product ID must match *exactly*; once published, the app reads the user's real local price from Play before enabling the checkout button.
 4. Under **Settings → License testing**, add tester Google accounts. Enroll those accounts in the internal test and install the Play-distributed build. Test purchases can use Play's test payment methods without real charges.
-5. Test a purchase and confirm: VIP is shown as owned; ads disappear; all three gold cosmetics are free to equip; app restart preserves VIP; reinstalling from Play restores VIP; pending payments do not grant VIP.
+5. Test a purchase and confirm: VIP is owned; ads disappear; all three Gold cosmetics are free; Trip history unlocks extended browsing, text sharing and GPX export; basic replay and progress ZIP backups work without VIP; restart/reinstall restores VIP; pending payments do not unlock premium actions.
 6. Refund/revoke a **test** purchase and confirm a successful new Play ownership query removes VIP access. Test temporary offline startup after a confirmed purchase, and ensure existing VIP owners retain access.
 
 The app acknowledges completed purchases through Play Billing 9.1. It uses an on-device entitlement cache so confirmed purchases can work offline, and corrects ownership on a successful Play query. An unavailable store/network is not interpreted as a refund. Local driving-history deletion does not remove Google Play ownership.
