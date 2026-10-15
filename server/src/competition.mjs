@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { createIntegrityVerifier } from "./integrity.mjs";
-import { EvidenceError, evidenceHash, parseEvidence } from "./scoring.mjs";
+import { EvidenceError, evidenceHash, parseEvidence, requireFreshFixes } from "./scoring.mjs";
 
 import { GRID_ID, scoreCells } from "./cells.mjs";
 import { sealCheckpoint, verifyContinuity } from "./checkpoints.mjs";
@@ -86,7 +86,10 @@ export async function createCompetition(pool, config, dependencies = {}) {
       // A committed retry needs no second Google decode (standard tokens have replay protection).
       const previous = await receipt(pool, user, body, hash);
       if (previous) return previous;
-      parseEvidence(evidence);
+      // No need to repeat JSON parsing, geometry validation and continuity
+      // checks: the first parse already validated them. New batches must still
+      // pass the exact same per-fix freshness limits as before.
+      requireFreshFixes(body);
       const active = await pool.query(
         `SELECT 1 FROM cell_runs WHERE user_id = $1 AND id = $2 AND nonce = $3 AND sequence = $4
          AND dataset = $5 AND expires_at > CURRENT_TIMESTAMP
