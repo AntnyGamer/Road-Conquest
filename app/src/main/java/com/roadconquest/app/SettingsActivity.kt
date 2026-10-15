@@ -222,12 +222,20 @@ class SettingsActivity : Activity() {
                     DataExporter.writeZip(this, repository, output)
                 } ?: error("Could not open export destination")
             }
+            if (result.isSuccess) {
+                // Saving can finish after the user leaves Settings. Record the
+                // completed export independent of the Activity's UI lifecycle.
+                getSharedPreferences("roadconquest_export_history", MODE_PRIVATE)
+                    .edit().putLong("last_completed_at", System.currentTimeMillis()).apply()
+            } else {
+                // ACTION_CREATE_DOCUMENT creates a new file before ZIP writing.
+                // If streaming fails, avoid leaving a corrupt backup behind.
+                runCatching { contentResolver.delete(uri, null, null) }
+            }
             runOnUiThread {
                 if (isDestroyed) return@runOnUiThread
                 result.fold(
                     onSuccess = {
-                        getSharedPreferences("roadconquest_export_history", MODE_PRIVATE)
-                            .edit().putLong("last_completed_at", System.currentTimeMillis()).apply()
                         Toast.makeText(this, "Road Conquest data exported", Toast.LENGTH_SHORT).show()
                         refreshSummary()
                     },
