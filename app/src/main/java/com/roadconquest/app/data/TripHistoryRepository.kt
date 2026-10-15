@@ -176,6 +176,10 @@ class TripHistoryRepository(context: Context) {
             writer.write("</trk></gpx>\n")
             check(trip.historyGeneration == helper.historyGeneration) { "Trip history changed during export" }
             writer.flush()
+            // A slow cloud provider may finish the flush after local history
+            // was reset. Treat that as a failed export so the caller removes
+            // the newly created stale route document.
+            check(trip.historyGeneration == helper.historyGeneration) { "Trip history changed during export" }
             written
         }
     }
