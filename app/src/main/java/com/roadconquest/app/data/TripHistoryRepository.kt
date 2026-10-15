@@ -1,6 +1,12 @@
 package com.roadconquest.app.data
 
 import android.content.Context
+import java.io.OutputStream
+import java.io.OutputStreamWriter
+import java.nio.charset.StandardCharsets
+import java.time.Instant
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 import kotlin.math.ceil
 
 /** Read-only trips derived from saved driving fixes; no database migration or tracking changes. */
@@ -15,12 +21,16 @@ data class SavedTrip(
 )
 data class SavedTripPoint(val latitude: Double, val longitude: Double, val timestamp: Long, val breakBefore: Boolean = false)
 
+/** Snapshot of trip-scoped facts; later road matching may revise road counts. */
+data class SavedTripInsights(val newRoadGroups: Long, val newTowns: Long, val pendingFixes: Long)
+
+
 class TripHistoryRepository(context: Context) {
     private val helper = AppDatabase.get(context.applicationContext)
 
-    /** Stops after the most recent 100 completed groups instead of loading full GPS history. */
+    /** Bounded recent history: free users see 100 drives; VIP can request up to 500. */
     fun recentTrips(limit: Int = 100): List<SavedTrip> = synchronized(helper.historyLock) {
-        require(limit in 1..100)
+        require(limit in 1..500)
         val output = ArrayList<SavedTrip>(limit)
         var firstId = 0L
         var lastId = 0L
@@ -59,6 +69,72 @@ class TripHistoryRepository(context: Context) {
         if (output.size < limit) addCurrent()
         output
     }
+
+    /** Uses existing indexed history timestamps; never fabricates per-trip tile counts. */
+    fun insights(trip: SavedTrip): SavedTripInsights = synchronized(helper.historyLock) {
+        if (trip.historyGeneration != helper.historyGeneration) return@synchronized SavedTripInsights(0, 0, 0)
+        val db = helper.readableDatabase
+        val period = arrayOf(trip.startedAt.toString(), trip.endedAt.toString())
+        val roads = db.rawQuery(
+            """SELECT COUNT(DISTINCT CASE WHEN road_group_id = '' THEN segment_id ELSE road_group_id END)
+               FROM roads WHERE first_unlocked_at BETWEEN ? AND ?
+               AND road_group_id NOT LIKE 'x2|%'""", period
+        ).use { it.moveToFirst(); it.getLong(0) }
+        val towns = db.rawQuery(
+            """SELECT COUNT(*) FROM visited_places v WHERE kind = 'TOWN'
+               AND first_visited_at BETWEEN ? AND ?
+               AND EXISTS (SELECT 1 FROM progression_rewards r
+                 WHERE r.reward_key = 'place:town:' || v.place_key)""", period
+        ).use { it.moveToFirst(); it.getLong(0) }
+        val pending = db.rawQuery(
+            "SELECT COUNT(*) FROM track_points WHERE id BETWEEN ? AND ? AND matched = 0",
+            arrayOf(trip.firstId.toString(), trip.lastId.toString())
+        ).use { it.moveToFirst(); it.getLong(0) }
+        SavedTripInsights(roads, towns, pending)
+    }
+
+    /**
+     * Explicit, user-initiated GPX export; no internet or RoadConquest server.
+     * The default privacy mode omits two minutes from BOTH trip endpoints.
+     * Entire small trips may yield no coordinates rather than exposing a home.
+     */
+    fun exportGpx(trip: SavedTrip, output: OutputStream, hideTripEnds: Boolean = true): Int =
+        synchronized(helper.historyLock) {
+            check(trip.historyGeneration == helper.historyGeneration) { "Trip history changed; select it again." }
+            val endPadding = if (hideTripEnds) 120_000L else 0L
+            val from = trip.startedAt + endPadding
+            val until = trip.endedAt - endPadding
+            val formatter = DateTimeFormatter.ISO_INSTANT
+            var written = 0
+            var previousTimestamp: Long? = null
+            val writer = OutputStreamWriter(output, StandardCharsets.UTF_8)
+            writer.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\\n")
+            writer.write("<gpx version=\"1.1\" creator=\"Road Conquest\" xmlns=\"http://www.topografix.com/GPX/1/1\">\\n<trk><name>Road Conquest drive</name>\\n")
+            helper.readableDatabase.rawQuery(
+                "SELECT latitude, longitude, timestamp_ms FROM track_points WHERE id BETWEEN ? AND ? ORDER BY id ASC",
+                arrayOf(trip.firstId.toString(), trip.lastId.toString())
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    val timestamp = cursor.getLong(2)
+                    if (timestamp < from || timestamp > until) continue
+                    val lat = cursor.getDouble(0)
+                    val lon = cursor.getDouble(1)
+                    if (!lat.isFinite() || !lon.isFinite() || lat !in -90.0..90.0 || lon !in -180.0..180.0) continue
+                    if (previousTimestamp == null || timestamp <= previousTimestamp!! ||
+                        timestamp - previousTimestamp!! > 30_000L) {
+                        if (previousTimestamp != null) writer.write("</trkseg>\\n")
+                        writer.write("<trkseg>\\n")
+                    }
+                    writer.write("<trkpt lat=\"$lat\" lon=\"$lon\"><time>${formatter.format(Instant.ofEpochMilli(timestamp))}</time></trkpt>\\n")
+                    previousTimestamp = timestamp
+                    written++
+                }
+            }
+            if (previousTimestamp != null) writer.write("</trkseg>\\n")
+            writer.write("</trk></gpx>\\n")
+            writer.flush()
+            written
+        }
 
     /** Read a bounded route sample, always retaining the first and last points. */
     fun replay(trip: SavedTrip, maxPoints: Int = 2500): List<SavedTripPoint> =
