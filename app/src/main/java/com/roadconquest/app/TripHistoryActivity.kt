@@ -293,7 +293,7 @@ class TripHistoryActivity : Activity() {
         gpxButton?.text = if (vip) "Save GPX" else "Save GPX · VIP"
         // Never share a placeholder or details from the previously selected trip.
         shareButton?.isEnabled = selectedTrip != null && shareSummaryReady
-        gpxButton?.isEnabled = selectedTrip != null
+        gpxButton?.isEnabled = selectedTrip != null && shareSummaryReady
         if (displayedVip != vip && tripList != null) refreshTripList()
     }
 
@@ -501,7 +501,7 @@ class TripHistoryActivity : Activity() {
                         "New roads: %,d (estimated) • New towns: %,d • New tiles: %,d\n%,d GPS fixes awaiting road matching. Older tiles without saved dates are excluded.",
                         insights.newRoadGroups, insights.newTowns, insights.newTiles, insights.pendingFixes
                     )
-                    shareSummaryReady = true
+                    shareSummaryReady = loaded.size >= 2
                     refreshVipControls()
                     points = loaded
                     // Cache MapLibre geometries once instead of reconstructing
