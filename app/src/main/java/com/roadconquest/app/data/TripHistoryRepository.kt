@@ -129,16 +129,10 @@ class TripHistoryRepository(context: Context) {
      */
     fun exportGpx(trip: SavedTrip, output: OutputStream, hideTripEnds: Boolean = true): Int {
         check(VipEntitlement.isActive(appContext)) { "GPX sharing requires lifetime VIP" }
-        // Slow Google Drive / document-provider writes must never hold the main
-        // GPS history lock. WAL allows this independent read-only connection to
-        // observe a consistent drive snapshot without blocking new tracking.
-        val databasePath = synchronized(helper.historyLock) {
-            check(trip.historyGeneration == helper.historyGeneration) { "Trip history changed; select it again." }
-            helper.readableDatabase.path
-        }
-        return android.database.sqlite.SQLiteDatabase.openDatabase(
-            databasePath, null, android.database.sqlite.SQLiteDatabase.OPEN_READONLY
-        ).use { snapshot ->
+        // Use the same independent WAL snapshot as trip browsing. Slow cloud
+        // document writes must never hold the main GPS history lock.
+        return withHistorySnapshot { snapshot, generation ->
+            check(trip.historyGeneration == generation) { "Trip history changed; select it again." }
             val endPadding = if (hideTripEnds) 120_000L else 0L
             val from = trip.startedAt + endPadding
             val until = trip.endedAt - endPadding
