@@ -87,6 +87,10 @@ class ChallengesActivity : Activity() {
             addView(goalLabel("Loading this week's progress…", 15f))
             root.addView(this, LinearLayout.LayoutParams(-1, -2))
         }
+        root.addView(Button(this, null, 0, R.style.RoadConquest_SettingsAction).apply {
+            text = "Refresh"
+            setOnClickListener { refresh() }
+        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
         val socialStart = root.childCount
         label("Friends", 22f)
         label("Add friends by username. Both people must accept the friendship.")
@@ -122,10 +126,6 @@ class ChallengesActivity : Activity() {
             setPadding(dp(16), dp(10), dp(16), dp(16))
             root.addView(this, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
         }
-        root.addView(Button(this, null, 0, R.style.RoadConquest_SettingsAction).apply {
-            text = "Refresh"
-            setOnClickListener { refresh() }
-        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
         if (!FeatureFlags.LEADERBOARDS_VISIBLE) {
             // Friends remain available, but don't dominate a weekly-goals page
             // when verified competitions are not activated.
