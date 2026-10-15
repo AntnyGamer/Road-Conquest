@@ -232,6 +232,10 @@ object DataImporter {
             helper.historyGeneration++
             helper.trackSummaryCache = null; helper.roadSummaryCache = null; helper.lastTrackPointCache = null
         } }
+        // A successful restore replaces local progress. A backup date from the
+        // previous local profile must not suggest that the new state was exported.
+        app.getSharedPreferences("roadconquest_export_history", Context.MODE_PRIVATE)
+            .edit().remove("last_completed_at").apply()
         // A cosmetic/icon failure after COMMIT must not claim that data was rolled back.
         // operationLock serializes reset/restore without holding historyLock while
         // taking Achievements' preference lock (its reads take these in reverse order).
