@@ -78,6 +78,7 @@ class MainActivity : Activity() {
     private lateinit var repository: TrackingRepository
     private lateinit var locationManager: LocationManager
     private var renderer: MapRenderer? = null
+    private var activeMap: MapLibreMap? = null
     private var previewBearingDegrees = 0.0
     private var startAfterPermissionGrant = false
     private var started = false
@@ -283,6 +284,7 @@ class MainActivity : Activity() {
 
         mapView.getMapAsync { map ->
             if (isDestroyed) return@getMapAsync
+            activeMap = map
             configureMapChrome(map, controlPanel)
             map.addOnMapClickListener { point ->
                 val overlayInfo = renderer?.overlayInfoAt(map.projection.toScreenLocation(point))
@@ -823,9 +825,36 @@ class MainActivity : Activity() {
                 }
                 dialog.dismiss()
             }
+            .setNeutralButton("Explore nearby") { _, _ -> showNearbyExploration() }
             .setNegativeButton("Cancel", null)
             .create()
         dialog.show()
+    }
+
+    /** On-demand exploration goals, centered on the visible map, no extra GPS or network. */
+    private fun showNearbyExploration() {
+        val center = activeMap?.cameraPosition?.target ?: return
+        summaryExecutor.execute {
+            val result = runCatching { repository.nearbyExploration(center.latitude, center.longitude) }
+            runOnUiThread {
+                if (isDestroyed) return@runOnUiThread
+                result.fold({ (explored, total) ->
+                    val remaining = total - explored
+                    val percent = if (total == 0) 0 else explored * 100 / total
+                    AlertDialog.Builder(this)
+                        .setTitle("Explore nearby")
+                        .setMessage(
+                            "In the 5 × 5 mile-grid area around the map center:\\n" +
+                                "Explored: $explored of $total tiles ($percent%)\\n" +
+                                "Unexplored: $remaining tiles\\n\\n" +
+                                "Move the map to explore a different area. This estimate uses saved cells only, without route planning, additional GPS, or server requests. Walking can reveal tiles; only driving unlocks roads."
+                        )
+                        .setPositiveButton("Close", null).show()
+                }, {
+                    Toast.makeText(this, "Could not load nearby exploration.", Toast.LENGTH_SHORT).show()
+                })
+            }
+        }
     }
 
     private fun showOverlayInfo(info: PlaceOverlayInfo) {
