@@ -1,6 +1,7 @@
 package com.roadconquest.app.data
 
 import android.content.Context
+import android.database.sqlite.SQLiteDatabase
 import com.roadconquest.app.billing.VipEntitlement
 import java.io.OutputStream
 import java.io.OutputStreamWriter
@@ -29,8 +30,17 @@ class TripHistoryRepository(context: Context) {
     private val appContext = context.applicationContext
     private val helper = AppDatabase.get(context.applicationContext)
 
+    /** Read an independent WAL snapshot so long trip scans do not block new GPS writes. */
+    private fun <T> withHistorySnapshot(block: (SQLiteDatabase, Long) -> T): T {
+        val (path, generation) = synchronized(helper.historyLock) {
+            helper.readableDatabase.path to helper.historyGeneration
+        }
+        return SQLiteDatabase.openDatabase(path, null, SQLiteDatabase.OPEN_READONLY)
+            .use { snapshot -> block(snapshot, generation) }
+    }
+
     /** Bounded recent history: free users see 100 drives; VIP can request up to 500. */
-    fun recentTrips(limit: Int = 100): List<SavedTrip> = synchronized(helper.historyLock) {
+    fun recentTrips(limit: Int = 100): List<SavedTrip> = withHistorySnapshot { db, generation ->
         require(limit in 1..(if (VipEntitlement.isActive(appContext)) 500 else 100)) {
             "Extended trip history requires lifetime VIP"
         }
@@ -43,10 +53,10 @@ class TripHistoryRepository(context: Context) {
         var distance = 0.0
         fun addCurrent() {
             if (count >= 2 && lastTime >= firstTime) {
-                output += SavedTrip(firstId, lastId, firstTime, lastTime, count, distance, helper.historyGeneration)
+                output += SavedTrip(firstId, lastId, firstTime, lastTime, count, distance, generation)
             }
         }
-        helper.readableDatabase.rawQuery(
+        db.rawQuery(
             "SELECT id, timestamp_ms, distance_m FROM track_points ORDER BY id DESC", null
         ).use { cursor ->
             while (cursor.moveToNext() && output.size < limit) {
@@ -70,7 +80,9 @@ class TripHistoryRepository(context: Context) {
             }
         }
         if (output.size < limit) addCurrent()
-        output
+        // A device-data reset can complete while this independent snapshot is
+        // being read; never show a pre-reset trip under the new generation.
+        if (generation == helper.historyGeneration) output else emptyList()
     }
 
     /** Cheap generation check; protects outgoing shares after a device-data reset. */
@@ -78,9 +90,8 @@ class TripHistoryRepository(context: Context) {
         trip.historyGeneration == helper.historyGeneration
 
     /** Uses existing indexed history timestamps; never fabricates per-trip tile counts. */
-    fun insights(trip: SavedTrip): SavedTripInsights = synchronized(helper.historyLock) {
-        if (trip.historyGeneration != helper.historyGeneration) return@synchronized SavedTripInsights(0, 0, 0, 0)
-        val db = helper.readableDatabase
+    fun insights(trip: SavedTrip): SavedTripInsights = withHistorySnapshot { db, generation ->
+        if (trip.historyGeneration != generation) return@withHistorySnapshot SavedTripInsights(0, 0, 0, 0)
         val period = arrayOf(trip.startedAt.toString(), trip.endedAt.toString())
         val roads = db.rawQuery(
             """SELECT COUNT(DISTINCT CASE WHEN road_group_id = '' THEN segment_id ELSE road_group_id END)
@@ -103,7 +114,9 @@ class TripHistoryRepository(context: Context) {
             "SELECT COUNT(*) FROM track_points WHERE id BETWEEN ? AND ? AND matched = 0",
             arrayOf(trip.firstId.toString(), trip.lastId.toString())
         ).use { it.moveToFirst(); it.getLong(0) }
-        SavedTripInsights(roads, towns, tiles, pending)
+        if (generation == helper.historyGeneration)
+            SavedTripInsights(roads, towns, tiles, pending)
+        else SavedTripInsights(0, 0, 0, 0)
     }
 
     /**
@@ -166,10 +179,9 @@ class TripHistoryRepository(context: Context) {
 
     /** Read a bounded route sample, always retaining the first and last points. */
     fun replay(trip: SavedTrip, maxPoints: Int = 2500): List<SavedTripPoint> =
-        synchronized(helper.historyLock) {
+        withHistorySnapshot { db, generation ->
             require(maxPoints in 2..5000)
-            if (trip.historyGeneration != helper.historyGeneration) return@synchronized emptyList()
-            val db = helper.readableDatabase
+            if (trip.historyGeneration != generation) return@withHistorySnapshot emptyList()
             val bounds = arrayOf(trip.firstId.toString(), trip.lastId.toString())
             // recentTrips() already counted these exact IDs under the same
             // history generation. New GPS rows append beyond lastId; a restore
@@ -205,7 +217,7 @@ class TripHistoryRepository(context: Context) {
                     selected += it.copy(breakBefore = it.breakBefore || gapSinceSample)
                 }
             }
-            selected
+            if (generation == helper.historyGeneration) selected else emptyList()
         }
 
     companion object {
