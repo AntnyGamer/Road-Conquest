@@ -41,6 +41,22 @@ class WeeklyChallengesTest {
         assertEquals(listOf(0L, 0L, 0L, 0L), WeeklyChallenges.status(context, week.endsAt).challenges.map { it.progress })
     }
 
+    @Test fun starterGoalsRewardAnOccasionalExplorerWithoutGrantingStretchBonuses() {
+        repeat(5) { road("short$it", "short-group$it", monday + 100) }
+        val repository = ProgressionRepository(context)
+        repository.recordPlace(PlaceDiscovery(
+            PlaceKind.TOWN, "week-starter", "Starter town",
+            visitedAt = monday + 100, latitude = 0.0, longitude = 0.0
+        ))
+        val startingBalance = repository.snapshot().balance
+        val goals = WeeklyChallenges.status(context, monday + 500)
+        assertEquals(listOf(5L, 5L, 1L, 1L), goals.challenges.map { it.progress })
+        assertEquals(listOf(true, false, true, false), goals.challenges.map { it.rewarded })
+        assertEquals(startingBalance + 150L, repository.snapshot().balance)
+        WeeklyChallenges.status(context, monday + 600)
+        assertEquals(startingBalance + 150L, repository.snapshot().balance)
+    }
+
     @Test fun utcMondayBoundaryIsStableAcrossYearAndFutureDatesDoNotCount() {
         assertEquals(Instant.parse("2025-12-29T00:00:00Z").toEpochMilli(), WeeklyChallenges.weekStart(Instant.parse("2026-01-01T16:00:00Z").toEpochMilli()))
         road("future", "new", monday + 1000)
