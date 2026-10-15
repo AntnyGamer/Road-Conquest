@@ -270,10 +270,10 @@ class MainActivity : Activity() {
         findViewById<Button>(R.id.tripsNavButton).setOnClickListener {
             startActivity(Intent(this, TripHistoryActivity::class.java))
         }
-        findViewById<Button>(R.id.goalsNavButton).setOnClickListener {
+        findViewById<Button>(R.id.badgesNavButton).setOnClickListener {
             startActivity(Intent(this, AchievementsActivity::class.java))
         }
-        findViewById<Button>(R.id.friendsNavButton).setOnClickListener {
+        findViewById<Button>(R.id.weeklyGoalsNavButton).setOnClickListener {
             startActivity(Intent(this, ChallengesActivity::class.java))
         }
         applySafeAreaInsets(settingsButton, centerButton, overlayButton, controlPanel, statsText, pointsText)
