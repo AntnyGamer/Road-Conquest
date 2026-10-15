@@ -243,24 +243,25 @@ class PlaceOverlayClient(
         resolvedEndpoint?.let { return it }
         val url = configUrl.trim()
         if (!url.startsWith("https://")) throw IOException("Place overlay config must use HTTPS")
-        val value = try {
+        val (value, fetchedConfig) = try {
             val connection = open(url, redirects = true, readTimeoutMs = 5_000)
             try {
                 val status = connection.responseCode
                 if (status !in 200..299 || connection.url.protocol != "https") {
                     throw IOException("Place overlay config is unavailable")
                 }
-                connection.inputStream.bufferedReader().use(::readConfigEndpoint)
+                connection.inputStream.bufferedReader().use(::readConfigEndpoint) to true
             } finally {
                 connection.disconnect()
             }
         } catch (_: IOException) {
-            // Do not make all overlays disappear just because the remote provider config is
-            // temporarily unreachable. The configured file can still override this when online.
-            DEFAULT_ENDPOINT
+            // Keep using the safe public fallback when the config service is down.
+            // Do not pin that fallback for the whole batch: later requests should
+            // be able to recover if the configured provider comes back online.
+            DEFAULT_ENDPOINT to false
         }
         if (!value.startsWith("https://")) throw IOException("Place overlay service is disabled or invalid")
-        resolvedEndpoint = value
+        if (fetchedConfig) resolvedEndpoint = value
         return value
     }
 
