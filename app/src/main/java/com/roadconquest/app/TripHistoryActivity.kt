@@ -66,6 +66,7 @@ class TripHistoryActivity : Activity() {
     private var replayProgress: TextView? = null
     private var selectedTripButton: Button? = null
     private var selectedTrip: SavedTrip? = null
+    private var shareSummaryReady = false
     private var insightsText: TextView? = null
     private var shareButton: Button? = null
     private var gpxButton: Button? = null
@@ -290,7 +291,8 @@ class TripHistoryActivity : Activity() {
         val vip = VipEntitlement.isActive(this)
         shareButton?.text = if (vip) "Share trip summary" else "Share trip summary · VIP"
         gpxButton?.text = if (vip) "Save GPX" else "Save GPX · VIP"
-        shareButton?.isEnabled = selectedTrip != null
+        // Never share a placeholder or details from the previously selected trip.
+        shareButton?.isEnabled = selectedTrip != null && shareSummaryReady
         gpxButton?.isEnabled = selectedTrip != null
         if (displayedVip != vip && tripList != null) refreshTripList()
     }
@@ -387,6 +389,7 @@ class TripHistoryActivity : Activity() {
     private fun isTripSafeToShare(trip: SavedTrip): Boolean {
         if (TripHistoryRepository(applicationContext).isCurrentTrip(trip)) return true
         selectedTrip = null
+        shareSummaryReady = false
         refreshVipControls()
         insightsText?.text = "Driving history changed. Reopen Trips to select a current drive."
         return false
@@ -441,19 +444,25 @@ class TripHistoryActivity : Activity() {
             val result = runCatching {
                 val stream = contentResolver.openOutputStream(uri, "w")
                     ?: error("Could not open selected file")
-                stream.use { TripHistoryRepository(applicationContext).exportGpx(trip, it, hideEnds) }
+                val pointCount = stream.use {
+                    TripHistoryRepository(applicationContext).exportGpx(trip, it, hideEnds)
+                }
+                if (pointCount == 0) {
+                    // A short drive has no privacy-safe coordinates to export.
+                    // Don't leave an empty document in the user's selected folder.
+                    runCatching { contentResolver.delete(uri, null, null) }
+                }
+                pointCount
+            }.onFailure {
+                // A cloud document provider may be slow: delete incomplete files
+                // on the worker rather than blocking the Android UI thread.
+                runCatching { contentResolver.delete(uri, null, null) }
             }
             runOnUiThread {
                 if (isDestroyed) return@runOnUiThread
                 Toast.makeText(this, result.fold(
                     { if (it == 0) "No coordinates remain after hiding endpoints. Consider a different trip." else "GPX saved ($it GPS points)" },
-                    {
-                        // ACTION_CREATE_DOCUMENT creates a new document. If a
-                        // reset/write error interrupted the export, don't leave
-                        // a partial precise-location file behind.
-                        runCatching { contentResolver.delete(uri, null, null) }
-                        "Could not save GPX. Choose another file or reload the trip."
-                    }
+                    { "Could not save GPX. Choose another file or reload the trip." }
                 ), Toast.LENGTH_LONG).show()
             }
         }
@@ -462,6 +471,7 @@ class TripHistoryActivity : Activity() {
     private fun loadTrip(trip: SavedTrip) {
         pauseReplay()
         selectedTrip = trip
+        shareSummaryReady = false
         refreshVipControls()
         insightsText?.text = "Checking new roads, towns and matching status…"
         val expected = ++generation
@@ -491,6 +501,8 @@ class TripHistoryActivity : Activity() {
                         "New roads: %,d (estimated) • New towns: %,d • New tiles: %,d\n%,d GPS fixes awaiting road matching. Older tiles without saved dates are excluded.",
                         insights.newRoadGroups, insights.newTowns, insights.newTiles, insights.pendingFixes
                     )
+                    shareSummaryReady = true
+                    refreshVipControls()
                     points = loaded
                     // Cache MapLibre geometries once instead of reconstructing
                     // every previously travelled point on every animation tick.
@@ -510,6 +522,8 @@ class TripHistoryActivity : Activity() {
                     else if (!mapReady) replayProgress?.text = "Preparing replay map…"
                 }, {
                     routeStatus?.text = "Could not load the selected drive."
+                    shareSummaryReady = false
+                    refreshVipControls()
                     insightsText?.text = "Trip details unavailable."
                     replayProgress?.text = "Replay unavailable"
                 })
