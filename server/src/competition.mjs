@@ -134,11 +134,19 @@ export async function createCompetition(pool, config, dependencies = {}) {
            SET new_cells = cell_weeks.new_cells + EXCLUDED.new_cells`,
           [user.id, config.dataset, week.toISOString().slice(0, 10), newCells.rowCount]
         );
-        await db.query("UPDATE cell_runs SET sequence = sequence + 1, expires_at = CURRENT_TIMESTAMP + INTERVAL '3 minutes' WHERE user_id = $1", [user.id]);
         const result = { sequence: body.sequence + 1, credited_cells: newCells.rowCount, accepted_cells: cells,
           verified: true, scoring_policy: 3, dataset: config.dataset, cells: Number(updatedScore.rows[0].cells) };
-        await db.query("INSERT INTO cell_receipts(run_id,sequence,user_id,evidence_hash,response) VALUES ($1,$2,$3,$4,$5)",
-          [body.run, body.sequence, user.id, hash, JSON.stringify(result)]);
+        // The retry receipt is stored only when the locked drive sequence advances.
+        await db.query(
+          `WITH advanced AS (
+            UPDATE cell_runs SET sequence = sequence + 1,
+              expires_at = CURRENT_TIMESTAMP + INTERVAL '3 minutes'
+            WHERE user_id = $1 RETURNING user_id
+          )
+          INSERT INTO cell_receipts(run_id,sequence,user_id,evidence_hash,response)
+          SELECT $2,$3,advanced.user_id,$4,$5 FROM advanced`,
+          [user.id, body.run, body.sequence, hash, JSON.stringify(result)]
+        );
         await db.query("COMMIT");
         return result;
       } catch (error) { await db.query("ROLLBACK"); throw error; }

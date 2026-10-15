@@ -1,5 +1,6 @@
 # Road Conquest 1.0 Beta 49
 
+- **Fewer verified-drive writes:** Advancing the secure drive sequence and saving its idempotent retry receipt now share one PostgreSQL statement. Transaction boundaries, session checks, scoring, and safe retries remain unchanged.
 - **Faster serverless cold starts:** Remove the redundant scrypt calculation at instance initialization. Missing-user logins still perform the same scrypt verification as existing-user failures, using a randomized dummy hash that cannot accidentally authenticate.
 - **Lower account-server database overhead:** Combine six routine expired-record cleanups into one database request instead of six parallel connections; return the latest verified-cell total directly from its score update instead of querying again; resolve the UTC weekly period and rankings together in one query. These changes retain scoring, visibility, retention windows, rate limits, and response shapes. No schema migration, new service or request frequency changes.
 
