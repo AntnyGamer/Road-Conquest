@@ -363,9 +363,6 @@ class MainActivity : Activity() {
             renderer?.refreshPlaceOverlays()
         }
         renderer?.refreshCosmetics()
-        if (!Prefs.isDeviceDataDeletionPending(this)) {
-            ProgressionManager.recordBatteryFromSystem(this)
-        }
         // Road updates can finish while this activity is stopped and its receiver is
         // unregistered. A mere pause/resume keeps the receiver registered and can reuse cache.
         renderer?.resumeViewport(refreshRoadsAfterStop)
