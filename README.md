@@ -56,7 +56,11 @@ the Google Play listing is created; changing it later would create a different a
   its edges. Good location fixes can unlock tiles while walking or stopped too, without
   adding driving miles. Existing exploration history remains visible in the new grid.
 - Earn points from newly unlocked roads, achievements and first visits to towns, states/regions
-  and countries. Your current point balance is visible directly on the map.
+  and countries. The compact map stats distinguish **Driving** miles/roads from **Exploration**
+  tiles. Tap the labeled **Garage · ⚔ points** chip to open the shop. The bottom bar keeps
+  three primary destinations—**Trips**, **Badges** and **Goals**—without a duplicate Garage
+  button. Settings organizes detailed totals into Driving, Exploration, Progression,
+  Tracking, and Data & Backup sections.
 - Open Garage & Shop to buy and equip car shapes, car colors, road colors, or the Golden
   Road Conquest UI and launcher icon. Purchases are one-time and equipped cosmetics can be changed later.
 - Choose Streets, Minimal, Night or Satellite maps, and a Light, Dark or phone-controlled appearance.
