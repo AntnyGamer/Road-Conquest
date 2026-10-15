@@ -572,8 +572,15 @@ object FogBitmapRenderer {
             // the bitmap; most nearby views have many saved tiles entirely offscreen.
             var reveal: Bitmap? = null
             var revealCanvas: Canvas? = null
+            // These camera/raster parameters are constant for every tile in
+            // this render. Compute the fade envelope only once, not per cell.
+            val gridScale = request.screenScale.toDouble()
+            val gridMetersPerPixel = request.metersPerScreenPixelAtCenter
+            val gridFade = if (!gridScale.isFinite() || gridScale <= 0.0 ||
+                !gridMetersPerPixel.isFinite() || gridMetersPerPixel <= 0.0
+            ) Double.NaN else ROAD_FULL_M * gridScale / gridMetersPerPixel + 2.0
             for (i in 0 until minOf(request.gridCoordinates.size, request.gridScreen.size) - 7 step 8) {
-                if (!gridCellMayAffectBitmap(request, i)) continue
+                if (!gridCellMayAffectBitmap(request, i, gridScale, gridFade)) continue
                 if (revealCanvas == null) {
                     reveal = scratch.acquireRevealBitmap(request.bitmapWidth, request.bitmapHeight)
                     revealCanvas = Canvas(reveal)
@@ -653,7 +660,13 @@ object FogBitmapRenderer {
         if (!scale.isFinite() || scale <= 0.0 ||
             !metersPerPixel.isFinite() || metersPerPixel <= 0.0
         ) return true // Preserve old rendering for unusual caller inputs.
-        val fade = ROAD_FULL_M * scale / metersPerPixel + 2.0
+        return gridCellMayAffectBitmap(request, offset, scale,
+            ROAD_FULL_M * scale / metersPerPixel + 2.0)
+    }
+
+    private fun gridCellMayAffectBitmap(request: Request, offset: Int, scale: Double, fade: Double): Boolean {
+        if (offset < 0 || offset + 7 >= request.gridScreen.size) return false
+        if (fade.isNaN()) return true // The render path preserves unusual caller inputs.
         var minX = Double.POSITIVE_INFINITY
         var minY = Double.POSITIVE_INFINITY
         var maxX = Double.NEGATIVE_INFINITY
