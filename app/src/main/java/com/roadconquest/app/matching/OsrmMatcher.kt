@@ -34,6 +34,14 @@ class OsrmMatcher(
     private var nextRequestAt = 0L
     @Volatile private var rateLimitedUntil = 0L
 
+    // Matching windows can be revisited while their pending fixes wait for additional
+    // context. OSRM returns the same geometry for identical request parameters, so
+    // keep a few recent successful responses in memory rather than downloading them
+    // again. Reparse against today's points/IDs; never cache failed/ambiguous HTTP
+    // responses or persist location-containing URLs/bodies on disk.
+    private data class CachedResponse(val body: String, val receivedAtMs: Long)
+    private val recentResponses = LinkedHashMap<String, CachedResponse>(4, 0.75f, true)
+
     /** Only a provider's rate-limit response blocks new matching requests. */
     internal fun rateLimitRemainingMs(): Long =
         (rateLimitedUntil - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
@@ -142,6 +150,18 @@ class OsrmMatcher(
 
     @Synchronized
     private fun requestMatch(url: URL, points: List<TrackPoint>): MatchResult? {
+        val cacheKey = url.toExternalForm()
+        val cached = recentResponses[cacheKey]
+        if (cached != null) {
+            val age = SystemClock.elapsedRealtime() - cached.receivedAtMs
+            if (age in 0L..RESPONSE_CACHE_TTL_MS) {
+                // Point IDs and already-matched flags may have changed since the
+                // previous window, even when OSRM's URL has not.
+                val result = runCatching { parse(cached.body, points) }.getOrNull()
+                if (result != null) return result
+            }
+            recentResponses.remove(cacheKey)
+        }
         if (rateLimitRemainingMs() > 0L) return null
         // Only the shared public demo needs pacing. The matcher runs on a
         // background executor, so no location callback or UI thread waits.
@@ -191,7 +211,14 @@ class OsrmMatcher(
                 }
                 output.toString(StandardCharsets.UTF_8.name())
             }
-            parse(body, points)
+            val result = parse(body, points)
+            if (result != null && body.length <= MAX_CACHED_RESPONSE_CHARS) {
+                recentResponses[cacheKey] = CachedResponse(body, SystemClock.elapsedRealtime())
+                if (recentResponses.size > MAX_CACHED_RESPONSES) {
+                    recentResponses.entries.iterator().apply { next(); remove() }
+                }
+            }
+            result
         } catch (_: Exception) {
             null
         } finally {
@@ -809,6 +836,11 @@ class OsrmMatcher(
     companion object {
         // The public OSRM demo rejects larger traces with TooBig (verified 2026-10-03).
         const val MAX_MATCH_POINTS = 10
+        // Strict in-memory cap: at most four compact, successful OSRM responses for
+        // one minute. Changed coordinates/times/radii/bearings always bypass cache.
+        private const val RESPONSE_CACHE_TTL_MS = 60_000L
+        private const val MAX_CACHED_RESPONSES = 4
+        private const val MAX_CACHED_RESPONSE_CHARS = 256 * 1024
         // A point with alternatives is only accepted when it is internal to a trace, so fixes
         // on both sides constrain the route. Keep this identical to TrackingService's road
         // acceptance threshold; otherwise a 0.45-0.79 contextual match can retry forever.
