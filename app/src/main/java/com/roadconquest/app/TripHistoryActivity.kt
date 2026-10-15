@@ -446,9 +446,12 @@ class TripHistoryActivity : Activity() {
             val result = runCatching {
                 val stream = contentResolver.openOutputStream(uri, "w")
                     ?: error("Could not open selected file")
-                val pointCount = stream.use {
-                    TripHistoryRepository(applicationContext).exportGpx(trip, it, hideEnds)
-                }
+                val history = TripHistoryRepository(applicationContext)
+                val pointCount = stream.use { history.exportGpx(trip, it, hideEnds) }
+                // Some document providers do their final cloud write in close(),
+                // after the repository's flush-time generation check. Do not
+                // retain an old private route if local history reset during close.
+                check(history.isCurrentTrip(trip)) { "Trip history changed while saving GPX" }
                 if (pointCount == 0) {
                     // A short drive has no privacy-safe coordinates to export.
                     // Don't leave an empty document in the user's selected folder.
