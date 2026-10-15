@@ -83,6 +83,7 @@ class ShopActivity : Activity() {
             isAppearanceLightNavigationBars = lightSystemBars
         }
         setContentView(R.layout.activity_shop)
+        findViewById<Button>(R.id.backNavButton).setOnClickListener { finish() }
         applyInsets()
         pointsText = findViewById(R.id.shopPointsText)
         progressText = findViewById(R.id.shopProgressText)

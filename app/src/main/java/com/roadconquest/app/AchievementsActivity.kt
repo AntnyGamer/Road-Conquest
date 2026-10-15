@@ -47,6 +47,7 @@ class AchievementsActivity : Activity() {
             isAppearanceLightNavigationBars = lightSystemBars
         }
         setContentView(R.layout.activity_achievements)
+        findViewById<Button>(R.id.backNavButton).setOnClickListener { finish() }
         ads = ScreenAds(this, findViewById(R.id.achievementsRoot))
         val root = findViewById<android.view.View>(R.id.achievementsRoot)
         val left = root.paddingLeft

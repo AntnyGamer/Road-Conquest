@@ -69,6 +69,10 @@ class ChallengesActivity : Activity() {
             setPadding(0, dp(8), 0, dp(8))
             root.addView(this)
         }
+        root.addView(Button(this, null, 0, R.style.RoadConquest_BackAction).apply {
+            text = "← Back"
+            setOnClickListener { finish() }
+        }, LinearLayout.LayoutParams(dp(110), dp(48)).apply { bottomMargin = dp(8) })
         label("YOUR WEEK", 12f).apply {
             setTextColor(Appearance.color(this@ChallengesActivity, R.attr.rcAccent))
             letterSpacing = 0.14f

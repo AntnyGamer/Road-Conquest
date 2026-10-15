@@ -39,6 +39,7 @@ class LeaderboardActivity : Activity() {
             isAppearanceLightNavigationBars = lightSystemBars
         }
         setContentView(R.layout.activity_leaderboard)
+        findViewById<Button>(R.id.backNavButton).setOnClickListener { finish() }
         ads = ScreenAds(this, findViewById(R.id.leaderboardRoot))
         val root = findViewById<View>(R.id.leaderboardRoot)
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->

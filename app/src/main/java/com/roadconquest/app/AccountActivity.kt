@@ -55,6 +55,7 @@ class AccountActivity : Activity() {
             isAppearanceLightNavigationBars = lightSystemBars
         }
         setContentView(R.layout.activity_account)
+        findViewById<Button>(R.id.backNavButton).setOnClickListener { finish() }
         applySafeAreaInsets()
 
         statusText = findViewById(R.id.accountStatusText)

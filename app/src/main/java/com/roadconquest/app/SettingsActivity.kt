@@ -83,6 +83,7 @@ class SettingsActivity : Activity() {
             isAppearanceLightNavigationBars = lightSystemBars
         }
         setContentView(R.layout.activity_settings)
+        findViewById<Button>(R.id.backNavButton).setOnClickListener { finish() }
         ads = ScreenAds(this, findViewById(R.id.settingsRoot))
         applySafeAreaInsets()
         setupAppearance()

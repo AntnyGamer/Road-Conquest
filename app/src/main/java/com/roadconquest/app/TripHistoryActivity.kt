@@ -116,6 +116,10 @@ class TripHistoryActivity : Activity() {
             view.setPadding(dp(18) + safe.left, dp(20) + safe.top, dp(18) + safe.right, dp(12) + safe.bottom)
             insets
         }
+        root.addView(Button(this, null, 0, R.style.RoadConquest_BackAction).apply {
+            text = "← Back"
+            setOnClickListener { finish() }
+        }, LinearLayout.LayoutParams(dp(110), dp(48)).apply { bottomMargin = dp(8) })
         root.addView(TextView(this).apply {
             text = "YOUR JOURNEYS"
             textSize = 12f
