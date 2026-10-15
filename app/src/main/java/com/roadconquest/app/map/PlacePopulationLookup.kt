@@ -116,9 +116,16 @@ internal object PlacePopulationLookup {
         val startedAtGeneration = generation()
         if (info.population != null) return Value(info.population, "Boundary provider")
         cached[key(info)]?.let { return it }
-        savedCensus(context, info)?.let {
-            cached.putIfAbsent(key(info), it)
-            return it
+        savedCensus(context, info)?.let { saved ->
+            // A reset can occur between reading disk and populating the memory
+            // cache. Coordinate with clearCache so old data cannot reappear.
+            return synchronized(cacheLock) {
+                if (startedAtGeneration != cacheGeneration) null
+                else {
+                    cached.putIfAbsent(key(info), saved)
+                    saved
+                }
+            }
         }
         val value = if (isUnitedStates(info) && info.kind == PlaceKind.COUNTRY) {
             Value(US_2020_POPULATION, "2020 Census")
