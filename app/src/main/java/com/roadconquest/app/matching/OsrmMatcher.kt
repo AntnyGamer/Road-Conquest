@@ -11,6 +11,8 @@ import java.net.URL
 import java.net.URI
 import java.io.ByteArrayOutputStream
 import java.nio.charset.StandardCharsets
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -195,10 +197,20 @@ class OsrmMatcher(
                 // immediate request from this batch or the next GPS callback.
                 // The repository already retains unmatched fixes for later
                 // retries, so never invent a locally guessed road instead.
-                val seconds = connection.getHeaderField("Retry-After")
-                    ?.trim()?.toLongOrNull()?.coerceIn(1L, 3_600L)
+                // HTTP Retry-After may be a delay in seconds OR an RFC 1123
+                // date. Respect either form to avoid retrying during a provider
+                // outage/rate limit; retain the existing bounded cooldown.
+                val retryAfter = connection.getHeaderField("Retry-After")?.trim()
+                val retryDelayMs = retryAfter?.toLongOrNull()?.let {
+                    it.coerceIn(1L, 3_600L) * 1_000L
+                } ?: retryAfter?.let {
+                    runCatching {
+                        ZonedDateTime.parse(it, DateTimeFormatter.RFC_1123_DATE_TIME)
+                            .toInstant().toEpochMilli() - System.currentTimeMillis()
+                    }.getOrNull()?.coerceIn(0L, 3_600_000L)
+                } ?: 0L
                 val defaultMs = if (status == 429) 60_000L else 30_000L
-                val pauseMs = maxOf(defaultMs, (seconds ?: 0L) * 1_000L)
+                val pauseMs = maxOf(defaultMs, retryDelayMs)
                 rateLimitedUntil = SystemClock.elapsedRealtime() + pauseMs
                 return null
             }
