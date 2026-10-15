@@ -245,10 +245,8 @@ class OsrmNetworkTest {
         }
     }
 
-    @Test fun okResponseWithNoUsableRoadsIsNeverCached() {
+    @Test fun identicalAmbiguousSuccessIsCachedUntilMoreGpsContextArrives() {
         MockWebServer().use { server ->
-            // A valid OSRM response can have only outlier tracepoints. It must
-            // not prevent a fresh lookup when the same window is retried.
             val ambiguous = """{"code":"Ok","tracepoints":[null,null],"matchings":[{"confidence":0.1,"legs":[]}]}"""
             server.enqueue(MockResponse().setBody(ambiguous))
             server.enqueue(MockResponse().setBody(valid))
@@ -257,8 +255,11 @@ class OsrmNetworkTest {
             val first = requireNotNull(matcher.match(points))
             assertTrue(first.roads.isEmpty())
             assertTrue(first.matchedPointConfidences.isEmpty())
-            assertTrue(requireNotNull(matcher.match(points)).roads.isNotEmpty())
-            assertEquals(2, server.requestCount)
+            assertTrue(requireNotNull(matcher.match(points)).roads.isEmpty())
+            assertEquals("The same ambiguous trace should not consume another call", 1, server.requestCount)
+            val newer = points.map { it.copy(timestampMillis = it.timestampMillis + 10_000L) }
+            assertTrue(requireNotNull(matcher.match(newer)).roads.isNotEmpty())
+            assertEquals("New timestamps must fetch a fresh matching response", 2, server.requestCount)
         }
     }
 
