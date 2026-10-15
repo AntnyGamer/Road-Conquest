@@ -214,6 +214,7 @@ class AppDatabase private constructor(context: Context) :
                 "PRIMARY KEY (grid_row, grid_col))"
         )
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_explored_grid_bounds ON explored_grid(latitude, longitude)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_explored_grid_first_unlocked ON explored_grid(first_unlocked_at)")
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -255,6 +256,7 @@ class AppDatabase private constructor(context: Context) :
         // Keep them unlocked with timestamp zero rather than inventing history.
         if (oldVersion in 11..13 && newVersion >= 14) {
             db.execSQL("ALTER TABLE explored_grid ADD COLUMN first_unlocked_at INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_explored_grid_first_unlocked ON explored_grid(first_unlocked_at)")
         }
         if (oldVersion < 12 && newVersion >= 12) {
             // Older releases marked inferred traversal counts as mathematically exact.
