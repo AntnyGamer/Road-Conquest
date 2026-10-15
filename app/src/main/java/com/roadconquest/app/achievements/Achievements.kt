@@ -116,7 +116,7 @@ object Achievements {
             // Retire low-battery challenges for NEW players: don't encourage
             // running a GPS tracker until a phone is about to power off.
             // Preserve the completed cards and exact historic payouts.
-            item.id !in setOf("battery_5", "battery_1") ||
+            (item.id != "battery_5" && item.id != "battery_1") ||
                 item.id in metrics.rewardedAchievements
         }.map { item ->
             // Road/place deduplication can reduce current totals. The durable
