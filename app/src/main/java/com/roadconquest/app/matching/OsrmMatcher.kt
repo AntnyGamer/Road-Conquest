@@ -82,7 +82,11 @@ class OsrmMatcher(
                 (first?.matchedPointConfidences?.get(points[index].id) ?: 0.0) >= MIN_ACCEPTABLE_CONFIDENCE
             }
         ) return first
-        val second = requestMatch(URI(path).toURL(), points) ?: return first
+        // When a confident corner remains unresolved, let OSRM split an implausible
+        // trace rather than forcing one route through it. The result still has to
+        // preserve every previously accepted fix and improve the supported gap.
+        val second = requestMatch(URI(path.replace("&gaps=ignore", "&gaps=split")).toURL(), points)
+            ?: return first
         fun accepted(result: MatchResult, id: Long) =
             (result.matchedPointConfidences[id] ?: 0.0) >= MIN_ACCEPTABLE_CONFIDENCE
         // The repaired interval needs independently supported, accepted road geometry on

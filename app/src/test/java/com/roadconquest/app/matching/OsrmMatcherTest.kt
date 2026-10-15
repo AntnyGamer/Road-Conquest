@@ -76,8 +76,10 @@ class OsrmMatcherTest {
                 val result = requireNotNull(OsrmMatcher(server.url("/").toString().trimEnd('/')).match(points))
                 assertEquals("Long corner must receive a second attempt", 2, server.requestCount)
                 assertNotNull(server.takeRequest().requestUrl?.queryParameter("bearings"))
+                val retried = server.takeRequest().requestUrl
                 assertNull("Only the retry omits bearing restrictions",
-                    server.takeRequest().requestUrl?.queryParameter("bearings"))
+                    retried?.queryParameter("bearings"))
+                assertEquals("split", retried?.queryParameter("gaps"))
                 assertTrue((before until before + gap).all {
                     (result.matchedPointConfidences[points[it].id] ?: 0.0) >=
                         OsrmMatcher.MIN_ACCEPTABLE_CONFIDENCE
