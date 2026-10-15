@@ -776,8 +776,8 @@ class MainActivity : Activity() {
                     onFailure = { error ->
                         Log.e("RoadConquest", "Could not load data summary", error)
                         statsText.text = getString(R.string.saved_data_unavailable)
-                        pointsText.text = "Points unavailable"
-                        pointsText.contentDescription = "Points unavailable. Open garage and shop."
+                        pointsText.text = "Garage · Points unavailable"
+                        pointsText.contentDescription = "Open Garage and shop. Points are temporarily unavailable."
                     }
                 )
             }
