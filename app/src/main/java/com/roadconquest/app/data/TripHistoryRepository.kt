@@ -113,8 +113,8 @@ class TripHistoryRepository(context: Context) {
             var written = 0
             var previousTimestamp: Long? = null
             val writer = OutputStreamWriter(output, StandardCharsets.UTF_8)
-            writer.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\\n")
-            writer.write("<gpx version=\"1.1\" creator=\"Road Conquest\" xmlns=\"http://www.topografix.com/GPX/1/1\">\\n<trk><name>Road Conquest drive</name>\\n")
+            writer.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
+            writer.write("<gpx version=\"1.1\" creator=\"Road Conquest\" xmlns=\"http://www.topografix.com/GPX/1/1\">\n<trk><name>Road Conquest drive</name>\n")
             helper.readableDatabase.rawQuery(
                 "SELECT latitude, longitude, timestamp_ms FROM track_points WHERE id BETWEEN ? AND ? ORDER BY id ASC",
                 arrayOf(trip.firstId.toString(), trip.lastId.toString())
@@ -127,16 +127,16 @@ class TripHistoryRepository(context: Context) {
                     if (!lat.isFinite() || !lon.isFinite() || lat !in -90.0..90.0 || lon !in -180.0..180.0) continue
                     if (previousTimestamp == null || timestamp <= previousTimestamp!! ||
                         timestamp - previousTimestamp!! > 30_000L) {
-                        if (previousTimestamp != null) writer.write("</trkseg>\\n")
-                        writer.write("<trkseg>\\n")
+                        if (previousTimestamp != null) writer.write("</trkseg>\n")
+                        writer.write("<trkseg>\n")
                     }
-                    writer.write("<trkpt lat=\"$lat\" lon=\"$lon\"><time>${formatter.format(Instant.ofEpochMilli(timestamp))}</time></trkpt>\\n")
+                    writer.write("<trkpt lat=\"$lat\" lon=\"$lon\"><time>${formatter.format(Instant.ofEpochMilli(timestamp))}</time></trkpt>\n")
                     previousTimestamp = timestamp
                     written++
                 }
             }
-            if (previousTimestamp != null) writer.write("</trkseg>\\n")
-            writer.write("</trk></gpx>\\n")
+            if (previousTimestamp != null) writer.write("</trkseg>\n")
+            writer.write("</trk></gpx>\n")
             writer.flush()
             written
         }
