@@ -30,10 +30,12 @@ Grant Precise location. For automatic background tracking, choose Allow all the 
 location settings and allow background battery use. Settings includes shortcuts to the relevant
 Android screens. Allow notifications to see the tracking notification and its Stop tracking control.
 
-The published Beta 48 uses Android application ID `com.roadconquest.app` and internal version
-code **74**. Google Play permanently reserves every uploaded version code, including drafts and
-testing tracks; Beta 47 used code 73 and Beta 46 used code 72. Confirm that code 74 is still
-available in your Play Console before uploading the signed Beta 48 bundle.
+The current development branch builds **Beta 49** with Android application ID
+`com.roadconquest.app` and internal version code **75**. Beta 48 was code 74, Beta 47 was
+code 73, and Beta 46 was code 72. Google Play permanently reserves uploaded version codes,
+including drafts and testing tracks. Before uploading a **signed Beta 49 release bundle**,
+confirm that code 75 is still available in Play Console. The unsigned CI bundle cannot be uploaded.
+Do not confuse a locally tested development build with an already-published signed release.
 The app shows its exact version in Settings → About. Treat the application ID as permanent once
 the Google Play listing is created; changing it later would create a different app.
 
