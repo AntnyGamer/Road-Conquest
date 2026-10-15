@@ -222,14 +222,15 @@ class SettingsActivity : Activity() {
                     DataExporter.writeZip(this, repository, output)
                 } ?: error("Could not open export destination")
             }
-            if (result.isSuccess && repository.isHistoryCurrent() &&
-                !Prefs.isDeviceDataDeletionPending(this)
-            ) {
-                // Record only exports of the current local profile, even if
-                // a delete or restore completed while the ZIP was being written.
-                // Saving can finish after the user leaves Settings.
-                getSharedPreferences("roadconquest_export_history", MODE_PRIVATE)
-                    .edit().putLong("last_completed_at", System.currentTimeMillis()).apply()
+            if (result.isSuccess) {
+                // Preserve a valid ZIP even if the user reset local progress while
+                // it was streaming; only the old profile's date should be skipped.
+                if (repository.isHistoryCurrent() &&
+                    !Prefs.isDeviceDataDeletionPending(this)
+                ) {
+                    getSharedPreferences("roadconquest_export_history", MODE_PRIVATE)
+                        .edit().putLong("last_completed_at", System.currentTimeMillis()).apply()
+                }
             } else {
                 // ACTION_CREATE_DOCUMENT creates a new file before ZIP writing.
                 // If streaming fails, avoid leaving a corrupt backup behind.
