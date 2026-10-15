@@ -79,6 +79,18 @@ class FogGridTest {
         assertArrayEquals(FogGrid.corners(39.9, -75.0), unchanged, 0.0)
     }
 
+    @Test fun nearbyExplorationGridWrapsDateLineWithoutDuplicatingOrInventingCells() {
+        val east = FogGrid.cell(0.0, 179.999)!!
+        val west = FogGrid.cell(0.0, -179.999)!!
+        val neighbors = FogGrid.neighbors(east)
+        assertEquals(25, neighbors.size)
+        assertEquals(25, neighbors.distinct().size)
+        assertTrue(neighbors.contains(west))
+        assertTrue(neighbors.contains(east))
+        assertEquals(listOf(east), FogGrid.neighbors(east, radius = 0))
+        assertTrue(FogGrid.neighbors(FogGrid.cell(85.051, 0.0)!!).size <= 25)
+    }
+
     @Test fun worldWrapAndInvalidCoordinatesNeverMakeInventedCells() {
         assertEquals(FogGrid.cell(0.0, -180.0), FogGrid.cell(0.0, 180.0))
         assertNull(FogGrid.cell(Double.NaN, 0.0))
