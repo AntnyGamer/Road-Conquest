@@ -667,14 +667,14 @@ class ProgressionRepositoryTest {
 
     @Test fun batteryAchievementsAwardAtFiveAndOnePercentOnlyOnce() {
         assertTrue(ProgressionManager.recordBatteryPercent(context, 5))
-        assertEquals(300L, ProgressionRepository(context).snapshot().balance)
+        assertEquals(150L, ProgressionRepository(context).snapshot().balance)
         assertFalse(ProgressionManager.recordBatteryPercent(context, 5))
-        assertEquals(300L, ProgressionRepository(context).snapshot().balance)
+        assertEquals(150L, ProgressionRepository(context).snapshot().balance)
 
         assertTrue(ProgressionManager.recordBatteryPercent(context, 1))
-        assertEquals(1_300L, ProgressionRepository(context).snapshot().balance)
+        assertEquals(500L, ProgressionRepository(context).snapshot().balance)
         assertTrue(ProgressionManager.recordBatteryPercent(context, 0))
-        assertEquals(1_300L, ProgressionRepository(context).snapshot().balance)
+        assertEquals(500L, ProgressionRepository(context).snapshot().balance)
         assertEquals(0, ProgressionRepository(context).snapshot().lowestBatteryPercent)
     }
 
@@ -684,12 +684,12 @@ class ProgressionRepositoryTest {
         val fifth = AdRewardBridge(context, 10L)
         assertTrue(fifth.onCompletedAd())
         assertFalse(fifth.onCompletedAd())
-        assertEquals(150L, ProgressionRepository(context).snapshot().balance)
+        assertEquals(100L, ProgressionRepository(context).snapshot().balance)
 
         repeat(5) { assertTrue(AdRewardBridge(context, 10L).onCompletedAd()) }
         val snapshot = ProgressionRepository(context).snapshot()
         assertEquals(10L, snapshot.adsWatched)
-        assertEquals(400L, snapshot.balance)
+        assertEquals(250L, snapshot.balance)
 
         val pending = AdRewardBridge(context, 10L)
         TrackingRepository(context).clearHistory()
@@ -700,6 +700,19 @@ class ProgressionRepositoryTest {
         assertEquals(0L, reset.adsWatched)
         assertEquals(0L, reset.balance)
     }
+
+    @Test fun existingRewardLedgerKeepsHistoricAchievementPayoutAfterRebalance() {
+        val repository = ProgressionRepository(context)
+        // Previously claimed achievements keep their ledger totals, even after milestone values change.
+        assertTrue(repository.awardAchievement("battery_1", 1_000))
+        assertTrue(repository.awardAchievement("ads_5", 100))
+        ProgressionManager.recordBatteryPercent(context, 1)
+        repeat(5) { assertTrue(AdRewardBridge(context, 10L).onCompletedAd()) }
+        assertEquals(1_100L + 150L + 5L * 10L, repository.snapshot().balance)
+        assertTrue("battery_1" in repository.snapshot().rewardedAchievements)
+        assertTrue("ads_5" in repository.snapshot().rewardedAchievements)
+    }
+
     @Test fun partialBaselineKeepsRetryingMissingKindsWithoutAwardingThem() {
         val progression = ProgressionRepository(context)
         val fix = android.location.Location("gps").apply {
