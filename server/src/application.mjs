@@ -488,7 +488,7 @@ async function handle(req, res) {
       return send(res, 400, { error: "leaderboard_visible must be boolean." });
     }
     await pool.query(
-      "UPDATE users SET leaderboard_visible = $1 WHERE id = $2",
+      "UPDATE users SET leaderboard_visible = $1 WHERE id = $2 AND leaderboard_visible IS DISTINCT FROM $1",
       [body.leaderboard_visible, user.id]
     );
     return send(res, 200, { leaderboard_visible: body.leaderboard_visible });

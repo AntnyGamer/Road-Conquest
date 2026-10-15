@@ -49,6 +49,9 @@ test("serverless accounts enforce authentication, privacy, limits and TLS with r
     assert.equal(login.status, 200);
     assert.equal((await call("/v1/me", "GET", undefined, login.body.token)).body.username, credentials.username);
     assert.equal((await call("/v1/privacy", "PUT", { leaderboard_visible: false }, login.body.token)).body.leaderboard_visible, false);
+    const privacyRow = await admin.query("SELECT xmin::text AS version FROM users WHERE username_key='functiondriver'");
+    assert.equal((await call("/v1/privacy", "PUT", { leaderboard_visible: false }, login.body.token)).body.leaderboard_visible, false);
+    assert.deepEqual((await admin.query("SELECT xmin::text AS version FROM users WHERE username_key='functiondriver'")).rows, privacyRow.rows);
     assert.equal((await call("/v1/me", "GET", undefined, login.body.token)).body.leaderboard_visible, false);
     assert.equal((await call("/v1/privacy", "PUT", { leaderboard_visible: true }, login.body.token)).body.leaderboard_visible, true);
     assert.deepEqual((await call("/v1/competition")).body, { available: false });
