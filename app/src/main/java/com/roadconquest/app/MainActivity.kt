@@ -738,7 +738,13 @@ class MainActivity : Activity() {
                         ProgressionManager.metrics(progression)
                     )
                 }
-                Triple(summary, progression, unlocked) to repository.hasUnmatchedDrivingFixes()
+                // The pending-match badge is only visible during active tracking.
+                // Avoid an otherwise pointless SQLite query when the app is paused,
+                // offline, deleting local data, or not recording.
+                val checkMatching = active && !trackingPaused && hasPreciseLocation &&
+                    locationEnabled && !deletionPending
+                Triple(summary, progression, unlocked) to
+                    (checkMatching && repository.hasUnmatchedDrivingFixes())
             }
             runOnUiThread {
                 if (isDestroyed || generation != summaryGeneration) return@runOnUiThread
