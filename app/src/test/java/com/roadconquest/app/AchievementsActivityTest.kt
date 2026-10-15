@@ -42,6 +42,7 @@ class AchievementsActivityTest {
             val all = Achievements.progress(DataSummary(0, 0, null, null))
             val categories = listOf(
                 AchievementCategory.ROADS to R.id.achievementRoadsButton,
+                AchievementCategory.TILES to R.id.achievementTilesButton,
                 AchievementCategory.DISTANCE to R.id.achievementDistanceButton,
                 AchievementCategory.PLACES to R.id.achievementPlacesButton,
                 AchievementCategory.ADS to R.id.achievementAdsButton,

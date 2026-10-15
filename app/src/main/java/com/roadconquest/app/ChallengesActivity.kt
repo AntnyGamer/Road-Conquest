@@ -193,7 +193,7 @@ class ChallengesActivity : Activity() {
                         person.addView(actions, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
                         friends.addView(person)
                     }
-                    if (rows.length() == 0) friends.addView(TextView(this).apply { text = "No friends or requests yet." })
+                    if (rows.length() == 0) friends.addView(goalLabel("No friends or requests yet.", 14f))
                 }, { status.text = serviceError(it) })
                 ranking.text = standings?.fold({ body ->
                     if (!body.optBoolean("available")) "Verified friend competitions are not active on the server yet. Local challenges still work."

@@ -539,7 +539,7 @@ class SettingsActivity : Activity() {
                         summaryText.text = buildString {
                             append(StatsText.format(this@SettingsActivity, summary))
                             append("\n")
-                            append(String.format(java.util.Locale.getDefault(), "⚔ %,d points\n", progression.balance))
+                            append(String.format(java.util.Locale.getDefault(), "⚔ %,d points • %,d map tiles\n", progression.balance, progression.tilesUnlocked))
                             append(String.format(
                                 java.util.Locale.getDefault(),
                                 "%,d towns • %,d states/regions • %,d countries\n",
