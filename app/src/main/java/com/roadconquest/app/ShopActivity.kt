@@ -132,8 +132,9 @@ class ShopActivity : Activity() {
         pointsText.text = String.format(Locale.getDefault(), "⚔ %,d points", snapshot.balance)
         progressText.text = String.format(
             Locale.getDefault(),
-            "%,d roads rewarded • %,d towns • %,d states/regions • %,d countries\n%,d lifetime points earned • %,d spent",
+            "%,d roads • %,d tiles • %,d towns • %,d regions • %,d countries\n%,d lifetime points earned • %,d spent",
             snapshot.rewardedRoads,
+            snapshot.tilesUnlocked,
             snapshot.towns,
             snapshot.states,
             snapshot.countries,

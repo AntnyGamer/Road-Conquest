@@ -60,7 +60,9 @@ data class ProgressionSnapshot(
     val adsWatched: Long,
     val lowestBatteryPercent: Int,
     val purchasedItems: Set<String>,
-    val rewardedAchievements: Set<String>
+    val rewardedAchievements: Set<String>,
+    /** Unique one-mile fog tiles stored in explored_grid; separate from leaderboard cells. */
+    val tilesUnlocked: Long = 0L
 )
 
 enum class PurchaseResult { PURCHASED, OWNED, INSUFFICIENT_POINTS }
@@ -624,7 +626,13 @@ class ProgressionRepository(context: Context) {
             while (cursor.moveToNext()) counters[cursor.getString(0)] = cursor.getLong(1)
         }
 
+        // A single indexed SQLite count reads persisted mile tiles, not 50 m fog samples.
+        // Counting here avoids a second location listener or a separate reward counter.
+        val tilesUnlocked = db.rawQuery("SELECT COUNT(*) FROM explored_grid", null)
+            .use { check(it.moveToFirst()); it.getLong(0) }
+
         ProgressionSnapshot(
+            tilesUnlocked = tilesUnlocked,
             balance = (earned - spent).coerceAtLeast(0L),
             lifetimeEarned = earned,
             pointsSpent = spent,

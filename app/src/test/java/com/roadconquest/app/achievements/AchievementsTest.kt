@@ -56,6 +56,19 @@ class AchievementsTest {
         assertFalse(progress.first { it.id == "ads_25" }.unlocked)
     }
 
+    @Test fun uniqueMileTilesEarnDistinctMilestonesWithoutInflatingRoadProgress() {
+        val tiles = Achievements.progress(DataSummary(0, 0, null, null), AchievementMetrics(tilesUnlocked = 25))
+        assertTrue(tiles.first { it.id == "tiles_1" }.unlocked)
+        assertTrue(tiles.first { it.id == "tiles_10" }.unlocked)
+        assertTrue(tiles.first { it.id == "tiles_25" }.unlocked)
+        assertFalse(tiles.first { it.id == "tiles_50" }.unlocked)
+        assertEquals(AchievementCategory.TILES, tiles.first { it.id == "tiles_25" }.category)
+        assertFalse(tiles.first { it.id == "roads_10" }.unlocked)
+        val alreadyRewarded = Achievements.progress(DataSummary(0, 0, null, null),
+            AchievementMetrics(tilesUnlocked = 0, rewardedAchievements = setOf("tiles_25")))
+        assertTrue(alreadyRewarded.first { it.id == "tiles_25" }.unlocked)
+    }
+
     @Test fun vipHidesOnlyLockedAdMilestonesWithoutGrantingPoints() {
         val items = Achievements.progress(
             DataSummary(0, 0, null, null, 0.0, 0),

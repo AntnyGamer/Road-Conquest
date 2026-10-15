@@ -742,7 +742,8 @@ class MainActivity : Activity() {
                 if (isDestroyed || generation != summaryGeneration) return@runOnUiThread
                 result.fold(
                     onSuccess = { (value, progression, unlocked) ->
-                        statsText.text = StatsText.format(this, value)
+                        statsText.text = StatsText.format(this, value) +
+                            String.format(Locale.getDefault(), "\n%,d map tiles explored", progression.tilesUnlocked)
                         pointsText.text = String.format(Locale.getDefault(), "⚔ %,d points", progression.balance)
                         pointsText.contentDescription = String.format(
                             Locale.getDefault(), "%,d points. Open garage and shop.", progression.balance

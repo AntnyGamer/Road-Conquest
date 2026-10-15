@@ -11,11 +11,13 @@ data class AchievementMetrics(
     val adsWatched: Long = 0L,
     val lowestBatteryPercent: Int = 101,
     val rewardedRoads: Long = 0L,
+    val tilesUnlocked: Long = 0L,
     val rewardedAchievements: Set<String> = emptySet()
 )
 
 enum class AchievementCategory(val label: String) {
     ROADS("Road Conquest"),
+    TILES("Map Tiles"),
     DISTANCE("Mileage"),
     PLACES("Exploration"),
     ADS("Ad Rewards"),
@@ -66,6 +68,16 @@ object Achievements {
             AchievementProgress("roads_2500", "Road Master", "Unlock 2,500 roads", AchievementCategory.ROADS, roads, 2500.0, "roads", 2_500),
             AchievementProgress("roads_5000", "Road Legend", "Unlock 5,000 roads", AchievementCategory.ROADS, roads, 5000.0, "roads", 4_000),
             AchievementProgress("roads_10000", "Road Pioneer", "Unlock 10,000 roads", AchievementCategory.ROADS, roads, 10000.0, "roads", 6_500),
+            AchievementProgress("tiles_1", "First Square", "Explore your first one-mile map tile", AchievementCategory.TILES, metrics.tilesUnlocked.toDouble(), 1.0, "tiles", 75),
+            AchievementProgress("tiles_10", "Square Scout", "Explore 10 unique map tiles", AchievementCategory.TILES, metrics.tilesUnlocked.toDouble(), 10.0, "tiles", 150),
+            AchievementProgress("tiles_25", "Tile Tracker", "Explore 25 unique map tiles", AchievementCategory.TILES, metrics.tilesUnlocked.toDouble(), 25.0, "tiles", 250),
+            AchievementProgress("tiles_50", "Grid Explorer", "Explore 50 unique map tiles", AchievementCategory.TILES, metrics.tilesUnlocked.toDouble(), 50.0, "tiles", 450),
+            AchievementProgress("tiles_100", "Map Maker", "Explore 100 unique map tiles", AchievementCategory.TILES, metrics.tilesUnlocked.toDouble(), 100.0, "tiles", 750),
+            AchievementProgress("tiles_250", "Territory Trekker", "Explore 250 unique map tiles", AchievementCategory.TILES, metrics.tilesUnlocked.toDouble(), 250.0, "tiles", 1_250),
+            AchievementProgress("tiles_500", "Wide Explorer", "Explore 500 unique map tiles", AchievementCategory.TILES, metrics.tilesUnlocked.toDouble(), 500.0, "tiles", 2_000),
+            AchievementProgress("tiles_1000", "Master Cartographer", "Explore 1,000 unique map tiles", AchievementCategory.TILES, metrics.tilesUnlocked.toDouble(), 1000.0, "tiles", 3_000),
+            AchievementProgress("tiles_2500", "Territory Legend", "Explore 2,500 unique map tiles", AchievementCategory.TILES, metrics.tilesUnlocked.toDouble(), 2500.0, "tiles", 5_000),
+            AchievementProgress("tiles_5000", "World Mapper", "Explore 5,000 unique map tiles", AchievementCategory.TILES, metrics.tilesUnlocked.toDouble(), 5000.0, "tiles", 8_000),
             AchievementProgress("miles_10", "Beginner Driver", "Travel 10 miles", AchievementCategory.DISTANCE, miles, 10.0, "mi", 100),
             AchievementProgress("miles_100", "Average Driver", "Travel 100 miles", AchievementCategory.DISTANCE, miles, 100.0, "mi", 400),
             AchievementProgress("miles_250", "Distance Explorer", "Travel 250 miles", AchievementCategory.DISTANCE, miles, 250.0, "mi", 650),

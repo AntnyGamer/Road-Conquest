@@ -68,6 +68,7 @@ class AchievementsActivity : Activity() {
         categoryButtons.putAll(
             linkedMapOf(
                 AchievementCategory.ROADS to findViewById(R.id.achievementRoadsButton),
+                AchievementCategory.TILES to findViewById(R.id.achievementTilesButton),
                 AchievementCategory.DISTANCE to findViewById(R.id.achievementDistanceButton),
                 AchievementCategory.PLACES to findViewById(R.id.achievementPlacesButton),
                 AchievementCategory.ADS to findViewById(R.id.achievementAdsButton),
@@ -111,6 +112,8 @@ class AchievementsActivity : Activity() {
         container.removeAllViews()
         Achievements.visibleAchievements(achievements, VipEntitlement.isActive(this)).asSequence()
             .filter { it.category == selectedCategory }
+            .sortedWith(compareBy<AchievementProgress> { it.unlocked }
+                .thenByDescending { (it.progress / it.goal).coerceIn(0.0, 1.0) })
             .forEach { addAchievement(container, it) }
         updateCategoryButtons()
     }
