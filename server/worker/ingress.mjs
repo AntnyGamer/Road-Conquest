@@ -64,34 +64,25 @@ export function createAccountIngress(upstreamFetch = fetch, now = () => Date.now
     }
     // Never fetch a caller-supplied host: the upstream origin is fixed by env.
     const target = origin + incoming.pathname + incoming.search;
-    const headers = new Headers(request.headers);
+    // Rebuilding a Request copies the caller's ORIGINAL headers. Sanitize
+    // that actual forwarded request exactly once before adding signed identity.
+    // Preserve the method, body, credentials and query parameters unchanged.
+    const forwarded = new Request(target, request);
     for (const name of [
       "host", "cf-connecting-ip", "cf-connecting-ipv6", "x-forwarded-for",
       "x-real-ip", "x-roadconquest-client-ip", "x-roadconquest-client-timestamp",
       "x-roadconquest-client-signature"
-    ]) headers.delete(name);
+    ]) forwarded.headers.delete(name);
     const ip = trustedEdgeIp(request);
     if (ip) {
       const timestamp = String(now());
       const signature = await signedClientIdentity(
         request.method, incoming.pathname + incoming.search, ip, timestamp, key
       );
-      headers.set("X-RoadConquest-Client-IP", ip);
-      headers.set("X-RoadConquest-Client-Timestamp", timestamp);
-      headers.set("X-RoadConquest-Client-Signature", signature);
+      forwarded.headers.set("X-RoadConquest-Client-IP", ip);
+      forwarded.headers.set("X-RoadConquest-Client-Timestamp", timestamp);
+      forwarded.headers.set("X-RoadConquest-Client-Signature", signature);
     }
-    // Do not rewrite or buffer request bodies, credentials, methods or query
-    // parameters. Disable redirect-following to prevent credential leakage.
-    const forwarded = new Request(target, request);
-    // Rebuilding a Request from another Request copies its ORIGINAL headers:
-    // explicitly remove forged identity headers there too, then add only the
-    // sanitized/edge-signed set. A request without an edge IP must stay anonymous.
-    for (const name of [
-      "host", "cf-connecting-ip", "cf-connecting-ipv6", "x-forwarded-for",
-      "x-real-ip", "x-roadconquest-client-ip", "x-roadconquest-client-timestamp",
-      "x-roadconquest-client-signature"
-    ]) forwarded.headers.delete(name);
-    for (const [name, value] of headers) forwarded.headers.set(name, value);
     // Convert upstream network failures to the same private, predictable JSON
     // response as a missing configuration. Do not surface Worker stack traces
     // or transient CDN error pages to the Android JSON API client.
