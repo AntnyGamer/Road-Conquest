@@ -54,6 +54,9 @@ export function createAccountIngress(upstreamFetch = fetch, now = () => Date.now
     const key = env?.RATE_LIMIT_IP_SIGNATURE_KEY;
     if (!origin || typeof key !== "string" || key.length < 32) return unavailable();
     const incoming = new URL(request.url);
+    // A misconfigured Worker must never proxy into itself and loop until
+    // Cloudflare exhausts subrequest limits. The real Neon origin differs.
+    if (new URL(origin).host === incoming.host) return unavailable();
     if (incoming.protocol !== "https:") {
       return new Response(JSON.stringify({ error: "HTTPS required" }), {
         status: 400, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" }
@@ -89,7 +92,15 @@ export function createAccountIngress(upstreamFetch = fetch, now = () => Date.now
       "x-roadconquest-client-signature"
     ]) forwarded.headers.delete(name);
     for (const [name, value] of headers) forwarded.headers.set(name, value);
-    const upstream = await upstreamFetch(new Request(forwarded, { redirect: "manual" }));
+    // Convert upstream network failures to the same private, predictable JSON
+    // response as a missing configuration. Do not surface Worker stack traces
+    // or transient CDN error pages to the Android JSON API client.
+    let upstream;
+    try {
+      upstream = await upstreamFetch(new Request(forwarded, { redirect: "manual" }));
+    } catch {
+      return unavailable();
+    }
     const responseHeaders = new Headers(upstream.headers);
     responseHeaders.set("Cache-Control", "no-store");
     return new Response(upstream.body, {
