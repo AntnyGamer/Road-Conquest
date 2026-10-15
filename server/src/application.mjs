@@ -13,6 +13,7 @@ import {
 } from "./security.mjs";
 import { competitionConfig, createCompetition } from "./competition.mjs";
 import { createFriends } from "./friends.mjs";
+import { cleanupExpiredState } from "./maintenance.mjs";
 
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -133,36 +134,10 @@ async function rateLimit(bucket, key, limit, windowMs) {
   return result.rows[0]?.allowed === true;
 }
 
-async function cleanupExpiredState() {
-  // A single database round trip and connection instead of six concurrent queries.
-  // Unreferenced data-modifying CTEs still execute; omitting RETURNING avoids holding deleted rows.
-  // Keep each table's original expiry threshold and the 15-minute cadence.
-  await pool.query(`WITH
-    expired_sessions AS (
-      DELETE FROM sessions WHERE expires_at <= CURRENT_TIMESTAMP
-    ),
-    expired_limits AS (
-      DELETE FROM auth_rate_limits WHERE window_started_at < CURRENT_TIMESTAMP - INTERVAL '2 hours'
-    ),
-    expired_road_receipts AS (
-      DELETE FROM competition_receipts WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '1 day'
-    ),
-    expired_road_runs AS (
-      DELETE FROM competition_runs WHERE expires_at < CURRENT_TIMESTAMP - INTERVAL '1 day'
-    ),
-    expired_cell_receipts AS (
-      DELETE FROM cell_receipts WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '1 day'
-    ),
-    expired_cell_runs AS (
-      DELETE FROM cell_runs WHERE expires_at < CURRENT_TIMESTAMP - INTERVAL '1 day'
-    )
-    SELECT 1`);
-}
-
 // Run once on every process/function start as well as periodically. Serverless runtimes do not
 // guarantee that an unreferenced background timer survives after a request finishes.
-await cleanupExpiredState();
-setInterval(() => { cleanupExpiredState().catch(() => {}); }, 15 * 60 * 1000).unref();
+await cleanupExpiredState(pool);
+setInterval(() => { cleanupExpiredState(pool).catch(() => {}); }, 15 * 60 * 1000).unref();
 
 function sendHtml(res, status, body) {
   const headers = {

@@ -274,6 +274,37 @@ class MapRenderingDeviceTest {
                         }
                     }
                 }
+                // Polar rasters must stay georeferenced when their padded
+                // extent reaches the Mercator limit. Check real native pixels.
+                for (latitude in listOf(-85.0, 85.0)) {
+                    val polarPoint = LatLng(latitude, 10.0)
+                    scenario.onActivity {
+                        assertTrue(repository.recordExploredGridCell(Location("gps").apply {
+                            this.latitude = latitude
+                            longitude = polarPoint.longitude
+                            accuracy = 3f
+                        }))
+                        renderer.refreshExploration()
+                    }
+                    val polarCenters = repository.getExploredGridInBounds(
+                        latitude + 0.02, 10.02, latitude - 0.02, 9.98
+                    )
+                    assertEquals(2, polarCenters.size)
+                    val polarCenter = LatLng(polarCenters[0], polarCenters[1])
+                    for (zoom in listOf(11.0, 13.0)) {
+                        move(polarCenter, zoom)
+                        awaitPixels("Polar clearing stays at its saved coordinate latitude=$latitude zoom=$zoom") { bitmap ->
+                            val point = map.projection.toScreenLocation(polarCenter)
+                            val x = point.x.toInt()
+                            val y = point.y.toInt()
+                            if (x !in 1 until bitmap.width - 1 || y !in 1 until bitmap.height - 1) false
+                            else {
+                                val color = bitmap.getPixel(x, y)
+                                Color.red(color) > 225 && Color.green(color) > 225 && Color.blue(color) > 225
+                            }
+                        }
+                    }
+                }
                 // Regression for the user's quick back-and-forth pinch: the
                 // explored mile cell must remain clear on *moving* frames, not
                 // disappear into opaque world fog until rendering catches up.

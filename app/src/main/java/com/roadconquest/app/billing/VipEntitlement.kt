@@ -19,10 +19,10 @@ object VipEntitlement {
     private const val PREFERENCES = "roadconquest_play_entitlements"
     private const val VIP_KEY = "vip_lifetime_owned"
     private val listeners = CopyOnWriteArraySet<() -> Unit>()
-    @Volatile private var ownershipRevision = 0L
+    private var ownershipRevision = 0L
 
-    /** Discard Play queries started before another client confirmed a change. */
-    internal fun revision(): Long = ownershipRevision
+    /** Only the latest query across all Billing clients may change ownership. */
+    @Synchronized internal fun beginOwnershipQuery(): Long = ++ownershipRevision
 
     fun isActive(context: Context): Boolean =
         context.applicationContext.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
@@ -35,21 +35,20 @@ object VipEntitlement {
     fun removeListener(listener: () -> Unit) { listeners.remove(listener) }
 
     /**
-     * Ignore responses issued before another Billing client processed a new
-     * purchase/refund. Compare and apply under the same lock to avoid races
-     * between the check and the shared entitlement update.
+     * Ignore responses superseded by a newer query or purchase callback.
+     * Compare and apply under the same lock, including unchanged confirmations.
      */
     @Synchronized internal fun updateIfCurrent(context: Context, owned: Boolean, expectedRevision: Long) {
         if (ownershipRevision == expectedRevision) updateFromPlay(context, owned)
     }
 
     @Synchronized internal fun updateFromPlay(context: Context, owned: Boolean) {
+        // A repeated purchase callback is still newer than an in-flight query,
+        // even when the offline cache already contains the same ownership.
+        ownershipRevision++
         if (isActive(context) == owned) return
-        // Update the in-process generation before notifying listeners so a
-        // competing older Play query cannot undo an already confirmed change.
         context.applicationContext.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
             .edit().putBoolean(VIP_KEY, owned).apply()
-        ownershipRevision++
         if (!owned) {
             // An authoritative Play refund/revocation removes VIP-only equipped
             // colors and themes. Never remove a gold item purchased with points.

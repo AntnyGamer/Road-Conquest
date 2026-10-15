@@ -1,6 +1,9 @@
 # Road Conquest 1.0 Beta 49
 
 - **Repository audit:** Correct date-line fog projection so one explored tile cannot reveal a world-wide strip. Cached municipal lookups now retain the actual current visit coordinate, and Census state fallback accepts valid fragmented responses while keeping its response-size bound.
+- **Polar fog accuracy:** Keep detailed and regional fog rasters within Mercator bounds so clamped latitude corners cannot stretch cleared tiles away from their saved coordinates.
+- **VIP ownership ordering:** Ignore ownership queries superseded by a newer check or purchase callback, including confirmations that match the offline cache. Successful current checks still detect refunds and preserve point-purchased cosmetics.
+- **Account deletion reliability:** Expire transient backend records in separate short transactions, avoiding the cross-table lock cycle found between batched cleanup and account-deletion cascades. Retention thresholds and runtime permissions are unchanged.
 - **Scalable weekly comparisons:** Select the caller and accepted friends before reading their weekly standings, avoiding scans of unrelated accounts. Add three backend foreign-key indexes for receipt and friendship cleanup; applying the updated schema remains a separate deployment step.
 - **Recovery and CI reliability:** Atomically replace an existing restore recovery ZIP, including on Windows development hosts; failed replacement preserves live progress and the existing recovery target. Startup CI downloads only its tested APK instead of the full bundle/symbol inputs.
 
@@ -24,7 +27,7 @@
 - **Cheaper account deletion:** Remove the five account-specific throttle records in one PostgreSQL request instead of five separate queries, preserving exact deletion scope.
 - **Fewer verified-drive writes:** Advancing the secure drive sequence and saving its idempotent retry receipt now share one PostgreSQL statement. Transaction boundaries, session checks, scoring, and safe retries remain unchanged.
 - **Faster serverless cold starts:** Remove the redundant scrypt calculation at instance initialization. Missing-user logins still perform the same scrypt verification as existing-user failures, using a randomized dummy hash that cannot accidentally authenticate.
-- **Lower account-server database overhead:** Combine six routine expired-record cleanups into one database request instead of six parallel connections; return the latest verified-cell total directly from its score update instead of querying again; resolve the UTC weekly period and rankings together in one query. These changes retain scoring, visibility, retention windows, rate limits, and response shapes. No schema migration, new service or request frequency changes.
+- **Lower account-server database overhead:** Return the latest verified-cell total directly from its score update instead of querying again; resolve the UTC weekly period and rankings together in one query. Routine expiry cleanup uses six sequential, independently committed statements so it does not retain locks across tables. This trades five maintenance round trips per startup or 15-minute sweep for safer account deletion, without adding parallel connections or changing retention windows.
 
 - **Live walking exploration progress:** Newly revealed fog tiles now schedule the existing debounced statistics/achievement refresh even when the player is walking and no driving fixes are stored; no extra location requests.
 - **Legacy reward accuracy:** Previously claimed achievement cards display the original payout from the reward ledger, even if later versions rebalance a milestone. No balance change, extra database scan, or repeat award.

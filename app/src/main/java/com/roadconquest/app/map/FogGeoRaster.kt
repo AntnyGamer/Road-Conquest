@@ -152,11 +152,18 @@ internal class FogGeoRaster private constructor(
                 // the fractional stages of a pinch-zoom gesture.
                 while (step < requiredStep) step *= 2.0
             }
+            // ImageSource cannot georeference pixels beyond the Mercator poles.
+            // Keep the square within one world, then shift it vertically at the
+            // poles instead of clamping only its advertised latitude corners.
+            // Otherwise those corners compress the image and move cleared cells.
+            step = minOf(step, WORLD_METERS / size)
+            val side = step * size
             val cx = RADIUS * Math.toRadians(longitude)
             val cy = RADIUS * ln(tan(PI / 4 + Math.toRadians(latitude.coerceIn(-MAX_LATITUDE, MAX_LATITUDE)) / 2))
             val snap = step * 32.0
-            val left = floor((cx - step * size / 2) / snap) * snap
-            val top = ceil((cy + step * size / 2) / snap) * snap
+            val left = floor((cx - side / 2) / snap) * snap
+            val top = (ceil((cy + side / 2) / snap) * snap)
+                .coerceIn(-HALF_WORLD + side, HALF_WORLD)
             return FogGeoRaster(left, top, step, size, size)
         }
 

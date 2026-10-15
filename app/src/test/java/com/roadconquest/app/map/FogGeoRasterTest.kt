@@ -69,6 +69,36 @@ class FogGeoRasterTest {
         }
     }
 
+    @Test fun polarAndWideRastersKeepCellsAtTheirGeoreferencedLatitude() {
+        fun mercatorY(latitude: Double) =
+            6378137.0 * ln(tan(PI / 4 + Math.toRadians(latitude) / 2))
+        for (latitude in listOf(-85.05, -80.0, 0.0, 80.0, 85.05)) {
+            val cells = FogGrid.corners(latitude, 10.0)
+            val rasters = listOf(
+                FogGeoRaster.around(latitude, 10.0, 5.0, 896),
+                FogGeoRaster.around(latitude, 10.0, 15.0, 1024),
+                FogGeoRaster.around(latitude, 10.0, 3.5, 896, 1080, 2400, 20_000.0),
+                FogGeoRaster.pinchFallback(latitude, 10.0, 10.0, 768, 1080, 2400, 350.0)
+            )
+            for (raster in rasters) {
+                val geographic = raster.corners()
+                val top = mercatorY(geographic[0])
+                val bottom = mercatorY(geographic[4])
+                val pixels = raster.projectGridCorners(cells)
+                for (i in pixels.indices step 2) {
+                    // ImageSource interpolates the bitmap between its geographic
+                    // edges. Both edges, not just the pixel scale, must agree.
+                    val y = top + (bottom - top) * pixels[i + 1] / raster.height
+                    val attachedLatitude = Math.toDegrees(atan(sinh(y / 6378137.0)))
+                    assertEquals("A polar raster must not stretch cleared cells",
+                        cells[i], attachedLatitude, 1e-7)
+                }
+                assertTrue("A single raster must fit in one Mercator world",
+                    raster.eastMeters - raster.westMeters <= FogGeoRaster.WORLD_METERS + 1e-7)
+            }
+        }
+    }
+
     @Test fun dateLineAndAntipodalCellsNeverRevealAWorldWideStrip() {
         for (raster in listOf(FogGeoRaster.fullWorld(512),
             FogGeoRaster.around(0.0, -160.0, 15.0, 1024))) {
