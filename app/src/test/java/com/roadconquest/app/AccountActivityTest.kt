@@ -197,6 +197,8 @@ class AccountActivityTest {
             val content = controller.get().findViewById<View>(android.R.id.content)
             collect(content)
             assertTrue(texts.contains("Weekly challenges"))
+            assertTrue("Goals Refresh must stay accessible even with Friends collapsed",
+                texts.contains("Refresh"))
             assertFalse("Friends are deliberately collapsed while leaderboards are disabled",
                 texts.contains("Add friend by username"))
             val optionalFriends = mutableListOf<Button>()
