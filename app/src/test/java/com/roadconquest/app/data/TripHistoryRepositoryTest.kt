@@ -43,6 +43,29 @@ class TripHistoryRepositoryTest {
         assertTrue(TripReplayRoute.visibleRanges(downsampled, 1).isEmpty())
     }
 
+    @Test fun tripInsightsKeepTileAndPendingCountsAccurateInOneSnapshot() {
+        val context = RuntimeEnvironment.getApplication()
+        TrackingRepository(context).clearHistory()
+        val repository = TrackingRepository(context)
+        val fixes = (0..3).map { index ->
+            android.location.Location("gps").apply {
+                latitude = 40.0
+                longitude = -74.0 + index * 0.0001
+                accuracy = 5f
+                time = 1_000_000L + index * 10_000L
+            }
+        }
+        repository.insertLocations(fixes)
+        assertTrue(repository.recordExploredGridCell(fixes[1]))
+        val history = TripHistoryRepository(context)
+        val trip = history.recentTrips().single()
+        val insights = history.insights(trip)
+        assertEquals(0L, insights.newRoadGroups)
+        assertEquals(0L, insights.newTowns)
+        assertEquals(1L, insights.newTiles)
+        assertEquals(4L, insights.pendingFixes)
+    }
+
     @Test fun savedTripGpxDefaultsToPrivateEndpointsAndFullExportIsExplicit() {
         val context = RuntimeEnvironment.getApplication()
         val tracker = TrackingRepository(context)
