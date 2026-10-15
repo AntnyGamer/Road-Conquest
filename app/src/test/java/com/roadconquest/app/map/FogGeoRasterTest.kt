@@ -193,6 +193,23 @@ class FogGeoRasterTest {
                     width, height, metersPerPixel).metersPerPixel)
     }
 
+    @Test fun lowerZoomBackupStillKeepsVisitedSquaresSeveralPixelsWide() {
+        // A quick zoom from 11.5 back to 15 must not magnify a nearly
+        // opaque, subpixel visited cell in an obsolete regional backup.
+        val width = 1080
+        val height = 2340
+        val viewportMetersPerPixel = 60.0
+        val raster = FogGeoRaster.pinchFallback(
+            39.96, -75.02, 11.5, 768, width, height, viewportMetersPerPixel
+        )
+        val square = raster.projectGridCorners(FogGrid.corners(39.96, -75.02))
+        val span = (0..3).map { square[it * 2] }.let { it.max() - it.min() }
+        assertTrue("Visited miles remain clearly erased in the zoom-11.5 backup", span >= 3.0)
+        val diagonal = hypot(width.toDouble(), height.toDouble()) * viewportMetersPerPixel
+        assertTrue("Backup remains wider than a rotated portrait viewport",
+            raster.width * raster.metersPerPixel > diagonal * 1.25)
+    }
+
     @Test fun regionalBackupKeepsDateLineCellsInTheirCorrectWorldCopy() {
         for (lon in listOf(179.97, -179.97)) {
             val backing = FogGeoRaster.pinchFallback(
