@@ -57,6 +57,16 @@ class TripHistoryRepositoryTest {
         })
         val history = TripHistoryRepository(context)
         val trip = history.recentTrips().single()
+        // Data-layer entitlement is enforced even if a new screen forgets
+        // to check the Play purchase before invoking GPX export.
+        com.roadconquest.app.billing.VipEntitlement.updateFromPlay(context, false)
+        assertThrows(IllegalStateException::class.java) {
+            history.exportGpx(trip, java.io.ByteArrayOutputStream())
+        }
+        assertThrows(IllegalArgumentException::class.java) { history.recentTrips(101) }
+        com.roadconquest.app.billing.VipEntitlement.updateFromPlay(context, true)
+        try {
+            assertEquals(1, history.recentTrips(500).size)
         val privateOutput = java.io.ByteArrayOutputStream()
         val visible = history.exportGpx(trip, privateOutput)
         val hiddenXml = privateOutput.toString("UTF-8")
@@ -72,6 +82,9 @@ class TripHistoryRepositoryTest {
         tracker.clearHistory()
         assertThrows(IllegalStateException::class.java) {
             history.exportGpx(trip, java.io.ByteArrayOutputStream(), hideTripEnds = false)
+        }
+        } finally {
+            com.roadconquest.app.billing.VipEntitlement.updateFromPlay(context, false)
         }
     }
 
