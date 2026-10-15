@@ -106,6 +106,18 @@ class TripHistoryActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         setTheme(Appearance.themeRes(this))
         super.onCreate(savedInstanceState)
+        savedInstanceState?.takeIf { it.containsKey("pendingGpxFirstId") }?.let { state ->
+            pendingGpxTrip = SavedTrip(
+                firstId = state.getLong("pendingGpxFirstId"),
+                lastId = state.getLong("pendingGpxLastId"),
+                startedAt = state.getLong("pendingGpxStartedAt"),
+                endedAt = state.getLong("pendingGpxEndedAt"),
+                pointCount = state.getInt("pendingGpxPointCount"),
+                distanceMeters = state.getDouble("pendingGpxDistance"),
+                historyGeneration = state.getLong("pendingGpxGeneration")
+            )
+            redactGpxEnds = state.getBoolean("pendingGpxHideEnds", true)
+        }
         WindowCompat.enableEdgeToEdge(window)
         // System bars sit on this screen's themed background, not the dark map fog.
         val lightSystemBars = !Appearance.isDark(this)
@@ -418,7 +430,13 @@ class TripHistoryActivity : Activity() {
                 if (isDestroyed) return@runOnUiThread
                 Toast.makeText(this, result.fold(
                     { if (it == 0) "No coordinates remain after hiding endpoints. Consider a different trip." else "GPX saved ($it GPS points)" },
-                    { "Could not save GPX. Choose another file or reload the trip." }
+                    {
+                        // ACTION_CREATE_DOCUMENT creates a new document. If a
+                        // reset/write error interrupted the export, don't leave
+                        // a partial precise-location file behind.
+                        runCatching { contentResolver.delete(uri, null, null) }
+                        "Could not save GPX. Choose another file or reload the trip."
+                    }
                 ), Toast.LENGTH_LONG).show()
             }
         }
@@ -552,7 +570,20 @@ class TripHistoryActivity : Activity() {
     override fun onPause() { pauseReplay(); mapView?.onPause(); super.onPause() }
     override fun onStop() { ForegroundSession.app.onStop(isChangingConfigurations); mapView?.onStop(); super.onStop() }
     override fun onLowMemory() { super.onLowMemory(); mapView?.onLowMemory() }
-    override fun onSaveInstanceState(out: Bundle) { super.onSaveInstanceState(out); mapView?.onSaveInstanceState(out) }
+    override fun onSaveInstanceState(out: Bundle) {
+        pendingGpxTrip?.let { trip ->
+            out.putLong("pendingGpxFirstId", trip.firstId)
+            out.putLong("pendingGpxLastId", trip.lastId)
+            out.putLong("pendingGpxStartedAt", trip.startedAt)
+            out.putLong("pendingGpxEndedAt", trip.endedAt)
+            out.putInt("pendingGpxPointCount", trip.pointCount)
+            out.putDouble("pendingGpxDistance", trip.distanceMeters)
+            out.putLong("pendingGpxGeneration", trip.historyGeneration)
+            out.putBoolean("pendingGpxHideEnds", redactGpxEnds)
+        }
+        super.onSaveInstanceState(out)
+        mapView?.onSaveInstanceState(out)
+    }
     override fun onDestroy() {
         generation++
         pauseReplay()
