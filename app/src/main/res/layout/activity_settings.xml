@@ -334,7 +334,7 @@
             <Button android:id="@+id/challengesButton"
                 style="@style/RoadConquest.SettingsAction"
                 android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:layout_marginTop="8dp" android:text="Weekly challenges and friends" />
+                android:layout_marginTop="8dp" android:text="Weekly goals and optional friends" />
 
             <TextView
                 android:id="@+id/dataSummaryText"
