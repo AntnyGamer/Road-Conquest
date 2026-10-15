@@ -47,7 +47,7 @@ class MapLayoutTest {
         root.addView(center, params(80, Gravity.TOP or Gravity.END))
         root.addView(overlay, params(144, Gravity.TOP or Gravity.END))
         root.addView(points, params(88, Gravity.TOP or Gravity.START))
-        root.addView(panel, params(16, Gravity.BOTTOM))
+        root.addView(panel, params(16, Gravity.BOTTOM).apply { bottomMargin = 0 })
         activity.setContentView(root)
         MainActivity::class.java.getDeclaredMethod(
             "applySafeAreaInsets",
@@ -81,7 +81,8 @@ class MapLayoutTest {
         assertEquals(27, (overlay.layoutParams as FrameLayout.LayoutParams).marginEnd)
         assertEquals(118, (points.layoutParams as FrameLayout.LayoutParams).topMargin)
         assertEquals(23, (points.layoutParams as FrameLayout.LayoutParams).marginStart)
-        assertEquals(34, (panel.layoutParams as FrameLayout.LayoutParams).bottomMargin)
+        assertEquals(0, (panel.layoutParams as FrameLayout.LayoutParams).bottomMargin)
+        assertEquals(18, panel.paddingBottom)
     }
 
     @Test fun expandingStatsKeepsPointsChipBelowIt() {
