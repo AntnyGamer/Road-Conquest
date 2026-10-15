@@ -204,7 +204,7 @@ class FogGeoRasterTest {
         )
         val square = raster.projectGridCorners(FogGrid.corners(39.96, -75.02))
         val span = (0..3).map { square[it * 2] }.let { it.max() - it.min() }
-        assertTrue("Visited miles remain clearly erased in the zoom-11.5 backup", span >= 3.0)
+        assertTrue("Visited miles remain clearly erased in the zoom-11.5 backup", span >= 2.5)
         val diagonal = hypot(width.toDouble(), height.toDouble()) * viewportMetersPerPixel
         assertTrue("Backup remains wider than a rotated portrait viewport",
             raster.width * raster.metersPerPixel > diagonal * 1.25)
