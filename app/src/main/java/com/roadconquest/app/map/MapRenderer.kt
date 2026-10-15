@@ -158,9 +158,11 @@ class MapRenderer(
         if (!viewportActive) return@OnCameraIdleListener
         cameraMoving = false
         val cameraPosition = map.cameraPosition
+        // Mark a changed detailed image as in flight before choosing the
+        // idle handoff; otherwise the regional mask briefly drops too early.
+        scheduleFogRender()
         updateFogCoverage(cameraPosition = cameraPosition)
         refreshViewport()
-        scheduleFogRender()
     }
 
     fun initialize(onReady: () -> Unit) {
@@ -932,7 +934,29 @@ class MapRenderer(
         // while MapLibre animates the camera. Keep it active until its actual
         // image bounds approach the viewport, instead of oscillating between a
         // low-resolution world mask and a detailed mask during every pinch.
-        val detailed = fogEnabled && cameraPosition.zoom >= FogBitmapRenderer.MIN_FOG_REVEAL_ZOOM &&
+        // Prefer a ready geographically anchored regional image throughout a
+        // rapid pinch. Swapping detailed ImageSource textures mid-animation
+        // can expose an opaque previously visited cell for one Android 12
+        // frame even while the detailed quad technically covers the screen.
+        // Never use a backup from an older exploration revision.
+        val regionalReady = fogEnabled &&
+            installedRegionalFogKey?.let {
+                it.styleGeneration == styleGeneration && it.visitedRevision == placeDataRevision
+            } == true &&
+            regionalFogCoordinates?.let { region ->
+                map.projection.toScreenLocations(region, fogCoverageScreen)
+                FogCoverage.coversViewport(
+                    fogCoverageScreen, mapView.width, mapView.height,
+                    if (cameraMoving) FOG_MOVING_COVERAGE_MARGIN_FRACTION else 0.0
+                )
+            } == true
+        // Keep the same regional texture until the replacement detailed bitmap
+        // has actually finished rendering at rest. Avoid a one-frame handoff
+        // back to stale detailed fog between camera-idle and the render result.
+        val preferRegional = regionalReady &&
+            (cameraMoving || (showingRegionalFog && fogRunning))
+        val detailed = fogEnabled && !preferRegional &&
+            cameraPosition.zoom >= FogBitmapRenderer.MIN_FOG_REVEAL_ZOOM &&
             coordinates != null && run {
                 map.projection.toScreenLocations(coordinates, fogCoverageScreen)
                 FogCoverage.coversViewport(
@@ -942,13 +966,7 @@ class MapRenderer(
                     if (cameraMoving) FOG_MOVING_COVERAGE_MARGIN_FRACTION else 0.0
                 )
             }
-        val regional = fogEnabled && !detailed && regionalFogCoordinates?.let { region ->
-            map.projection.toScreenLocations(region, fogCoverageScreen)
-            FogCoverage.coversViewport(
-                fogCoverageScreen, mapView.width, mapView.height,
-                if (cameraMoving) FOG_MOVING_COVERAGE_MARGIN_FRACTION else 0.0
-            )
-        } == true
+        val regional = regionalReady && (preferRegional || !detailed)
         val changed = detailed != showingDetailedFog || regional != showingRegionalFog
         if (!force && !changed) return
         val detail = map.style?.getLayer(
