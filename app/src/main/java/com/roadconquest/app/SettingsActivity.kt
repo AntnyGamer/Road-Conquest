@@ -546,7 +546,8 @@ class SettingsActivity : Activity() {
                             append("Background permission: $background")
                             val lastExport = getSharedPreferences("roadconquest_export_history", MODE_PRIVATE)
                                 .getLong("last_completed_at", 0L)
-                            append("\nLast successful progress export: ")
+                            append("\n\nDATA & BACKUP\n")
+                            append("Last successful progress export: ")
                             append(if (lastExport <= 0L) "Never (consider exporting a backup)"
                                 else java.text.DateFormat.getDateTimeInstance().format(java.util.Date(lastExport)))
                         }
