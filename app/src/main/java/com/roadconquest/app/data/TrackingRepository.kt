@@ -82,6 +82,8 @@ class TrackingRepository(context: Context) {
                     put("grid_col", tile.column)
                     put("latitude", center.first)
                     put("longitude", center.second)
+                    put("first_unlocked_at", location.time.takeIf { it > 0L }
+                        ?: System.currentTimeMillis())
                 }, SQLiteDatabase.CONFLICT_IGNORE
             ) != -1L
         }
