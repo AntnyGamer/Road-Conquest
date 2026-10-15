@@ -539,17 +539,11 @@ class SettingsActivity : Activity() {
                 result.fold(
                     onSuccess = { (summary, progression) ->
                         summaryText.text = buildString {
-                            append(StatsText.format(this@SettingsActivity, summary))
-                            append("\n")
-                            append(String.format(java.util.Locale.getDefault(), "⚔ %,d points • %,d map tiles\n", progression.balance, progression.tilesUnlocked))
-                            append(String.format(
-                                java.util.Locale.getDefault(),
-                                "%,d towns • %,d states/regions • %,d countries\n",
-                                progression.towns, progression.states, progression.countries
-                            ))
-                            append("Tracking mode: $mode\n")
+                            append(StatsText.settingsOverview(this@SettingsActivity, summary, progression))
+                            append("\n\nTRACKING\n")
+                            append("Mode: $mode\n")
                             append("Precise location: $precise\n")
-                            append("Allow all the time: $background")
+                            append("Background permission: $background")
                             val lastExport = getSharedPreferences("roadconquest_export_history", MODE_PRIVATE)
                                 .getLong("last_completed_at", 0L)
                             append("\nLast successful progress export: ")
