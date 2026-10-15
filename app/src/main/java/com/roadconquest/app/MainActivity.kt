@@ -273,9 +273,6 @@ class MainActivity : Activity() {
         findViewById<Button>(R.id.goalsNavButton).setOnClickListener {
             startActivity(Intent(this, AchievementsActivity::class.java))
         }
-        findViewById<Button>(R.id.garageNavButton).setOnClickListener {
-            startActivity(Intent(this, ShopActivity::class.java))
-        }
         findViewById<Button>(R.id.friendsNavButton).setOnClickListener {
             startActivity(Intent(this, ChallengesActivity::class.java))
         }
@@ -755,11 +752,10 @@ class MainActivity : Activity() {
                             else "Tracking your driving"
                             if (statusText.text.toString() != matchingStatus) statusText.text = matchingStatus
                         }
-                        statsText.text = StatsText.format(this, value) +
-                            String.format(Locale.getDefault(), "\n%,d map tiles explored", progression.tilesUnlocked)
-                        pointsText.text = String.format(Locale.getDefault(), "⚔ %,d points", progression.balance)
+                        statsText.text = StatsText.mapOverview(this, value, progression.tilesUnlocked)
+                        pointsText.text = String.format(Locale.getDefault(), "Garage · ⚔ %,d", progression.balance)
                         pointsText.contentDescription = String.format(
-                            Locale.getDefault(), "%,d points. Open garage and shop.", progression.balance
+                            Locale.getDefault(), "Garage and shop. %,d points. Double tap to open.", progression.balance
                         )
                         if (unlocked.isNotEmpty()) {
                             val reward = unlocked.sumOf { it.rewardPoints }
