@@ -126,17 +126,17 @@ object Cosmetics {
         return true
     }
 
-    fun renderCarIcon(context: Context): Bitmap {
+    /** The preview uses the exact same renderer as the live map car marker. */
+    fun renderCarIcon(context: Context, style: CarStyle = carStyle(context), color: CarColor = carColor(context)): Bitmap {
         val scale = context.resources.displayMetrics.density.coerceAtLeast(1f)
         val size = (42f * scale).toInt().coerceAtLeast(42)
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         canvas.scale(size / 48f, size / 48f)
-        val body = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = carColor(context).argb }
+        val body = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = color.argb }
         val glass = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
         val dark = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(17, 24, 39) }
 
-        val style = carStyle(context)
         when (style) {
             CarStyle.CLASSIC -> {
                 canvas.drawPath(Path().apply {

@@ -239,8 +239,14 @@ class TripHistoryActivity : Activity() {
                             val miles = trip.distanceMeters / 1609.344
                             column.addView(Button(this@TripHistoryActivity, null, 0,
                                 R.style.RoadConquest_SettingsAction).apply {
-                                text = String.format(Locale.getDefault(), "%s  •  %.1f mi  •  %d fixes",
-                                    formatter.format(Date(trip.startedAt)), miles, trip.pointCount)
+                                val duration = DateUtils.formatElapsedTime(
+                                    ((trip.endedAt - trip.startedAt).coerceAtLeast(0L)) / 1000
+                                )
+                                text = String.format(Locale.getDefault(), "%s\\n%.1f mi  •  %s",
+                                    formatter.format(Date(trip.startedAt)), miles, duration)
+                                minHeight = dp(66)
+                                gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
+                                setPadding(dp(16), dp(8), dp(16), dp(8))
                                 setOnClickListener {
                                     selectedTripButton?.apply {
                                         isSelected = false
