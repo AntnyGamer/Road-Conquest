@@ -852,9 +852,9 @@ class MainActivity : Activity() {
                     AlertDialog.Builder(this)
                         .setTitle("Explore nearby")
                         .setMessage(
-                            "In the 5 × 5 mile-grid area around the map center:\\n" +
-                                "Explored: $explored of $total tiles ($percent%)\\n" +
-                                "Unexplored: $remaining tiles\\n\\n" +
+                            "In the 5 × 5 mile-grid area around the map center:\n" +
+                                "Explored: $explored of $total tiles ($percent%)\n" +
+                                "Unexplored: $remaining tiles\n\n" +
                                 "Move the map to explore a different area. This estimate uses saved cells only, without route planning, additional GPS, or server requests. Walking can reveal tiles; only driving unlocks roads."
                         )
                         .setPositiveButton("Close", null).show()
