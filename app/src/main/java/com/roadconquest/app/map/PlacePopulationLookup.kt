@@ -30,7 +30,7 @@ internal object PlacePopulationLookup {
     // Census 2020 counts are fixed historical figures. Never persist dynamic
     // country counts or failed/ambiguous responses.
     internal fun savedCensus(context: Context, info: PlaceOverlayInfo): Value? {
-        if (requestFor(info)?.countryCode != null || !isUnitedStates(info)) return null
+        if (!isUnitedStates(info) || requestFor(info) == null) return null
         val value = context.applicationContext.getSharedPreferences(CENSUS_CACHE, Context.MODE_PRIVATE)
             .getLong(key(info), -1L)
         return value.takeIf { it >= 0L }?.let { Value(it, "2020 Census") }
@@ -38,7 +38,7 @@ internal object PlacePopulationLookup {
 
     internal fun rememberCensus(context: Context, info: PlaceOverlayInfo, value: Value) {
         if (value.source != "2020 Census" || !isUnitedStates(info) ||
-            requestFor(info)?.countryCode != null) return
+            requestFor(info) == null) return
         context.applicationContext.getSharedPreferences(CENSUS_CACHE, Context.MODE_PRIVATE)
             .edit().putLong(key(info), value.count).apply()
     }
