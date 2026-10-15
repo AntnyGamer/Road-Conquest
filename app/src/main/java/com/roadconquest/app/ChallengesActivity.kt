@@ -10,6 +10,7 @@ import android.view.View
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.core.view.ViewCompat
@@ -18,6 +19,7 @@ import androidx.core.view.WindowInsetsCompat
 import com.roadconquest.app.account.AccountClient
 import com.roadconquest.app.account.AccountStore
 import com.roadconquest.app.data.WeeklyChallenges
+import com.roadconquest.app.data.ChallengeWeek
 import com.roadconquest.app.util.Appearance
 import com.roadconquest.app.util.ForegroundSession
 import com.roadconquest.app.util.FeatureFlags
@@ -29,7 +31,7 @@ import java.util.concurrent.Executors
 class ChallengesActivity : Activity() {
     private val worker = Executors.newSingleThreadExecutor()
     private var generation = 0
-    private lateinit var local: TextView
+    private lateinit var local: LinearLayout
     private lateinit var ranking: TextView
     private lateinit var friends: LinearLayout
     private lateinit var status: TextView
@@ -73,11 +75,12 @@ class ChallengesActivity : Activity() {
         }
         label("Weekly challenges", 28f).apply { isAccessibilityHeading = true }
         label("Weeks run Monday to Monday at 00:00 UTC. Local goals use new road and town discoveries. Points are added automatically once per goal.")
-        local = label("Loading this week's progress…").apply {
-            textSize = 15f
-            setTextColor(Appearance.color(this@ChallengesActivity, R.attr.rcTextPrimary))
+        local = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             setBackgroundResource(R.drawable.settings_card_background)
             setPadding(dp(16), dp(16), dp(16), dp(16))
+            addView(goalLabel("Loading this week's progress…", 15f))
+            root.addView(this, LinearLayout.LayoutParams(-1, -2))
         }
         label("Friends", 22f)
         label("Add friends by username. Both people must accept the friendship.")
@@ -123,18 +126,14 @@ class ChallengesActivity : Activity() {
         val expected = ++generation
         val session = AccountStore.load(this)
         worker.execute {
-            val goals = runCatching {
-                val week = WeeklyChallenges.status(applicationContext)
-                buildString {
-                    append("Resets ${DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(week.endsAt))} (local time)\n\n")
-                    week.challenges.forEach {
-                        append("${it.title}\n${it.progress.coerceAtMost(it.target)} / ${it.target} · ${it.reward} points")
-                        append(if (it.rewarded) " · Reward earned\n\n" else "\n\n")
-                    }
-                }
-            }
+            val goals = runCatching { WeeklyChallenges.status(applicationContext) }
             runOnUiThread {
-                if (!isDestroyed && expected == generation) local.text = goals.getOrElse { "Could not load local challenges." }
+                if (!isDestroyed && expected == generation) {
+                    goals.fold(::renderLocalGoals, {
+                        local.removeAllViews()
+                        local.addView(goalLabel("Could not load local challenges.", 15f))
+                    })
+                }
             }
             if (session == null) {
                 runOnUiThread {
@@ -158,25 +157,37 @@ class ChallengesActivity : Activity() {
                         val row = rows.getJSONObject(i)
                         val username = row.getString("username")
                         val relation = row.getString("status")
-                        friends.addView(TextView(this).apply {
-                            text = "$username · $relation"
-                            textSize = 16f
-                            setTextColor(Appearance.color(this@ChallengesActivity, R.attr.rcTextPrimary))
-                            setPadding(0, dp(12), 0, dp(6))
+                        val person = LinearLayout(this).apply {
+                            orientation = LinearLayout.VERTICAL
+                            setPadding(0, dp(10), 0, dp(12))
+                        }
+                        person.addView(goalLabel(username, 17f, primary = true).apply {
+                            setTypeface(typeface, android.graphics.Typeface.BOLD)
                         })
-                        if (relation == "incoming") friends.addView(Button(this).apply {
-                            text = "Accept $username"; isEnabled = !changingFriend
+                        person.addView(goalLabel(when (relation) {
+                            "incoming" -> "Wants to be your friend"
+                            "accepted" -> "Friends"
+                            else -> "Request sent"
+                        }, 13f))
+                        val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                        if (relation == "incoming") actions.addView(Button(this).apply {
+                            text = "Accept"; isEnabled = !changingFriend
                             setOnClickListener { changeFriend(username, "accept") }
-                        })
-                        friends.addView(Button(this).apply {
-                            text = when (relation) { "accepted" -> "Remove $username"; "incoming" -> "Decline $username"; else -> "Cancel request to $username" }
+                        }, LinearLayout.LayoutParams(0, -2, 1f))
+                        actions.addView(Button(this, null, 0, R.style.RoadConquest_SettingsAction).apply {
+                            text = when (relation) { "accepted" -> "Remove"; "incoming" -> "Decline"; else -> "Cancel request" }
                             isEnabled = !changingFriend
                             setOnClickListener {
-                                AlertDialog.Builder(this@ChallengesActivity).setTitle(text).setMessage("End this friendship or request?")
+                                AlertDialog.Builder(this@ChallengesActivity).setTitle("${text} $username?")
+                                    .setMessage("This updates your friends list.")
                                     .setNegativeButton("Keep", null)
-                                    .setPositiveButton("Remove") { _, _ -> changeFriend(username, "remove") }.show()
+                                    .setPositiveButton("Confirm") { _, _ -> changeFriend(username, "remove") }.show()
                             }
+                        }, LinearLayout.LayoutParams(0, -2, 1f).apply {
+                            if (relation == "incoming") marginStart = dp(8)
                         })
+                        person.addView(actions, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+                        friends.addView(person)
                     }
                     if (rows.length() == 0) friends.addView(TextView(this).apply { text = "No friends or requests yet." })
                 }, { status.text = serviceError(it) })
@@ -195,6 +206,45 @@ class ChallengesActivity : Activity() {
                     }
                 }, { serviceError(it) }).orEmpty()
             }
+        }
+    }
+
+    private fun goalLabel(label: String, size: Float, primary: Boolean = false) = TextView(this).apply {
+        text = label
+        textSize = size
+        setTextColor(Appearance.color(this@ChallengesActivity,
+            if (primary) R.attr.rcTextPrimary else R.attr.rcTextSecondary))
+    }
+
+    private fun renderLocalGoals(week: ChallengeWeek) {
+        local.removeAllViews()
+        val reset = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT)
+            .format(Date(week.endsAt))
+        local.addView(goalLabel("Resets $reset (local time)", 13f).apply {
+            setPadding(0, 0, 0, dp(8))
+        })
+        week.challenges.forEachIndexed { index, goal ->
+            val section = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                if (index > 0) setPadding(0, dp(14), 0, 0)
+            }
+            val header = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+            }
+            header.addView(goalLabel(goal.title, 15f, primary = true).apply {
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+            }, LinearLayout.LayoutParams(0, -2, 1f))
+            header.addView(goalLabel(if (goal.rewarded) "✓ Earned" else "+${goal.reward} pts", 13f))
+            section.addView(header)
+            section.addView(ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+                max = 1000
+                progress = ((goal.progress.coerceIn(0L, goal.target).toDouble() /
+                    goal.target.coerceAtLeast(1L)) * 1000).toInt()
+                contentDescription = "${goal.title}: ${goal.progress.coerceAtMost(goal.target)} of ${goal.target}"
+            }, LinearLayout.LayoutParams(-1, dp(12)).apply { topMargin = dp(6) })
+            section.addView(goalLabel("${goal.progress.coerceAtMost(goal.target)} / ${goal.target}", 13f))
+            local.addView(section)
         }
     }
 
