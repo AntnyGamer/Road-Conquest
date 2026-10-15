@@ -95,6 +95,9 @@ class MainActivity : Activity() {
     private var lastPlaceBackfillElapsed = -1L
     private val queuedPlaceResolution = Runnable { if (resumed) resolvePendingPlaces() }
     @Volatile private var summaryGeneration = 0
+    // Persist the last known pending-match label between rapid UI refreshes,
+    // avoiding a transient "Tracking" / "Pending" flicker every cycle.
+    private var lastMatchingPending = false
     @Volatile private var roadDetailsGeneration = 0
     private val statsHandler = Handler(Looper.getMainLooper())
     private var statsRefreshScheduled = false
@@ -712,7 +715,9 @@ class MainActivity : Activity() {
             !hasPreciseLocation && hasApproximateLocation -> "Precise location required"
             !hasPreciseLocation -> "Location permission required"
             !locationEnabled -> if (active) "Tracking paused — Location is off" else "Location is off"
-            active -> "Tracking your driving"
+            active -> if (lastMatchingPending)
+                "Tracking your driving • GPS saved, road matching pending"
+            else "Tracking your driving"
             else -> "Not tracking"
         }
         // Avoid repeating the same live-region announcement on each data refresh.
@@ -750,6 +755,7 @@ class MainActivity : Activity() {
                 if (isDestroyed || generation != summaryGeneration) return@runOnUiThread
                 result.fold(
                     onSuccess = { (summaryValues, pendingMatching) ->
+                        lastMatchingPending = pendingMatching
                         val (value, progression, unlocked) = summaryValues
                         if (TrackingService.isRunning && !Prefs.isTrackingPaused(this) &&
                             statusText.text.toString().startsWith("Tracking your driving")) {
