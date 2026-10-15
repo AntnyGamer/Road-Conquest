@@ -242,7 +242,7 @@ class TripHistoryActivity : Activity() {
                                 val duration = DateUtils.formatElapsedTime(
                                     ((trip.endedAt - trip.startedAt).coerceAtLeast(0L)) / 1000
                                 )
-                                text = String.format(Locale.getDefault(), "%s\\n%.1f mi  •  %s",
+                                text = String.format(Locale.getDefault(), "%s\n%.1f mi  •  %s",
                                     formatter.format(Date(trip.startedAt)), miles, duration)
                                 minHeight = dp(66)
                                 gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
