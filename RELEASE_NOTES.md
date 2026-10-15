@@ -1,5 +1,7 @@
 # Road Conquest 1.0 Beta 49
 
+- **Lower account-server database overhead:** Combine six routine expired-record cleanups into one database request instead of six parallel connections; return the latest verified-cell total directly from its score update instead of querying again; resolve the UTC weekly period and rankings together in one query. These changes retain scoring, visibility, retention windows, rate limits, and response shapes. No schema migration, new service or request frequency changes.
+
 - **Live walking exploration progress:** Newly revealed fog tiles now schedule the existing debounced statistics/achievement refresh even when the player is walking and no driving fixes are stored; no extra location requests.
 - **Legacy reward accuracy:** Previously claimed achievement cards display the original payout from the reward ledger, even if later versions rebalance a milestone. No balance change, extra database scan, or repeat award.
 - **Audit fixes:** Refresh achievement wallet and milestones on screen resume without losing the selected category; retain friend-request success/error feedback and re-enable action buttons after a failed request.

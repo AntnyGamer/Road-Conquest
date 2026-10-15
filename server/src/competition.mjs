@@ -117,8 +117,10 @@ export async function createCompetition(pool, config, dependencies = {}) {
            ON CONFLICT DO NOTHING RETURNING grid_row`,
           [user.id, config.dataset, cells.map(c => c.row), cells.map(c => c.column)]
         );
-        await db.query(
-          "UPDATE cell_scores SET cells = cells + $1, last_verified_fix = $2 WHERE user_id = $3 AND dataset = $4",
+        // RETURNING gives us the newly committed total without another SELECT.
+        // The same update still persists the continuity checkpoint for zero-credit batches.
+        const updatedScore = await db.query(
+          "UPDATE cell_scores SET cells = cells + $1, last_verified_fix = $2 WHERE user_id = $3 AND dataset = $4 RETURNING cells",
           [newCells.rowCount, JSON.stringify(sealCheckpoint(body.fixes.at(-1), body.run, scope, config.checkpointKey)), user.id, config.dataset]
         );
         // Batches spanning Monday midnight belong to the week of their final fix.
@@ -133,7 +135,8 @@ export async function createCompetition(pool, config, dependencies = {}) {
           [user.id, config.dataset, week.toISOString().slice(0, 10), newCells.rowCount]
         );
         await db.query("UPDATE cell_runs SET sequence = sequence + 1, expires_at = CURRENT_TIMESTAMP + INTERVAL '3 minutes' WHERE user_id = $1", [user.id]);
-        const result = { sequence: body.sequence + 1, credited_cells: newCells.rowCount, accepted_cells: cells, ...await totals(db, user.id) };
+        const result = { sequence: body.sequence + 1, credited_cells: newCells.rowCount, accepted_cells: cells,
+          verified: true, scoring_policy: 3, dataset: config.dataset, cells: Number(updatedScore.rows[0].cells) };
         await db.query("INSERT INTO cell_receipts(run_id,sequence,user_id,evidence_hash,response) VALUES ($1,$2,$3,$4,$5)",
           [body.run, body.sequence, user.id, hash, JSON.stringify(result)]);
         await db.query("COMMIT");
@@ -143,19 +146,32 @@ export async function createCompetition(pool, config, dependencies = {}) {
     },
     async friendWeek(user, metric = "cells") {
       if (metric !== "cells") throw new EvidenceError("Choose cells.", 400);
-      const week = (await pool.query("SELECT to_char(date_trunc('week', CURRENT_TIMESTAMP AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS week")).rows[0].week;
+      // Determine the UTC week and rank friends in the same query. LEFT JOIN
+      // retains the week even when the account has no visible standings.
       const result = await pool.query(
-        `WITH scores AS (
+        `WITH week AS (
+          SELECT date_trunc('week', CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date AS start_date
+        ), scores AS (
           SELECT u.username_display AS username,u.username_key,COALESCE(w.new_cells,0) AS cells
-          FROM users u LEFT JOIN cell_weeks w ON w.user_id=u.id AND w.dataset=$2 AND w.week_start=$3::date
+          FROM users u LEFT JOIN cell_weeks w ON w.user_id=u.id AND w.dataset=$2
+            AND w.week_start=(SELECT start_date FROM week)
           WHERE u.leaderboard_visible AND u.leaderboard_eligible AND (u.id=$1 OR EXISTS (
             SELECT 1 FROM friendships f WHERE f.accepted AND
             ((f.user_low=$1 AND f.user_high=u.id) OR (f.user_high=$1 AND f.user_low=u.id))))
-         ) SELECT username,cells,RANK() OVER (ORDER BY cells DESC) AS rank
-           FROM scores ORDER BY cells DESC,username_key ASC LIMIT 51`, [user.id, config.dataset, week]
+        ), ranked AS (
+          SELECT username,username_key,cells,RANK() OVER (ORDER BY cells DESC) AS rank
+          FROM scores
+        )
+        SELECT to_char(week.start_date, 'YYYY-MM-DD') AS week_start,
+          ranked.username,ranked.cells,ranked.rank
+        FROM week LEFT JOIN ranked ON TRUE
+        ORDER BY ranked.cells DESC NULLS LAST,ranked.username_key ASC NULLS LAST
+        LIMIT 51`, [user.id, config.dataset]
       );
-      return { available: true, verified: true, scoring_policy: 3, metric, dataset: config.dataset, week_start: week,
-        entries: result.rows.map(r => ({ username: r.username, rank: Number(r.rank), cells: Number(r.cells) })) };
+      return { available: true, verified: true, scoring_policy: 3, metric, dataset: config.dataset,
+        week_start: result.rows[0].week_start,
+        entries: result.rows.filter(r => r.username !== null)
+          .map(r => ({ username: r.username, rank: Number(r.rank), cells: Number(r.cells) })) };
     },
     async leaderboard(metric = "cells") {
       if (metric !== "cells") throw new EvidenceError("Choose cells.", 400);

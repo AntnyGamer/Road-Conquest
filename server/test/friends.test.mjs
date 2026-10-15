@@ -32,6 +32,11 @@ test("friend consent, private weekly scores, ties, removal, username changes and
     await friends.change(recipient, requester === alpha ? "Alpha" : "Beta", "accept");
     assert.deepEqual((await competition.friendWeek(alpha, "cells")).entries.map(r => [r.username, r.rank]), [["Alpha", 1], ["Beta", 1]]);
     assert.deepEqual((await competition.friendWeek(outsider, "cells")).entries.map(r => r.username), ["Outsider"]);
+    await pool.query("UPDATE users SET leaderboard_visible=FALSE WHERE id=$1", [outsider.id]);
+    const hiddenWeek = await competition.friendWeek(outsider, "cells");
+    assert.deepEqual(hiddenWeek.entries, []);
+    assert.match(hiddenWeek.week_start, /^\\d{4}-\\d{2}-\\d{2}$/u);
+    await pool.query("UPDATE users SET leaderboard_visible=TRUE WHERE id=$1", [outsider.id]);
     await friends.change(outsider, "Beta", "remove");
     assert.equal((await friends.list(alpha)).friends[0].status, "accepted");
     await pool.query("UPDATE users SET leaderboard_visible=FALSE WHERE id=$1", [beta.id]);

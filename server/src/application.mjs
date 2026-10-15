@@ -126,14 +126,29 @@ async function rateLimit(bucket, key, limit, windowMs) {
 }
 
 async function cleanupExpiredState() {
-  await Promise.all([
-    pool.query("DELETE FROM sessions WHERE expires_at <= CURRENT_TIMESTAMP"),
-    pool.query("DELETE FROM auth_rate_limits WHERE window_started_at < CURRENT_TIMESTAMP - INTERVAL '2 hours'"),
-    pool.query("DELETE FROM competition_receipts WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '1 day'"),
-    pool.query("DELETE FROM competition_runs WHERE expires_at < CURRENT_TIMESTAMP - INTERVAL '1 day'"),
-    pool.query("DELETE FROM cell_receipts WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '1 day'"),
-    pool.query("DELETE FROM cell_runs WHERE expires_at < CURRENT_TIMESTAMP - INTERVAL '1 day'")
-  ]);
+  // A single database round trip and connection instead of six concurrent queries.
+  // Data-modifying CTEs execute even when their rows are not read by SELECT.
+  // Keep each table's original expiry threshold and the 15-minute cadence.
+  await pool.query(`WITH
+    expired_sessions AS (
+      DELETE FROM sessions WHERE expires_at <= CURRENT_TIMESTAMP RETURNING 1
+    ),
+    expired_limits AS (
+      DELETE FROM auth_rate_limits WHERE window_started_at < CURRENT_TIMESTAMP - INTERVAL '2 hours' RETURNING 1
+    ),
+    expired_road_receipts AS (
+      DELETE FROM competition_receipts WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '1 day' RETURNING 1
+    ),
+    expired_road_runs AS (
+      DELETE FROM competition_runs WHERE expires_at < CURRENT_TIMESTAMP - INTERVAL '1 day' RETURNING 1
+    ),
+    expired_cell_receipts AS (
+      DELETE FROM cell_receipts WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '1 day' RETURNING 1
+    ),
+    expired_cell_runs AS (
+      DELETE FROM cell_runs WHERE expires_at < CURRENT_TIMESTAMP - INTERVAL '1 day' RETURNING 1
+    )
+    SELECT 1`);
 }
 
 // Run once on every process/function start as well as periodically. Serverless runtimes do not
