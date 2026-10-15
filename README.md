@@ -1,4 +1,4 @@
-# Road Conquest 1.0 Beta 48
+# Road Conquest 1.0 Beta 49
 
 Road Conquest remembers the roads you drive and the places you visit, revealing them through a
 cloud-textured fog map.
@@ -7,10 +7,7 @@ cloud-textured fog map.
 [Source and issues](https://github.com/AntnyGamer/RoadConquest-Beta) ·
 [GNU AGPL v3 license](LICENSE)
 
-Beta 48 adds official 2020 Census populations for verified U.S. municipalities and states,
-plus country-code population lookups where supported. It removes the bottom sheet's hairline
-outline and adds a carefully gated fallback for unresolved road corners. Beta 47's progression
-and discovery improvements remain intact, as does Beta 46's refreshed UI and progressive trip replay, with existing progress, purchases, and scoring preserved. Competitive rankings and verification uploads remain hidden by default.
+Beta 49 adds milestone rewards for unique one-mile explored map tiles, visible tile totals, previews for cosmetic items, clearer trip history and weekly goals, improved friend and leaderboard displays, map navigation icons, and back navigation. Beta 48's population and road-matching fixes are unchanged. Existing progress and purchases are preserved, and competitive rankings and verification uploads remain hidden by default.
 See [backup and challenges details](BACKUP_AND_CHALLENGES.md). Previously unlocked roads, exploration, purchases, and scoring are
 preserved when installing an update signed with the same app identity over an existing installation.
 

@@ -1,4 +1,18 @@
-# Road Conquest 1.0 Beta 48
+# Road Conquest 1.0 Beta 49
+
+- **One-mile map tile achievements:** Ten milestones for 1, 10, 25, 50, 100, 250, 500, 1,000, 2,500 and 5,000 unique unlocked map tiles, with one-time point rewards from 75 to 8,000. Counts come from persisted `explored_grid`, not 50-meter fog samples or independently verified leaderboard cells. Existing reward ownership prevents duplicate payments, including after restore.
+- **Progress visibility:** Map, Settings and Garage show map tile totals. Achievements have a new Map Tiles category and prioritize near-complete unfinished milestones.
+- **Garage:** Shows real car shape/color previews via the same renderer used by the map, plus road-color and theme swatches, without changing purchases or currently equipped cosmetics.
+- **Navigation:** The map's quick destinations have themed icons and clearer Weekly labeling. Secondary screens have an explicit Back button. Existing bottom sheet placement and location permissions are unchanged.
+- **Trips and social:** Trip history emphasizes dates, distances, durations and replay instead of GPS-fix counts. Weekly challenge progress uses separate progress bars with reward states; friend requests show explicit actions. Verified leaderboard entries are visually separated when this optional feature is enabled.
+- **Compatibility:** Android 12+, versionCode **75**, same application ID and signing identity. No new GPS collection, background tasks, database schema changes, or alterations to existing map matching and fog geometry. The documented competition allowlist includes 75; a separately deployed server still requires corresponding allowlist deployment. Public leaderboards remain hidden by default.
+- **Validation:** Android compilation, local unit tests, lint, emulator map integration and signed release startup should pass before distributing this build.
+
+Keep existing app data when updating a compatible install. For Play installations, use the signed release AAB via Play; the GitHub APK may use a different app-signing identity.
+
+---
+
+# Beta 48 (previous release)
 
 - **Population details:** New on-demand population lookup for visited U.S. states and Census-identified municipalities using official 2020 Census POP100 counts from the Census2020 TIGERweb service. U.S. country total comes from the 2020 Census; other countries with ISO country-code keys can use REST Countries. Display labels identify 2020 data. Unsupported places honestly remain unavailable, and offline requests do not affect saved polygons or travel data.
 - **Exact edge-to-edge bottom panel:** Remove the 1dp border previously visible along its sides and bottom. The sheet still has rounded top corners and safe-area-aware content padding.
