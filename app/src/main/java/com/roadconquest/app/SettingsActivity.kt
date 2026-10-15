@@ -28,6 +28,7 @@ import com.roadconquest.app.account.AccountStore
 import com.roadconquest.app.data.LocalDataReset
 import com.roadconquest.app.data.TrackingRepository
 import com.roadconquest.app.export.DataExporter
+import com.roadconquest.app.export.DataImporter
 import com.roadconquest.app.util.Prefs
 import com.roadconquest.app.util.Appearance
 import com.roadconquest.app.util.UiTheme
@@ -223,13 +224,16 @@ class SettingsActivity : Activity() {
                 } ?: error("Could not open export destination")
             }
             if (result.isSuccess) {
-                // Preserve a valid ZIP even if the user reset local progress while
-                // it was streaming; only the old profile's date should be skipped.
-                if (repository.isHistoryCurrent() &&
-                    !Prefs.isDeviceDataDeletionPending(this)
-                ) {
-                    getSharedPreferences("roadconquest_export_history", MODE_PRIVATE)
-                        .edit().putLong("last_completed_at", System.currentTimeMillis()).apply()
+                // A valid ZIP remains available even if the user reset progress
+                // while exporting. Serialize only the backup-date update with
+                // restore/deletion so a stale export cannot reappear after reset.
+                synchronized(DataImporter.operationLock) {
+                    if (repository.isHistoryCurrent() &&
+                        !Prefs.isDeviceDataDeletionPending(this)
+                    ) {
+                        getSharedPreferences("roadconquest_export_history", MODE_PRIVATE)
+                            .edit().putLong("last_completed_at", System.currentTimeMillis()).commit()
+                    }
                 }
             } else {
                 // ACTION_CREATE_DOCUMENT creates a new file before ZIP writing.
