@@ -87,6 +87,29 @@ class TrackingRepository(context: Context) {
         }
     }
 
+    /** Optional on-demand nearby exploration, entirely local and index-backed. */
+    fun nearbyExploration(latitude: Double, longitude: Double): Pair<Int, Int> =
+        synchronized(dbHelper.historyLock) {
+            val origin = FogGrid.cell(latitude, longitude) ?: return@synchronized 0 to 0
+            val cells = FogGrid.neighbors(origin)
+            val db = dbHelper.readableDatabase
+            val statement = db.compileStatement(
+                "SELECT COUNT(*) FROM explored_grid WHERE grid_row = ? AND grid_col = ?"
+            )
+            try {
+                var explored = 0
+                cells.forEach { cell ->
+                    statement.bindLong(1, cell.row.toLong())
+                    statement.bindLong(2, cell.column.toLong())
+                    if (statement.simpleQueryForLong() > 0L) explored++
+                    statement.clearBindings()
+                }
+                explored to cells.size
+            } finally {
+                statement.close()
+            }
+        }
+
     /** Read the authoritative mile cells (as centers) with a padded viewport query. */
     @Synchronized
     fun getExploredGridInBounds(north: Double, east: Double, south: Double, west: Double): DoubleArray {
