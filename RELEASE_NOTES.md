@@ -1,4 +1,20 @@
-# Road Conquest 1.0 Beta 46
+# Road Conquest 1.0 Beta 47
+
+- **More rewarding early and long-term progression:** Adds weekly goals for five newly unlocked roads and one newly visited town (75 points each) alongside the existing 25-road and three-town milestones. Adds intermediate and longer-term road, mileage and place achievements. Earned rewards and historical ledgers remain intact.
+- **Shop progression:** Rebalances prices across starter and aspirational cosmetics, adds two vehicle shapes, three car colors and three road colors, and shows points needed before an item can be purchased. The Gold UI now costs 6,500 points unless unlocked through lifetime VIP. Previously purchased items stay owned; the other VIP benefits are unchanged.
+- **Missed-town recovery:** Resolves pending place candidates separately so a failed response cannot stop the whole queue, retries empty U.S. town lookups with a bound and backoff, and drains saved town candidates more promptly using the already-running tracking service. This can increase network lookups while a backlog exists, but does not sample GPS more often.
+- **Missing turns:** Allows a carefully bounded second map-matching attempt for short, well-supported intersections, preserving accepted GPS fixes and map-match confidence gates. No unverified road connectors or extra leaderboard credit are added.
+- **Bottom tracking panel:** Attaches the location/tracking panel to the bottom of the map with rounded upper corners and navigation-bar inset handling.
+- **Performance:** Consolidates weekly reward-state queries, reuses known trip fix counts in replay, and reduces per-pixel and per-cell work when rendering fog. No extra GPS collection or new background jobs from these optimizations.
+- **Compatibility and release safety:** Android 12+; application ID and permanent signing identity unchanged; versionCode **73** (Beta 46 was 72). Adds 73 to the documented `PLAY_VERSION_CODES` allowlist. A separately deployed verification server needs its own allowlist updated before accepting verified scores from Play-installed Beta 47. Public competition remains disabled by default.
+- **Checks:** GitHub Actions must pass account-server tests, Android unit tests, lint, bundle/build validation, Android emulator map tests, and release cold-start tests before creating the signed GitHub release.
+
+Install the signed Beta 47 APK over a compatible **GitHub-installed** beta to keep local progress. For an existing **Google Play installation**, update through Play using the signed Beta 47 AAB instead. These distribution channels may have different app-signing keys. Do not uninstall or clear data to fix a signature mismatch; export a backup before switching channels. The `vip_lifetime` $2.99 purchase still requires activation in Google Play Console.
+
+---
+
+# Beta 46 (previous release)
+
 
 - **Refreshed driving dashboard:** Updated navigation and status cards with direct access to trips, achievements, garage and weekly goals; more consistent light, dark and gold presentation.
 - **Trip replay:** Roads turn blue progressively as recorded positions play, without revealing the full route early. Rewinding removes later blue segments and skips unrecorded GPS gaps, including those near the last point after downsampling. Selected trips and elapsed time are easier to identify.
