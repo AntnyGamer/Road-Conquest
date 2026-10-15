@@ -182,6 +182,51 @@ class OsrmNetworkTest {
         }
     }
 
+    @Test fun identicalSuccessfulWindowsReuseResponseWithoutChangingMatchedIds() {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody(valid))
+            server.start()
+            val matcher = OsrmMatcher(server.url("/").toString().trimEnd('/'))
+            val first = requireNotNull(matcher.match(points))
+            val sameFixesDifferentIds = points.map { it.copy(id = it.id + 100) }
+            val second = requireNotNull(matcher.match(sameFixesDifferentIds))
+
+            assertEquals(1, server.requestCount)
+            assertEquals(first.roads, second.roads)
+            assertEquals(
+                first.matchedPointConfidences.values.toList(),
+                second.matchedPointConfidences.values.toList()
+            )
+            assertEquals(sameFixesDifferentIds.map { it.id }.toSet(),
+                second.matchedPointConfidences.keys)
+        }
+    }
+
+    @Test fun differentMatchingParametersNeverUseStaleResponse() {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody(valid))
+            server.enqueue(MockResponse().setBody(valid))
+            server.start()
+            val matcher = OsrmMatcher(server.url("/").toString().trimEnd('/'))
+            requireNotNull(matcher.match(points))
+            // Coordinates can be unchanged but timestamps affect OSRM's speed-based inference.
+            requireNotNull(matcher.match(points.map { it.copy(timestampMillis = it.timestampMillis + 10_000L) }))
+            assertEquals(2, server.requestCount)
+        }
+    }
+
+    @Test fun unsuccessfulMatchIsNotCached() {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody("""{"code":"NoMatch"}"""))
+            server.enqueue(MockResponse().setBody(valid))
+            server.start()
+            val matcher = OsrmMatcher(server.url("/").toString().trimEnd('/'))
+            assertNull(matcher.match(points))
+            assertNotNull(matcher.match(points))
+            assertEquals(2, server.requestCount)
+        }
+    }
+
     @Test fun oversizedTraceCannotBeSentToThePublicServer() {
         MockWebServer().use { server ->
             server.start()
