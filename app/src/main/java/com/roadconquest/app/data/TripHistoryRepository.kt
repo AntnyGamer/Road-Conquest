@@ -21,7 +21,7 @@ data class SavedTrip(
 data class SavedTripPoint(val latitude: Double, val longitude: Double, val timestamp: Long, val breakBefore: Boolean = false)
 
 /** Snapshot of trip-scoped facts; later road matching may revise road counts. */
-data class SavedTripInsights(val newRoadGroups: Long, val newTowns: Long, val pendingFixes: Long)
+data class SavedTripInsights(val newRoadGroups: Long, val newTowns: Long, val newTiles: Long, val pendingFixes: Long)
 
 
 class TripHistoryRepository(context: Context) {
@@ -71,7 +71,7 @@ class TripHistoryRepository(context: Context) {
 
     /** Uses existing indexed history timestamps; never fabricates per-trip tile counts. */
     fun insights(trip: SavedTrip): SavedTripInsights = synchronized(helper.historyLock) {
-        if (trip.historyGeneration != helper.historyGeneration) return@synchronized SavedTripInsights(0, 0, 0)
+        if (trip.historyGeneration != helper.historyGeneration) return@synchronized SavedTripInsights(0, 0, 0, 0)
         val db = helper.readableDatabase
         val period = arrayOf(trip.startedAt.toString(), trip.endedAt.toString())
         val roads = db.rawQuery(
@@ -85,11 +85,17 @@ class TripHistoryRepository(context: Context) {
                AND EXISTS (SELECT 1 FROM progression_rewards r
                  WHERE r.reward_key = 'place:town:' || v.place_key)""", period
         ).use { it.moveToFirst(); it.getLong(0) }
+        // Unknown pre-upgrade discovery times are stored as zero and are
+        // never retroactively credited to an arbitrary old trip.
+        val tiles = db.rawQuery(
+            "SELECT COUNT(*) FROM explored_grid WHERE first_unlocked_at BETWEEN ? AND ? AND first_unlocked_at > 0",
+            period
+        ).use { it.moveToFirst(); it.getLong(0) }
         val pending = db.rawQuery(
             "SELECT COUNT(*) FROM track_points WHERE id BETWEEN ? AND ? AND matched = 0",
             arrayOf(trip.firstId.toString(), trip.lastId.toString())
         ).use { it.moveToFirst(); it.getLong(0) }
-        SavedTripInsights(roads, towns, pending)
+        SavedTripInsights(roads, towns, tiles, pending)
     }
 
     /**
