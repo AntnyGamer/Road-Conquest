@@ -113,6 +113,38 @@ class TripHistoryRepositoryTest {
         }
     }
 
+    @Test fun resetDuringSlowGpxFlushInvalidatesExport() {
+        val context = RuntimeEnvironment.getApplication()
+        TrackingRepository(context).clearHistory()
+        val tracker = TrackingRepository(context)
+        tracker.insertLocations((0..2).map { i ->
+            android.location.Location("gps").apply {
+                latitude = 40.0
+                longitude = -74.0 + i * 0.0001
+                accuracy = 5f
+                time = 1_000_000L + i * 10_000L
+            }
+        })
+        val history = TripHistoryRepository(context)
+        val trip = history.recentTrips().single()
+        val output = object : java.io.ByteArrayOutputStream() {
+            override fun flush() {
+                super.flush()
+                // Simulate a reset while a cloud document provider finishes I/O.
+                TrackingRepository(context).clearHistory()
+            }
+        }
+        com.roadconquest.app.billing.VipEntitlement.updateFromPlay(context, true)
+        try {
+            assertThrows(IllegalStateException::class.java) {
+                history.exportGpx(trip, output, hideTripEnds = false)
+            }
+            assertFalse(history.isCurrentTrip(trip))
+        } finally {
+            com.roadconquest.app.billing.VipEntitlement.updateFromPlay(context, false)
+        }
+    }
+
     @Test fun replayPreservesTrueGapsThroughSamplingAndRejectsReplacedHistory() {
         val context = RuntimeEnvironment.getApplication()
         val tracker = TrackingRepository(context)
