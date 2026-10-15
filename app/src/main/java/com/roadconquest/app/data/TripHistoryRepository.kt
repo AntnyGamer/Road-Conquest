@@ -107,9 +107,17 @@ class TripHistoryRepository(context: Context) {
      * The default privacy mode omits two minutes from BOTH trip endpoints.
      * Entire small trips may yield no coordinates rather than exposing a home.
      */
-    fun exportGpx(trip: SavedTrip, output: OutputStream, hideTripEnds: Boolean = true): Int =
-        synchronized(helper.historyLock) {
+    fun exportGpx(trip: SavedTrip, output: OutputStream, hideTripEnds: Boolean = true): Int {
+        // Slow Google Drive / document-provider writes must never hold the main
+        // GPS history lock. WAL allows this independent read-only connection to
+        // observe a consistent drive snapshot without blocking new tracking.
+        val databasePath = synchronized(helper.historyLock) {
             check(trip.historyGeneration == helper.historyGeneration) { "Trip history changed; select it again." }
+            helper.readableDatabase.path
+        }
+        return android.database.sqlite.SQLiteDatabase.openDatabase(
+            databasePath, null, android.database.sqlite.SQLiteDatabase.OPEN_READONLY
+        ).use { snapshot ->
             val endPadding = if (hideTripEnds) 120_000L else 0L
             val from = trip.startedAt + endPadding
             val until = trip.endedAt - endPadding
@@ -119,11 +127,15 @@ class TripHistoryRepository(context: Context) {
             val writer = OutputStreamWriter(output, StandardCharsets.UTF_8)
             writer.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
             writer.write("<gpx version=\"1.1\" creator=\"Road Conquest\" xmlns=\"http://www.topografix.com/GPX/1/1\">\n<trk><name>Road Conquest drive</name>\n")
-            helper.readableDatabase.rawQuery(
+            snapshot.rawQuery(
                 "SELECT latitude, longitude, timestamp_ms FROM track_points WHERE id BETWEEN ? AND ? ORDER BY id ASC",
                 arrayOf(trip.firstId.toString(), trip.lastId.toString())
             ).use { cursor ->
                 while (cursor.moveToNext()) {
+                    // A reset or restore must cancel this old trip's export.
+                    if (trip.historyGeneration != helper.historyGeneration) {
+                        error("Trip history changed during export")
+                    }
                     val timestamp = cursor.getLong(2)
                     if (timestamp < from || timestamp > until) continue
                     val lat = cursor.getDouble(0)
@@ -141,9 +153,11 @@ class TripHistoryRepository(context: Context) {
             }
             if (previousTimestamp != null) writer.write("</trkseg>\n")
             writer.write("</trk></gpx>\n")
+            check(trip.historyGeneration == helper.historyGeneration) { "Trip history changed during export" }
             writer.flush()
             written
         }
+    }
 
     /** Read a bounded route sample, always retaining the first and last points. */
     fun replay(trip: SavedTrip, maxPoints: Int = 2500): List<SavedTripPoint> =
