@@ -80,9 +80,15 @@ export function createAccountIngress(upstreamFetch = fetch, now = () => Date.now
     // Do not rewrite or buffer request bodies, credentials, methods or query
     // parameters. Disable redirect-following to prevent credential leakage.
     const forwarded = new Request(target, request);
+    // Rebuilding a Request from another Request copies its ORIGINAL headers:
+    // explicitly remove forged identity headers there too, then add only the
+    // sanitized/edge-signed set. A request without an edge IP must stay anonymous.
+    for (const name of [
+      "host", "cf-connecting-ip", "cf-connecting-ipv6", "x-forwarded-for",
+      "x-real-ip", "x-roadconquest-client-ip", "x-roadconquest-client-timestamp",
+      "x-roadconquest-client-signature"
+    ]) forwarded.headers.delete(name);
     for (const [name, value] of headers) forwarded.headers.set(name, value);
-    for (const name of ["cf-connecting-ip", "cf-connecting-ipv6", "x-forwarded-for",
-      "x-real-ip", "host"]) forwarded.headers.delete(name);
     const upstream = await upstreamFetch(new Request(forwarded, { redirect: "manual" }));
     const responseHeaders = new Headers(upstream.headers);
     responseHeaders.set("Cache-Control", "no-store");
