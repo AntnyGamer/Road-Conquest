@@ -17,7 +17,9 @@ enum class CarStyle(val id: String, val label: String) {
     CLASSIC("classic", "Classic"),
     SPORT("sport", "Sport"),
     SUV("suv", "SUV"),
-    RACER("racer", "Racer")
+    RACER("racer", "Racer"),
+    VAN("van", "Van"),
+    TRUCK("truck", "Pickup")
 }
 
 enum class CarColor(val id: String, val label: String, val argb: Int) {
@@ -26,6 +28,9 @@ enum class CarColor(val id: String, val label: String, val argb: Int) {
     GREEN("green", "Emerald", Color.rgb(5, 150, 105)),
     PURPLE("purple", "Purple", Color.rgb(124, 58, 237)),
     BLACK("black", "Black", Color.rgb(31, 41, 55)),
+    TEAL("teal", "Teal", Color.rgb(13, 148, 136)),
+    PINK("pink", "Rose", Color.rgb(219, 39, 119)),
+    SILVER("silver", "Silver", Color.rgb(148, 163, 184)),
     GOLD("gold", "Gold", Color.rgb(217, 164, 6))
 }
 
@@ -35,6 +40,9 @@ enum class RoadColor(val id: String, val label: String, val argb: Int) {
     GREEN("green", "Emerald", Color.rgb(5, 150, 105)),
     PURPLE("purple", "Purple", Color.rgb(124, 58, 237)),
     ORANGE("orange", "Orange", Color.rgb(234, 88, 12)),
+    CYAN("cyan", "Cyan", Color.rgb(8, 145, 178)),
+    PINK("pink", "Rose", Color.rgb(219, 39, 119)),
+    CHARCOAL("charcoal", "Charcoal", Color.rgb(71, 85, 105)),
     GOLD("gold", "Gold", Color.rgb(217, 164, 6))
 }
 
@@ -52,26 +60,34 @@ data class ShopItem(
 object ShopCatalog {
     val items: List<ShopItem> = listOf(
         ShopItem("car_style_classic", "Classic car", "The original Road Conquest car.", 0, CosmeticType.CAR_STYLE, CarStyle.CLASSIC.id),
-        ShopItem("car_style_sport", "Sport car", "A lower, sleeker map marker.", 600, CosmeticType.CAR_STYLE, CarStyle.SPORT.id),
-        ShopItem("car_style_suv", "SUV", "A taller, boxier map marker.", 800, CosmeticType.CAR_STYLE, CarStyle.SUV.id),
-        ShopItem("car_style_racer", "Racer", "A sharp performance-style marker.", 1_000, CosmeticType.CAR_STYLE, CarStyle.RACER.id),
+        ShopItem("car_style_sport", "Sport car", "A lower, sleeker map marker.", 650, CosmeticType.CAR_STYLE, CarStyle.SPORT.id),
+        ShopItem("car_style_suv", "SUV", "A taller, boxier map marker.", 950, CosmeticType.CAR_STYLE, CarStyle.SUV.id),
+        ShopItem("car_style_racer", "Racer", "A sharp performance-style marker.", 1_600, CosmeticType.CAR_STYLE, CarStyle.RACER.id),
+        ShopItem("car_style_van", "Van", "A roomy van marker for frequent explorers.", 1_900, CosmeticType.CAR_STYLE, CarStyle.VAN.id),
+        ShopItem("car_style_truck", "Pickup", "A rugged pickup truck marker.", 2_600, CosmeticType.CAR_STYLE, CarStyle.TRUCK.id),
 
         ShopItem("car_color_blue", "Blue car", "Road Conquest blue.", 0, CosmeticType.CAR_COLOR, CarColor.BLUE.id),
-        ShopItem("car_color_red", "Red car", "A bright red car marker.", 250, CosmeticType.CAR_COLOR, CarColor.RED.id),
-        ShopItem("car_color_green", "Emerald car", "An emerald green car marker.", 250, CosmeticType.CAR_COLOR, CarColor.GREEN.id),
-        ShopItem("car_color_purple", "Purple car", "A vivid purple car marker.", 300, CosmeticType.CAR_COLOR, CarColor.PURPLE.id),
-        ShopItem("car_color_black", "Black car", "A dark graphite car marker.", 300, CosmeticType.CAR_COLOR, CarColor.BLACK.id),
-        ShopItem("car_color_gold", "Gold car", "A metallic gold car marker.", 600, CosmeticType.CAR_COLOR, CarColor.GOLD.id),
+        ShopItem("car_color_red", "Red car", "A bright red car marker.", 300, CosmeticType.CAR_COLOR, CarColor.RED.id),
+        ShopItem("car_color_green", "Emerald car", "An emerald green car marker.", 300, CosmeticType.CAR_COLOR, CarColor.GREEN.id),
+        ShopItem("car_color_purple", "Purple car", "A vivid purple car marker.", 450, CosmeticType.CAR_COLOR, CarColor.PURPLE.id),
+        ShopItem("car_color_black", "Black car", "A dark graphite car marker.", 450, CosmeticType.CAR_COLOR, CarColor.BLACK.id),
+        ShopItem("car_color_teal", "Teal car", "A cool teal car marker.", 650, CosmeticType.CAR_COLOR, CarColor.TEAL.id),
+        ShopItem("car_color_pink", "Rose car", "A vibrant rose-colored car.", 950, CosmeticType.CAR_COLOR, CarColor.PINK.id),
+        ShopItem("car_color_silver", "Silver car", "A polished silver car marker.", 1_300, CosmeticType.CAR_COLOR, CarColor.SILVER.id),
+        ShopItem("car_color_gold", "Gold car", "A metallic gold car marker.", 1_800, CosmeticType.CAR_COLOR, CarColor.GOLD.id),
 
         ShopItem("road_color_blue", "Blue roads", "The original traveled-road color.", 0, CosmeticType.ROAD_COLOR, RoadColor.BLUE.id),
-        ShopItem("road_color_red", "Red roads", "Draw traveled roads in red.", 350, CosmeticType.ROAD_COLOR, RoadColor.RED.id),
-        ShopItem("road_color_green", "Emerald roads", "Draw traveled roads in emerald.", 350, CosmeticType.ROAD_COLOR, RoadColor.GREEN.id),
-        ShopItem("road_color_purple", "Purple roads", "Draw traveled roads in purple.", 400, CosmeticType.ROAD_COLOR, RoadColor.PURPLE.id),
-        ShopItem("road_color_orange", "Orange roads", "Draw traveled roads in orange.", 400, CosmeticType.ROAD_COLOR, RoadColor.ORANGE.id),
-        ShopItem("road_color_gold", "Gold roads", "Draw traveled roads in gold.", 700, CosmeticType.ROAD_COLOR, RoadColor.GOLD.id),
+        ShopItem("road_color_red", "Red roads", "Draw traveled roads in red.", 450, CosmeticType.ROAD_COLOR, RoadColor.RED.id),
+        ShopItem("road_color_green", "Emerald roads", "Draw traveled roads in emerald.", 450, CosmeticType.ROAD_COLOR, RoadColor.GREEN.id),
+        ShopItem("road_color_purple", "Purple roads", "Draw traveled roads in purple.", 600, CosmeticType.ROAD_COLOR, RoadColor.PURPLE.id),
+        ShopItem("road_color_orange", "Orange roads", "Draw traveled roads in orange.", 600, CosmeticType.ROAD_COLOR, RoadColor.ORANGE.id),
+        ShopItem("road_color_cyan", "Cyan roads", "Draw traveled roads in cyan.", 900, CosmeticType.ROAD_COLOR, RoadColor.CYAN.id),
+        ShopItem("road_color_pink", "Rose roads", "Draw traveled roads in rose.", 1_400, CosmeticType.ROAD_COLOR, RoadColor.PINK.id),
+        ShopItem("road_color_charcoal", "Charcoal roads", "Draw traveled roads in charcoal.", 1_800, CosmeticType.ROAD_COLOR, RoadColor.CHARCOAL.id),
+        ShopItem("road_color_gold", "Gold roads", "Draw traveled roads in gold.", 2_200, CosmeticType.ROAD_COLOR, RoadColor.GOLD.id),
 
         ShopItem("ui_standard", "Standard UI", "Use the normal Road Conquest palette and launcher icon.", 0, CosmeticType.APP_THEME, "standard"),
-        ShopItem("ui_gold", "Golden Road Conquest", "Gold/cream app UI plus a golden launcher icon.", 3_000, CosmeticType.APP_THEME, "gold")
+        ShopItem("ui_gold", "Golden Road Conquest", "Gold/cream app UI plus a golden launcher icon.", 6_500, CosmeticType.APP_THEME, "gold")
     )
 }
 
@@ -158,6 +174,19 @@ object Cosmetics {
                 canvas.drawPath(Path().apply {
                     moveTo(19f, 18f); lineTo(30f, 18f); lineTo(34f, 23f); lineTo(15f, 23f); close()
                 }, glass)
+            }
+            CarStyle.VAN -> {
+                canvas.drawRoundRect(RectF(8f, 15f, 40f, 38f), 5f, 5f, body)
+                canvas.drawRoundRect(RectF(12f, 18f, 36f, 26f), 2f, 2f, glass)
+                canvas.drawCircle(15f, 36f, 3f, dark)
+                canvas.drawCircle(33f, 36f, 3f, dark)
+            }
+            CarStyle.TRUCK -> {
+                canvas.drawRoundRect(RectF(8f, 22f, 40f, 36f), 4f, 4f, body)
+                canvas.drawRect(13f, 13f, 30f, 28f, body)
+                canvas.drawRect(16f, 16f, 27f, 24f, glass)
+                canvas.drawCircle(15f, 36f, 3f, dark)
+                canvas.drawCircle(34f, 36f, 3f, dark)
             }
             CarStyle.SUV -> {
                 canvas.drawRoundRect(RectF(8f, 15f, 40f, 38f), 4f, 4f, body)

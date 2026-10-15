@@ -62,7 +62,11 @@ object WeeklyChallenges {
                         arrayOf(week.toString(), weekEnd.toString(), now.toString())
                     ).use { it.moveToFirst(); it.getLong(0) }
                     return listOf(
+                        // Preserve existing challenge IDs and their rewards. New starter
+                        // milestones stack with the original stretch goals once per week.
+                        WeeklyChallenge("roads_5", "Unlock 5 new roads", roads, 5, 75, false),
                         WeeklyChallenge("roads", "Unlock 25 new roads", roads, 25, 250, false),
+                        WeeklyChallenge("towns_1", "Explore 1 new town", towns, 1, 75, false),
                         WeeklyChallenge("towns", "Explore 3 new towns", towns, 3, 300, false)
                     ).map { challenge ->
                         val key = "weekly:$week:${challenge.id}"
