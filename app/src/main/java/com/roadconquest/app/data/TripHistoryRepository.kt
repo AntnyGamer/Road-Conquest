@@ -85,6 +85,9 @@ class TripHistoryRepository(context: Context) {
         if (generation == helper.historyGeneration) output else emptyList()
     }
 
+    /** Cheap invalidation token for screens resuming after a restore or deletion. */
+    fun currentHistoryGeneration(): Long = helper.historyGeneration
+
     /** Cheap generation check; protects outgoing shares after a device-data reset. */
     fun isCurrentTrip(trip: SavedTrip): Boolean =
         trip.historyGeneration == helper.historyGeneration
