@@ -110,6 +110,13 @@ class TrackingRepository(context: Context) {
             }
         }
 
+    /** Indexed existence check only; no raw GPS is uploaded to update tracking status. */
+    fun hasUnmatchedDrivingFixes(): Boolean = synchronized(dbHelper.historyLock) {
+        dbHelper.readableDatabase.rawQuery(
+            "SELECT 1 FROM track_points WHERE matched = 0 LIMIT 1", null
+        ).use { it.moveToFirst() }
+    }
+
     /** Read the authoritative mile cells (as centers) with a padded viewport query. */
     @Synchronized
     fun getExploredGridInBounds(north: Double, east: Double, south: Double, west: Double): DoubleArray {
