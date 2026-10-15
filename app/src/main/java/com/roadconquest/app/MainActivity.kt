@@ -849,7 +849,7 @@ class MainActivity : Activity() {
         fun updateDialog() {
             val heading = if (populationSource == "2020 Census") "Population (2020 Census)"
                 else "Population"
-            dialog.setMessage("$heading: $population\n$type\nArea: $area\nFirst visited: $firstVisited\nLast visited: $lastVisited")
+            dialog.setMessage("$type\n$heading: $population\nArea: $area\nFirst visited: $firstVisited\nLast visited: $lastVisited")
         }
         updateDialog()
         summaryExecutor.execute {

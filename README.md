@@ -7,8 +7,10 @@ cloud-textured fog map.
 [Source and issues](https://github.com/AntnyGamer/RoadConquest-Beta) ·
 [GNU AGPL v3 license](LICENSE)
 
-Beta 48 fills in place populations from authoritative Census 2020 counts for verified U.S. towns and states, and from country-code lookups where supported. It removes the bottom panel's hairline outline and improves anchored turn retries with a split-trace fallback. Beta 47's progression and discovery improvements remain intact. It retains Beta 46's
-refreshed UI and progressive trip replay, with existing progress, purchases, and scoring preserved. Competitive rankings and verification uploads remain hidden by default.
+Beta 48 adds official 2020 Census populations for verified U.S. municipalities and states,
+plus country-code population lookups where supported. It removes the bottom sheet's hairline
+outline and adds a carefully gated fallback for unresolved road corners. Beta 47's progression
+and discovery improvements remain intact, as does Beta 46's refreshed UI and progressive trip replay, with existing progress, purchases, and scoring preserved. Competitive rankings and verification uploads remain hidden by default.
 See [backup and challenges details](BACKUP_AND_CHALLENGES.md). Previously unlocked roads, exploration, purchases, and scoring are
 preserved when installing an update signed with the same app identity over an existing installation.
 

@@ -11,13 +11,13 @@ import org.robolectric.annotation.Config
 @Config(sdk = [31], manifest = Config.NONE)
 class PlacePopulationLookupTest {
     @Test fun officialPlaceUsesExactGeoidFrom2020Census() {
-        val info = PlaceOverlayInfo("us|new jersey|census-4-3428770", "Haddon Heights borough",
+        val info = PlaceOverlayInfo("us|new jersey|census-4-3428800", "Haddon Heights borough",
             PlaceKind.TOWN, null, 3.0)
         val request = requireNotNull(PlacePopulationLookup.requestFor(info))
         assertTrue(request.url.contains("Census2020/Places_CouSub_ConCity_SubMCD/MapServer/4/query"))
-        val expected = """{"features":[{"attributes":{"STATE":"34","GEOID":"3428770","POP100":7495}}]}"""
+        val expected = """{"features":[{"attributes":{"STATE":"34","GEOID":"3428800","POP100":7495}}]}"""
         assertEquals(7495L, PlacePopulationLookup.parseResponse(request, expected)?.count)
-        val wrong = """{"features":[{"attributes":{"STATE":"34","GEOID":"3428771","POP100":7495}}]}"""
+        val wrong = """{"features":[{"attributes":{"STATE":"34","GEOID":"3428801","POP100":7495}}]}"""
         assertNull(PlacePopulationLookup.parseResponse(request, wrong))
     }
 
