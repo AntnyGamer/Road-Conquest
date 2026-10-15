@@ -24,6 +24,9 @@ internal object PlacePopulationLookup {
 
     private val officialGeoid = Regex("""[|]census-(1|3|4)-([0-9]+)$""")
     private val cached = ConcurrentHashMap<String, Value>()
+    private val cacheLock = Any()
+    @Volatile private var cacheGeneration = 0L
+    internal fun generation(): Long = cacheGeneration
     private const val CENSUS_CACHE = "roadconquest_census2020_population"
     private fun key(info: PlaceOverlayInfo) = info.kind.name + "|" + info.key
 
@@ -36,17 +39,22 @@ internal object PlacePopulationLookup {
         return value.takeIf { it >= 0L }?.let { Value(it, "2020 Census") }
     }
 
-    internal fun rememberCensus(context: Context, info: PlaceOverlayInfo, value: Value) {
-        if (value.source != "2020 Census" || !isUnitedStates(info) ||
-            requestFor(info) == null) return
+    internal fun rememberCensus(
+        context: Context, info: PlaceOverlayInfo, value: Value,
+        startedAtGeneration: Long = generation()
+    ) = synchronized(cacheLock) {
+        // A request started before Delete all data must not restore old entries.
+        if (startedAtGeneration != cacheGeneration || value.source != "2020 Census" ||
+            !isUnitedStates(info) || requestFor(info) == null) return@synchronized
         context.applicationContext.getSharedPreferences(CENSUS_CACHE, Context.MODE_PRIVATE)
             .edit().putLong(key(info), value.count).apply()
     }
 
-    fun clearCache(context: Context) {
+    fun clearCache(context: Context) = synchronized(cacheLock) {
+        cacheGeneration++
         cached.clear()
-        context.applicationContext.getSharedPreferences(CENSUS_CACHE, Context.MODE_PRIVATE)
-            .edit().clear().commit()
+        check(context.applicationContext.getSharedPreferences(CENSUS_CACHE, Context.MODE_PRIVATE)
+            .edit().clear().commit()) { "Could not clear cached Census population data" }
     }
     private const val CENSUS_BASE = "https://tigerweb.geo.census.gov/arcgis/rest/services/Census2020"
     private const val MAX_RESPONSE_CHARS = 8_192
@@ -105,6 +113,7 @@ internal object PlacePopulationLookup {
     }
 
     fun lookup(context: Context, info: PlaceOverlayInfo): Value? {
+        val startedAtGeneration = generation()
         if (info.population != null) return Value(info.population, "Boundary provider")
         cached[key(info)]?.let { return it }
         savedCensus(context, info)?.let {
@@ -142,9 +151,11 @@ internal object PlacePopulationLookup {
                 connection.disconnect()
             }
         }
-        if (value != null) {
-            cached.putIfAbsent(key(info), value)
-            rememberCensus(context, info, value)
+        if (value != null) synchronized(cacheLock) {
+            if (startedAtGeneration == cacheGeneration) {
+                cached.putIfAbsent(key(info), value)
+                rememberCensus(context, info, value, startedAtGeneration)
+            }
         }
         return value
     }

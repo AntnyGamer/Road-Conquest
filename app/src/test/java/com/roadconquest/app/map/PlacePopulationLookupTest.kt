@@ -53,6 +53,10 @@ class PlacePopulationLookupTest {
             ))
             PlacePopulationLookup.rememberCensus(context, info, result)
             assertEquals(result, PlacePopulationLookup.savedCensus(context, info))
+            val oldGeneration = PlacePopulationLookup.generation()
+            PlacePopulationLookup.clearCache(context)
+            PlacePopulationLookup.rememberCensus(context, info, result, oldGeneration)
+            assertNull(PlacePopulationLookup.savedCensus(context, info))
             // A successful public country population must never enter the static cache.
             PlacePopulationLookup.rememberCensus(context, PlaceOverlayInfo(
                 "se", "Sweden", PlaceKind.COUNTRY, null, 1.0),
