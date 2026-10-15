@@ -1,5 +1,6 @@
 # Road Conquest 1.0 Beta 49
 
+- **Faster serverless cold starts:** Remove the redundant scrypt calculation at instance initialization. Missing-user logins still perform the same scrypt verification as existing-user failures, using a randomized dummy hash that cannot accidentally authenticate.
 - **Lower account-server database overhead:** Combine six routine expired-record cleanups into one database request instead of six parallel connections; return the latest verified-cell total directly from its score update instead of querying again; resolve the UTC weekly period and rankings together in one query. These changes retain scoring, visibility, retention windows, rate limits, and response shapes. No schema migration, new service or request frequency changes.
 
 - **Live walking exploration progress:** Newly revealed fog tiles now schedule the existing debounced statistics/achievement refresh even when the player is walking and no driving fixes are stored; no extra location requests.

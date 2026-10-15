@@ -1,4 +1,4 @@
-import { createHash, createHmac } from "node:crypto";
+import { createHash, createHmac, randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
@@ -86,7 +86,10 @@ if (process.env.APPLY_SCHEMA_ON_STARTUP !== "0") {
 const competition = await createCompetition(pool, competitionConfig(process.env));
 const friends = createFriends(pool);
 
-const dummy = await hashPassword("this is only a constant dummy password", PEPPER);
+// Invalid usernames still take one full scrypt verification, just like bad passwords
+// for real users. Random dummy hashes cannot accidentally authenticate and do not
+// require an expensive additional scrypt calculation on every cold start.
+const dummy = { salt: randomBytes(16), hash: randomBytes(64) };
 
 function clientIp(req) {
   if (TRUST_PROXY) {
