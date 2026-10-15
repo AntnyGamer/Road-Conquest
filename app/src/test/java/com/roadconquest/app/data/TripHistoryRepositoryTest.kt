@@ -43,6 +43,38 @@ class TripHistoryRepositoryTest {
         assertTrue(TripReplayRoute.visibleRanges(downsampled, 1).isEmpty())
     }
 
+    @Test fun savedTripGpxDefaultsToPrivateEndpointsAndFullExportIsExplicit() {
+        val context = RuntimeEnvironment.getApplication()
+        val tracker = TrackingRepository(context)
+        tracker.clearHistory()
+        tracker.insertLocations((0..36).map { index ->
+            android.location.Location("gps").apply {
+                latitude = 40.0
+                longitude = -74.0 + index * 0.0001
+                accuracy = 5f
+                time = 1_000_000L + index * 10_000L
+            }
+        })
+        val history = TripHistoryRepository(context)
+        val trip = history.recentTrips().single()
+        val privateOutput = java.io.ByteArrayOutputStream()
+        val visible = history.exportGpx(trip, privateOutput)
+        val hiddenXml = privateOutput.toString("UTF-8")
+        assertTrue(visible > 0)
+        assertTrue(hiddenXml.startsWith("<?xml version="))
+        assertTrue(hiddenXml.contains("<gpx version="))
+        assertTrue(hiddenXml.contains("<trkseg>"))
+        assertTrue(hiddenXml.contains("</trkseg>"))
+        assertFalse(hiddenXml.contains("1970-01-01T00:16:40Z")) // first time
+        val fullOutput = java.io.ByteArrayOutputStream()
+        assertEquals(37, history.exportGpx(trip, fullOutput, hideTripEnds = false))
+        assertTrue(fullOutput.toString("UTF-8").contains("1970-01-01T00:16:40Z"))
+        tracker.clearHistory()
+        assertThrows(IllegalStateException::class.java) {
+            history.exportGpx(trip, java.io.ByteArrayOutputStream(), hideTripEnds = false)
+        }
+    }
+
     @Test fun replayPreservesTrueGapsThroughSamplingAndRejectsReplacedHistory() {
         val context = RuntimeEnvironment.getApplication()
         val tracker = TrackingRepository(context)
