@@ -1,5 +1,7 @@
 # Road Conquest 1.0 Beta 49
 
+- **Lower database write load on blocked requests:** Saturated rate-limit windows now refuse further requests without rewriting the same unchanged counter row. Allowed requests, first over-limit requests, and window resets retain the existing limits and expiry behavior.
+
 - **Less duplicated verified GPS work:** After a retry-receipt miss, the account server now checks freshness on the already validated GPS evidence instead of parsing and fully validating the same JSON batch a second time. The same timestamps, motion rules, device integrity, and scoring remain enforced.
 
 - **More database round-trip reductions:** Friend requests now resolve and lock both participants in one ordered query instead of separate lookup and lock requests. Verified batches initialize/read the user's score checkpoint in one statement instead of two, without changing security checks, the lock order, or checkpoint continuity.

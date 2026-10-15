@@ -122,10 +122,15 @@ async function rateLimit(bucket, key, limit, windowMs) {
        attempts = CASE
          WHEN auth_rate_limits.window_started_at <= CURRENT_TIMESTAMP - ($3::bigint * INTERVAL '1 millisecond')
          THEN 1 ELSE LEAST(auth_rate_limits.attempts + 1, $4 + 1) END
+     -- Once the count is already at limit+1, another blocked attempt should
+     -- not rewrite the identical row. Expired windows must still reset.
+     WHERE auth_rate_limits.window_started_at <= CURRENT_TIMESTAMP - ($3::bigint * INTERVAL '1 millisecond')
+        OR auth_rate_limits.attempts <= $4
      RETURNING attempts <= $4 AS allowed`,
     [bucket, opaqueRateKey(bucket, key), windowMs, limit]
   );
-  return result.rows[0].allowed === true;
+  // A missing RETURNING row means an already-saturated window: still denied.
+  return result.rows[0]?.allowed === true;
 }
 
 async function cleanupExpiredState() {
