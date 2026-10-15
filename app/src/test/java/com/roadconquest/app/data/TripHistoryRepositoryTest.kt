@@ -102,8 +102,12 @@ class TripHistoryRepositoryTest {
         insert((0..4).map { 1_000_000L + it * 20_000 })
         val history = TripHistoryRepository(context)
         val trip = history.recentTrips().single()
+        val oldGeneration = history.currentHistoryGeneration()
+        assertEquals(oldGeneration, trip.historyGeneration)
         assertFalse(history.replay(trip, 2).last().breakBefore)
         tracker.clearHistory()
+        assertNotEquals("A data reset invalidates every previously selected route",
+            oldGeneration, history.currentHistoryGeneration())
         insert(listOf(1_000_000, 1_020_000, 1_060_000, 1_080_000, 1_100_000))
         assertTrue(history.replay(trip).isEmpty())
         assertTrue(history.replay(history.recentTrips().single(), 2).last().breakBefore)
