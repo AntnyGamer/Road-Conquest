@@ -717,7 +717,9 @@ object FogBitmapRenderer {
             // coverage instead; it naturally fades to imperceptible subpixels.
             for (i in 0 until count) {
                 val coverage = pixels[i] and 0xff
-                pixels[i] = Color.rgb(coverage, coverage, coverage)
+                // Exactly the same opaque grayscale as Color.rgb(), without
+                // a method call for every pixel of the world fog mask.
+                pixels[i] = -0x1000000 or (coverage * 0x10101)
             }
             bitmap.setPixels(pixels, 0, width, 0, 0, width, height)
             return
@@ -770,7 +772,7 @@ object FogBitmapRenderer {
                 val fraction = (distance / radius).coerceIn(0f, 1f)
                 val smooth = fraction * fraction * (3f - 2f * fraction)
                 val shade = ((1f - smooth) * 255f).roundToInt().coerceIn(0, 255)
-                pixels[i] = Color.rgb(shade, shade, shade)
+                pixels[i] = -0x1000000 or (shade * 0x10101)
             }
         }
         bitmap.setPixels(pixels, 0, width, 0, 0, width, height)
