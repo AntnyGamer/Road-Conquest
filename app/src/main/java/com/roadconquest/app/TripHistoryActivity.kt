@@ -71,6 +71,7 @@ class TripHistoryActivity : Activity() {
     private var gpxButton: Button? = null
     private var tripList: LinearLayout? = null
     private var displayedVip: Boolean? = null
+    private var tripListGeneration = 0
     private var pendingGpxTrip: SavedTrip? = null
     private var redactGpxEnds = true
     private val vipBilling by lazy {
@@ -298,6 +299,7 @@ class TripHistoryActivity : Activity() {
         val column = tripList ?: return
         val vip = VipEntitlement.isActive(this)
         displayedVip = vip
+        val listGeneration = ++tripListGeneration
         column.removeAllViews()
         column.addView(TextView(this).apply {
             text = if (vip) "Showing up to 500 recent drives (VIP)" else "Showing up to 100 recent drives · VIP unlocks extended history"
@@ -308,7 +310,8 @@ class TripHistoryActivity : Activity() {
         worker.execute {
             val result = runCatching { TripHistoryRepository(applicationContext).recentTrips(if (vip) 500 else 100) }
             runOnUiThread {
-                if (isDestroyed || displayedVip != vip) return@runOnUiThread
+                if (isDestroyed || displayedVip != vip ||
+                    listGeneration != tripListGeneration) return@runOnUiThread
                 result.fold({ trips ->
                     if (trips.isEmpty()) {
                         column.addView(TextView(this@TripHistoryActivity).apply {
@@ -352,9 +355,17 @@ class TripHistoryActivity : Activity() {
         }
     }
 
+    private fun isTripSafeToShare(trip: SavedTrip): Boolean {
+        if (TripHistoryRepository(applicationContext).isCurrentTrip(trip)) return true
+        selectedTrip = null
+        refreshVipControls()
+        insightsText?.text = "Driving history changed. Reopen Trips to select a current drive."
+        return false
+    }
+
     private fun shareSelectedTrip() {
         val trip = selectedTrip ?: return
-        if (!requireVip()) return
+        if (!requireVip() || !isTripSafeToShare(trip)) return
         val details = insightsText?.text?.toString().orEmpty()
         val message = String.format(Locale.getDefault(),
             "Road Conquest drive • %s\n%.1f miles • %d minutes\n%s\nShared without exact GPS coordinates.",
@@ -371,7 +382,7 @@ class TripHistoryActivity : Activity() {
 
     private fun selectGpxPrivacy() {
         val trip = selectedTrip ?: return
-        if (!requireVip()) return
+        if (!requireVip() || !isTripSafeToShare(trip)) return
         AlertDialog.Builder(this)
             .setTitle("Save private GPX route")
             .setMessage("GPX files contain precise GPS locations. Protect home and destination addresses by hiding the first and last two minutes. Choose Full route only when you explicitly want to reveal those locations.")
