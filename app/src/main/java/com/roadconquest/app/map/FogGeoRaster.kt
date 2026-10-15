@@ -123,8 +123,8 @@ internal class FogGeoRaster private constructor(
             // visited cell to about one pixel. Reusing that texture while
             // pinching back toward zoom 15 made already cleared cells opaque
             // on Android 12. Keep the broad four-level reserve above zoom 14.5,
-            // but cap lower-zoom reserve so tile holes survive interpolation.
-            val zoomReserve = minOf(4.0, (zoom - 10.5).coerceAtLeast(0.0))
+            // but reserve no extra zoom-out at 11.5 so tile holes survive interpolation.
+            val zoomReserve = minOf(4.0, (zoom - 11.5).coerceAtLeast(0.0))
             return around(
                 latitude, longitude, zoom - zoomReserve, size,
                 viewportWidth, viewportHeight,
