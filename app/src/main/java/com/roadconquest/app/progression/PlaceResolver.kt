@@ -136,6 +136,10 @@ object PlaceResolver {
                 // Retry an unreachable provider rather than permanently discard a town.
                 return null
             }
+            // Empty/partial Census responses can occur during a transient outage.
+            // Do not permanently retire a U.S. town candidate on its first null
+            // response; bounded retries preserve the original GPS fix.
+            if (result == null && candidate.attempts < 2) return null
             if (result != null) {
                 if (!PlaceOverlayCache.writeOfficialUs(
                         context, result.place, result.overlay, cacheGeneration
@@ -227,6 +231,7 @@ object PlaceResolver {
         } catch (_: IOException) {
             return null
         }
+        if (town == null && candidate.attempts < 2) return null
         return listOfNotNull(country, statePlace, town)
     }
 

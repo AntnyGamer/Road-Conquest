@@ -428,7 +428,7 @@ class MainActivity : Activity() {
                     ProgressionRepository(applicationContext).backfillPlaceCandidates(3_000)
                     lastPlaceBackfillElapsed = now
                 }
-                ProgressionManager.resolvePendingPlacesWithDetails(this, 6)
+                ProgressionManager.resolvePendingPlacesWithDetails(this, 12)
             }.getOrNull()
             val pending = runCatching {
                 val repository = ProgressionRepository(applicationContext)
@@ -962,6 +962,9 @@ class MainActivity : Activity() {
         val panelStart = panelParams.marginStart
         val panelEnd = panelParams.marginEnd
         val panelBottom = panelParams.bottomMargin
+        val panelPaddingLeft = controlPanel.paddingLeft
+        val panelPaddingRight = controlPanel.paddingRight
+        val panelPaddingBottom = controlPanel.paddingBottom
 
         fun sizeStats() {
             if (root.width <= 0) return
@@ -1035,14 +1038,25 @@ class MainActivity : Activity() {
                     overlayButton.layoutParams = params
                 }
             }
+            // The entire panel is a true edge-to-edge bottom sheet, not a floating card.
+            // Keep the navigation/gesture inset INSIDE its background, so the controls
+            // stay tappable above the system bar while the sheet reaches the screen edge.
             (controlPanel.layoutParams as FrameLayout.LayoutParams).also { params ->
-                if (params.marginStart != panelStart + safe.left || params.marginEnd != panelEnd + safe.right ||
-                    params.bottomMargin != panelBottom + safe.bottom) {
-                    params.marginStart = panelStart + safe.left
-                    params.marginEnd = panelEnd + safe.right
-                    params.bottomMargin = panelBottom + safe.bottom
+                if (params.marginStart != panelStart || params.marginEnd != panelEnd ||
+                    params.bottomMargin != panelBottom) {
+                    params.marginStart = panelStart
+                    params.marginEnd = panelEnd
+                    params.bottomMargin = panelBottom
                     controlPanel.layoutParams = params
                 }
+            }
+            val paddingLeft = panelPaddingLeft + safe.left
+            val paddingRight = panelPaddingRight + safe.right
+            val paddingBottom = panelPaddingBottom + safe.bottom
+            if (controlPanel.paddingLeft != paddingLeft ||
+                controlPanel.paddingRight != paddingRight ||
+                controlPanel.paddingBottom != paddingBottom) {
+                controlPanel.setPadding(paddingLeft, controlPanel.paddingTop, paddingRight, paddingBottom)
             }
             insets
         }
