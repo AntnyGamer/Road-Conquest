@@ -87,6 +87,17 @@ test("serverless accounts enforce authentication, privacy, limits and TLS with r
       last = await call("/v1/signup", "POST", credentials, undefined, { "X-Forwarded-For": `198.51.100.${i}` });
     }
     assert.equal(last.status, 429, "Changing a caller-supplied IP cannot evade signup limits");
+    const saturatedBefore = await admin.query(
+      "SELECT attempts, xmin::text AS row_version FROM auth_rate_limits WHERE bucket='signup-ip'"
+    );
+    assert.equal(saturatedBefore.rowCount, 1);
+    assert.equal(Number(saturatedBefore.rows[0].attempts), 9);
+    assert.equal((await call("/v1/signup", "POST", credentials)).status, 429);
+    const saturatedAfter = await admin.query(
+      "SELECT attempts, xmin::text AS row_version FROM auth_rate_limits WHERE bucket='signup-ip'"
+    );
+    // A refused, already-saturated request must not rewrite the counter row.
+    assert.deepEqual(saturatedAfter.rows, saturatedBefore.rows);
     const insecure = await api.fetch(new Request("http://accounts.example/v1/login", {
       method: "POST", headers: { "X-Forwarded-Proto": "https" }, body: JSON.stringify(credentials)
     }));
