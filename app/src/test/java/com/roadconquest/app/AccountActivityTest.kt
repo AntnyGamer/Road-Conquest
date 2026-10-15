@@ -194,8 +194,25 @@ class AccountActivityTest {
                 if (view is TextView) texts += view.text.toString()
                 if (view is android.view.ViewGroup) for (index in 0 until view.childCount) collect(view.getChildAt(index))
             }
-            collect(controller.get().findViewById(android.R.id.content))
+            val content = controller.get().findViewById<View>(android.R.id.content)
+            collect(content)
             assertTrue(texts.contains("Weekly challenges"))
+            assertFalse("Friends are deliberately collapsed while leaderboards are disabled",
+                texts.contains("Add friend by username"))
+            val optionalFriends = mutableListOf<Button>()
+            fun findOptionalFriends(view: View) {
+                if (view is Button && view.text.toString() == "Manage friends (optional)") {
+                    optionalFriends.add(view)
+                }
+                if (view is android.view.ViewGroup) for (index in 0 until view.childCount) {
+                    findOptionalFriends(view.getChildAt(index))
+                }
+            }
+            findOptionalFriends(content)
+            assertEquals(1, optionalFriends.size)
+            optionalFriends.single().performClick()
+            texts.clear()
+            collect(content)
             assertTrue(texts.contains("Add friend by username"))
             assertFalse(texts.contains("New roads"))
             assertFalse(texts.contains("Miles"))
