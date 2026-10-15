@@ -1,5 +1,6 @@
 package com.roadconquest.app.map
 
+import android.content.Context
 import android.net.Uri
 import com.roadconquest.app.data.PlaceKind
 import org.json.JSONArray
@@ -23,6 +24,30 @@ internal object PlacePopulationLookup {
 
     private val officialGeoid = Regex("""[|]census-(1|3|4)-([0-9]+)$""")
     private val cached = ConcurrentHashMap<String, Value>()
+    private const val CENSUS_CACHE = "roadconquest_census2020_population"
+    private fun key(info: PlaceOverlayInfo) = info.kind.name + "|" + info.key
+
+    // Census 2020 counts are fixed historical figures. Never persist dynamic
+    // country counts or failed/ambiguous responses.
+    internal fun savedCensus(context: Context, info: PlaceOverlayInfo): Value? {
+        if (requestFor(info)?.countryCode != null || !isUnitedStates(info)) return null
+        val value = context.applicationContext.getSharedPreferences(CENSUS_CACHE, Context.MODE_PRIVATE)
+            .getLong(key(info), -1L)
+        return value.takeIf { it >= 0L }?.let { Value(it, "2020 Census") }
+    }
+
+    internal fun rememberCensus(context: Context, info: PlaceOverlayInfo, value: Value) {
+        if (value.source != "2020 Census" || !isUnitedStates(info) ||
+            requestFor(info)?.countryCode != null) return
+        context.applicationContext.getSharedPreferences(CENSUS_CACHE, Context.MODE_PRIVATE)
+            .edit().putLong(key(info), value.count).apply()
+    }
+
+    fun clearCache(context: Context) {
+        cached.clear()
+        context.applicationContext.getSharedPreferences(CENSUS_CACHE, Context.MODE_PRIVATE)
+            .edit().clear().commit()
+    }
     private const val CENSUS_BASE = "https://tigerweb.geo.census.gov/arcgis/rest/services/Census2020"
     private const val MAX_RESPONSE_CHARS = 8_192
     // The 2020 decennial Census US total, including the 50 states and D.C.
@@ -79,9 +104,13 @@ internal object PlacePopulationLookup {
         return Request(url, state, geoid)
     }
 
-    fun lookup(info: PlaceOverlayInfo): Value? {
+    fun lookup(context: Context, info: PlaceOverlayInfo): Value? {
         if (info.population != null) return Value(info.population, "Boundary provider")
-        cached[info.kind.name + "|" + info.key]?.let { return it }
+        cached[key(info)]?.let { return it }
+        savedCensus(context, info)?.let {
+            cached.putIfAbsent(key(info), it)
+            return it
+        }
         val value = if (isUnitedStates(info) && info.kind == PlaceKind.COUNTRY) {
             Value(US_2020_POPULATION, "2020 Census")
         } else {
@@ -113,7 +142,10 @@ internal object PlacePopulationLookup {
                 connection.disconnect()
             }
         }
-        if (value != null) cached.putIfAbsent(info.kind.name + "|" + info.key, value)
+        if (value != null) {
+            cached.putIfAbsent(key(info), value)
+            rememberCensus(context, info, value)
+        }
         return value
     }
 

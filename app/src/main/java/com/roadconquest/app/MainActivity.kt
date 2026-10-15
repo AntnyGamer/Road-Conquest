@@ -873,7 +873,7 @@ class MainActivity : Activity() {
         }
         if (info.population == null && PlacePopulationLookup.canLookup(info)) {
             populationExecutor.execute {
-                val result = runCatching { PlacePopulationLookup.lookup(info) }.getOrNull()
+                val result = runCatching { PlacePopulationLookup.lookup(applicationContext, info) }.getOrNull()
                 runOnUiThread {
                     if (isDestroyed || !dialog.isShowing) return@runOnUiThread
                     population = result?.let { String.format(Locale.getDefault(), "%,d", it.count) }

@@ -29,6 +29,7 @@ object LocalDataReset {
         try {
             TrackingRepository(app).clearHistory()
             ProgressionManager.resetLocalProgression(app)
+            com.roadconquest.app.map.PlacePopulationLookup.clearCache(app)
             DataExporter.clearTemporarySnapshots(app)
             listOf(com.roadconquest.app.export.DataImporter.previousBackup(app),
                 java.io.File(app.filesDir, "before-restore.tmp.zip")).forEach {

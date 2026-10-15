@@ -1,6 +1,7 @@
 package com.roadconquest.app.map
 
 import com.roadconquest.app.data.PlaceKind
+import org.robolectric.RuntimeEnvironment
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -38,6 +39,29 @@ class PlacePopulationLookupTest {
             """{"cca2":"SE","cca3":"SWE","population":10500000}""")?.count)
         assertNull(PlacePopulationLookup.parseResponse(request,
             """{"cca2":"NO","cca3":"NOR","population":5500000}"""))
+    }
+
+    @Test fun validatedHistoricalCensusCountCanBeCachedAcrossSessions() {
+        val context = RuntimeEnvironment.getApplication()
+        val info = PlaceOverlayInfo("us|new jersey|census-4-3428800", "Haddon Heights",
+            PlaceKind.TOWN, null, 3.0)
+        PlacePopulationLookup.clearCache(context)
+        try {
+            val result = requireNotNull(PlacePopulationLookup.parseResponse(
+                requireNotNull(PlacePopulationLookup.requestFor(info)),
+                """{"features":[{"attributes":{"STATE":"34","GEOID":"3428800","POP100":7495}}]}"""
+            ))
+            PlacePopulationLookup.rememberCensus(context, info, result)
+            assertEquals(result, PlacePopulationLookup.savedCensus(context, info))
+            // A successful public country population must never enter the static cache.
+            PlacePopulationLookup.rememberCensus(context, PlaceOverlayInfo(
+                "se", "Sweden", PlaceKind.COUNTRY, null, 1.0),
+                PlacePopulationLookup.Value(10_000_000L, "REST Countries"))
+            assertNull(PlacePopulationLookup.savedCensus(context,
+                PlaceOverlayInfo("se", "Sweden", PlaceKind.COUNTRY, null, 1.0)))
+        } finally {
+            PlacePopulationLookup.clearCache(context)
+        }
     }
 
     @Test fun nonCensusTownNeverGetsAnotherTownPopulation() {
