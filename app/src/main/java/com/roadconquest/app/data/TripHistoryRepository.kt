@@ -1,6 +1,7 @@
 package com.roadconquest.app.data
 
 import android.content.Context
+import com.roadconquest.app.billing.VipEntitlement
 import java.io.OutputStream
 import java.io.OutputStreamWriter
 import java.nio.charset.StandardCharsets
@@ -25,11 +26,14 @@ data class SavedTripInsights(val newRoadGroups: Long, val newTowns: Long, val ne
 
 
 class TripHistoryRepository(context: Context) {
+    private val appContext = context.applicationContext
     private val helper = AppDatabase.get(context.applicationContext)
 
     /** Bounded recent history: free users see 100 drives; VIP can request up to 500. */
     fun recentTrips(limit: Int = 100): List<SavedTrip> = synchronized(helper.historyLock) {
-        require(limit in 1..500)
+        require(limit in 1..(if (VipEntitlement.isActive(appContext)) 500 else 100)) {
+            "Extended trip history requires lifetime VIP"
+        }
         val output = ArrayList<SavedTrip>(limit)
         var firstId = 0L
         var lastId = 0L
@@ -108,6 +112,7 @@ class TripHistoryRepository(context: Context) {
      * Entire small trips may yield no coordinates rather than exposing a home.
      */
     fun exportGpx(trip: SavedTrip, output: OutputStream, hideTripEnds: Boolean = true): Int {
+        check(VipEntitlement.isActive(appContext)) { "GPX sharing requires lifetime VIP" }
         // Slow Google Drive / document-provider writes must never hold the main
         // GPS history lock. WAL allows this independent read-only connection to
         // observe a consistent drive snapshot without blocking new tracking.
