@@ -4,6 +4,7 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import com.roadconquest.app.billing.VipEntitlement
 import java.io.OutputStream
+import java.io.BufferedWriter
 import java.io.OutputStreamWriter
 import java.nio.charset.StandardCharsets
 import java.time.Instant
@@ -142,7 +143,9 @@ class TripHistoryRepository(context: Context) {
             val formatter = DateTimeFormatter.ISO_INSTANT
             var written = 0
             var previousTimestamp: Long? = null
-            val writer = OutputStreamWriter(output, StandardCharsets.UTF_8)
+            // Buffer the thousands of small XML writes before sending them to a
+            // potentially slow Android cloud document provider.
+            val writer = BufferedWriter(OutputStreamWriter(output, StandardCharsets.UTF_8), 32 * 1024)
             writer.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
             writer.write("<gpx version=\"1.1\" creator=\"Road Conquest\" xmlns=\"http://www.topografix.com/GPX/1/1\">\n<trk><name>Road Conquest drive</name>\n")
             snapshot.rawQuery(
