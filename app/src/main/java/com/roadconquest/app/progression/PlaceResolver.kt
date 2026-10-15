@@ -86,7 +86,8 @@ object PlaceResolver {
         municipalCache: VerifiedMunicipalCache? = null,
         addressesOverride: List<android.location.Address>? = null,
         stateLookup: (Double, Double) -> String? = UnitedStatesMunicipalityAtPoint::stateNameAt,
-        townLookup: (PlaceDiscovery) -> UnitedStatesMunicipalityAtPoint.Result? = UnitedStatesMunicipalityAtPoint::fetch
+        townLookup: (PlaceDiscovery) -> UnitedStatesMunicipalityAtPoint.Result? = UnitedStatesMunicipalityAtPoint::fetch,
+        overlayClient: PlaceOverlayClient? = null
     ): List<PlaceDiscovery>? {
         // Capture BEFORE geocoding and network I/O. Clearing local data changes
         // this generation; older in-flight lookups must never recreate erased
@@ -168,7 +169,9 @@ object PlaceResolver {
                 )
             }
         }.distinctBy { it.key }.take(4)
-        val client by lazy { PlaceOverlayClient() }
+        // A batch may resolve several foreign towns. The shared client reuses its
+        // already-fetched provider config without sharing results across batches.
+        val client by lazy { overlayClient ?: PlaceOverlayClient() }
         for (town in townCandidates) {
             // Cache the authenticated municipal polygon by its town identity,
             // even when the current GPS fix falls OUTSIDE it. A nearby postal

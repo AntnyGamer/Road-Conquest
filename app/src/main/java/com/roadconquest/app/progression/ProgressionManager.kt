@@ -97,6 +97,9 @@ object ProgressionManager {
         val repository = ProgressionRepository(context)
         // Limit polygon parsing and database reads to one set per foreground batch.
         val municipalCache by lazy { PlaceResolver.VerifiedMunicipalCache(context) }
+        // Reuse remote provider configuration across candidates in this bounded
+        // batch, but create a fresh client on the next batch to honor config changes.
+        val overlayClient by lazy { com.roadconquest.app.map.PlaceOverlayClient() }
         // Do not manufacture new discovery notifications from replaying historical drives.
         var added = 0
         var newestVisitAt = 0L
@@ -113,7 +116,7 @@ object ProgressionManager {
                     return@synchronized PlaceResolutionResult(added, newestVisitAt, placesUpdated)
                 }
                 val discoveries = try {
-                    PlaceResolver.resolve(context, candidate, municipalCache)
+                    PlaceResolver.resolve(context, candidate, municipalCache, overlayClient = overlayClient)
                 } catch (error: Exception) {
                     android.util.Log.w("RoadConquest", "Place candidate will retry", error)
                     null
