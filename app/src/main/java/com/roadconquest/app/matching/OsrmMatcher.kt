@@ -215,7 +215,12 @@ class OsrmMatcher(
                 output.toString(StandardCharsets.UTF_8.name())
             }
             val result = parse(body, points)
-            if (result != null && body.length <= MAX_CACHED_RESPONSE_CHARS) {
+            // An HTTP 200/OSRM Ok response can still contain zero usable roads.
+            // Do not freeze such an ambiguous result in memory: a later retry
+            // should be allowed to ask the provider again.
+            if (result != null && result.roads.isNotEmpty() &&
+                result.matchedPointConfidences.isNotEmpty() && body.length <= MAX_CACHED_RESPONSE_CHARS
+            ) {
                 recentResponses[cacheKey] = CachedResponse(body, SystemClock.elapsedRealtime())
                 if (recentResponses.size > MAX_CACHED_RESPONSES) {
                     recentResponses.entries.iterator().apply { next(); remove() }
