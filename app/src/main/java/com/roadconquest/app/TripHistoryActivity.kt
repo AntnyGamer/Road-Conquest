@@ -442,8 +442,8 @@ class TripHistoryActivity : Activity() {
                 if (isDestroyed || expected != generation) return@runOnUiThread
                 result.fold({ (loaded, insights) ->
                     insightsText?.text = String.format(Locale.getDefault(),
-                        "New roads: %,d (estimated) • New towns: %,d • %,d GPS fixes awaiting road matching.\\nTile discoveries by trip will be tracked for future drives.",
-                        insights.newRoadGroups, insights.newTowns, insights.pendingFixes
+                        "New roads: %,d (estimated) • New towns: %,d • New tiles: %,d\\n%,d GPS fixes awaiting road matching. Older tiles without saved dates are excluded.",
+                        insights.newRoadGroups, insights.newTowns, insights.newTiles, insights.pendingFixes
                     )
                     points = loaded
                     // Cache MapLibre geometries once instead of reconstructing
