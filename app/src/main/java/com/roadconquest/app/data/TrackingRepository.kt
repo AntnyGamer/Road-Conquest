@@ -112,12 +112,19 @@ class TrackingRepository(context: Context) {
             }
         }
 
-    /** Indexed existence check only; no raw GPS is uploaded to update tracking status. */
-    fun hasUnmatchedDrivingFixes(): Boolean = synchronized(dbHelper.historyLock) {
-        dbHelper.readableDatabase.rawQuery(
-            "SELECT 1 FROM track_points WHERE matched = 0 LIMIT 1", null
-        ).use { it.moveToFirst() }
-    }
+    /**
+     * A live tracking badge concerns recent driving, not a permanently unresolved
+     * GPS corner from months ago. The existing timestamp index bounds this lookup
+     * without an extra index, network request, or scanning the entire history.
+     */
+    fun hasUnmatchedDrivingFixes(nowMillis: Long = System.currentTimeMillis()): Boolean =
+        synchronized(dbHelper.historyLock) {
+            dbHelper.readableDatabase.rawQuery(
+                "SELECT 1 FROM track_points WHERE timestamp_ms BETWEEN ? AND ? " +
+                    "AND matched = 0 LIMIT 1",
+                arrayOf((nowMillis - 60 * 60_000L).toString(), nowMillis.toString())
+            ).use { it.moveToFirst() }
+        }
 
     /** Read the authoritative mile cells (as centers) with a padded viewport query. */
     @Synchronized
