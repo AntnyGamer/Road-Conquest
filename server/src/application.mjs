@@ -448,13 +448,20 @@ async function handle(req, res) {
       }
       // Foreign keys remove every session, score, unlocked way, live run and receipt.
       await client.query("DELETE FROM users WHERE id = $1", [user.id]);
-      for (const [bucket, key] of [
+      // Delete exactly the same five account-specific throttling keys in one
+      // round trip. Keep paired buckets and hashes (rather than a cross-product).
+      const removalKeys = [
         ["account-change", String(user.id)], ["reauth", String(user.id)],
         ["drive-start", String(user.id)], ["drive-batch", String(user.id)],
         ["login-user", saved.username_key]
-      ]) {
-        await client.query("DELETE FROM auth_rate_limits WHERE bucket = $1 AND key_hash = $2", [bucket, opaqueRateKey(bucket, key)]);
-      }
+      ];
+      await client.query(
+        `DELETE FROM auth_rate_limits WHERE (bucket,key_hash) IN (
+          SELECT cleanup.bucket,cleanup.key_hash
+          FROM unnest($1::text[], $2::bytea[]) AS cleanup(bucket,key_hash)
+        )`,
+        [removalKeys.map(entry => entry[0]), removalKeys.map(([bucket, key]) => opaqueRateKey(bucket, key))]
+      );
       await client.query("COMMIT");
       return send(res, 200, { ok: true });
     } catch (error) {
