@@ -115,9 +115,18 @@ class OsrmMatcher(
         // both ends, GPS is precise and continuous, and its normal candidate
         // search left the turn missing. This never widens GPS radiuses or waives
         // detour/snap/confidence protections in parseLeg().
+        // The very first fix of a later split trace is deliberately left pending
+        // by parse(), despite its exit-road geometry being accepted. Inspect that
+        // accepted geometry and the already-matched saved exit anchor instead of
+        // requiring a confidence entry parse() intentionally withholds.
+        val exitTime = points[gap.last + 1].timestampMillis
+        val confirmedExitRoad = first?.roads?.any { road ->
+            road.confidence >= MIN_ACCEPTABLE_CONFIDENCE &&
+                road.firstTimestamp <= exitTime && road.lastTimestamp >= exitTime
+        } == true
         if (first == null ||
             !accepted(first, points[gap.first - 1].id) ||
-            !accepted(first, points[gap.last + 1].id) ||
+            !points[gap.last + 1].matched || !confirmedExitRoad ||
             (gap.first - 1..gap.last + 1).any { index ->
                 points[index].accuracyMeters !in 0.01f..MAX_LONG_TURN_ACCURACY_M
             } ||
