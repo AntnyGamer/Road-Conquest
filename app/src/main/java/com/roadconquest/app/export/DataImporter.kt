@@ -23,6 +23,8 @@ import java.io.Closeable
 import java.io.File
 import java.io.FilterInputStream
 import java.io.InputStream
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.time.Instant
 import java.util.zip.CRC32
 import java.util.zip.ZipFile
@@ -194,7 +196,11 @@ object DataImporter {
             try {
                 temporaryBackup.outputStream().use { DataExporter.writeZip(app, TrackingRepository(app), it) }
                 java.io.FileOutputStream(temporaryBackup, true).use { it.fd.sync() }
-                check(temporaryBackup.renameTo(previousBackup(app))) { "Could not save recovery backup" }
+                // Both paths are in filesDir. Require an atomic replacement so
+                // the old recovery copy survives any failed move. File.renameTo
+                // cannot replace an existing target on Windows test hosts.
+                Files.move(temporaryBackup.toPath(), previousBackup(app).toPath(),
+                    StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
             } finally { temporaryBackup.delete() }
             val live = helper.writableDatabase
             SQLiteDatabase.openDatabase(prepared.file.path, null, SQLiteDatabase.OPEN_READONLY).use { source ->

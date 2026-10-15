@@ -246,6 +246,13 @@ jobs:
       - name: Mark the CI App Bundle as unsigned
         shell: bash
         run: mv app/build/outputs/bundle/release/app-release.aab app/build/outputs/bundle/release/app-release-UNSIGNED-DO-NOT-UPLOAD.aab
+      - name: Save tested APK for startup checks
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: android-startup-apk-unsigned
+          path: app/build/outputs/apk/release/app-release-unsigned.apk
+          if-no-files-found: error
+          retention-days: 7
       - name: Save unsigned Android build inputs (not for Play upload)
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -375,7 +382,7 @@ jobs:
       - name: Download the release APK built by this run
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name android-build-inputs-unsigned --dir "$RUNNER_TEMP/release-startup"
+        run: gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name android-startup-apk-unsigned --dir "$RUNNER_TEMP/release-startup"
       - name: Sign a disposable copy for emulator installation
         run: |
           set -euo pipefail

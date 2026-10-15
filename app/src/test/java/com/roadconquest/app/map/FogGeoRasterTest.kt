@@ -43,7 +43,7 @@ class FogGeoRasterTest {
         }
     }
 
-    @Test fun optimizedSquareProjectionExactlyMatchesOriginalAtAnyLongitude() {
+    @Test fun squareProjectionPreservesPointLocationsWithinOneWorldCopy() {
         for ((latitude, longitude) in listOf(
             39.96 to -75.02, 0.0 to 179.999, 0.0 to -179.999,
             79.0 to 10.0, -80.0 to 15.0
@@ -56,8 +56,31 @@ class FogGeoRasterTest {
                 FogGeoRaster.around(latitude, longitude, 15.0, 1024)
             )
             for (raster in rasters) {
-                assertArrayEquals("Optimization must preserve every fog pixel coordinate",
-                    raster.project(corners), raster.projectGridCorners(corners), 0.0)
+                val individual = raster.project(corners)
+                val squares = raster.projectGridCorners(corners)
+                val worldWidth = FogGeoRaster.WORLD_METERS / raster.metersPerPixel
+                for (i in squares.indices step 2) {
+                    val difference = squares[i] - individual[i]
+                    assertEquals("Each corner retains its location modulo one world",
+                        0.0, difference - round(difference / worldWidth) * worldWidth, 1e-8)
+                    assertEquals(individual[i + 1], squares[i + 1], 0.0)
+                }
+            }
+        }
+    }
+
+    @Test fun dateLineAndAntipodalCellsNeverRevealAWorldWideStrip() {
+        for (raster in listOf(FogGeoRaster.fullWorld(512),
+            FogGeoRaster.around(0.0, -160.0, 15.0, 1024))) {
+            for (longitude in listOf(-179.999, 179.999, 20.0)) {
+                val corners = FogGrid.corners(0.0, longitude)
+                val squares = raster.projectGridCorners(corners)
+                val expectedWidth = Math.toRadians(corners[3] - corners[1]) *
+                    6378137.0 / raster.metersPerPixel
+                assertEquals("Both edges must use the same world copy",
+                    expectedWidth, squares[2] - squares[0], 1e-8)
+                assertEquals(squares[0], squares[6], 0.0)
+                assertEquals(squares[2], squares[4], 0.0)
             }
         }
     }

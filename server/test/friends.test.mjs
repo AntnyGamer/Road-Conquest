@@ -26,6 +26,7 @@ test("friend consent, private weekly scores, ties, removal, username changes and
     assert.equal((await pool.query("SELECT COUNT(*) FROM friendships")).rows[0].count, "1");
     const relation = (await friends.list(alpha)).friends[0];
     assert.notEqual(relation.status, "accepted");
+    assert.deepEqual((await competition.friendWeek(alpha)).entries.map(r => r.username), ["Alpha"]);
     const requester = relation.status === "outgoing" ? alpha : beta;
     const recipient = requester === alpha ? beta : alpha;
     await assert.rejects(friends.change(requester, recipient === beta ? "Beta" : "Alpha", "accept"), /incoming/u);
@@ -41,6 +42,9 @@ test("friend consent, private weekly scores, ties, removal, username changes and
     assert.equal((await friends.list(alpha)).friends[0].status, "accepted");
     await pool.query("UPDATE users SET leaderboard_visible=FALSE WHERE id=$1", [beta.id]);
     assert.deepEqual((await competition.friendWeek(alpha, "cells")).entries.map(r => r.username), ["Alpha"]);
+    await pool.query("UPDATE users SET leaderboard_visible=TRUE,leaderboard_eligible=FALSE WHERE id=$1", [beta.id]);
+    assert.deepEqual((await competition.friendWeek(alpha)).entries.map(r => r.username), ["Alpha"]);
+    await pool.query("UPDATE users SET leaderboard_eligible=TRUE WHERE id=$1", [beta.id]);
     await pool.query("UPDATE users SET leaderboard_visible=TRUE,username_display='Renamed',username_key='renamed' WHERE id=$1", [beta.id]);
     assert.equal((await friends.list(alpha)).friends[0].username, "Renamed");
     // Previous weeks cannot inflate this week's standings.

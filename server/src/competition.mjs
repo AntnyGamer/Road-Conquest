@@ -181,13 +181,17 @@ export async function createCompetition(pool, config, dependencies = {}) {
       const result = await pool.query(
         `WITH week AS (
           SELECT date_trunc('week', CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date AS start_date
+        ), participants AS (
+          SELECT $1::bigint AS id
+          UNION
+          SELECT CASE WHEN f.user_low=$1 THEN f.user_high ELSE f.user_low END
+          FROM friendships f WHERE f.accepted AND (f.user_low=$1 OR f.user_high=$1)
         ), scores AS (
           SELECT u.username_display AS username,u.username_key,COALESCE(w.new_cells,0) AS cells
-          FROM users u LEFT JOIN cell_weeks w ON w.user_id=u.id AND w.dataset=$2
+          FROM participants p JOIN users u ON u.id=p.id
+          LEFT JOIN cell_weeks w ON w.user_id=u.id AND w.dataset=$2
             AND w.week_start=(SELECT start_date FROM week)
-          WHERE u.leaderboard_visible AND u.leaderboard_eligible AND (u.id=$1 OR EXISTS (
-            SELECT 1 FROM friendships f WHERE f.accepted AND
-            ((f.user_low=$1 AND f.user_high=u.id) OR (f.user_high=$1 AND f.user_low=u.id))))
+          WHERE u.leaderboard_visible AND u.leaderboard_eligible
         ), ranked AS (
           SELECT username,username_key,cells,RANK() OVER (ORDER BY cells DESC) AS rank
           FROM scores

@@ -140,11 +140,15 @@ class PlaceResolverTest {
             mutableListOf(town to rectangle)
         }
         for (index in 0 until 6) {
-            val fix = town.copy(latitude = 39.82, longitude = -75.03,
+            val fix = town.copy(latitude = 39.815 + index * 0.001, longitude = -75.025,
                 visitedAt = 2000L + index)
             val found = cache.find(fix)
             assertEquals(town.key, found?.key)
             assertEquals(fix.visitedAt, found?.visitedAt)
+            assertEquals("Cache reuse must retain this visit's actual GPS latitude",
+                fix.latitude, found!!.latitude, 0.0)
+            assertEquals("Cache reuse must retain this visit's actual GPS longitude",
+                fix.longitude, found.longitude, 0.0)
         }
         assertEquals("Only one cache load for the entire discovery batch", 1, loads)
         assertNull(cache.find(town.copy(latitude = 39.90)))

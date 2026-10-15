@@ -113,6 +113,29 @@ class DataImporterTest {
         assertEquals(0L, TrackingRepository(context).getSummary().trackPointCount)
     }
 
+    @Test fun failedRecoveryReplacementPreservesLiveProgressAndTheExistingTarget() {
+        val tracker = TrackingRepository(context)
+        tracker.insertLocation(fix(1_000_000))
+        val original = export()
+        tracker.insertLocation(fix(1_005_000, -74.0001))
+        val before = entries(export()).filterKeys { it != "metadata.json" }
+        val target = DataImporter.previousBackup(context)
+        assertTrue(target.mkdir())
+        val marker = java.io.File(target, "existing-recovery")
+        marker.writeText("preserve")
+        try {
+            DataImporter.prepare(context, ByteArrayInputStream(original)).use { backup ->
+                assertTrue(runCatching { DataImporter.restore(context, backup) }.isFailure)
+            }
+            assertEquals(before, entries(export()).filterKeys { it != "metadata.json" })
+            assertEquals("preserve", marker.readText())
+            assertFalse(java.io.File(context.filesDir, "before-restore.tmp.zip").exists())
+        } finally {
+            marker.delete()
+            target.delete()
+        }
+    }
+
     @Test fun restoringRebuildsAnExhaustedGpsIdCounterAndAllowsFutureDriving() {
         val originalId = TrackingRepository(context).insertLocation(fix(1_000_000))
         val bytes = export()

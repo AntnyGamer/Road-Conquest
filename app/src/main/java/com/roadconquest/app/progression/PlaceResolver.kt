@@ -72,7 +72,8 @@ object PlaceResolver {
                 if (match != null && match.key != place.key) return null
                 match = place
             }
-            return match?.copy(visitedAt = seed.visitedAt)
+            return match?.copy(visitedAt = seed.visitedAt,
+                latitude = seed.latitude, longitude = seed.longitude)
         }
 
         fun remember(result: UnitedStatesMunicipalityAtPoint.Result) {
