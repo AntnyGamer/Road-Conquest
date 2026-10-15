@@ -330,7 +330,11 @@ class TripHistoryActivity : Activity() {
                             text = "No saved drives yet. Your recorded GPS history will appear here."
                         })
                     }
-                    trips.forEach { trip ->
+                    // Inflate only visible-sized batches. 500 Buttons at once
+                    // caused unnecessary main-thread work and view memory on VIP.
+                    fun appendBatch(start: Int) {
+                        val end = minOf(start + 40, trips.size)
+                        trips.subList(start, end).forEach { trip ->
                         val miles = trip.distanceMeters / 1609.344
                         column.addView(Button(this@TripHistoryActivity, null, 0,
                             R.style.RoadConquest_SettingsAction).apply {
@@ -357,7 +361,20 @@ class TripHistoryActivity : Activity() {
                                 loadTrip(trip)
                             }
                         }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
+                        }
+                        if (end < trips.size) {
+                            column.addView(Button(this@TripHistoryActivity, null, 0,
+                                R.style.RoadConquest_SettingsAction).apply {
+                                text = "Show more drives (${trips.size - end} remaining)"
+                                minHeight = dp(52)
+                                setOnClickListener {
+                                    column.removeView(this)
+                                    appendBatch(end)
+                                }
+                            }, LinearLayout.LayoutParams(-1, -2))
+                        }
                     }
+                    if (trips.isNotEmpty()) appendBatch(0)
                 }, {
                     column.addView(TextView(this@TripHistoryActivity).apply {
                         text = "Trip history is temporarily unavailable."
