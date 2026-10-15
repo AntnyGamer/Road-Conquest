@@ -87,6 +87,7 @@ class ChallengesActivity : Activity() {
             addView(goalLabel("Loading this week's progress…", 15f))
             root.addView(this, LinearLayout.LayoutParams(-1, -2))
         }
+        val socialStart = root.childCount
         label("Friends", 22f)
         label("Add friends by username. Both people must accept the friendship.")
         if (FeatureFlags.LEADERBOARDS_VISIBLE) {
@@ -125,7 +126,33 @@ class ChallengesActivity : Activity() {
             text = "Refresh"
             setOnClickListener { refresh() }
         }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+        if (!FeatureFlags.LEADERBOARDS_VISIBLE) {
+            // Friends remain available, but don't dominate a weekly-goals page
+            // when verified competitions are not activated.
+            val social = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                visibility = View.GONE
+            }
+            while (root.childCount > socialStart) {
+                val child = root.getChildAt(socialStart)
+                root.removeViewAt(socialStart)
+                social.addView(child)
+            }
+            val toggle = Button(this, null, 0, R.style.RoadConquest_SettingsAction).apply {
+                text = "Manage friends (optional)"
+                setOnClickListener {
+                    socialExpanded = !socialExpanded
+                    social.visibility = if (socialExpanded) View.VISIBLE else View.GONE
+                    text = if (socialExpanded) "Hide friends" else "Manage friends (optional)"
+                    if (socialExpanded) refresh()
+                }
+            }
+            root.addView(toggle)
+            root.addView(social)
+        }
     }
+
+    private var socialExpanded = FeatureFlags.LEADERBOARDS_VISIBLE
 
     private fun refresh() {
         val expected = ++generation
@@ -143,7 +170,7 @@ class ChallengesActivity : Activity() {
                     })
                 }
             }
-            if (expected != generation) return@execute
+            if (expected != generation || !socialExpanded) return@execute
             if (session == null) {
                 runOnUiThread {
                     if (!isDestroyed && expected == generation) {
