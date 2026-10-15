@@ -34,11 +34,15 @@ class PlaceResolverTest {
         val context = org.robolectric.RuntimeEnvironment.getApplication()
         val partial = Address(Locale.US).apply { countryCode = "US"; countryName = "United States" }
         var stateLookups = 0
-        val places = PlaceResolver.resolve(context, candidate,
+        assertNull(PlaceResolver.resolve(context, candidate,
+            addressesOverride = listOf(partial),
+            stateLookup = { _, _ -> stateLookups++; "New Jersey" },
+            townLookup = { null }))
+        val places = PlaceResolver.resolve(context, candidate.copy(attempts = 2),
             addressesOverride = listOf(partial),
             stateLookup = { _, _ -> stateLookups++; "New Jersey" },
             townLookup = { null })!!
-        assertEquals(1, stateLookups)
+        assertEquals(2, stateLookups)
         assertEquals(listOf("us", "us|new jersey"), places.map { it.key })
         assertFalse(places.any { it.kind == PlaceKind.TOWN })
     }
@@ -220,8 +224,15 @@ class PlaceResolverTest {
 
     @Test fun missingAndroidGeocoderStillResolvesVerifiedUsStateWithoutGuessingTown() {
         val context = org.robolectric.RuntimeEnvironment.getApplication()
-        val result = PlaceResolver.resolveWithoutGeocoder(
+        assertNull(PlaceResolver.resolveWithoutGeocoder(
             context, candidate, com.roadconquest.app.map.PlaceOverlayCache.generation(),
+            municipalCache = PlaceResolver.VerifiedMunicipalCache { mutableListOf() },
+            stateLookup = { _, _ -> "New Jersey" },
+            townLookup = { null }
+        ))
+        val result = PlaceResolver.resolveWithoutGeocoder(
+            context, candidate.copy(attempts = 2),
+            com.roadconquest.app.map.PlaceOverlayCache.generation(),
             municipalCache = PlaceResolver.VerifiedMunicipalCache { mutableListOf() },
             stateLookup = { lat, lon ->
                 assertEquals(candidate.latitude, lat, 0.0)
