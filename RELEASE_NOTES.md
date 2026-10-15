@@ -1,5 +1,10 @@
 # Road Conquest 1.0 Beta 49
 
+- **New feature work on the unmerged development branch:** Free trip summaries now report estimated road unlocks, discovered towns, dated map-tile unlocks, and GPS matching still pending. Saved mile tiles carry first-unlock dates via a backward-compatible schema-14 migration and ZIP format 11. Unknown legacy dates stay unknown; backup formats 9/10 remain importable. The map overlay picker adds a local 5×5 exploration goal view, while Settings records the time of the last successful progress export.
+- **Lifetime VIP trip extras:** The existing $2.99 `vip_lifetime` purchase additionally unlocks browsing up to 500 recent trips, sharing text summaries, and privately saving GPX files (first/last two minutes hidden by default). Free users retain 100 recent trips, replay, basic summaries, and complete data backup/restore.
+- **Less clutter / safer progression:** Retire the 1%/5% battery achievements for new awards while preserving earned points, hide the Bonus filter when empty, rename the map Weekly button to Goals, collapse optional friends behind Manage friends while verified leaderboards remain hidden, and identify pending road matching separately from saved GPS.
+
+
 - **Repository audit:** Correct date-line fog projection so one explored tile cannot reveal a world-wide strip. Cached municipal lookups now retain the actual current visit coordinate, and Census state fallback accepts valid fragmented responses while keeping its response-size bound.
 - **Polar fog accuracy:** Keep detailed and regional fog rasters within Mercator bounds so clamped latitude corners cannot stretch cleared tiles away from their saved coordinates.
 - **VIP ownership ordering:** Ignore ownership queries superseded by a newer check or purchase callback, including confirmations that match the offline cache. Successful current checks still detect refunds and preserve point-purchased cosmetics.
