@@ -189,7 +189,8 @@ object ProgressionManager {
         lowestBatteryPercent = snapshot.lowestBatteryPercent,
         rewardedRoads = snapshot.rewardedRoads,
         tilesUnlocked = snapshot.tilesUnlocked,
-        rewardedAchievements = snapshot.rewardedAchievements
+        rewardedAchievements = snapshot.rewardedAchievements,
+        rewardedAchievementPoints = snapshot.rewardedAchievementPoints
     )
 }
 

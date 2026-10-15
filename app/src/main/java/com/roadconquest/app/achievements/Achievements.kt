@@ -12,7 +12,8 @@ data class AchievementMetrics(
     val lowestBatteryPercent: Int = 101,
     val rewardedRoads: Long = 0L,
     val tilesUnlocked: Long = 0L,
-    val rewardedAchievements: Set<String> = emptySet()
+    val rewardedAchievements: Set<String> = emptySet(),
+    val rewardedAchievementPoints: Map<String, Long> = emptyMap()
 )
 
 enum class AchievementCategory(val label: String) {
@@ -114,7 +115,10 @@ object Achievements {
         ).map { item ->
             // Road/place deduplication can reduce current totals. The durable
             // reward ledger preserves earned milestones across full restores.
-            if (item.id in metrics.rewardedAchievements) item.copy(progress = maxOf(item.progress, item.goal)) else item
+            if (item.id in metrics.rewardedAchievements) item.copy(
+                progress = maxOf(item.progress, item.goal),
+                rewardPoints = metrics.rewardedAchievementPoints[item.id] ?: item.rewardPoints
+            ) else item
         }
     }
 

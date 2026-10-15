@@ -711,6 +711,15 @@ class ProgressionRepositoryTest {
         assertEquals(1_100L + 150L + 5L * 10L, repository.snapshot().balance)
         assertTrue("battery_1" in repository.snapshot().rewardedAchievements)
         assertTrue("ads_5" in repository.snapshot().rewardedAchievements)
+        val earned = Achievements.progress(
+            DataSummary(0, 0, null, null),
+            ProgressionManager.metrics(repository.snapshot())
+        )
+        assertEquals(1_000L, earned.first { it.id == "battery_1" }.rewardPoints)
+        assertEquals(100L, earned.first { it.id == "ads_5" }.rewardPoints)
+        // Players who have not unlocked a milestone see its current reward.
+        assertEquals(350L, Achievements.progress(DataSummary(0, 0, null, null))
+            .first { it.id == "battery_1" }.rewardPoints)
     }
 
     @Test fun partialBaselineKeepsRetryingMissingKindsWithoutAwardingThem() {
