@@ -165,6 +165,22 @@ class OsrmNetworkTest {
         }
     }
 
+    @Test fun retryAfterHttpDateDelaysAdditionalRequests() {
+        MockWebServer().use { server ->
+            val retryAt = java.time.ZonedDateTime.now(java.time.ZoneOffset.UTC)
+                .plusMinutes(3)
+                .format(java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME)
+            server.enqueue(MockResponse().setResponseCode(429).addHeader("Retry-After", retryAt))
+            server.start()
+            val matcher = OsrmMatcher(server.url("/").toString().trimEnd('/'))
+            assertNull(matcher.match(points))
+            assertTrue("Honor future HTTP-date retry limit",
+                matcher.rateLimitRemainingMs() in 150_000L..180_000L)
+            assertNull(matcher.match(points))
+            assertEquals(1, server.requestCount)
+        }
+    }
+
     @Test fun oversizedResponseIsRejected() {
         MockWebServer().use { server ->
             server.enqueue(MockResponse().setBody(" ".repeat(4 * 1024 * 1024 + 1) + valid))
