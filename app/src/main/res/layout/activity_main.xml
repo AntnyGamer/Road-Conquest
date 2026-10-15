@@ -186,14 +186,14 @@
                 android:drawableTop="@drawable/ic_nav_weekly"
                 android:drawablePadding="3dp"
                 android:drawableTint="?attr/rcTextPrimary"
-                android:contentDescription="Weekly challenges and friends"
+                android:contentDescription="Weekly exploration goals and optional friends"
                 style="@style/RoadConquest.NavigationAction"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:minHeight="52dp"
                 android:layout_marginStart="6dp"
                 android:layout_weight="1"
-                android:text="Weekly" />
+                android:text="Goals" />
         </LinearLayout>
     </LinearLayout>
 </FrameLayout>
