@@ -28,6 +28,34 @@ class MapLayoutTest {
         override fun requestLayout() { layoutRequests++; super.requestLayout() }
     }
 
+    @Test fun bottomNavigationKeepsThreePrimaryDestinationsAndAccessibleGarageChip() {
+        // Parse actual compiled layout without starting MapLibre's native GPU view.
+        val context = Robolectric.buildActivity(MainActivity::class.java).get()
+        val parser = context.resources.getLayout(R.layout.activity_main)
+        val androidNs = "http://schemas.android.com/apk/res/android"
+        val nav = mutableListOf<Int>()
+        var garageChipFound = false
+        try {
+            while (parser.eventType != org.xmlpull.v1.XmlPullParser.END_DOCUMENT) {
+                if (parser.eventType == org.xmlpull.v1.XmlPullParser.START_TAG) {
+                    val id = parser.getAttributeResourceValue(androidNs, "id", 0)
+                    if (id in setOf(R.id.tripsNavButton, R.id.badgesNavButton, R.id.weeklyGoalsNavButton)) {
+                        assertEquals("Navigation targets must be actual buttons", "Button", parser.name)
+                        nav += id
+                    }
+                    if (id == R.id.pointsText) {
+                        garageChipFound = parser.getAttributeBooleanValue(androidNs, "clickable", false)
+                    }
+                }
+                parser.next()
+            }
+        } finally {
+            parser.close()
+        }
+        assertEquals(listOf(R.id.tripsNavButton, R.id.badgesNavButton, R.id.weeklyGoalsNavButton), nav)
+        assertTrue("The existing points chip must remain tappable for Garage", garageChipFound)
+    }
+
     @Test fun identicalInsetsAndRepeatedLayoutsDoNotRescheduleTheStatsCard() {
         // Test the real safe-area listener without loading MapLibre's desktop-incompatible GPU view.
         val activity = Robolectric.buildActivity(MainActivity::class.java).get()
