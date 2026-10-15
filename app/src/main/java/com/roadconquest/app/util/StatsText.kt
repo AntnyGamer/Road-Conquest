@@ -23,12 +23,12 @@ object StatsText {
     /** Full categorized breakdown with no new database or network work. */
     fun settingsOverview(context: Context, summary: DataSummary, progress: ProgressionSnapshot): String =
         buildString {
-            append("DRIVING\\n")
+            append("DRIVING\n")
             append(format(context, summary))
-            append("\\n\\nEXPLORATION\\n")
-            append(String.format(Locale.getDefault(), "%,d mile tiles • %,d towns\\n%,d states/regions • %,d countries",
+            append("\n\nEXPLORATION\n")
+            append(String.format(Locale.getDefault(), "%,d mile tiles • %,d towns\n%,d states/regions • %,d countries",
                 progress.tilesUnlocked, progress.towns, progress.states, progress.countries))
-            append("\\n\\nPROGRESSION\\n")
+            append("\n\nPROGRESSION\n")
             append(String.format(Locale.getDefault(), "⚔ %,d points", progress.balance))
         }
 
