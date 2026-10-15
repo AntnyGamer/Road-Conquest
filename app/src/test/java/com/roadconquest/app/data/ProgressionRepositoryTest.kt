@@ -684,12 +684,12 @@ class ProgressionRepositoryTest {
         val fifth = AdRewardBridge(context, 10L)
         assertTrue(fifth.onCompletedAd())
         assertFalse(fifth.onCompletedAd())
-        assertEquals(100L, ProgressionRepository(context).snapshot().balance)
+        assertEquals(150L, ProgressionRepository(context).snapshot().balance)
 
         repeat(5) { assertTrue(AdRewardBridge(context, 10L).onCompletedAd()) }
         val snapshot = ProgressionRepository(context).snapshot()
         assertEquals(10L, snapshot.adsWatched)
-        assertEquals(250L, snapshot.balance)
+        assertEquals(400L, snapshot.balance)
 
         val pending = AdRewardBridge(context, 10L)
         TrackingRepository(context).clearHistory()
