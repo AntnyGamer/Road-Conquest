@@ -37,6 +37,7 @@ class ChallengesActivity : Activity() {
     private lateinit var status: TextView
     private lateinit var invite: Button
     private var changingFriend = false
+    private var pendingFriendFeedback: String? = null
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density + 0.5f).toInt()
 
@@ -155,7 +156,8 @@ class ChallengesActivity : Activity() {
                 if (isDestroyed || expected != generation || AccountStore.load(this)?.token != session.token) return@runOnUiThread
                 invite.text = "Add friend by username"
                 friends.removeAllViews()
-                status.text = ""
+                status.text = pendingFriendFeedback.orEmpty()
+                pendingFriendFeedback = null
                 friendList.fold({ rows ->
                     for (i in 0 until rows.length()) {
                         val row = rows.getJSONObject(i)
@@ -269,10 +271,27 @@ class ChallengesActivity : Activity() {
                 if (isDestroyed) return@runOnUiThread
                 changingFriend = false; invite.isEnabled = true
                 if (AccountStore.load(this)?.token != session.token) { refresh(); return@runOnUiThread }
-                status.text = result.fold({ "Friendship updated." }, { serviceError(it) })
-                refresh()
+                result.fold({
+                    pendingFriendFeedback = "Friendship updated."
+                    refresh()
+                }, { error ->
+                    // A failed request must remain visible; immediately refreshing would
+                    // erase the error even though the friendship was unchanged.
+                    status.text = serviceError(error)
+                    enableFriendActions()
+                })
             }
         }
+    }
+
+    private fun enableFriendActions() {
+        fun enableRecursively(view: View) {
+            if (view is Button) view.isEnabled = true
+            if (view is android.view.ViewGroup) {
+                for (index in 0 until view.childCount) enableRecursively(view.getChildAt(index))
+            }
+        }
+        enableRecursively(friends)
     }
 
     override fun onStart() { super.onStart(); ForegroundSession.app.onStart() }

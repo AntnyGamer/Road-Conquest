@@ -29,6 +29,7 @@ class AchievementsActivity : Activity() {
     private val executor = Executors.newSingleThreadExecutor()
     private var achievements: List<AchievementProgress> = emptyList()
     private var selectedCategory = AchievementCategory.ROADS
+    private var loadGeneration = 0
     private val categoryButtons = linkedMapOf<AchievementCategory, Button>()
 
     private companion object { const val PROGRESS_MAX = 1000 }
@@ -63,8 +64,6 @@ class AchievementsActivity : Activity() {
         }
         ViewCompat.requestApplyInsets(root)
 
-        val text = findViewById<TextView>(R.id.achievementsText)
-        val points = findViewById<TextView>(R.id.achievementPointsText)
         val list = findViewById<LinearLayout>(R.id.achievementsList)
         categoryButtons.putAll(
             linkedMapOf(
@@ -83,6 +82,11 @@ class AchievementsActivity : Activity() {
             }
         }
         updateCategoryButtons()
+    }
+
+    /** Reload progress when returning after a drive, restore, or earned reward. */
+    private fun refreshAchievements() {
+        val expected = ++loadGeneration
         executor.execute {
             val result = runCatching {
                 val summary = TrackingRepository(this).getSummary()
@@ -90,7 +94,10 @@ class AchievementsActivity : Activity() {
                 progression to Achievements.progress(this, summary, ProgressionManager.metrics(progression))
             }
             runOnUiThread {
-                if (isDestroyed) return@runOnUiThread
+                if (isDestroyed || expected != loadGeneration) return@runOnUiThread
+                val text = findViewById<TextView>(R.id.achievementsText)
+                val points = findViewById<TextView>(R.id.achievementPointsText)
+                val list = findViewById<LinearLayout>(R.id.achievementsList)
                 result.fold(
                     onSuccess = { (progression, achievements) ->
                         points.text = String.format(Locale.getDefault(), "⚔ %,d points", progression.balance)
@@ -210,6 +217,7 @@ class AchievementsActivity : Activity() {
                 }
             ) selectedCategory = AchievementCategory.ROADS
             renderCategory(findViewById(R.id.achievementsList))
+            refreshAchievements()
         }
     }
 
@@ -219,6 +227,7 @@ class AchievementsActivity : Activity() {
     }
 
     override fun onDestroy() {
+        loadGeneration++
         ads.destroy()
         executor.shutdownNow()
         super.onDestroy()
