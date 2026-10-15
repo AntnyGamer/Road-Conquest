@@ -39,6 +39,7 @@ import com.roadconquest.app.map.MapRenderer
 import com.roadconquest.app.map.FogBitmapRenderer
 import com.roadconquest.app.map.PlaceOverlayInfo
 import com.roadconquest.app.map.PlaceOverlayMode
+import com.roadconquest.app.map.PlacePopulationLookup
 import com.roadconquest.app.progression.ProgressionManager
 import com.roadconquest.app.util.LocationProviders
 import com.roadconquest.app.util.Prefs
@@ -87,6 +88,7 @@ class MainActivity : Activity() {
     private var accountPrompt: AlertDialog? = null
     private var locationDisclosure: AlertDialog? = null
     private val summaryExecutor = Executors.newSingleThreadExecutor()
+    private val populationExecutor = Executors.newSingleThreadExecutor()
     private val discoveryExecutor = Executors.newSingleThreadExecutor()
     private val placeResolutionInFlight = AtomicBoolean(false)
     private var lastPlaceBackfillElapsed = -1L
@@ -511,6 +513,7 @@ class MainActivity : Activity() {
         roadDetailsGeneration++
         statsHandler.removeCallbacksAndMessages(null)
         summaryExecutor.shutdownNow()
+        populationExecutor.shutdownNow()
         discoveryExecutor.shutdownNow()
         renderer?.destroy()
         mapView.onDestroy()
@@ -824,9 +827,12 @@ class MainActivity : Activity() {
             com.roadconquest.app.data.PlaceKind.STATE -> "State or region"
             com.roadconquest.app.data.PlaceKind.TOWN -> "Town"
         }
-        val population = info.population?.let {
+        var population = info.population?.let {
             String.format(Locale.getDefault(), "%,d", it)
-        } ?: "Not available"
+        } ?: if (PlacePopulationLookup.canLookup(info)) "Loading…" else "Not available"
+        var populationSource: String? = null
+        var firstVisited = "Loading…"
+        var lastVisited = "Loading…"
         val squareMiles = info.areaSquareKilometers * 0.386102
         val area = if (squareMiles >= 1.0) {
             String.format(Locale.getDefault(), "%,.1f sq mi (%,.1f km²)", squareMiles, info.areaSquareKilometers)
@@ -835,11 +841,17 @@ class MainActivity : Activity() {
         }
         val dialog = AlertDialog.Builder(this)
             .setTitle(info.name)
-            .setMessage("$type\nPopulation: $population\nArea: $area\nFirst visited: Loading…\nLast visited: Loading…")
+            .setMessage("")
             .setPositiveButton("Close", null)
             .show()
-        // Query local visit history off the UI thread. The overlay responds
-        // immediately even with years of trips saved.
+        // Both workers update UI-owned strings on the main thread so neither
+        // asynchronous result can erase the other or block ordinary map stats.
+        fun updateDialog() {
+            val heading = if (populationSource == "2020 Census") "Population (2020 Census)"
+                else "Population"
+            dialog.setMessage("$type\n$heading: $population\nArea: $area\nFirst visited: $firstVisited\nLast visited: $lastVisited")
+        }
+        updateDialog()
         summaryExecutor.execute {
             val visits = runCatching {
                 ProgressionRepository(applicationContext).placeVisitTimes(info.kind, info.key)
@@ -847,9 +859,21 @@ class MainActivity : Activity() {
             runOnUiThread {
                 if (isDestroyed || !dialog.isShowing) return@runOnUiThread
                 val formatted = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT)
-                val first = visits?.let { formatted.format(Date(it.firstVisitedAt)) } ?: "Not available"
-                val last = visits?.let { formatted.format(Date(it.lastVisitedAt)) } ?: "Not available"
-                dialog.setMessage("$type\nPopulation: $population\nArea: $area\nFirst visited: $first\nLast visited: $last")
+                firstVisited = visits?.let { formatted.format(Date(it.firstVisitedAt)) } ?: "Not available"
+                lastVisited = visits?.let { formatted.format(Date(it.lastVisitedAt)) } ?: "Not available"
+                updateDialog()
+            }
+        }
+        if (info.population == null && PlacePopulationLookup.canLookup(info)) {
+            populationExecutor.execute {
+                val result = runCatching { PlacePopulationLookup.lookup(info) }.getOrNull()
+                runOnUiThread {
+                    if (isDestroyed || !dialog.isShowing) return@runOnUiThread
+                    population = result?.let { String.format(Locale.getDefault(), "%,d", it.count) }
+                        ?: "Not available"
+                    populationSource = result?.source
+                    updateDialog()
+                }
             }
         }
     }

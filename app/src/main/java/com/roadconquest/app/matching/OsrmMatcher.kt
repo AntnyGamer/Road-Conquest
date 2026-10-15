@@ -74,29 +74,70 @@ class OsrmMatcher(
             "?steps=true&geometries=geojson&overview=full&annotations=false&tidy=false&gaps=ignore" +
             "&waypoints=$waypoints&timestamps=$timestamps&radiuses=$radiuses"
         val first = requestMatch(URI(path + (bearings?.let { "&bearings=$it" } ?: "")).toURL(), points)
-        // A short, resolved-on-both-sides junction gap can remain unmatched because course
-        // guidance conflicts with a GPS fix at the turn. Retry once without bearings, never
-        // on a live/unanchored trace or a fully resolved result. All acceptance guards remain.
+        // Retry a supported, anchored turn without heading constraints first. If the
+        // normal retry cannot recover it, allow a final tightly bounded candidate search
+        // over non-startpoint road edges. Never accept a weaker or contradictory path.
         val gap = supportedGap ?: return first
-        if (bearings == null || gap.all { index ->
+        if (gap.all { index ->
                 (first?.matchedPointConfidences?.get(points[index].id) ?: 0.0) >= MIN_ACCEPTABLE_CONFIDENCE
             }
         ) return first
-        val second = requestMatch(URI(path).toURL(), points) ?: return first
         fun accepted(result: MatchResult, id: Long) =
             (result.matchedPointConfidences[id] ?: 0.0) >= MIN_ACCEPTABLE_CONFIDENCE
-        // The repaired interval needs independently supported, accepted road geometry on
-        // both ends. Never replace an already accepted fix with a different partial trace.
-        if (!accepted(second, points[gap.first - 1].id) ||
-            !accepted(second, points[gap.last + 1].id)
-        ) return first
-        if (first == null) return second
-        val oldGap = gap.count { accepted(first, points[it].id) }
-        val newGap = gap.count { accepted(second, points[it].id) }
-        val preservesEvidence = first.matchedPointConfidences.keys.all { id ->
-            !accepted(first, id) || accepted(second, id)
+        val oldGap = gap.count { index ->
+            first?.let { accepted(it, points[index].id) } == true
         }
-        return if (newGap > oldGap && preservesEvidence) second else first
+        fun safelyImproves(result: MatchResult?, requiredGapConfidence: Double): Boolean {
+            if (result == null ||
+                !accepted(result, points[gap.first - 1].id) ||
+                !accepted(result, points[gap.last + 1].id)
+            ) return false
+            val repaired = gap.count { index ->
+                (result.matchedPointConfidences[points[index].id] ?: 0.0) >= requiredGapConfidence
+            }
+            // Never discard an accepted approach/exit or a previously confirmed road
+            // simply because another routing hypothesis fills the hole.
+            return repaired > oldGap &&
+                (first == null || first.matchedPointConfidences.keys.all { id ->
+                    !accepted(first, id) || accepted(result, id)
+                })
+        }
+
+        // Keep the established no-bearing retry unchanged; "gaps=split" only
+        // controls large timestamp gaps and does not repair a short street corner.
+        // Without first-pass heading guidance, an identical second request adds
+        // no evidence and wastes the public match service's limited capacity.
+        val second = if (bearings == null) null else requestMatch(URI(path).toURL(), points)
+        if (safelyImproves(second, MIN_ACCEPTABLE_CONFIDENCE)) return second
+
+        // Only retry with "snapping=any" when OSRM has independently confirmed
+        // both ends, GPS is precise and continuous, and its normal candidate
+        // search left the turn missing. This never widens GPS radiuses or waives
+        // detour/snap/confidence protections in parseLeg().
+        // The very first fix of a later split trace is deliberately left pending
+        // by parse(), despite its exit-road geometry being accepted. Inspect that
+        // accepted geometry and the already-matched saved exit anchor instead of
+        // requiring a confidence entry parse() intentionally withholds.
+        val exitTime = points[gap.last + 1].timestampMillis
+        val confirmedExitRoad = first?.roads?.any { road ->
+            road.confidence >= MIN_ACCEPTABLE_CONFIDENCE &&
+                road.firstTimestamp <= exitTime && road.lastTimestamp >= exitTime
+        } == true
+        if (first == null ||
+            !accepted(first, points[gap.first - 1].id) ||
+            !points[gap.last + 1].matched || !confirmedExitRoad ||
+            (gap.first - 1..gap.last + 1).any { index ->
+                points[index].accuracyMeters !in 0.01f..MAX_LONG_TURN_ACCURACY_M
+            } ||
+            (gap.first - 1 until gap.last + 1).any { index ->
+                val from = points[index]
+                val to = points[index + 1]
+                to.timestampMillis - from.timestampMillis !in 1..MAX_LONG_TURN_SAMPLE_GAP_MS ||
+                    pointDistanceMeters(from, to) > MAX_LONG_TURN_JUMP_M
+            }
+        ) return first
+        val third = requestMatch(URI("$path&snapping=any").toURL(), points)
+        return if (safelyImproves(third, MIN_ALTERNATE_SNAP_CONFIDENCE)) third else first
     }
 
     @Synchronized
@@ -815,6 +856,7 @@ class OsrmMatcher(
         private const val MAX_LONG_TURN_SAMPLE_GAP_MS = 15_000L
         private const val MAX_LONG_TURN_JUMP_M = 100.0
         private const val MAX_LONG_TURN_ACCURACY_M = 12f
+        private const val MIN_ALTERNATE_SNAP_CONFIDENCE = 0.75
         private const val EARTH_RADIUS_M = 6_371_008.8
         private const val MIN_GEOMETRY_LENGTH_M = 0.001
         private const val DUPLICATE_POINT_TOLERANCE_M = 0.01

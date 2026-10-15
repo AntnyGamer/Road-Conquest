@@ -1,4 +1,17 @@
-# Road Conquest 1.0 Beta 47
+# Road Conquest 1.0 Beta 48
+
+- **Population details:** New on-demand population lookup for visited U.S. states and Census-identified municipalities using official 2020 Census POP100 counts from the Census2020 TIGERweb service. U.S. country total comes from the 2020 Census; other countries with ISO country-code keys can use REST Countries. Display labels identify 2020 data. Unsupported places honestly remain unavailable, and offline requests do not affect saved polygons or travel data.
+- **Exact edge-to-edge bottom panel:** Remove the 1dp border previously visible along its sides and bottom. The sheet still has rounded top corners and safe-area-aware content padding.
+- **Turn matching:** Retains the ordinary no-bearing OSRM retry for supported corners. When a precise, continuous gap remains unresolved despite matching both ends (including at low speeds), a final higher-confidence road-edge candidate retry can recover it without discarding accepted fixes, relaxing GPS snap/detour limits, or synthesizing road geometry. Extra network matching requests are possible for persistent corner gaps.
+- **Compatibility:** Android 12+, versionCode **74** (Beta 47 was 73). Existing package ID and permanent signing key remain unchanged, and all previous progress and purchases remain saved. Include 74 in the documented `PLAY_VERSION_CODES` allowlist if a separately deployed server uses verified scoring. Public leaderboards remain disabled by default.
+- **Validation:** Android unit, lint, emulator, backend, minified-release-startup and signed Play-bundle checks are release gates.
+
+Install signed GitHub APK over a compatible GitHub APK install, or use the signed AAB in a Play testing track to update a Play-installed version. Don't clear app data or switch signing identities. Export a backup before changing distribution channels.
+
+---
+
+# Beta 47 (previous release)
+
 
 - **More rewarding early and long-term progression:** Adds weekly goals for five newly unlocked roads and one newly visited town (75 points each) alongside the existing 25-road and three-town milestones. Adds intermediate and longer-term road, mileage and place achievements. Earned rewards and historical ledgers remain intact.
 - **Shop progression:** Rebalances prices across starter and aspirational cosmetics, adds two vehicle shapes, three car colors and three road colors, and shows points needed before an item can be purchased. The Gold UI now costs 6,500 points unless unlocked through lifetime VIP. Previously purchased items stay owned; the other VIP benefits are unchanged.

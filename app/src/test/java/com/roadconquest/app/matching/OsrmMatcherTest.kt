@@ -76,8 +76,10 @@ class OsrmMatcherTest {
                 val result = requireNotNull(OsrmMatcher(server.url("/").toString().trimEnd('/')).match(points))
                 assertEquals("Long corner must receive a second attempt", 2, server.requestCount)
                 assertNotNull(server.takeRequest().requestUrl?.queryParameter("bearings"))
+                val retried = server.takeRequest().requestUrl
                 assertNull("Only the retry omits bearing restrictions",
-                    server.takeRequest().requestUrl?.queryParameter("bearings"))
+                    retried?.queryParameter("bearings"))
+                assertEquals("ignore", retried?.queryParameter("gaps"))
                 assertTrue((before until before + gap).all {
                     (result.matchedPointConfidences[points[it].id] ?: 0.0) >=
                         OsrmMatcher.MIN_ACCEPTABLE_CONFIDENCE
@@ -127,6 +129,80 @@ class OsrmMatcherTest {
                     OsrmMatcher.MIN_ACCEPTABLE_CONFIDENCE
             })
             assertTrue(result.roads.isNotEmpty())
+        }
+    }
+
+    @Test fun preciseAnchoredTurnCanUseHigherConfidenceAlternativeSnapWithoutDroppingExistingRoads() {
+        val coords = listOf(
+            -74.00060 to 40.0, -74.00030 to 40.0, -74.0 to 40.0,
+            -74.0 to 40.00030, -74.0 to 40.00060
+        )
+        val fixes = coords.mapIndexed { i, (lon, lat) ->
+            TrackPoint(i + 101L, lat, lon, 4f, 9f, 0f,
+                100_000L + 3_000L * i, i != 2)
+        }
+        fun trace(group: Int, waypoint: Int, i: Int) =
+            """{"matchings_index":$group,"waypoint_index":$waypoint,"alternatives_count":0,"location":[${coords[i].first},${coords[i].second}]}"""
+        fun leg(a: Int, b: Int) =
+            """{"steps":[{"name":"Known road","distance":30,"geometry":{"type":"LineString","coordinates":[[${coords[a].first},${coords[a].second}],[${coords[b].first},${coords[b].second}]]}}]}"""
+        val incomplete = """{"code":"Ok","tracepoints":[${trace(0,0,0)},${trace(0,1,1)},null,
+            ${trace(1,0,3)},${trace(1,1,4)}],
+            "matchings":[{"confidence":0.95,"legs":[${leg(0,1)}]},
+            {"confidence":0.95,"legs":[${leg(3,4)}]}]}"""
+        fun complete(confidence: Double) = """{"code":"Ok",
+            "tracepoints":[${coords.indices.joinToString(",") { trace(0,it,it) }}],
+            "matchings":[{"confidence":$confidence,
+            "legs":[${(0 until coords.lastIndex).joinToString(",") { leg(it,it+1) }}]}]}"""
+
+        for ((confidence, shouldAccept) in listOf(0.95 to true, 0.65 to false)) {
+            MockWebServer().use { server ->
+                server.enqueue(MockResponse().setBody(incomplete))
+                server.enqueue(MockResponse().setBody(incomplete))
+                server.enqueue(MockResponse().setBody(complete(confidence)))
+                server.start()
+                val result = requireNotNull(OsrmMatcher(server.url("/").toString().trimEnd('/')).match(fixes))
+                assertEquals(3, server.requestCount)
+                assertEquals("ignore", server.takeRequest().requestUrl?.queryParameter("gaps"))
+                assertNull(server.takeRequest().requestUrl?.queryParameter("snapping"))
+                val fallback = server.takeRequest().requestUrl
+                assertEquals("any", fallback?.queryParameter("snapping"))
+                assertNull(fallback?.queryParameter("bearings"))
+                assertEquals(shouldAccept,
+                    (result.matchedPointConfidences[fixes[2].id] ?: 0.0) >=
+                        OsrmMatcher.MIN_ACCEPTABLE_CONFIDENCE)
+            }
+        }
+    }
+
+    @Test fun preciseLowSpeedCornerDoesNotRepeatUnconstrainedMatchBeforeFallback() {
+        val coords = listOf(
+            -74.00060 to 40.0, -74.00030 to 40.0, -74.0 to 40.0,
+            -74.0 to 40.00030, -74.0 to 40.00060
+        )
+        val fixes = coords.mapIndexed { i, (lon, lat) ->
+            TrackPoint(i + 201L, lat, lon, 4f, 1f, 0f,
+                100_000L + i * 4_000L, i != 2)
+        }
+        fun loc(i: Int) = "[${coords[i].first},${coords[i].second}]"
+        fun trace(group: Int, waypoint: Int, i: Int) =
+            """{"matchings_index":$group,"waypoint_index":$waypoint,"alternatives_count":0,"location":${loc(i)}}"""
+        fun leg(a: Int, b: Int) =
+            """{"steps":[{"name":"Known road","distance":30,"geometry":{"type":"LineString","coordinates":[${loc(a)},${loc(b)}]}}]}"""
+        val incomplete = """{"code":"Ok","tracepoints":[${trace(0,0,0)},${trace(0,1,1)},null,${trace(1,0,3)},${trace(1,1,4)}],
+            "matchings":[{"confidence":0.95,"legs":[${leg(0,1)}]},{"confidence":0.95,"legs":[${leg(3,4)}]}]}"""
+        val complete = """{"code":"Ok","tracepoints":[${coords.indices.joinToString(",") { trace(0,it,it) }}],
+            "matchings":[{"confidence":0.95,"legs":[${(0 until coords.lastIndex).joinToString(",") { leg(it,it+1) }}]}]}"""
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody(incomplete))
+            server.enqueue(MockResponse().setBody(complete))
+            server.start()
+            val result = requireNotNull(OsrmMatcher(server.url("/").toString().trimEnd('/')).match(fixes))
+            assertEquals(2, server.requestCount)
+            assertNull(server.takeRequest().requestUrl?.queryParameter("bearings"))
+            val retry = server.takeRequest().requestUrl
+            assertNull(retry?.queryParameter("bearings"))
+            assertEquals("any", retry?.queryParameter("snapping"))
+            assertTrue(result.matchedPointConfidences.containsKey(fixes[2].id))
         }
     }
 
