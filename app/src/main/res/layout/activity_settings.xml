@@ -17,6 +17,14 @@
         android:paddingEnd="16dp"
         android:paddingBottom="28dp">
 
+        <Button
+            android:id="@+id/backNavButton"
+            style="@style/RoadConquest.BackAction"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:layout_marginBottom="8dp"
+            android:text="← Back" />
+
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
