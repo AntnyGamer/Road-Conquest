@@ -95,31 +95,34 @@ class TripHistoryRepository(context: Context) {
     /** Uses existing indexed history timestamps; never fabricates per-trip tile counts. */
     fun insights(trip: SavedTrip): SavedTripInsights = withHistorySnapshot { db, generation ->
         if (trip.historyGeneration != generation) return@withHistorySnapshot SavedTripInsights(0, 0, 0, 0)
-        val period = arrayOf(trip.startedAt.toString(), trip.endedAt.toString())
-        val roads = db.rawQuery(
-            """SELECT COUNT(DISTINCT CASE WHEN road_group_id = '' THEN segment_id ELSE road_group_id END)
-               FROM roads WHERE first_unlocked_at BETWEEN ? AND ?
-               AND road_group_id NOT LIKE 'x2|%'""", period
-        ).use { it.moveToFirst(); it.getLong(0) }
-        val towns = db.rawQuery(
-            """SELECT COUNT(*) FROM visited_places v WHERE kind = 'TOWN'
-               AND first_visited_at BETWEEN ? AND ?
-               AND EXISTS (SELECT 1 FROM progression_rewards r
-                 WHERE r.reward_key = 'place:town:' || v.place_key)""", period
-        ).use { it.moveToFirst(); it.getLong(0) }
-        // Unknown pre-upgrade discovery times are stored as zero and are
-        // never retroactively credited to an arbitrary old trip.
-        val tiles = db.rawQuery(
-            "SELECT COUNT(*) FROM explored_grid WHERE first_unlocked_at BETWEEN ? AND ? AND first_unlocked_at > 0",
-            period
-        ).use { it.moveToFirst(); it.getLong(0) }
-        val pending = db.rawQuery(
-            "SELECT COUNT(*) FROM track_points WHERE id BETWEEN ? AND ? AND matched = 0",
-            arrayOf(trip.firstId.toString(), trip.lastId.toString())
-        ).use { it.moveToFirst(); it.getLong(0) }
-        if (generation == helper.historyGeneration)
-            SavedTripInsights(roads, towns, tiles, pending)
-        else SavedTripInsights(0, 0, 0, 0)
+        // One SQLite statement gives the four counters the same WAL snapshot,
+        // even while road matching and place discovery update the live DB.
+        // Historic tile unlock times (zero) are deliberately excluded.
+        val started = trip.startedAt.toString()
+        val ended = trip.endedAt.toString()
+        val args = arrayOf(
+            started, ended, started, ended, started, ended,
+            trip.firstId.toString(), trip.lastId.toString()
+        )
+        val counts = db.rawQuery(
+            """SELECT
+                (SELECT COUNT(DISTINCT CASE WHEN road_group_id = '' THEN segment_id ELSE road_group_id END)
+                   FROM roads WHERE first_unlocked_at BETWEEN ? AND ?
+                   AND road_group_id NOT LIKE 'x2|%'),
+                (SELECT COUNT(*) FROM visited_places v
+                   WHERE kind = 'TOWN' AND first_visited_at BETWEEN ? AND ?
+                   AND EXISTS (SELECT 1 FROM progression_rewards r
+                     WHERE r.reward_key = 'place:town:' || v.place_key)),
+                (SELECT COUNT(*) FROM explored_grid
+                   WHERE first_unlocked_at BETWEEN ? AND ? AND first_unlocked_at > 0),
+                (SELECT COUNT(*) FROM track_points
+                   WHERE id BETWEEN ? AND ? AND matched = 0)""",
+            args
+        ).use { cursor ->
+            check(cursor.moveToFirst())
+            SavedTripInsights(cursor.getLong(0), cursor.getLong(1), cursor.getLong(2), cursor.getLong(3))
+        }
+        if (generation == helper.historyGeneration) counts else SavedTripInsights(0, 0, 0, 0)
     }
 
     /**
