@@ -112,14 +112,20 @@ object Achievements {
             AchievementProgress("ads_25", "Ad Supporter", "Watch 25 ads", AchievementCategory.ADS, metrics.adsWatched.toDouble(), 25.0, "ads", 500),
             AchievementProgress("ads_50", "Ad Veteran", "Watch 50 ads", AchievementCategory.ADS, metrics.adsWatched.toDouble(), 50.0, "ads", 1_000),
             AchievementProgress("ads_100", "Ad Legend", "Watch 100 ads", AchievementCategory.ADS, metrics.adsWatched.toDouble(), 100.0, "ads", 2_500)
-        ).map { item ->
+        ).asSequence().filter { item ->
+            // Retire low-battery challenges for NEW players: don't encourage
+            // running a GPS tracker until a phone is about to power off.
+            // Preserve the completed cards and exact historic payouts.
+            item.id !in setOf("battery_5", "battery_1") ||
+                item.id in metrics.rewardedAchievements
+        }.map { item ->
             // Road/place deduplication can reduce current totals. The durable
             // reward ledger preserves earned milestones across full restores.
             if (item.id in metrics.rewardedAchievements) item.copy(
                 progress = maxOf(item.progress, item.goal),
                 rewardPoints = metrics.rewardedAchievementPoints[item.id] ?: item.rewardPoints
             ) else item
-        }
+        }.toList()
     }
 
     fun progress(
