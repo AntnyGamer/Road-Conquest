@@ -29,7 +29,7 @@ internal object PlacePopulationLookup {
     private const val US_2020_POPULATION = 331_449_281L
 
     internal fun canLookup(info: PlaceOverlayInfo): Boolean =
-        isUnitedStates(info) && info.kind == PlaceKind.COUNTRY || requestFor(info) != null
+        (isUnitedStates(info) && info.kind == PlaceKind.COUNTRY) || requestFor(info) != null
 
     private fun isUnitedStates(info: PlaceOverlayInfo): Boolean =
         info.key == "us" || info.key.startsWith("us|")
@@ -45,7 +45,8 @@ internal object PlacePopulationLookup {
             val geoid = match.groupValues[2]
             val state = geoid.take(2)
             val parent = info.key.split('|').getOrNull(1) ?: return null
-            if (geoid.length !in 7..10 ||
+            if ((layer == 1 && geoid.length != 10) ||
+                (layer != 1 && geoid.length != 7) ||
                 UnitedStatesMunicipalBoundaries.stateCode("United States", parent) != state
             ) return null
             return censusRequest("Places_CouSub_ConCity_SubMCD", layer, state, geoid)

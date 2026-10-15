@@ -78,13 +78,10 @@ class OsrmMatcher(
         // normal retry cannot recover it, allow a final tightly bounded candidate search
         // over non-startpoint road edges. Never accept a weaker or contradictory path.
         val gap = supportedGap ?: return first
-        if (bearings == null || gap.all { index ->
+        if (gap.all { index ->
                 (first?.matchedPointConfidences?.get(points[index].id) ?: 0.0) >= MIN_ACCEPTABLE_CONFIDENCE
             }
         ) return first
-        // When a confident corner remains unresolved, let OSRM split an implausible
-        // trace rather than forcing one route through it. The result still has to
-        // preserve every previously accepted fix and improve the supported gap.
         fun accepted(result: MatchResult, id: Long) =
             (result.matchedPointConfidences[id] ?: 0.0) >= MIN_ACCEPTABLE_CONFIDENCE
         val oldGap = gap.count { index ->
@@ -108,7 +105,9 @@ class OsrmMatcher(
 
         // Keep the established no-bearing retry unchanged; "gaps=split" only
         // controls large timestamp gaps and does not repair a short street corner.
-        val second = requestMatch(URI(path).toURL(), points)
+        // Without first-pass heading guidance, an identical second request adds
+        // no evidence and wastes the public match service's limited capacity.
+        val second = if (bearings == null) null else requestMatch(URI(path).toURL(), points)
         if (safelyImproves(second, MIN_ACCEPTABLE_CONFIDENCE)) return second
 
         // Only retry with "snapping=any" when OSRM has independently confirmed
