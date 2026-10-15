@@ -47,7 +47,9 @@ class TripHistoryRepositoryTest {
         val context = RuntimeEnvironment.getApplication()
         val tracker = TrackingRepository(context)
         tracker.clearHistory()
-        tracker.insertLocations((0..36).map { index ->
+        // Clear-history increments the repository generation; a stale repository
+        // correctly refuses further writes. Use a newly attached repository.
+        TrackingRepository(context).insertLocations((0..36).map { index ->
             android.location.Location("gps").apply {
                 latitude = 40.0
                 longitude = -74.0 + index * 0.0001
