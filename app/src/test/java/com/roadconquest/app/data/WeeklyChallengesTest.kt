@@ -33,12 +33,28 @@ class WeeklyChallengesTest {
         TrackingRepository(context).readableDatabase().execSQL("INSERT INTO visited_places VALUES ('TOWN','start','Start','','',?,0,0)", arrayOf(monday + 10))
         val before = repository.snapshot().balance
         val week = WeeklyChallenges.status(context, monday + 100)
-        assertEquals(listOf(25L, 3L), week.challenges.map { it.progress })
+        assertEquals(listOf(25L, 25L, 3L, 3L), week.challenges.map { it.progress })
         assertTrue(week.challenges.all { it.rewarded })
-        assertEquals(before + 550, repository.snapshot().balance)
+        assertEquals(before + 700, repository.snapshot().balance)
         WeeklyChallenges.status(context, monday + 200)
-        assertEquals(before + 550, repository.snapshot().balance)
-        assertEquals(listOf(0L, 0L), WeeklyChallenges.status(context, week.endsAt).challenges.map { it.progress })
+        assertEquals(before + 700, repository.snapshot().balance)
+        assertEquals(listOf(0L, 0L, 0L, 0L), WeeklyChallenges.status(context, week.endsAt).challenges.map { it.progress })
+    }
+
+    @Test fun starterGoalsRewardAnOccasionalExplorerWithoutGrantingStretchBonuses() {
+        repeat(5) { road("short$it", "short-group$it", monday + 100) }
+        val repository = ProgressionRepository(context)
+        repository.recordPlace(PlaceDiscovery(
+            PlaceKind.TOWN, "week-starter", "Starter town",
+            visitedAt = monday + 100, latitude = 0.0, longitude = 0.0
+        ))
+        val startingBalance = repository.snapshot().balance
+        val goals = WeeklyChallenges.status(context, monday + 500)
+        assertEquals(listOf(5L, 5L, 1L, 1L), goals.challenges.map { it.progress })
+        assertEquals(listOf(true, false, true, false), goals.challenges.map { it.rewarded })
+        assertEquals(startingBalance + 150L, repository.snapshot().balance)
+        WeeklyChallenges.status(context, monday + 600)
+        assertEquals(startingBalance + 150L, repository.snapshot().balance)
     }
 
     @Test fun utcMondayBoundaryIsStableAcrossYearAndFutureDatesDoNotCount() {
@@ -54,9 +70,9 @@ class WeeklyChallengesTest {
         val repository = ProgressionRepository(context)
         repeat(3) { repository.recordPlace(PlaceDiscovery(PlaceKind.TOWN, "late$it", "Late $it", visitedAt = monday - 1000, latitude = 0.0, longitude = 0.0)) }
         val before = repository.snapshot().balance
-        assertEquals(listOf(0L, 0L), WeeklyChallenges.status(context, monday + 1000).challenges.map { it.progress })
-        assertEquals(before + 550, repository.snapshot().balance)
+        assertEquals(listOf(0L, 0L, 0L, 0L), WeeklyChallenges.status(context, monday + 1000).challenges.map { it.progress })
+        assertEquals(before + 700, repository.snapshot().balance)
         WeeklyChallenges.status(context, monday + 2000)
-        assertEquals(before + 550, repository.snapshot().balance)
+        assertEquals(before + 700, repository.snapshot().balance)
     }
 }

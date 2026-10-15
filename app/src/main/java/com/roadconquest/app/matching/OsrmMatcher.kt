@@ -572,10 +572,24 @@ class OsrmMatcher(
             if (pointDistanceMeters(approachFrom, approachTo) < MIN_BEARING_EVIDENCE_DISTANCE_M ||
                 pointDistanceMeters(exitFrom, exitTo) < MIN_BEARING_EVIDENCE_DISTANCE_M
             ) return false
-            return bearingDifferenceDegrees(
+            val change = bearingDifferenceDegrees(
                 initialBearingDegrees(approachFrom, approachTo),
                 initialBearingDegrees(exitFrom, exitTo)
-            ) >= SHARP_TURN_DEGREES
+            )
+            if (change >= SHARP_TURN_DEGREES) return true
+            // Some valid junction transitions bend only 25-44 degrees. The
+            // independent GPS fixes on both sides still warrant a no-bearing
+            // OSRM retry, but only across a short and accurate sampled gap.
+            return change >= MODERATE_TURN_DEGREES &&
+                (first - 1..last + 1).all { index ->
+                    points[index].accuracyMeters.isFinite() &&
+                        points[index].accuracyMeters in 0.01f..MAX_LONG_TURN_ACCURACY_M
+                } &&
+                (first - 1 until last + 1).all { index ->
+                    val elapsed = points[index + 1].timestampMillis - points[index].timestampMillis
+                    elapsed in 1..MAX_LONG_TURN_SAMPLE_GAP_MS &&
+                        pointDistanceMeters(points[index], points[index + 1]) <= MAX_LONG_TURN_JUMP_M
+                }
         }
 
         // Long holes require precise, continuous GPS and actual turn geometry.
@@ -795,6 +809,7 @@ class OsrmMatcher(
         // degrees is broad enough for ordinary curves while still excluding the opposite road.
         private const val BEARING_GUIDANCE_RANGE_DEGREES = 65
         private const val SHARP_TURN_DEGREES = 45.0
+        private const val MODERATE_TURN_DEGREES = 25.0
         private const val MAX_SUPPORTED_TURN_GAP_POINTS = 8
         private const val MAX_LONG_TURN_GAP_MS = 30_000L
         private const val MAX_LONG_TURN_SAMPLE_GAP_MS = 15_000L

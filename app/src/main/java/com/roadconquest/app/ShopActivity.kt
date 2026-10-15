@@ -238,8 +238,16 @@ class ShopActivity : Activity() {
                 owned -> "Equip"
                 else -> String.format(Locale.getDefault(), "Buy • %,d points", item.cost)
             }
-            isEnabled = !equipped
+            isEnabled = !equipped && (owned || snapshot.balance >= item.cost)
             setOnClickListener { onItemPressed(item, owned) }
+        }
+        if (!owned && snapshot.balance < item.cost) {
+            card.addView(TextView(this).apply {
+                text = String.format(Locale.getDefault(), "%,d more points to unlock", item.cost - snapshot.balance)
+                textSize = 12f
+                setTextColor(Appearance.color(this@ShopActivity, R.attr.rcTextSecondary))
+                setPadding(0, 0, 0, dp(8))
+            })
         }
         card.addView(action, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,

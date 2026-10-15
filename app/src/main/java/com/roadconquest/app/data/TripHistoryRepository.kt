@@ -67,11 +67,11 @@ class TripHistoryRepository(context: Context) {
             if (trip.historyGeneration != helper.historyGeneration) return@synchronized emptyList()
             val db = helper.readableDatabase
             val bounds = arrayOf(trip.firstId.toString(), trip.lastId.toString())
-            val count = db.rawQuery(
-                "SELECT COUNT(*) FROM track_points WHERE id BETWEEN ? AND ?", bounds
-            ).use { it.moveToFirst(); it.getLong(0) }
-            val stride = ceil(count.toDouble() / maxPoints).toInt().coerceAtLeast(1)
-            val selected = ArrayList<SavedTripPoint>(minOf(maxPoints, count.toInt()))
+            // recentTrips() already counted these exact IDs under the same
+            // history generation. New GPS rows append beyond lastId; a restore
+            // invalidates generation above. Avoid recounting a long trip on replay.
+            val stride = ceil(trip.pointCount.toDouble() / maxPoints).toInt().coerceAtLeast(1)
+            val selected = ArrayList<SavedTripPoint>(minOf(maxPoints, trip.pointCount))
             var position = 0L
             var last: SavedTripPoint? = null
             var previousTime: Long? = null

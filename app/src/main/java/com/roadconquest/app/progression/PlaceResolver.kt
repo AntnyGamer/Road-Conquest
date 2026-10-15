@@ -136,6 +136,10 @@ object PlaceResolver {
                 // Retry an unreachable provider rather than permanently discard a town.
                 return null
             }
+            // Empty/partial Census responses can occur during a transient outage.
+            // Do not permanently retire a U.S. town candidate on its first null
+            // response; bounded retries preserve the original GPS fix.
+            if (result == null && candidate.attempts < 2) return null
             if (result != null) {
                 if (!PlaceOverlayCache.writeOfficialUs(
                         context, result.place, result.overlay, cacheGeneration
@@ -216,17 +220,22 @@ object PlaceResolver {
             stateKey, state, "United States", "United States")
         val seed = discovery(candidate, PlaceKind.TOWN,
             "$stateKey|gps", "", state, "United States")
-        val cached = (municipalCache ?: VerifiedMunicipalCache(context)).find(seed)
+        val known = municipalCache ?: VerifiedMunicipalCache(context)
+        val cached = known.find(seed)
         val town = cached ?: try {
             townLookup(seed)?.let { official ->
                 if (!PlaceOverlayCache.writeOfficialUs(
                         context, official.place, official.overlay, cacheGeneration
                     )) return null
+                // Reuse a freshly confirmed polygon for the remaining fixes in
+                // this batch, even when the device has no Android geocoder.
+                known.remember(official)
                 official.place
             }
         } catch (_: IOException) {
             return null
         }
+        if (town == null && candidate.attempts < 2) return null
         return listOfNotNull(country, statePlace, town)
     }
 

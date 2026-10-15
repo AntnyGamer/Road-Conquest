@@ -41,19 +41,21 @@ class AchievementsActivityTest {
             val list = activity.findViewById<LinearLayout>(R.id.achievementsList)
             val all = Achievements.progress(DataSummary(0, 0, null, null))
             val categories = listOf(
-                Triple(AchievementCategory.ROADS, R.id.achievementRoadsButton, 3),
-                Triple(AchievementCategory.DISTANCE, R.id.achievementDistanceButton, 3),
-                Triple(AchievementCategory.PLACES, R.id.achievementPlacesButton, 9),
-                Triple(AchievementCategory.ADS, R.id.achievementAdsButton, 5),
-                Triple(AchievementCategory.EXTRA, R.id.achievementExtraButton, 2)
+                AchievementCategory.ROADS to R.id.achievementRoadsButton,
+                AchievementCategory.DISTANCE to R.id.achievementDistanceButton,
+                AchievementCategory.PLACES to R.id.achievementPlacesButton,
+                AchievementCategory.ADS to R.id.achievementAdsButton,
+                AchievementCategory.EXTRA to R.id.achievementExtraButton
             )
+            val expectedRoadCount = all.count { it.category == AchievementCategory.ROADS }
             val deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5)
             do {
                 Shadows.shadowOf(Looper.getMainLooper()).idle()
-                if (list.childCount == 3) break
+                if (list.childCount == expectedRoadCount) break
                 Thread.sleep(10)
             } while (System.nanoTime() < deadline)
-            for ((category, buttonId, expectedCount) in categories) {
+            for ((category, buttonId) in categories) {
+                val expectedCount = all.count { it.category == category }
                 activity.findViewById<Button>(buttonId).performClick()
                 Shadows.shadowOf(Looper.getMainLooper()).idle()
                 assertEquals(expectedCount, list.childCount)

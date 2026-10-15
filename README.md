@@ -1,4 +1,4 @@
-# Road Conquest 1.0 Beta 45
+# Road Conquest 1.0 Beta 46
 
 Road Conquest remembers the roads you drive and the places you visit, revealing them through a
 cloud-textured fog map.
@@ -7,10 +7,10 @@ cloud-textured fog map.
 [Source and issues](https://github.com/AntnyGamer/RoadConquest-Beta) ·
 [GNU AGPL v3 license](LICENSE)
 
-Beta 45 adds validated progress restore with a recovery backup, weekly road and town
-challenges, friend requests, and saved-trip replay. It improves VIP achievement eligibility
-and background place discovery, and temporarily hides competitive rankings and verification
-uploads. Beta 44's VIP, road-matching, municipality and map improvements remain included.
+Beta 46 refreshes the driving dashboard and improves trip replay, recording-gap handling,
+accessibility, and map startup performance. It retains Beta 45's validated progress restore,
+weekly challenges, friendships, and privacy protections, plus earlier road-matching and
+municipality improvements. Competitive rankings and verification uploads remain hidden by default.
 See [backup and challenges details](BACKUP_AND_CHALLENGES.md). Previously unlocked roads, exploration, purchases, and scoring are
 preserved when installing an update signed with the same app identity over an existing installation.
 
@@ -33,7 +33,10 @@ Grant Precise location. For automatic background tracking, choose Allow all the 
 location settings and allow background battery use. Settings includes shortcuts to the relevant
 Android screens. Allow notifications to see the tracking notification and its Stop tracking control.
 
-This release uses Android application ID `com.roadconquest.app` and internal version code 71. Google Play permanently reserves every uploaded version code, including codes used by drafts or testing tracks; Beta 45 replaces the code-70 Beta 44 bundle for new Play uploads.
+The published Beta 46 uses Android application ID `com.roadconquest.app` and internal version
+code **72**. Google Play permanently reserves every uploaded version code, including drafts and
+testing tracks; Beta 45 used code 71 and Beta 44 used code 70. Confirm that code 72 is still
+available in your Play Console before uploading the signed Beta 46 bundle.
 The app shows its exact version in Settings → About. Treat the application ID as permanent once
 the Google Play listing is created; changing it later would create a different app.
 
@@ -156,9 +159,8 @@ map integration tests on Android 12, 15 and 17. The release job publishes the ve
 all required jobs pass and only when that version tag does not already exist; ordinary commits at an
 already-published version are verified without retargeting or overwriting the release. It also attaches the exact account-function bundle produced by the tested
 backend job, so the deployable server artifact for that release is preserved alongside the Android release artifacts. It verifies the permanent signing-certificate digest and includes the source
-ZIP and checksums for the APK, AAB, source archive and server bundle. Beta 17 is published from
-`perf/battery-and-rendering-review` without merging the optimization PR. Release publication from
-that branch is restricted to Beta 17; normal release publication continues from `main`.
+ZIP and checksums for the APK, AAB, source archive and server bundle. Normal release
+publication runs from `main`; feature PR builds verify without publishing a new beta.
 Configure these repository secrets from the private signing backup:
 
 - `ROADCONQUEST_RELEASE_KEYSTORE_BASE64`

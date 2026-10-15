@@ -106,7 +106,18 @@ object ProgressionManager {
             val candidates = repository.pendingPlaceCandidates(limit - processed)
             if (candidates.isEmpty()) break
             for (candidate in candidates) {
-                val discoveries = PlaceResolver.resolve(context, candidate, municipalCache)
+                // A malformed provider response or an Android geocoder runtime failure
+                // must not abort the entire queue and strand every later municipality.
+                // Retry only the failed fix with the existing persistent backoff.
+                if (Thread.currentThread().isInterrupted) {
+                    return@synchronized PlaceResolutionResult(added, newestVisitAt, placesUpdated)
+                }
+                val discoveries = try {
+                    PlaceResolver.resolve(context, candidate, municipalCache)
+                } catch (error: Exception) {
+                    android.util.Log.w("RoadConquest", "Place candidate will retry", error)
+                    null
+                }
                 if (discoveries.isNullOrEmpty()) {
                     repository.deferCandidate(candidate)
                 } else {

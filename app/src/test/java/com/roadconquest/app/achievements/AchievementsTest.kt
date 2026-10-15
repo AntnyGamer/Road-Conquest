@@ -24,8 +24,8 @@ class AchievementsTest {
         )
         val progress = Achievements.progress(summary)
         assertEquals(
-            listOf("Newbie Explorer", "Casual Explorer", "Road Conquerer", "Beginner Driver", "Average Driver", "Expert Driver"),
-            progress.take(6).map { it.title }
+            listOf("Newbie Explorer", "Casual Explorer", "Road Pathfinder", "Road Conquerer"),
+            progress.filter { it.category == AchievementCategory.ROADS }.take(4).map { it.title }
         )
         assertTrue(progress.size > 6)
         assertEquals(AchievementCategory.ROADS, progress.first { it.id == "roads_10" }.category)
@@ -35,8 +35,10 @@ class AchievementsTest {
         assertEquals(AchievementCategory.EXTRA, progress.first { it.id == "battery_5" }.category)
         assertTrue(progress.first { it.id == "roads_10" }.unlocked)
         assertTrue(progress.first { it.id == "roads_100" }.unlocked)
+        assertFalse(progress.first { it.id == "roads_250" }.unlocked)
         assertFalse(progress.first { it.id == "roads_1000" }.unlocked)
         assertTrue(progress.first { it.id == "miles_100" }.unlocked)
+        assertFalse(progress.first { it.id == "miles_250" }.unlocked)
         assertFalse(progress.first { it.id == "miles_1000" }.unlocked)
     }
 

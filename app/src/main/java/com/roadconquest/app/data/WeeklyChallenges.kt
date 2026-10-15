@@ -61,17 +61,31 @@ object WeeklyChallenges {
                             WHERE r.reward_key = 'place:town:' || v.place_key)""",
                         arrayOf(week.toString(), weekEnd.toString(), now.toString())
                     ).use { it.moveToFirst(); it.getLong(0) }
-                    return listOf(
+                    // Preserve every challenge ID and payout. Batch the ownership
+                    // lookup: one indexed SQLite query per week instead of one per goal.
+                    val challenges = listOf(
+                        WeeklyChallenge("roads_5", "Unlock 5 new roads", roads, 5, 75, false),
                         WeeklyChallenge("roads", "Unlock 25 new roads", roads, 25, 250, false),
+                        WeeklyChallenge("towns_1", "Explore 1 new town", towns, 1, 75, false),
                         WeeklyChallenge("towns", "Explore 3 new towns", towns, 3, 300, false)
-                    ).map { challenge ->
-                        val key = "weekly:$week:${challenge.id}"
+                    )
+                    val keys = challenges.map { "weekly:$week:${it.id}" }
+                    challenges.forEachIndexed { index, challenge ->
                         if (challenge.progress >= challenge.target) {
                             db.insertWithOnConflict("progression_rewards", null, ContentValues().apply {
-                                put("reward_key", key); put("points", challenge.reward); put("awarded_at", now)
+                                put("reward_key", keys[index]); put("points", challenge.reward); put("awarded_at", now)
                             }, SQLiteDatabase.CONFLICT_IGNORE)
                         }
-                        challenge.copy(rewarded = db.rawQuery("SELECT 1 FROM progression_rewards WHERE reward_key = ?", arrayOf(key)).use { it.moveToFirst() })
+                    }
+                    val rewarded = HashSet<String>(challenges.size)
+                    db.rawQuery(
+                        "SELECT reward_key FROM progression_rewards WHERE reward_key IN (?,?,?,?)",
+                        keys.toTypedArray()
+                    ).use { cursor ->
+                        while (cursor.moveToNext()) rewarded.add(cursor.getString(0))
+                    }
+                    return challenges.mapIndexed { index, challenge ->
+                        challenge.copy(rewarded = keys[index] in rewarded)
                     }
                 }
                 val challenges = evaluate(start)
