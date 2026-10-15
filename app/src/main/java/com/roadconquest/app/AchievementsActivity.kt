@@ -103,6 +103,10 @@ class AchievementsActivity : Activity() {
                         points.text = String.format(Locale.getDefault(), "⚔ %,d points", progression.balance)
                         text.visibility = android.view.View.GONE
                         this.achievements = achievements
+                        if (selectedCategory == AchievementCategory.EXTRA &&
+                            achievements.none { it.category == AchievementCategory.EXTRA }) {
+                            selectedCategory = AchievementCategory.ROADS
+                        }
                         renderCategory(list)
                     },
                     onFailure = {
@@ -137,10 +141,11 @@ class AchievementsActivity : Activity() {
                 if (selected) R.attr.rcOnAccent else R.attr.rcTextPrimary))
             // VIP has no rewarded-ad offers: preserve earned ad milestones,
             // but do not show an empty page of impossible locked challenges.
-            button.visibility = if (category == AchievementCategory.ADS &&
-                VipEntitlement.isActive(this) && achievements.none {
-                    it.category == AchievementCategory.ADS && it.unlocked
-                }
+            button.visibility = if (
+                (category == AchievementCategory.ADS && VipEntitlement.isActive(this) &&
+                    achievements.none { it.category == AchievementCategory.ADS && it.unlocked }) ||
+                (category == AchievementCategory.EXTRA &&
+                    achievements.none { it.category == AchievementCategory.EXTRA })
             ) android.view.View.GONE else android.view.View.VISIBLE
         }
     }
