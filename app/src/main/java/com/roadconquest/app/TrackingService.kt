@@ -662,10 +662,12 @@ class TrackingService : Service(), LocationListener {
         }
 
     /**
-     * Resolve at most one persisted discovery per five minutes while the GPS
-     * foreground service is running without the map UI. No additional location
-     * sampling, wake locks or periodic Android background jobs are introduced.
-     * The normal MainActivity resolver takes priority when the map is open.
+     * Drain a bounded page of persisted discoveries each minute while tracking
+     * with the map closed. One candidate every five minutes could never catch up
+     * with a normal drive and left known visited municipalities permanently gray.
+     * This reuses the existing location foreground service and its executor:
+     * no extra GPS sampling, wake locks or Android background jobs.
+     * The map's foreground resolver still takes priority while visible.
      */
     private fun scheduleBackgroundPlaceDiscovery() {
         if (!ready || MainActivity.trackingReceiverRegistered ||
@@ -679,7 +681,7 @@ class TrackingService : Service(), LocationListener {
                     ) {
                         val due = progressionRepository.nextPlaceCandidateAttemptMillis()
                         if (due != null && due <= System.currentTimeMillis()) {
-                            ProgressionManager.resolvePendingPlacesWithDetails(this, 1)
+                            ProgressionManager.resolvePendingPlacesWithDetails(this, 12)
                         }
                     }
                 } catch (error: Exception) {
@@ -975,7 +977,7 @@ class TrackingService : Service(), LocationListener {
         private const val MAX_LOCATION_AGE_MS = 60_000L
         private const val MAX_LOCATION_AGE_NANOS = MAX_LOCATION_AGE_MS * 1_000_000L
         private const val MAX_START_ANCHOR_AGE_MS = 10_000L
-        private const val BACKGROUND_PLACE_DISCOVERY_INTERVAL_MS = 5 * 60_000L
+        private const val BACKGROUND_PLACE_DISCOVERY_INTERVAL_MS = 60_000L
         private const val MATCH_INTERVAL_MS = 10_000L
         private const val PLACE_CANDIDATE_MIN_DISTANCE_M = 55f
         private const val MAX_EXPLORED_CELL_CACHE = 4_096
