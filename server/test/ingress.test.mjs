@@ -94,6 +94,34 @@ test("preserves HTTP status, private response and DELETE account body", async ()
   assert.equal(await requestCopy.text(), '{"password":"secret"}');
 });
 
+test("backend network errors return private JSON rather than an unhandled Worker exception", async () => {
+  const proxy = createAccountIngress(async () => {
+    throw new Error("internal provider error containing sensitive details");
+  }, () => now);
+  const response = await proxy(new Request("https://roadconquest.workers.dev/v1/me", {
+    headers: { Authorization: "Bearer sensitive-token" }
+  }), env);
+  assert.equal(response.status, 503);
+  assert.equal(response.headers.get("Cache-Control"), "no-store");
+  assert.equal(response.headers.get("Content-Type"), "application/json");
+  const body = await response.text();
+  assert.equal(JSON.parse(body).error, "Account service is unavailable.");
+  assert.doesNotMatch(body, /sensitive|provider error/);
+});
+
+test("accidentally pointing an ingress at itself fails closed without issuing fetch", async () => {
+  let calls = 0;
+  const proxy = createAccountIngress(async () => {
+    calls++;
+    return new Response("{}");
+  });
+  const response = await proxy(new Request("https://roadconquest.workers.dev/v1/me"), {
+    ...env, API_ORIGIN: "https://roadconquest.workers.dev/"
+  });
+  assert.equal(response.status, 503);
+  assert.equal(calls, 0);
+});
+
 test("misconfigured upstream and HTTP never forward credentials", async () => {
   let requests = 0;
   const proxy = createAccountIngress(async () => { requests++; return new Response("{}", { status: 200 }); });
