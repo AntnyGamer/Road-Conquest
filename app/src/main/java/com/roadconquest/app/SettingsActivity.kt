@@ -226,6 +226,8 @@ class SettingsActivity : Activity() {
                 if (isDestroyed) return@runOnUiThread
                 result.fold(
                     onSuccess = {
+                        getSharedPreferences("roadconquest_export_history", MODE_PRIVATE)
+                            .edit().putLong("last_completed_at", System.currentTimeMillis()).apply()
                         Toast.makeText(this, "Road Conquest data exported", Toast.LENGTH_SHORT).show()
                         refreshSummary()
                     },
@@ -548,6 +550,11 @@ class SettingsActivity : Activity() {
                             append("Tracking mode: $mode\n")
                             append("Precise location: $precise\n")
                             append("Allow all the time: $background")
+                            val lastExport = getSharedPreferences("roadconquest_export_history", MODE_PRIVATE)
+                                .getLong("last_completed_at", 0L)
+                            append("\\nLast successful progress export: ")
+                            append(if (lastExport <= 0L) "Never (consider exporting a backup)"
+                                else java.text.DateFormat.getDateTimeInstance().format(java.util.Date(lastExport)))
                         }
                     },
                     onFailure = { error ->
