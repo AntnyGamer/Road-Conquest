@@ -185,7 +185,7 @@ object DataExporter {
                 while (cursor.moveToNext()) {
                     val discoveredAt = cursor.getLong(4).takeIf { it > 0L }
                     ?.let { Instant.ofEpochMilli(it).toString() }.orEmpty()
-                    writer.write("${cursor.getInt(0)},${cursor.getInt(1)},${cursor.getDouble(2)},${cursor.getDouble(3)},$discoveredAt\\n")
+                    writer.write("${cursor.getInt(0)},${cursor.getInt(1)},${cursor.getDouble(2)},${cursor.getDouble(3)},$discoveredAt\n")
                     count++
                 }
             }
