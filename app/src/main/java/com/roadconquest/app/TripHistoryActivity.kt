@@ -419,7 +419,7 @@ class TripHistoryActivity : Activity() {
         if (!requireVip() || !isTripSafeToShare(trip)) return
         AlertDialog.Builder(this)
             .setTitle("Save private GPX route")
-            .setMessage("GPX files contain precise GPS locations. Protect home and destination addresses by hiding the first and last two minutes. Choose Full route only when you explicitly want to reveal those locations.")
+            .setMessage("GPX files contain precise GPS locations. Omitting the first and last two minutes can reduce exposure of your start and destination, but does not guarantee privacy. Review the route before sharing; Full route includes exact endpoints.")
             .setItems(arrayOf("Hide first and last 2 minutes (recommended)", "Export full route, including exact endpoints")) { _, choice ->
                 pendingGpxTrip = trip
                 redactGpxEnds = choice == 0
