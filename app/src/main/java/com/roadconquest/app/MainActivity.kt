@@ -104,6 +104,13 @@ class MainActivity : Activity() {
             renderer?.refreshTracking()
         }
     }
+    /** Coalesce high-frequency road/fog notifications into one lightweight UI refresh. */
+    private fun scheduleStatsRefresh() {
+        if (resumed && !statsRefreshScheduled) {
+            statsRefreshScheduled = true
+            statsHandler.postDelayed(statsRefresh, 5_000L)
+        }
+    }
 
     private var lastPreviewLocation: Location? = null
     // TrackingService location broadcasts arrive every few seconds while the map is open.
@@ -167,12 +174,7 @@ class MainActivity : Activity() {
                         intent.getLongExtra(TrackingService.EXTRA_LOCATION_AGE_MS, 0L)
                     )
                 }
-                TrackingService.ACTION_STATS_UPDATED -> {
-                    if (resumed && !statsRefreshScheduled) {
-                        statsRefreshScheduled = true
-                        statsHandler.postDelayed(statsRefresh, 5_000L)
-                    }
-                }
+                TrackingService.ACTION_STATS_UPDATED -> scheduleStatsRefresh()
                 LocationManager.PROVIDERS_CHANGED_ACTION, LocationManager.MODE_CHANGED_ACTION -> {
                     refreshControls()
                     if (!TrackingService.isRunning && !Prefs.isManualOnly(this@MainActivity) &&
@@ -188,6 +190,10 @@ class MainActivity : Activity() {
                 }
                 TrackingService.ACTION_EXPLORATION_UPDATED -> {
                     renderer?.refreshExploration()
+                    // Walking can unlock tiles without producing road-driving statistics.
+                    // Keep the visible wallet/milestones up to date with the same bounded
+                    // UI refresh as accepted driving fixes, with no added GPS work.
+                    scheduleStatsRefresh()
                     if (resumed) resolvePendingPlaces()
                 }
                 TrackingService.ACTION_PLACE_CANDIDATE_UPDATED -> {
