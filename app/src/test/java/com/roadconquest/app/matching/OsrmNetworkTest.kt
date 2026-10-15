@@ -229,6 +229,23 @@ class OsrmNetworkTest {
         }
     }
 
+    @Test fun okResponseWithNoUsableRoadsIsNeverCached() {
+        MockWebServer().use { server ->
+            // A valid OSRM response can have only outlier tracepoints. It must
+            // not prevent a fresh lookup when the same window is retried.
+            val ambiguous = """{"code":"Ok","tracepoints":[null,null],"matchings":[{"confidence":0.1,"legs":[]}]}"""
+            server.enqueue(MockResponse().setBody(ambiguous))
+            server.enqueue(MockResponse().setBody(valid))
+            server.start()
+            val matcher = OsrmMatcher(server.url("/").toString().trimEnd('/'))
+            val first = requireNotNull(matcher.match(points))
+            assertTrue(first.roads.isEmpty())
+            assertTrue(first.matchedPointConfidences.isEmpty())
+            assertTrue(requireNotNull(matcher.match(points)).roads.isNotEmpty())
+            assertEquals(2, server.requestCount)
+        }
+    }
+
     @Test fun oversizedTraceCannotBeSentToThePublicServer() {
         MockWebServer().use { server ->
             server.start()
