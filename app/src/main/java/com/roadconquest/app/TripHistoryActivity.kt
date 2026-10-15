@@ -73,6 +73,7 @@ class TripHistoryActivity : Activity() {
     private var tripList: LinearLayout? = null
     private var displayedVip: Boolean? = null
     private var tripListGeneration = 0
+    private var shownHistoryGeneration = -1L
     private var pendingGpxTrip: SavedTrip? = null
     private var redactGpxEnds = true
     private val vipBilling by lazy {
@@ -311,6 +312,7 @@ class TripHistoryActivity : Activity() {
 
     private fun refreshTripList() {
         val column = tripList ?: return
+        shownHistoryGeneration = TripHistoryRepository(applicationContext).currentHistoryGeneration()
         val vip = VipEntitlement.isActive(this)
         displayedVip = vip
         val listGeneration = ++tripListGeneration
@@ -595,6 +597,27 @@ class TripHistoryActivity : Activity() {
     override fun onResume() {
         super.onResume()
         mapView?.onResume()
+        val currentGeneration = TripHistoryRepository(applicationContext).currentHistoryGeneration()
+        if (shownHistoryGeneration != -1L && shownHistoryGeneration != currentGeneration) {
+            // A restore or Delete all data occurred while this screen was paused.
+            // Do not keep a deleted GPS route on screen or allow it to be replayed.
+            generation++
+            pauseReplay()
+            selectedTrip = null
+            selectedTripButton = null
+            shareSummaryReady = false
+            points = emptyList()
+            routeCoordinates = emptyList()
+            lastRenderedIndex = -1
+            seek?.isEnabled = false
+            playButton?.isEnabled = false
+            seek?.progress = 0
+            renderReplay()
+            routeStatus?.text = "Driving history changed. Choose a saved drive."
+            replayProgress?.text = "Choose a drive to replay"
+            insightsText?.text = "Choose a drive for its distance, new roads and matching status."
+            refreshTripList()
+        }
         vipBilling.refresh(includeOffer = false)
         refreshVipControls()
     }
