@@ -174,9 +174,10 @@ user IDs preserve friendships through username changes; account deletion cascade
 `GET /v1/friends/weekly?metric=cells` ranks first-ever newly verified exploration
 cells in the current UTC Monday-to-Monday week. Only the caller and accepted
 friends appear. Hidden/ineligible accounts are excluded; ties share a rank.
-Revisits, retries and older weeks cannot inflate new-cell totals. Local 25-road
-and 3-town goals still award local points offline. Friend management works while
-competitive scoring is disabled; unavailable standings contain no entries.
+Revisits, retries and older weeks cannot inflate new-cell totals. Local weekly goals
+(5 or 25 newly unlocked roads and 1 or 3 newly rewarded towns) still award points
+offline in the current development branch. Friend management works while competitive
+scoring is disabled; unavailable standings contain no entries.
 
 ## Verified scoring and leaderboards
 
