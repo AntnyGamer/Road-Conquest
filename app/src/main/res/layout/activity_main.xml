@@ -45,6 +45,7 @@
         android:paddingStart="16dp"
         android:paddingEnd="16dp"
         android:text="Garage · ⚔ 0"
+        android:contentDescription="Garage and shop. 0 points. Double tap to open."
         android:textColor="?attr/rcTextPrimary"
         android:textSize="14sp"
         android:fontFamily="sans-serif-medium" />
