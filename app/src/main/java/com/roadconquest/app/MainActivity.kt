@@ -744,12 +744,20 @@ class MainActivity : Activity() {
                         ProgressionManager.metrics(progression)
                     )
                 }
-                Triple(summary, progression, unlocked)
+                Triple(summary, progression, unlocked) to repository.hasUnmatchedDrivingFixes()
             }
             runOnUiThread {
                 if (isDestroyed || generation != summaryGeneration) return@runOnUiThread
                 result.fold(
-                    onSuccess = { (value, progression, unlocked) ->
+                    onSuccess = { (summaryValues, pendingMatching) ->
+                        val (value, progression, unlocked) = summaryValues
+                        if (TrackingService.isRunning && !Prefs.isTrackingPaused(this) &&
+                            statusText.text.toString().startsWith("Tracking your driving")) {
+                            val matchingStatus = if (pendingMatching)
+                                "Tracking your driving • GPS saved, road matching pending"
+                            else "Tracking your driving"
+                            if (statusText.text.toString() != matchingStatus) statusText.text = matchingStatus
+                        }
                         statsText.text = StatsText.format(this, value) +
                             String.format(Locale.getDefault(), "\n%,d map tiles explored", progression.tilesUnlocked)
                         pointsText.text = String.format(Locale.getDefault(), "⚔ %,d points", progression.balance)
