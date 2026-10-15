@@ -322,7 +322,7 @@ class TripHistoryActivity : Activity() {
                             val duration = DateUtils.formatElapsedTime(
                                 ((trip.endedAt - trip.startedAt).coerceAtLeast(0L)) / 1000
                             )
-                            text = String.format(Locale.getDefault(), "%s\\n%.1f mi  •  %s",
+                            text = String.format(Locale.getDefault(), "%s\n%.1f mi  •  %s",
                                 formatter.format(Date(trip.startedAt)), miles, duration)
                             minHeight = dp(66)
                             gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
@@ -357,7 +357,7 @@ class TripHistoryActivity : Activity() {
         if (!requireVip()) return
         val details = insightsText?.text?.toString().orEmpty()
         val message = String.format(Locale.getDefault(),
-            "Road Conquest drive • %s\\n%.1f miles • %d minutes\\n%s\\nShared without exact GPS coordinates.",
+            "Road Conquest drive • %s\n%.1f miles • %d minutes\n%s\nShared without exact GPS coordinates.",
             DateFormat.getDateInstance().format(Date(trip.startedAt)),
             trip.distanceMeters / 1609.344,
             (trip.endedAt - trip.startedAt).coerceAtLeast(0L) / 60_000,
@@ -442,7 +442,7 @@ class TripHistoryActivity : Activity() {
                 if (isDestroyed || expected != generation) return@runOnUiThread
                 result.fold({ (loaded, insights) ->
                     insightsText?.text = String.format(Locale.getDefault(),
-                        "New roads: %,d (estimated) • New towns: %,d • New tiles: %,d\\n%,d GPS fixes awaiting road matching. Older tiles without saved dates are excluded.",
+                        "New roads: %,d (estimated) • New towns: %,d • New tiles: %,d\n%,d GPS fixes awaiting road matching. Older tiles without saved dates are excluded.",
                         insights.newRoadGroups, insights.newTowns, insights.newTiles, insights.pendingFixes
                     )
                     points = loaded
