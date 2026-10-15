@@ -35,6 +35,33 @@ class AppearanceTest {
         app.getSharedPreferences("roadconquest_preferences", 0).edit().clear().commit()
     }
 
+    @Test fun mapAndSettingsStatsHaveClearDistinctCategoriesWithoutChangingTotals() {
+        val context = ContextThemeWrapper(
+            Appearance.wrap(RuntimeEnvironment.getApplication()), R.style.Theme_RoadConquest
+        )
+        val summary = DataSummary(0, 0, null, null, 3218.688, 12)
+        val compact = StatsText.mapOverview(context, summary, 18)
+        assertTrue(compact, compact.startsWith("Driving"))
+        assertTrue(compact, compact.contains("2.0 mi"))
+        assertTrue(compact, compact.contains("12 roads"))
+        assertTrue(compact, compact.contains("Explore"))
+        assertTrue(compact, compact.contains("18 tiles"))
+        assertEquals("Compact map overview should have only two short lines", 2, compact.lines().size)
+        val progression = com.roadconquest.app.data.ProgressionSnapshot(
+            balance = 1240L, lifetimeEarned = 1240L, pointsSpent = 0L,
+            rewardedRoads = 12L, towns = 3L, states = 2L, countries = 1L,
+            adsWatched = 0L, lowestBatteryPercent = 101,
+            purchasedItems = emptySet(), rewardedAchievements = emptySet(),
+            tilesUnlocked = 18L
+        )
+        val details = StatsText.settingsOverview(context, summary, progression)
+        assertTrue(details, details.indexOf("DRIVING") < details.indexOf("EXPLORATION"))
+        assertTrue(details, details.indexOf("EXPLORATION") < details.indexOf("PROGRESSION"))
+        assertTrue(details, details.contains("18 mile tiles"))
+        assertTrue(details, details.contains("3 towns"))
+        assertTrue(details, details.contains("1,240 points"))
+    }
+
     @Test fun lightAndDarkResolveMatchingColorsAndSystemFollowsThePhone() {
         val app = RuntimeEnvironment.getApplication()
         for (theme in listOf(UiTheme.LIGHT, UiTheme.DARK)) {
