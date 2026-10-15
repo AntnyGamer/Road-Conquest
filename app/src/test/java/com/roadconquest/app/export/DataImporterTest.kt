@@ -152,8 +152,44 @@ class DataImporterTest {
         ProgressionRepository(context).recordPlaceCandidate(fix(1_000_000))
         val values = entries(export()).toMutableMap()
         values["metadata.json"] = JSONObject(values.getValue("metadata.json")).put("schema_version", 9).toString()
+        // Legacy schema-9 and schema-10 had four grid columns, before
+        // first-unlock times were introduced in format 11.
+        values["explored_grid.csv"] = values.getValue("explored_grid.csv")
+            .trimEnd('\n').lineSequence().joinToString("\n") { it.substringBeforeLast(',') } + "\n"
         DataImporter.prepare(context, ByteArrayInputStream(repack(values))).use { DataImporter.restore(context, it) }
         assertEquals(values.getValue("place_candidates.csv"), entries(export()).getValue("place_candidates.csv"))
+    }
+
+    @Test fun importedFormatTenStillRestoresWithoutTileDiscoveryDates() {
+        val tracker = TrackingRepository(context)
+        tracker.recordExploredGridCell(fix(1_000_000L))
+        val values = entries(export()).toMutableMap()
+        values["metadata.json"] = JSONObject(values.getValue("metadata.json"))
+            .put("schema_version", 10).toString()
+        values["explored_grid.csv"] = values.getValue("explored_grid.csv")
+            .trimEnd('\n').lineSequence().joinToString("\n") { it.substringBeforeLast(',') } + "\n"
+        DataImporter.prepare(context, ByteArrayInputStream(repack(values))).use {
+            DataImporter.restore(context, it)
+        }
+        val db = AppDatabase.get(context).readableDatabase
+        db.rawQuery("SELECT first_unlocked_at FROM explored_grid LIMIT 1", null).use {
+            assertTrue(it.moveToFirst())
+            assertEquals(0L, it.getLong(0))
+        }
+    }
+
+    @Test fun currentBackupPreservesRealTileFirstUnlockDates() {
+        TrackingRepository(context).recordExploredGridCell(fix(1_000_000L))
+        val bytes = export()
+        TrackingRepository(context).clearHistory()
+        DataImporter.prepare(context, ByteArrayInputStream(bytes)).use {
+            DataImporter.restore(context, it)
+        }
+        val db = AppDatabase.get(context).readableDatabase
+        db.rawQuery("SELECT first_unlocked_at FROM explored_grid LIMIT 1", null).use {
+            assertTrue(it.moveToFirst())
+            assertEquals(1_000_000L, it.getLong(0))
+        }
     }
 
     @Test fun restoreWaitingForAnExportDoesNotDeadlockOrdinaryHistoryReaders() {
