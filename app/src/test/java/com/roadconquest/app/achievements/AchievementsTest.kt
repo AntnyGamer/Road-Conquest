@@ -32,7 +32,7 @@ class AchievementsTest {
         assertEquals(AchievementCategory.DISTANCE, progress.first { it.id == "miles_10" }.category)
         assertEquals(AchievementCategory.PLACES, progress.first { it.id == "towns_5" }.category)
         assertEquals(AchievementCategory.ADS, progress.first { it.id == "ads_5" }.category)
-        assertEquals(AchievementCategory.EXTRA, progress.first { it.id == "battery_5" }.category)
+        assertFalse(progress.any { it.id == "battery_5" || it.id == "battery_1" })
         assertTrue(progress.first { it.id == "roads_10" }.unlocked)
         assertTrue(progress.first { it.id == "roads_100" }.unlocked)
         assertFalse(progress.first { it.id == "roads_250" }.unlocked)
@@ -42,18 +42,28 @@ class AchievementsTest {
         assertFalse(progress.first { it.id == "miles_1000" }.unlocked)
     }
 
-    @Test fun placeBatteryAndAdMilestonesUseTheirDedicatedMetrics() {
+    @Test fun placeAndAdMilestonesRemainWhileBatteryGoalsRetire() {
         val summary = DataSummary(0, 0, null, null, 0.0, 0)
         val metrics = AchievementMetrics(towns = 25, states = 3, countries = 2, adsWatched = 10, lowestBatteryPercent = 1)
         val progress = Achievements.progress(summary, metrics)
         assertTrue(progress.first { it.id == "towns_25" }.unlocked)
         assertTrue(progress.first { it.id == "states_3" }.unlocked)
         assertTrue(progress.first { it.id == "countries_2" }.unlocked)
-        assertTrue(progress.first { it.id == "battery_5" }.unlocked)
-        assertTrue(progress.first { it.id == "battery_1" }.unlocked)
+        assertFalse(progress.any { it.id == "battery_5" || it.id == "battery_1" })
         assertTrue(progress.first { it.id == "ads_5" }.unlocked)
         assertTrue(progress.first { it.id == "ads_10" }.unlocked)
         assertFalse(progress.first { it.id == "ads_25" }.unlocked)
+    }
+
+    @Test fun previouslyEarnedBatteryRewardsRemainVisibleWithoutNewGrants() {
+        val saved = Achievements.progress(
+            DataSummary(0, 0, null, null),
+            AchievementMetrics(lowestBatteryPercent = 101, rewardedAchievements = setOf("battery_5"),
+                rewardedAchievementPoints = mapOf("battery_5" to 150L))
+        )
+        assertTrue(saved.first { it.id == "battery_5" }.unlocked)
+        assertEquals(150L, saved.first { it.id == "battery_5" }.rewardPoints)
+        assertFalse(saved.any { it.id == "battery_1" })
     }
 
     @Test fun uniqueMileTilesEarnDistinctMilestonesWithoutInflatingRoadProgress() {
