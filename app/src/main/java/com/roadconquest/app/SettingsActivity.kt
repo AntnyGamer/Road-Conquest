@@ -222,9 +222,12 @@ class SettingsActivity : Activity() {
                     DataExporter.writeZip(this, repository, output)
                 } ?: error("Could not open export destination")
             }
-            if (result.isSuccess) {
-                // Saving can finish after the user leaves Settings. Record the
-                // completed export independent of the Activity's UI lifecycle.
+            if (result.isSuccess && repository.isHistoryCurrent() &&
+                !Prefs.isDeviceDataDeletionPending(this)
+            ) {
+                // Record only exports of the current local profile, even if
+                // a delete or restore completed while the ZIP was being written.
+                // Saving can finish after the user leaves Settings.
                 getSharedPreferences("roadconquest_export_history", MODE_PRIVATE)
                     .edit().putLong("last_completed_at", System.currentTimeMillis()).apply()
             } else {
