@@ -1,5 +1,9 @@
 # Road Conquest 1.0 Beta 49
 
+- **Repository audit:** Correct date-line fog projection so one explored tile cannot reveal a world-wide strip. Cached municipal lookups now retain the actual current visit coordinate, and Census state fallback accepts valid fragmented responses while keeping its response-size bound.
+- **Scalable weekly comparisons:** Select the caller and accepted friends before reading their weekly standings, avoiding scans of unrelated accounts. Add three backend foreign-key indexes for receipt and friendship cleanup; applying the updated schema remains a separate deployment step.
+- **Recovery and CI reliability:** Atomically replace an existing restore recovery ZIP, including on Windows development hosts; failed replacement preserves live progress and the existing recovery target. Startup CI downloads only its tested APK instead of the full bundle/symbol inputs.
+
 - **Reset consistency:** Population lookups started before Delete all data can no longer repopulate the persistent 2020 Census cache after it has been cleared. A bounded generation guard also protects the in-memory cache while preserving successful historical cache hits.
 
 - **Idempotent privacy updates:** Repeated requests to save an unchanged leaderboard visibility value no longer rewrite the same account row, while still returning the requested setting.
@@ -31,7 +35,7 @@
 - **Garage:** Shows real car shape/color previews via the same renderer used by the map, plus road-color and theme swatches, without changing purchases or currently equipped cosmetics.
 - **Navigation:** The map's quick destinations have themed icons and clearer Weekly labeling. Secondary screens have an explicit Back button. Existing bottom sheet placement and location permissions are unchanged.
 - **Trips and social:** Trip history emphasizes dates, distances, durations and replay instead of GPS-fix counts. Weekly challenge progress uses separate progress bars with reward states; friend requests show explicit actions. Verified leaderboard entries are visually separated when this optional feature is enabled.
-- **Compatibility:** Android 12+, versionCode **75**, same application ID and signing identity. No new GPS collection, background tasks, database schema changes, or alterations to existing map matching and fog geometry. The documented competition allowlist includes 75; a separately deployed server still requires corresponding allowlist deployment. Public leaderboards remain hidden by default.
+- **Compatibility:** Android 12+, versionCode **75**, same application ID and signing identity. No new GPS collection, background tasks, Android database format changes, or changes to road-matching acceptance. Stored exploration and purchases remain intact; fog projection is corrected without changing the grid. The backend adds three indexes without rewriting progress. The documented competition allowlist includes 75; a separately deployed server still requires corresponding allowlist deployment. Public leaderboards remain hidden by default.
 - **Validation:** Android compilation, local unit tests, lint, emulator map integration and signed release startup should pass before distributing this build.
 
 Keep existing app data when updating a compatible install. For Play installations, use the signed release AAB via Play; the GitHub APK may use a different app-signing identity.
