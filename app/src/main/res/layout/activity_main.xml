@@ -154,7 +154,7 @@
                 android:text="Trips" />
 
             <Button
-                android:id="@+id/goalsNavButton"
+                android:id="@+id/badgesNavButton"
                 android:drawableTop="@drawable/ic_nav_badges"
                 android:drawablePadding="3dp"
                 android:drawableTint="?attr/rcTextPrimary"
@@ -168,7 +168,7 @@
                 android:text="Badges" />
 
             <Button
-                android:id="@+id/friendsNavButton"
+                android:id="@+id/weeklyGoalsNavButton"
                 android:drawableTop="@drawable/ic_nav_weekly"
                 android:drawablePadding="3dp"
                 android:drawableTint="?attr/rcTextPrimary"
