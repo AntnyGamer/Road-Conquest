@@ -69,6 +69,10 @@ class TripHistoryRepository(context: Context) {
         output
     }
 
+    /** Cheap generation check; protects outgoing shares after a device-data reset. */
+    fun isCurrentTrip(trip: SavedTrip): Boolean =
+        trip.historyGeneration == helper.historyGeneration
+
     /** Uses existing indexed history timestamps; never fabricates per-trip tile counts. */
     fun insights(trip: SavedTrip): SavedTripInsights = synchronized(helper.historyLock) {
         if (trip.historyGeneration != helper.historyGeneration) return@synchronized SavedTripInsights(0, 0, 0, 0)
