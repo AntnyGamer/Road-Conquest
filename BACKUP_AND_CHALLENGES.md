@@ -20,8 +20,11 @@ stops tracking and disables verified-drive sharing. It does not import account c
 VIP ownership, permissions or upload old GPS for leaderboard credit. Google Play restores
 VIP separately. Delete all data removes the private recovery backup too.
 
-Settings → **Weekly challenges and friends** shows local goals of 25 new roads and three
-new rewarded towns. Completion awards 250 and 300 points once per UTC week respectively.
+**Goals → Weekly challenges and friends** shows four stacking local goals in this branch:
+five newly unlocked roads (75 points), 25 newly unlocked roads (250 points),
+one newly rewarded town (75 points), and three newly rewarded towns (300 points).
+A player can earn up to 700 weekly-goal points. The original 25-road and three-town
+goal IDs and payouts remain unchanged; only the two starter milestones are new.
 Old-road sections, excluded road groups and the zero-point starting town do not count.
 The reward ledger survives export/restore. Weeks reset Monday at 00:00 UTC worldwide.
 The previous week has a one-week grace period for late road matching or town resolution.
