@@ -89,27 +89,26 @@ class TrackingRepository(context: Context) {
         }
     }
 
-    /** Optional on-demand nearby exploration, entirely local and index-backed. */
+    /** One indexed read for the nearby 5×5 grid, including date-line wrapping. */
     fun nearbyExploration(latitude: Double, longitude: Double): Pair<Int, Int> =
         synchronized(dbHelper.historyLock) {
             val origin = FogGrid.cell(latitude, longitude) ?: return@synchronized 0 to 0
             val cells = FogGrid.neighbors(origin)
-            val db = dbHelper.readableDatabase
-            val statement = db.compileStatement(
-                "SELECT COUNT(*) FROM explored_grid WHERE grid_row = ? AND grid_col = ?"
-            )
-            try {
-                var explored = 0
-                cells.forEach { cell ->
-                    statement.bindLong(1, cell.row.toLong())
-                    statement.bindLong(2, cell.column.toLong())
-                    if (statement.simpleQueryForLong() > 0L) explored++
-                    statement.clearBindings()
-                }
-                explored to cells.size
-            } finally {
-                statement.close()
+            // Neighbors form complete rows, even when latitude clips the first
+            // or last row. Keep wrapped columns as discrete values rather than
+            // using BETWEEN, which would incorrectly include most of the world.
+            val columns = cells.takeWhile { it.row == cells.first().row }.map { it.column }
+            val placeholders = List(columns.size) { "?" }.joinToString(",")
+            val args = (listOf(cells.first().row, cells.last().row) + columns)
+                .map(Int::toString).toTypedArray()
+            val explored = dbHelper.readableDatabase.rawQuery(
+                "SELECT COUNT(*) FROM explored_grid WHERE grid_row BETWEEN ? AND ? " +
+                    "AND grid_col IN ($placeholders)", args
+            ).use { cursor ->
+                check(cursor.moveToFirst())
+                cursor.getInt(0)
             }
+            explored to cells.size
         }
 
     /**
