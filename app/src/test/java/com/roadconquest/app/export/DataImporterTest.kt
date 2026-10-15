@@ -80,6 +80,19 @@ class DataImporterTest {
         assertEquals(points, ProgressionRepository(context).snapshot().balance)
     }
 
+    @Test fun restoringProgressDoesNotClaimItWasAlreadyExported() {
+        TrackingRepository(context).insertLocation(fix(1_000_000))
+        val backup = export()
+        val exportPrefs = context.getSharedPreferences(
+            "roadconquest_export_history", Context.MODE_PRIVATE
+        )
+        exportPrefs.edit().putLong("last_completed_at", 123456789L).commit()
+        DataImporter.prepare(context, ByteArrayInputStream(backup)).use {
+            DataImporter.restore(context, it)
+        }
+        assertEquals(0L, exportPrefs.getLong("last_completed_at", 0L))
+    }
+
     @Test fun rejectsIncompleteUnsafeNonfiniteAndInconsistentBackupsBeforeChangingProgress() {
         TrackingRepository(context).insertLocation(fix(1_000_000))
         val original = export()
