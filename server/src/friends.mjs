@@ -19,12 +19,19 @@ export function createFriends(pool) {
       const db = await pool.connect();
       try {
         await db.query("BEGIN");
-        const target = (await db.query("SELECT id FROM users WHERE username_key = $1", [normalized.key])).rows[0];
-        if (!target || String(target.id) === String(user.id)) throw new EvidenceError("Choose another existing username.", 400);
-        // A stable lock order prevents reciprocal requests deadlocking or exceeding the cap.
-        const pair = [user.id, target.id].sort((a, b) => BigInt(a) < BigInt(b) ? -1 : 1);
-        const locked = await db.query("SELECT id FROM users WHERE id = ANY($1::bigint[]) ORDER BY id FOR UPDATE", [pair]);
+        // Resolve the target and lock both participants in one database round
+        // trip. ORDER BY still acquires locks in stable ID order, preventing
+        // reciprocal requests from deadlocking or bypassing the 50-friend cap.
+        const locked = await db.query(
+          "SELECT id, username_key FROM users WHERE id = $1 OR username_key = $2 ORDER BY id FOR UPDATE",
+          [user.id, normalized.key]
+        );
+        const target = locked.rows.find(row => row.username_key === normalized.key);
+        if (!target || String(target.id) === String(user.id)) {
+          throw new EvidenceError("Choose another existing username.", 400);
+        }
         if (locked.rowCount !== 2) throw new EvidenceError("Account unavailable.", 409);
+        const pair = locked.rows.map(row => row.id);
         if (action === "request") {
           const existing = await db.query("SELECT 1 FROM friendships WHERE user_low = $1 AND user_high = $2", pair);
           if (!existing.rowCount) {

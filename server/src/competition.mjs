@@ -113,8 +113,21 @@ export async function createCompetition(pool, config, dependencies = {}) {
         if (!run || run.id !== body.run || run.nonce !== body.nonce || run.sequence !== body.sequence ||
             run.dataset !== config.dataset || run.expires_at.getTime() <= Date.now() ||
             body.fixes[0].time < run.created_at.getTime() - 10000) throw new EvidenceError("Drive challenge expired or changed.", 409);
-        await db.query("INSERT INTO cell_scores(user_id, dataset) VALUES ($1,$2) ON CONFLICT DO NOTHING", [user.id, config.dataset]);
-        const old = await db.query("SELECT last_verified_fix FROM cell_scores WHERE user_id = $1 AND dataset = $2", [user.id, config.dataset]);
+        // Ensure the score row exists and read the previous sealed checkpoint
+        // in one round trip. Our user-row lock serializes updates for this account.
+        // The inserted CTE returns new rows; the fallback SELECT returns existing
+        // rows without writing unchanged score data.
+        const old = await db.query(
+          `WITH inserted AS (
+            INSERT INTO cell_scores(user_id, dataset) VALUES ($1,$2)
+            ON CONFLICT DO NOTHING RETURNING last_verified_fix
+          )
+          SELECT last_verified_fix FROM inserted
+          UNION ALL
+          SELECT last_verified_fix FROM cell_scores
+          WHERE user_id = $1 AND dataset = $2 AND NOT EXISTS (SELECT 1 FROM inserted)`,
+          [user.id, config.dataset]
+        );
         const scope = `3:${user.id}:${config.dataset}`;
         verifyContinuity(old.rows[0].last_verified_fix, body.fixes[0], body.run, scope, config.checkpointKey);
         const newCells = await db.query(
