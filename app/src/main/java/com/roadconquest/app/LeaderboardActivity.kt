@@ -23,7 +23,7 @@ import java.util.concurrent.Executors
 class LeaderboardActivity : Activity() {
     private lateinit var ads: ScreenAds
     private val executor = Executors.newSingleThreadExecutor()
-    private var generation = 0
+    @Volatile private var generation = 0
     private data class RankedUser(val rank: Long, val username: String, val cells: Long)
     private data class RankingDisplay(val message: String, val myUsername: String?, val rows: List<RankedUser>)
 
@@ -72,8 +72,11 @@ class LeaderboardActivity : Activity() {
         message.text = "Loading verified scores…"
         container.removeAllViews()
         executor.execute {
+            if (current != generation) return@execute
             val result = runCatching {
                 val ranking = AccountClient.leaderboard()
+                // Skip the second account request if a newer refresh superseded this one.
+                if (current != generation) return@execute
                 val session = AccountStore.load(this)
                 val verificationAvailable = ranking.optBoolean("verification_available", true)
                 val mine = if (verificationAvailable) session?.let {

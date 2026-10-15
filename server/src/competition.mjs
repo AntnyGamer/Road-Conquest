@@ -60,15 +60,21 @@ export async function createCompetition(pool, config, dependencies = {}) {
       cells_definition: "Unique squares from the app's exploration grid, confirmed by two accurate moving GPS fixes inside the same square. Repeat visits add no credit." }),
     totals: user => totals(pool, user.id),
     async begin(user) {
-      await eligible(pool, user);
       const id = randomUUID();
       const nonce = randomBytes(32).toString("base64url");
-      await pool.query(
-        `INSERT INTO cell_runs(user_id, id, nonce, dataset) VALUES ($1,$2,$3,$4)
+      // Authenticate first at the HTTP boundary, then check competition eligibility
+      // directly in the write: no separate preflight SELECT / database round trip.
+      // An ineligible (or deleted) account cannot create or renew a challenge.
+      const started = await pool.query(
+        `INSERT INTO cell_runs(user_id, id, nonce, dataset)
+         SELECT u.id,$2,$3,$4 FROM users u
+         WHERE u.id=$1 AND u.leaderboard_eligible = TRUE
          ON CONFLICT (user_id) DO UPDATE SET id = EXCLUDED.id, nonce = EXCLUDED.nonce, dataset = EXCLUDED.dataset,
-           sequence = 0, created_at = CURRENT_TIMESTAMP, expires_at = CURRENT_TIMESTAMP + INTERVAL '3 minutes'`,
+           sequence = 0, created_at = CURRENT_TIMESTAMP, expires_at = CURRENT_TIMESTAMP + INTERVAL '3 minutes'
+         RETURNING user_id`,
         [user.id, id, nonce, config.dataset]
       );
+      if (!started.rowCount) throw new EvidenceError("Account is not eligible for verified competition.", 403);
       return { run: id, nonce, sequence: 0 };
     },
     async submit(user, evidence, integrityToken) {

@@ -30,7 +30,7 @@ import java.util.concurrent.Executors
 
 class ChallengesActivity : Activity() {
     private val worker = Executors.newSingleThreadExecutor()
-    private var generation = 0
+    @Volatile private var generation = 0
     private lateinit var local: LinearLayout
     private lateinit var ranking: TextView
     private lateinit var friends: LinearLayout
@@ -131,6 +131,9 @@ class ChallengesActivity : Activity() {
         val expected = ++generation
         val session = AccountStore.load(this)
         worker.execute {
+            // Refresh taps and resumes can queue work behind an active request.
+            // Skip obsolete jobs instead of making avoidable account-server calls.
+            if (expected != generation) return@execute
             val goals = runCatching { WeeklyChallenges.status(applicationContext) }
             runOnUiThread {
                 if (!isDestroyed && expected == generation) {
@@ -140,6 +143,7 @@ class ChallengesActivity : Activity() {
                     })
                 }
             }
+            if (expected != generation) return@execute
             if (session == null) {
                 runOnUiThread {
                     if (!isDestroyed && expected == generation) {
@@ -151,6 +155,7 @@ class ChallengesActivity : Activity() {
                 return@execute
             }
             val friendList = runCatching { AccountClient.friends(session.token).getJSONArray("friends") }
+            if (expected != generation) return@execute
             val standings = if (FeatureFlags.LEADERBOARDS_VISIBLE) runCatching { AccountClient.friendWeek(session.token) } else null
             runOnUiThread {
                 if (isDestroyed || expected != generation || AccountStore.load(this)?.token != session.token) return@runOnUiThread
