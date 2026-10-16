@@ -379,7 +379,7 @@ class RoadGeometryTurnTest {
         assertEquals(listOf("Approach"), result.roads.map { it.name })
         assertEquals(setOf(1L, 2L), result.matchedPointConfidences.keys)
         assertFalse(3L in result.matchedPointConfidences)
-        assertTrue(result.roads.none { it.geometryJson.contains("not a road step") })
+        assertTrue(result.roads.none { it.coordinatesJson.contains("not a road step") })
 
         // When the malformed provider leg is the only leg, keep the original
         // failure path/backoff; never invent a road to avoid a visible gap.
