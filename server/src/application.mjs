@@ -308,19 +308,21 @@ async function handle(req, res) {
     if (metric !== "cells") return send(res, 400, { error: "Choose cells." });
     // The public page can load before verification is provisioned. No scores are invented,
     // and every drive-writing endpoint below remains gated on strict competition setup.
-    const ranking = competition
-      ? { ...await competition.leaderboard(metric), verification_available: true }
-      : { metric, dataset: null, entries: [], verification_available: false };
-    if (competition && url.searchParams.get("mine") === "1") {
-      // An optional authenticated total avoids another HTTP request and
-      // rate-limit DB write. Public rankings remain accessible anonymously.
-      const user = await authenticatedUser(req);
-      if (user) {
-        try { ranking.mine = await competition.totals(user); }
-        catch { /* Keep the public rankings if the personal count is unavailable. */ }
+    if (!competition) return send(res, 200,
+      { metric, dataset: null, entries: [], verification_available: false });
+    // The requested total is still tied to a freshly checked session. Public
+    // rankings and invalid/anonymous sessions never reveal another user's score.
+    const user = url.searchParams.get("mine") === "1" ? await authenticatedUser(req) : null;
+    let ranking;
+    if (user) {
+      try { ranking = await competition.leaderboard(metric, user.id); }
+      catch {
+        // Same best-effort behavior as the old optional totals query: keep the
+        // public leaderboard available when a personal-score read fails.
+        ranking = await competition.leaderboard(metric);
       }
-    }
-    return send(res, 200, ranking);
+    } else ranking = await competition.leaderboard(metric);
+    return send(res, 200, { ...ranking, verification_available: true });
   }
   if (url.pathname.startsWith("/v1/verified/")) {
     if (!competition) return send(res, 404, { error: "Verified leaderboards are unavailable." });

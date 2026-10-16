@@ -21,7 +21,7 @@ test("top fifty ranks preserve ties across the cutoff and exclude hidden or inel
       FROM generate_series(1,80) g`, [Buffer.alloc(16),Buffer.alloc(64)]);
     await pool.query(`INSERT INTO cell_scores(user_id,dataset,cells)
       SELECT id,$1,CASE WHEN username_key<='rank_010' THEN 300 WHEN username_key<='rank_060' THEN 200 ELSE 100 END FROM users`, [dataset]);
-    const all = (await pool.query(`SELECT u.username_display AS username,u.username_key,s.cells,u.leaderboard_visible,u.leaderboard_eligible
+    const all = (await pool.query(`SELECT u.id,u.username_display AS username,u.username_key,s.cells,u.leaderboard_visible,u.leaderboard_eligible
       FROM users u JOIN cell_scores s ON s.user_id=u.id WHERE s.dataset=$1`, [dataset])).rows;
     const eligible = all.filter(row => row.leaderboard_visible && row.leaderboard_eligible).sort((a,b) =>
       Number(b.cells)-Number(a.cells) || a.username_key.localeCompare(b.username_key));
@@ -32,6 +32,28 @@ test("top fifty ranks preserve ties across the cutoff and exclude hidden or inel
     assert.equal(actual.length,50);
     assert.equal(actual.at(-1).rank,8);
     assert.deepEqual(actual,expected);
+    const hidden = all.find(row => row.username_key === 'rank_001');
+    const visible = all.find(row => row.username_key === 'rank_010');
+    let roundTrips = 0;
+    const metered = await createCompetition({
+      query(...args) { roundTrips++; return pool.query(...args); }
+    }, config, { verify: async () => {} });
+    const privateHidden = await metered.leaderboard('cells', hidden.id);
+    assert.equal(roundTrips, 1, 'Combined ranking and personal score use one query');
+    assert.deepEqual(privateHidden.entries, expected);
+    assert.deepEqual(privateHidden.mine, { verified: true, scoring_policy: 3, dataset, cells: 300 });
+    const privateVisible = await metered.leaderboard('cells', visible.id);
+    assert.equal(roundTrips, 2);
+    assert.deepEqual(privateVisible.entries, expected);
+    assert.equal(privateVisible.mine.cells, 300);
+    const anonymous = await metered.leaderboard();
+    assert.equal(roundTrips, 3);
+    assert.deepEqual(anonymous.entries, expected);
+    assert.equal(Object.hasOwn(anonymous, 'mine'), false);
+    await pool.query('DELETE FROM cell_scores');
+    const empty = await metered.leaderboard('cells', visible.id);
+    assert.deepEqual(empty.entries, []);
+    assert.equal(empty.mine.cells, 0, 'No rankings still returns zero verified personal cells');
   } finally { await pool.end(); }
 });
 

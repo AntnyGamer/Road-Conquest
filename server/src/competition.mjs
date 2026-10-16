@@ -212,20 +212,42 @@ export async function createCompetition(pool, config, dependencies = {}) {
         entries: result.rows.filter(r => r.username !== null)
           .map(r => ({ username: r.username, rank: Number(r.rank), cells: Number(r.cells) })) };
     },
-    async leaderboard(metric = "cells") {
+    async leaderboard(metric = "cells", authenticatedUserId = null) {
       if (metric !== "cells") throw new EvidenceError("Choose cells.", 400);
-      const result = await pool.query(
-        `WITH leaders AS (
+      // Public callers keep exactly the existing query and response. A verified
+      // authenticated caller gets its total as one additional scalar projection
+      // in the same indexed rankings query, without a second PostgreSQL round trip.
+      const publicSql = `WITH leaders AS (
            SELECT u.username_display AS username,u.username_key,s.cells
            FROM cell_scores s JOIN users u ON u.id=s.user_id
            WHERE s.dataset=$1 AND s.cells>0 AND u.leaderboard_visible AND u.leaderboard_eligible
            ORDER BY s.cells DESC,u.username_key ASC LIMIT 50
          )
          SELECT username,cells,RANK() OVER (ORDER BY cells DESC) AS rank
-         FROM leaders ORDER BY cells DESC,username_key ASC`, [config.dataset]
-      );
-      return { verified: true, scoring_policy: 3, metric, dataset: config.dataset,
-        entries: result.rows.map(r => ({ username: r.username, rank: Number(r.rank), cells: Number(r.cells) })) };
+         FROM leaders ORDER BY cells DESC,username_key ASC`;
+      const withMine = authenticatedUserId != null;
+      const sql = withMine ? `WITH leaders AS (
+           SELECT u.username_display AS username,u.username_key,s.cells
+           FROM cell_scores s JOIN users u ON u.id=s.user_id
+           WHERE s.dataset=$1 AND s.cells>0 AND u.leaderboard_visible AND u.leaderboard_eligible
+           ORDER BY s.cells DESC,u.username_key ASC LIMIT 50
+         ), ranked AS (
+           SELECT username,username_key,cells,RANK() OVER (ORDER BY cells DESC) AS rank
+           FROM leaders
+         )
+         SELECT ranked.username,ranked.cells,ranked.rank,mine.cells AS mine_cells
+         FROM (SELECT COALESCE((
+           SELECT cells FROM cell_scores WHERE user_id=$2 AND dataset=$1
+         ),0) AS cells) mine LEFT JOIN ranked ON TRUE
+         ORDER BY ranked.cells DESC NULLS LAST,ranked.username_key ASC NULLS LAST`
+        : publicSql;
+      const result = await pool.query(sql, withMine ? [config.dataset, authenticatedUserId] : [config.dataset]);
+      const ranking = { verified: true, scoring_policy: 3, metric, dataset: config.dataset,
+        entries: result.rows.filter(r => r.username !== null)
+          .map(r => ({ username: r.username, rank: Number(r.rank), cells: Number(r.cells) })) };
+      if (withMine) ranking.mine = { verified: true, scoring_policy: 3, dataset: config.dataset,
+        cells: Number(result.rows[0].mine_cells) };
+      return ranking;
     }
   };
 }
