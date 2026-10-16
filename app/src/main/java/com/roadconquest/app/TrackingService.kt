@@ -111,9 +111,7 @@ class TrackingService : Service(), LocationListener {
     @Volatile private var lastMatchAttempt = 0L
     @Volatile private var ready = false
     private var providerReceiverRegistered = false
-    private var batteryReceiverRegistered = false
     private var locationUpdatesRegistered = false
-    private var lowestBatteryPercentSeen = 101
     private var lastNotificationLocationEnabled: Boolean? = null
     private val notificationManager by lazy(LazyThreadSafetyMode.NONE) {
         getSystemService(NotificationManager::class.java)
@@ -147,26 +145,6 @@ class TrackingService : Service(), LocationListener {
             sendUiBroadcast(ACTION_TRACKING_STATE_CHANGED)
         }
     }
-    private val batteryReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action != Intent.ACTION_BATTERY_CHANGED || !ready ||
-                Prefs.isTrackingPaused(this@TrackingService)
-            ) return
-            val level = intent.getIntExtra("level", -1)
-            val scale = intent.getIntExtra("scale", -1)
-            if (level < 0 || scale <= 0) return
-            val percent = (level * 100 / scale).coerceIn(0, 100)
-            // No progression I/O is needed for ordinary battery levels. Within one tracking
-            // session, a repeated or higher low-battery reading cannot lower the persisted
-            // minimum either, so avoid reopening SQLite for it.
-            if (percent <= 5 && percent < lowestBatteryPercentSeen) {
-                val changed = ProgressionManager.recordBatteryPercent(this@TrackingService, percent)
-                lowestBatteryPercentSeen = percent
-                if (changed) sendUiBroadcast(ACTION_STATS_UPDATED)
-            }
-        }
-    }
-
     override fun onCreate() {
         super.onCreate()
         locationManager = getSystemService(LocationManager::class.java)
@@ -203,14 +181,6 @@ class TrackingService : Service(), LocationListener {
             addAction(LocationManager.MODE_CHANGED_ACTION)
         }, ContextCompat.RECEIVER_NOT_EXPORTED)
         providerReceiverRegistered = true
-        ContextCompat.registerReceiver(
-            this,
-            batteryReceiver,
-            IntentFilter(Intent.ACTION_BATTERY_CHANGED),
-            ContextCompat.RECEIVER_NOT_EXPORTED
-        )
-        batteryReceiverRegistered = true
-        ProgressionManager.recordBatteryFromSystem(this)
         Prefs.markEverStarted(this)
         sendUiBroadcast(ACTION_TRACKING_STATE_CHANGED)
     }
@@ -491,8 +461,6 @@ class TrackingService : Service(), LocationListener {
         locationMonitorStarted = false
         if (providerReceiverRegistered) runCatching { unregisterReceiver(providerReceiver) }
         providerReceiverRegistered = false
-        if (batteryReceiverRegistered) runCatching { unregisterReceiver(batteryReceiver) }
-        batteryReceiverRegistered = false
         if (locationUpdatesRegistered && ::locationManager.isInitialized) {
             runCatching { locationManager.removeUpdates(this) }
             locationUpdatesRegistered = false

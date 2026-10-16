@@ -39,6 +39,22 @@ internal object FogGrid {
         return Cell(row, floor(wrapped / longitudeStep).toInt().coerceIn(0, columnCount - 1))
     }
 
+    /** Nearby tile goals use the same globally aligned grid, including date-line wrapping. */
+    fun neighbors(cell: Cell, radius: Int = 2): List<Cell> {
+        require(radius in 0..5)
+        val firstRow = floor((90.0 - MAX_MERCATOR_LATITUDE) / LATITUDE_STEP).toInt()
+        val lastRow = floor((90.0 + MAX_MERCATOR_LATITUDE) / LATITUDE_STEP).toInt()
+        val output = ArrayList<Cell>((2 * radius + 1) * (2 * radius + 1))
+        for (row in (cell.row - radius)..(cell.row + radius)) {
+            if (row !in firstRow..lastRow) continue
+            for (offset in -radius..radius) {
+                val column = ((cell.column + offset) % columnCount + columnCount) % columnCount
+                output += Cell(row, column)
+            }
+        }
+        return output
+    }
+
     fun center(cell: Cell): Pair<Double, Double> {
         val south = (-90.0 + cell.row * LATITUDE_STEP).coerceAtLeast(-MAX_MERCATOR_LATITUDE)
         val north = (-90.0 + (cell.row + 1) * LATITUDE_STEP).coerceAtMost(MAX_MERCATOR_LATITUDE)

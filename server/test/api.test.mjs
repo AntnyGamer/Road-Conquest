@@ -125,6 +125,12 @@ test("signup/login/privacy/logout are server-enforced and duplicate usernames ar
     });
     assert.equal(badLogin.status, 401);
     assert.equal(badLogin.payload.error, "Invalid username or password.");
+    const missingUser = await json(baseUrl, "/v1/login", "POST", {
+      username: "MissingUser",
+      password: "this is only a constant dummy password"
+    });
+    assert.equal(missingUser.status, 401);
+    assert.equal(missingUser.payload.error, "Invalid username or password.");
 
     const login = await json(baseUrl, "/v1/login", "POST", {
       username: "DRIVERONE",

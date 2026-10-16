@@ -42,6 +42,7 @@ class AchievementsActivityTest {
             val all = Achievements.progress(DataSummary(0, 0, null, null))
             val categories = listOf(
                 AchievementCategory.ROADS to R.id.achievementRoadsButton,
+                AchievementCategory.TILES to R.id.achievementTilesButton,
                 AchievementCategory.DISTANCE to R.id.achievementDistanceButton,
                 AchievementCategory.PLACES to R.id.achievementPlacesButton,
                 AchievementCategory.ADS to R.id.achievementAdsButton,
@@ -73,4 +74,24 @@ class AchievementsActivityTest {
         }
     }
 
+    @Test fun returningToBadgesRefreshesBalanceAndKeepsCategory() {
+        val controller = Robolectric.buildActivity(AchievementsActivity::class.java).create().start().resume()
+        try {
+            val activity = controller.get()
+            activity.findViewById<Button>(R.id.achievementTilesButton).performClick()
+            val repository = com.roadconquest.app.data.ProgressionRepository(activity)
+            assertTrue(repository.awardAchievement("wallet-refresh-check", 222L))
+            controller.pause().resume()
+            val points = activity.findViewById<TextView>(R.id.achievementPointsText)
+            val deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5)
+            while (!points.text.contains("222") && System.nanoTime() < deadline) {
+                Shadows.shadowOf(Looper.getMainLooper()).idle()
+                Thread.sleep(10)
+            }
+            assertTrue("Wallet should refresh after resume", points.text.contains("222"))
+            assertTrue(activity.findViewById<Button>(R.id.achievementTilesButton).isSelected)
+        } finally {
+            controller.pause().stop().destroy()
+        }
+    }
 }

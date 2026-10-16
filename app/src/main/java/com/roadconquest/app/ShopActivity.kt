@@ -3,6 +3,10 @@ package com.roadconquest.app
 import android.app.Activity
 import android.content.Context
 import android.os.Bundle
+import android.graphics.drawable.GradientDrawable
+import android.view.Gravity
+import android.view.View
+import android.widget.ImageView
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.LinearLayout
@@ -19,6 +23,9 @@ import com.roadconquest.app.data.PurchaseResult
 import com.roadconquest.app.data.TrackingRepository
 import com.roadconquest.app.progression.CosmeticType
 import com.roadconquest.app.progression.Cosmetics
+import com.roadconquest.app.progression.CarStyle
+import com.roadconquest.app.progression.CarColor
+import com.roadconquest.app.progression.RoadColor
 import com.roadconquest.app.progression.ProgressionManager
 import com.roadconquest.app.progression.ShopCatalog
 import com.roadconquest.app.progression.ShopItem
@@ -76,6 +83,7 @@ class ShopActivity : Activity() {
             isAppearanceLightNavigationBars = lightSystemBars
         }
         setContentView(R.layout.activity_shop)
+        findViewById<Button>(R.id.backNavButton).setOnClickListener { finish() }
         applyInsets()
         pointsText = findViewById(R.id.shopPointsText)
         progressText = findViewById(R.id.shopProgressText)
@@ -132,8 +140,9 @@ class ShopActivity : Activity() {
         pointsText.text = String.format(Locale.getDefault(), "⚔ %,d points", snapshot.balance)
         progressText.text = String.format(
             Locale.getDefault(),
-            "%,d roads rewarded • %,d towns • %,d states/regions • %,d countries\n%,d lifetime points earned • %,d spent",
+            "%,d roads • %,d tiles • %,d towns • %,d regions • %,d countries\n%,d lifetime points earned • %,d spent",
             snapshot.rewardedRoads,
+            snapshot.tilesUnlocked,
             snapshot.towns,
             snapshot.states,
             snapshot.countries,
@@ -168,7 +177,7 @@ class ShopActivity : Activity() {
             setTextColor(Appearance.color(this@ShopActivity, R.attr.rcTextPrimary))
         })
         card.addView(TextView(this).apply {
-            text = "One-time Google Play purchase. Remove banners and rewarded-ad offers, and unlock Gold car, Gold roads, and Golden Road Conquest UI without spending points. You can still choose other styles."
+            text = "One-time Google Play purchase. Remove banners and rewarded-ad offers, unlock Gold car, Gold roads and Golden UI, plus VIP trip extras: browse up to 500 drives, share summaries and export GPX routes. Normal trip history, replays, progress backups and basic summaries stay free."
             textSize = 13f
             setTextColor(Appearance.color(this@ShopActivity, R.attr.rcTextSecondary))
             setPadding(0, dp(8), 0, dp(8))
@@ -220,27 +229,28 @@ class ShopActivity : Activity() {
             val padding = dp(16)
             setPadding(padding, padding, padding, padding)
         }
-        card.addView(TextView(this).apply {
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        header.addView(previewFor(item), LinearLayout.LayoutParams(dp(60), dp(54)).apply {
+            marginEnd = dp(12)
+        })
+        val labels = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        labels.addView(TextView(this).apply {
             text = item.name
             setTextColor(Appearance.color(this@ShopActivity, R.attr.rcTextPrimary))
             textSize = 17f
             setTypeface(typeface, android.graphics.Typeface.BOLD)
         })
-        card.addView(TextView(this).apply {
+        labels.addView(TextView(this).apply {
             text = item.description
             setTextColor(Appearance.color(this@ShopActivity, R.attr.rcTextSecondary))
             textSize = 13f
-            setPadding(0, dp(4), 0, dp(8))
+            setPadding(0, dp(4), 0, 0)
         })
-        val action = Button(this).apply {
-            text = when {
-                equipped -> "Equipped"
-                owned -> "Equip"
-                else -> String.format(Locale.getDefault(), "Buy • %,d points", item.cost)
-            }
-            isEnabled = !equipped && (owned || snapshot.balance >= item.cost)
-            setOnClickListener { onItemPressed(item, owned) }
-        }
+        header.addView(labels, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        card.addView(header, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) })
         if (!owned && snapshot.balance < item.cost) {
             card.addView(TextView(this).apply {
                 text = String.format(Locale.getDefault(), "%,d more points to unlock", item.cost - snapshot.balance)
@@ -249,14 +259,54 @@ class ShopActivity : Activity() {
                 setPadding(0, 0, 0, dp(8))
             })
         }
-        card.addView(action, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT
-        ))
+        card.addView(Button(this).apply {
+            text = when {
+                equipped -> "✓ Equipped"
+                owned -> "Equip"
+                else -> String.format(Locale.getDefault(), "Buy • %,d points", item.cost)
+            }
+            isEnabled = !equipped && (owned || snapshot.balance >= item.cost)
+            setOnClickListener { onItemPressed(item, owned) }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         items.addView(card, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
         ).apply { bottomMargin = dp(10) })
+    }
+
+    private fun previewFor(item: ShopItem): View {
+        val preview = LinearLayout(this).apply {
+            gravity = Gravity.CENTER
+            contentDescription = "Preview: ${item.name}"
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+        when (item.type) {
+            CosmeticType.CAR_STYLE, CosmeticType.CAR_COLOR -> {
+                val style = if (item.type == CosmeticType.CAR_STYLE) {
+                    CarStyle.entries.firstOrNull { it.id == item.value } ?: Cosmetics.carStyle(this)
+                } else Cosmetics.carStyle(this)
+                val color = if (item.type == CosmeticType.CAR_COLOR) {
+                    CarColor.entries.firstOrNull { it.id == item.value } ?: Cosmetics.carColor(this)
+                } else Cosmetics.carColor(this)
+                preview.addView(ImageView(this).apply {
+                    setImageBitmap(Cosmetics.renderCarIcon(this@ShopActivity, style, color))
+                    scaleType = ImageView.ScaleType.FIT_CENTER
+                }, LinearLayout.LayoutParams(dp(52), dp(52)))
+            }
+            CosmeticType.ROAD_COLOR, CosmeticType.APP_THEME -> {
+                val color = if (item.type == CosmeticType.ROAD_COLOR) {
+                    RoadColor.entries.firstOrNull { it.id == item.value }?.argb
+                        ?: Cosmetics.roadColor(this).argb
+                } else if (item.value == "gold") 0xFFD9A406.toInt() else 0xFF235DDE.toInt()
+                preview.addView(View(this).apply {
+                    background = GradientDrawable().apply {
+                        setColor(color)
+                        cornerRadius = dp(8).toFloat()
+                        setStroke(dp(1), Appearance.color(this@ShopActivity, R.attr.rcOutline))
+                    }
+                }, LinearLayout.LayoutParams(dp(52), dp(if (item.type == CosmeticType.ROAD_COLOR) 12 else 42)))
+            }
+        }
+        return preview
     }
 
     private fun onItemPressed(item: ShopItem, alreadyOwned: Boolean) {

@@ -116,6 +116,39 @@ public source, or an ordinary browser script. Simply setting the secret without
 deploying a trusted signing ingress does **not** change the live shared limits.
 Keep the public privacy and deletion pages accessible through the ingress.
 
+### Optional Cloudflare Workers ingress ($0 within the free-tier quotas)
+
+The repository includes a deployable module at `server/worker/ingress.mjs`. Its source
+is **not** deployed by GitHub CI. It signs Cloudflare's edge-provided
+`CF-Connecting-IP` with the exact HMAC that the Neon Function already verifies,
+so unrelated legitimate users no longer share the fallback eight-signups/hour
+budget. It does **not** trust client-supplied forwarding or signature headers.
+
+1. Create or edit a **Cloudflare Worker on the Free plan**, using the module in
+   `server/worker/ingress.mjs` as its entrypoint. Do not overwrite an existing
+   production Worker without first confirming its current routes and behavior.
+2. Configure `API_ORIGIN` as the **base HTTPS invocation origin** of the active
+   Neon `roadconquest` Function, without a path or query. Configure
+   `RATE_LIMIT_IP_SIGNATURE_KEY` as a **Cloudflare Worker secret** with the
+   exact same 32+-character random value held by the Neon Function. Never put
+   the secret in Android, JavaScript delivered to browsers, source control or logs.
+3. Verify `GET /health`, `GET /privacy`, `GET /delete-account`, two distinct
+   client IPs' signup/login budgets, logout, username changes and account
+   deletion from the Worker URL. Test spoofed `X-Forwarded-For` and
+   `X-RoadConquest-Client-*` request headers; no caller-supplied IP may bypass
+   the verified signature check. Run `node --test test/ingress.test.mjs`
+   from `server/` before publishing changes to the Worker.
+4. Only after live end-to-end checks pass, configure
+   `ROADCONQUEST_ACCOUNT_API_URL` for the **release** build to the confirmed
+   Worker URL. `app/build.gradle.kts` has a default URL which must not be
+   assumed to be correctly configured merely because it is present in code.
+
+The direct Neon invocation URL may remain publicly reachable; unsigned direct
+requests deliberately retain the conservative shared budget. Worker requests
+consume both Cloudflare and Neon free-plan quotas, neither of which guarantees
+unlimited use. A Worker is an account-service proxy, **not** a solution to
+OSRM's separate public-demo map-matching limits.
+
 After deployment reports success, test the returned HTTPS invocation URL through actual signup,
 login, session revocation and profile privacy. Only then build the Android release with that
 actual `ROADCONQUEST_ACCOUNT_API_URL`; never guess or precompile an unclaimed hostname.
@@ -240,7 +273,7 @@ PLAY_SERVICE_ACCOUNT_JSON=<service-account JSON stored as a secret env var>
 # or PLAY_SERVICE_ACCOUNT_FILE=/run/secrets/play-integrity.json
 PLAY_CLOUD_PROJECT_NUMBER=<numeric linked Google Cloud project>
 PLAY_CERTIFICATES=<base64url SHA256 Play app-signing certificate without padding>
-PLAY_VERSION_CODES=71,72,73,74
+PLAY_VERSION_CODES=71,72,73,74,75
 ```
 
 Apply `schema.sql` as the database owner. Restricted API roles need

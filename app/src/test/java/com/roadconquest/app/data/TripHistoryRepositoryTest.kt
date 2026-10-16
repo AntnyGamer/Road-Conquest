@@ -43,6 +43,108 @@ class TripHistoryRepositoryTest {
         assertTrue(TripReplayRoute.visibleRanges(downsampled, 1).isEmpty())
     }
 
+    @Test fun tripInsightsKeepTileAndPendingCountsAccurateInOneSnapshot() {
+        val context = RuntimeEnvironment.getApplication()
+        TrackingRepository(context).clearHistory()
+        val repository = TrackingRepository(context)
+        val fixes = (0..3).map { index ->
+            android.location.Location("gps").apply {
+                latitude = 40.0
+                longitude = -74.0 + index * 0.0001
+                accuracy = 5f
+                time = 1_000_000L + index * 10_000L
+            }
+        }
+        repository.insertLocations(fixes)
+        assertTrue(repository.recordExploredGridCell(fixes[1]))
+        val history = TripHistoryRepository(context)
+        val trip = history.recentTrips().single()
+        val insights = history.insights(trip)
+        assertEquals(0L, insights.newRoadGroups)
+        assertEquals(0L, insights.newTowns)
+        assertEquals(1L, insights.newTiles)
+        assertEquals(4L, insights.pendingFixes)
+    }
+
+    @Test fun savedTripGpxDefaultsToPrivateEndpointsAndFullExportIsExplicit() {
+        val context = RuntimeEnvironment.getApplication()
+        val tracker = TrackingRepository(context)
+        tracker.clearHistory()
+        // Clear-history increments the repository generation; a stale repository
+        // correctly refuses further writes. Use a newly attached repository.
+        TrackingRepository(context).insertLocations((0..36).map { index ->
+            android.location.Location("gps").apply {
+                latitude = 40.0
+                longitude = -74.0 + index * 0.0001
+                accuracy = 5f
+                time = 1_000_000L + index * 10_000L
+            }
+        })
+        val history = TripHistoryRepository(context)
+        val trip = history.recentTrips().single()
+        // Data-layer entitlement is enforced even if a new screen forgets
+        // to check the Play purchase before invoking GPX export.
+        com.roadconquest.app.billing.VipEntitlement.updateFromPlay(context, false)
+        assertThrows(IllegalStateException::class.java) {
+            history.exportGpx(trip, java.io.ByteArrayOutputStream())
+        }
+        assertThrows(IllegalArgumentException::class.java) { history.recentTrips(101) }
+        com.roadconquest.app.billing.VipEntitlement.updateFromPlay(context, true)
+        try {
+            assertEquals(1, history.recentTrips(500).size)
+        val privateOutput = java.io.ByteArrayOutputStream()
+        val visible = history.exportGpx(trip, privateOutput)
+        val hiddenXml = privateOutput.toString("UTF-8")
+        assertTrue(visible > 0)
+        assertTrue(hiddenXml.startsWith("<?xml version="))
+        assertTrue(hiddenXml.contains("<gpx version="))
+        assertTrue(hiddenXml.contains("<trkseg>"))
+        assertTrue(hiddenXml.contains("</trkseg>"))
+        assertFalse(hiddenXml.contains("1970-01-01T00:16:40Z")) // first time
+        val fullOutput = java.io.ByteArrayOutputStream()
+        assertEquals(37, history.exportGpx(trip, fullOutput, hideTripEnds = false))
+        assertTrue(fullOutput.toString("UTF-8").contains("1970-01-01T00:16:40Z"))
+        tracker.clearHistory()
+        assertThrows(IllegalStateException::class.java) {
+            history.exportGpx(trip, java.io.ByteArrayOutputStream(), hideTripEnds = false)
+        }
+        } finally {
+            com.roadconquest.app.billing.VipEntitlement.updateFromPlay(context, false)
+        }
+    }
+
+    @Test fun resetDuringSlowGpxFlushInvalidatesExport() {
+        val context = RuntimeEnvironment.getApplication()
+        TrackingRepository(context).clearHistory()
+        val tracker = TrackingRepository(context)
+        tracker.insertLocations((0..2).map { i ->
+            android.location.Location("gps").apply {
+                latitude = 40.0
+                longitude = -74.0 + i * 0.0001
+                accuracy = 5f
+                time = 1_000_000L + i * 10_000L
+            }
+        })
+        val history = TripHistoryRepository(context)
+        val trip = history.recentTrips().single()
+        val output = object : java.io.ByteArrayOutputStream() {
+            override fun flush() {
+                super.flush()
+                // Simulate a reset while a cloud document provider finishes I/O.
+                TrackingRepository(context).clearHistory()
+            }
+        }
+        com.roadconquest.app.billing.VipEntitlement.updateFromPlay(context, true)
+        try {
+            assertThrows(IllegalStateException::class.java) {
+                history.exportGpx(trip, output, hideTripEnds = false)
+            }
+            assertFalse(history.isCurrentTrip(trip))
+        } finally {
+            com.roadconquest.app.billing.VipEntitlement.updateFromPlay(context, false)
+        }
+    }
+
     @Test fun replayPreservesTrueGapsThroughSamplingAndRejectsReplacedHistory() {
         val context = RuntimeEnvironment.getApplication()
         val tracker = TrackingRepository(context)
@@ -55,8 +157,12 @@ class TripHistoryRepositoryTest {
         insert((0..4).map { 1_000_000L + it * 20_000 })
         val history = TripHistoryRepository(context)
         val trip = history.recentTrips().single()
+        val oldGeneration = history.currentHistoryGeneration()
+        assertEquals(oldGeneration, trip.historyGeneration)
         assertFalse(history.replay(trip, 2).last().breakBefore)
         tracker.clearHistory()
+        assertNotEquals("A data reset invalidates every previously selected route",
+            oldGeneration, history.currentHistoryGeneration())
         insert(listOf(1_000_000, 1_020_000, 1_060_000, 1_080_000, 1_100_000))
         assertTrue(history.replay(trip).isEmpty())
         assertTrue(history.replay(history.recentTrips().single(), 2).last().breakBefore)

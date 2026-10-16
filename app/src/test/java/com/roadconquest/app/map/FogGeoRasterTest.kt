@@ -43,7 +43,7 @@ class FogGeoRasterTest {
         }
     }
 
-    @Test fun optimizedSquareProjectionExactlyMatchesOriginalAtAnyLongitude() {
+    @Test fun squareProjectionPreservesPointLocationsWithinOneWorldCopy() {
         for ((latitude, longitude) in listOf(
             39.96 to -75.02, 0.0 to 179.999, 0.0 to -179.999,
             79.0 to 10.0, -80.0 to 15.0
@@ -56,8 +56,61 @@ class FogGeoRasterTest {
                 FogGeoRaster.around(latitude, longitude, 15.0, 1024)
             )
             for (raster in rasters) {
-                assertArrayEquals("Optimization must preserve every fog pixel coordinate",
-                    raster.project(corners), raster.projectGridCorners(corners), 0.0)
+                val individual = raster.project(corners)
+                val squares = raster.projectGridCorners(corners)
+                val worldWidth = FogGeoRaster.WORLD_METERS / raster.metersPerPixel
+                for (i in squares.indices step 2) {
+                    val difference = squares[i] - individual[i]
+                    assertEquals("Each corner retains its location modulo one world",
+                        0.0, difference - round(difference / worldWidth) * worldWidth, 1e-8)
+                    assertEquals(individual[i + 1], squares[i + 1], 0.0)
+                }
+            }
+        }
+    }
+
+    @Test fun polarAndWideRastersKeepCellsAtTheirGeoreferencedLatitude() {
+        fun mercatorY(latitude: Double) =
+            6378137.0 * ln(tan(PI / 4 + Math.toRadians(latitude) / 2))
+        for (latitude in listOf(-85.05, -80.0, 0.0, 80.0, 85.05)) {
+            val cells = FogGrid.corners(latitude, 10.0)
+            val rasters = listOf(
+                FogGeoRaster.around(latitude, 10.0, 5.0, 896),
+                FogGeoRaster.around(latitude, 10.0, 15.0, 1024),
+                FogGeoRaster.around(latitude, 10.0, 3.5, 896, 1080, 2400, 20_000.0),
+                FogGeoRaster.pinchFallback(latitude, 10.0, 10.0, 768, 1080, 2400, 350.0)
+            )
+            for (raster in rasters) {
+                val geographic = raster.corners()
+                val top = mercatorY(geographic[0])
+                val bottom = mercatorY(geographic[4])
+                val pixels = raster.projectGridCorners(cells)
+                for (i in pixels.indices step 2) {
+                    // ImageSource interpolates the bitmap between its geographic
+                    // edges. Both edges, not just the pixel scale, must agree.
+                    val y = top + (bottom - top) * pixels[i + 1] / raster.height
+                    val attachedLatitude = Math.toDegrees(atan(sinh(y / 6378137.0)))
+                    assertEquals("A polar raster must not stretch cleared cells",
+                        cells[i], attachedLatitude, 1e-7)
+                }
+                assertTrue("A single raster must fit in one Mercator world",
+                    raster.eastMeters - raster.westMeters <= FogGeoRaster.WORLD_METERS + 1e-7)
+            }
+        }
+    }
+
+    @Test fun dateLineAndAntipodalCellsNeverRevealAWorldWideStrip() {
+        for (raster in listOf(FogGeoRaster.fullWorld(512),
+            FogGeoRaster.around(0.0, -160.0, 15.0, 1024))) {
+            for (longitude in listOf(-179.999, 179.999, 20.0)) {
+                val corners = FogGrid.corners(0.0, longitude)
+                val squares = raster.projectGridCorners(corners)
+                val expectedWidth = Math.toRadians(corners[3] - corners[1]) *
+                    6378137.0 / raster.metersPerPixel
+                assertEquals("Both edges must use the same world copy",
+                    expectedWidth, squares[2] - squares[0], 1e-8)
+                assertEquals(squares[0], squares[6], 0.0)
+                assertEquals(squares[2], squares[4], 0.0)
             }
         }
     }
@@ -138,6 +191,23 @@ class FogGeoRasterTest {
             backup.metersPerPixel >
                 FogGeoRaster.around(39.96, -75.02, 15.0, 1024,
                     width, height, metersPerPixel).metersPerPixel)
+    }
+
+    @Test fun lowerZoomBackupStillKeepsVisitedSquaresSeveralPixelsWide() {
+        // A quick zoom from 11.5 back to 15 must not magnify a nearly
+        // opaque, subpixel visited cell in an obsolete regional backup.
+        val width = 1080
+        val height = 2340
+        val viewportMetersPerPixel = 60.0
+        val raster = FogGeoRaster.pinchFallback(
+            39.96, -75.02, 11.5, 768, width, height, viewportMetersPerPixel
+        )
+        val square = raster.projectGridCorners(FogGrid.corners(39.96, -75.02))
+        val span = (0..3).map { square[it * 2] }.let { it.max() - it.min() }
+        assertTrue("Visited miles remain clearly erased in the zoom-11.5 backup", span >= 2.5)
+        val diagonal = hypot(width.toDouble(), height.toDouble()) * viewportMetersPerPixel
+        assertTrue("Backup remains wider than a rotated portrait viewport",
+            raster.width * raster.metersPerPixel > diagonal * 1.25)
     }
 
     @Test fun regionalBackupKeepsDateLineCellsInTheirCorrectWorldCopy() {

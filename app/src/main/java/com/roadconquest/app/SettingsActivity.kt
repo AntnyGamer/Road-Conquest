@@ -28,6 +28,7 @@ import com.roadconquest.app.account.AccountStore
 import com.roadconquest.app.data.LocalDataReset
 import com.roadconquest.app.data.TrackingRepository
 import com.roadconquest.app.export.DataExporter
+import com.roadconquest.app.export.DataImporter
 import com.roadconquest.app.util.Prefs
 import com.roadconquest.app.util.Appearance
 import com.roadconquest.app.util.UiTheme
@@ -83,6 +84,7 @@ class SettingsActivity : Activity() {
             isAppearanceLightNavigationBars = lightSystemBars
         }
         setContentView(R.layout.activity_settings)
+        findViewById<Button>(R.id.backNavButton).setOnClickListener { finish() }
         ads = ScreenAds(this, findViewById(R.id.settingsRoot))
         applySafeAreaInsets()
         setupAppearance()
@@ -221,6 +223,26 @@ class SettingsActivity : Activity() {
                     DataExporter.writeZip(this, repository, output)
                 } ?: error("Could not open export destination")
             }
+            var cleanupFailed = false
+            if (result.isSuccess) {
+                // A valid ZIP remains available even if the user reset progress
+                // while exporting. Serialize only the backup-date update with
+                // restore/deletion so a stale export cannot reappear after reset.
+                synchronized(DataImporter.operationLock) {
+                    if (repository.isHistoryCurrent() &&
+                        !Prefs.isDeviceDataDeletionPending(this)
+                    ) {
+                        getSharedPreferences("roadconquest_export_history", MODE_PRIVATE)
+                            .edit().putLong("last_completed_at", System.currentTimeMillis()).commit()
+                    }
+                }
+            } else {
+                // ACTION_CREATE_DOCUMENT creates the destination before writing.
+                // Some SAF providers reject deletion; never silently imply that
+                // a partial backup was removed if its cleanup did not succeed.
+                cleanupFailed = !runCatching { contentResolver.delete(uri, null, null) > 0 }
+                    .getOrDefault(false)
+            }
             runOnUiThread {
                 if (isDestroyed) return@runOnUiThread
                 result.fold(
@@ -229,7 +251,10 @@ class SettingsActivity : Activity() {
                         refreshSummary()
                     },
                     onFailure = { error ->
-                        Toast.makeText(this, "Export failed: ${error.message}", Toast.LENGTH_LONG).show()
+                        val message = if (cleanupFailed) {
+                            "Export failed. An incomplete backup may remain; delete it manually in Files."
+                        } else "Export failed: ${error.message}"
+                        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
                     }
                 )
             }
@@ -291,7 +316,7 @@ class SettingsActivity : Activity() {
         val dialog = AlertDialog.Builder(this)
             .setTitle("Delete all data?")
             .setMessage(
-                "This permanently deletes all saved Road Conquest data on this phone, including trips, mileage, roads, explored places, points, purchases and cosmetics. Your cloud account stays. Tracking stops and verified-drive sharing turns off. Exported files must be deleted separately. This cannot be undone.\n\nType exactly:\n$DELETE_LOCAL_DATA_CONFIRMATION"
+                "This permanently deletes saved Road Conquest progress on this phone, including trips, mileage, roads, explored places, points and cosmetics bought with points. Your cloud account and lifetime VIP purchase in Google Play remain; VIP can be restored through Google Play if needed. Tracking stops and verified-drive sharing turns off. Exported files must be deleted separately. Deleted progress cannot be recovered without an existing backup.\n\nType exactly:\n$DELETE_LOCAL_DATA_CONFIRMATION"
             )
             .setView(fields)
             .setNegativeButton("Cancel", null)
@@ -536,17 +561,17 @@ class SettingsActivity : Activity() {
                 result.fold(
                     onSuccess = { (summary, progression) ->
                         summaryText.text = buildString {
-                            append(StatsText.format(this@SettingsActivity, summary))
-                            append("\n")
-                            append(String.format(java.util.Locale.getDefault(), "⚔ %,d points\n", progression.balance))
-                            append(String.format(
-                                java.util.Locale.getDefault(),
-                                "%,d towns • %,d states/regions • %,d countries\n",
-                                progression.towns, progression.states, progression.countries
-                            ))
-                            append("Tracking mode: $mode\n")
+                            append(StatsText.settingsOverview(this@SettingsActivity, summary, progression))
+                            append("\n\nTRACKING\n")
+                            append("Mode: $mode\n")
                             append("Precise location: $precise\n")
-                            append("Allow all the time: $background")
+                            append("Background permission: $background")
+                            val lastExport = getSharedPreferences("roadconquest_export_history", MODE_PRIVATE)
+                                .getLong("last_completed_at", 0L)
+                            append("\n\nDATA & BACKUP\n")
+                            append("Last successful progress export: ")
+                            append(if (lastExport <= 0L) "Never (consider exporting a backup)"
+                                else java.text.DateFormat.getDateTimeInstance().format(java.util.Date(lastExport)))
                         }
                     },
                     onFailure = { error ->

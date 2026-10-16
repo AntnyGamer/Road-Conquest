@@ -23,7 +23,7 @@
         android:maxWidth="210dp"
         android:background="@drawable/panel_background"
         android:elevation="6dp"
-        android:text="@string/stats_initial"
+        android:text="@string/stats_grouped_initial"
         android:textColor="?attr/rcTextPrimary"
         android:textSize="14sp"
         android:fontFamily="sans-serif-medium"
@@ -44,7 +44,8 @@
         android:gravity="center_vertical"
         android:paddingStart="16dp"
         android:paddingEnd="16dp"
-        android:text="⚔ 0 points"
+        android:text="Garage · ⚔ 0"
+        android:contentDescription="Garage and shop. 0 points. Double tap to open."
         android:textColor="?attr/rcTextPrimary"
         android:textSize="14sp"
         android:fontFamily="sans-serif-medium" />
@@ -142,6 +143,9 @@
 
             <Button
                 android:id="@+id/tripsNavButton"
+                android:drawableTop="@drawable/ic_nav_trips"
+                android:drawablePadding="3dp"
+                android:drawableTint="?attr/rcTextPrimary"
                 android:contentDescription="Trip history and replay"
                 style="@style/RoadConquest.NavigationAction"
                 android:layout_width="0dp"
@@ -151,7 +155,10 @@
                 android:text="Trips" />
 
             <Button
-                android:id="@+id/goalsNavButton"
+                android:id="@+id/badgesNavButton"
+                android:drawableTop="@drawable/ic_nav_badges"
+                android:drawablePadding="3dp"
+                android:drawableTint="?attr/rcTextPrimary"
                 android:contentDescription="Achievements and milestones"
                 style="@style/RoadConquest.NavigationAction"
                 android:layout_width="0dp"
@@ -162,19 +169,11 @@
                 android:text="Badges" />
 
             <Button
-                android:id="@+id/garageNavButton"
-                android:contentDescription="Garage and points shop"
-                style="@style/RoadConquest.NavigationAction"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:minHeight="52dp"
-                android:layout_marginStart="6dp"
-                android:layout_weight="1"
-                android:text="Garage" />
-
-            <Button
-                android:id="@+id/friendsNavButton"
-                android:contentDescription="Weekly challenges and friends"
+                android:id="@+id/weeklyGoalsNavButton"
+                android:drawableTop="@drawable/ic_nav_weekly"
+                android:drawablePadding="3dp"
+                android:drawableTint="?attr/rcTextPrimary"
+                android:contentDescription="Weekly exploration goals"
                 style="@style/RoadConquest.NavigationAction"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"

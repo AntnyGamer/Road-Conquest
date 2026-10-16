@@ -5,6 +5,18 @@ export class EvidenceError extends Error {
 }
 export const evidenceHash = evidence => createHash("sha256").update(evidence, "utf8").digest("base64url");
 
+/** Recheck just freshness after an authenticated retry-receipt miss.
+ * The evidence has already passed full shape, motion and continuity validation.
+ */
+export function requireFreshFixes(body, now = Date.now()) {
+  for (const f of body.fixes) {
+    if (now - f.time < -10000 || now - f.time > 150000) {
+      throw new EvidenceError("Poor or stale GPS evidence.");
+    }
+  }
+  return body;
+}
+
 export function distance(a, b) {
   const rad = Math.PI / 180;
   const h = Math.sin((b.lat - a.lat) * rad / 2) ** 2 +

@@ -1,4 +1,4 @@
-import { createHash, createHmac } from "node:crypto";
+import { createHash, createHmac, randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
@@ -13,6 +13,7 @@ import {
 } from "./security.mjs";
 import { competitionConfig, createCompetition } from "./competition.mjs";
 import { createFriends } from "./friends.mjs";
+import { cleanupExpiredState } from "./maintenance.mjs";
 
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -86,7 +87,10 @@ if (process.env.APPLY_SCHEMA_ON_STARTUP !== "0") {
 const competition = await createCompetition(pool, competitionConfig(process.env));
 const friends = createFriends(pool);
 
-const dummy = await hashPassword("this is only a constant dummy password", PEPPER);
+// Invalid usernames still take one full scrypt verification, just like bad passwords
+// for real users. Random dummy hashes cannot accidentally authenticate and do not
+// require an expensive additional scrypt calculation on every cold start.
+const dummy = { salt: randomBytes(16), hash: randomBytes(64) };
 
 function clientIp(req) {
   if (TRUST_PROXY) {
@@ -119,27 +123,21 @@ async function rateLimit(bucket, key, limit, windowMs) {
        attempts = CASE
          WHEN auth_rate_limits.window_started_at <= CURRENT_TIMESTAMP - ($3::bigint * INTERVAL '1 millisecond')
          THEN 1 ELSE LEAST(auth_rate_limits.attempts + 1, $4 + 1) END
+     -- Once the count is already at limit+1, another blocked attempt should
+     -- not rewrite the identical row. Expired windows must still reset.
+     WHERE auth_rate_limits.window_started_at <= CURRENT_TIMESTAMP - ($3::bigint * INTERVAL '1 millisecond')
+        OR auth_rate_limits.attempts <= $4
      RETURNING attempts <= $4 AS allowed`,
     [bucket, opaqueRateKey(bucket, key), windowMs, limit]
   );
-  return result.rows[0].allowed === true;
-}
-
-async function cleanupExpiredState() {
-  await Promise.all([
-    pool.query("DELETE FROM sessions WHERE expires_at <= CURRENT_TIMESTAMP"),
-    pool.query("DELETE FROM auth_rate_limits WHERE window_started_at < CURRENT_TIMESTAMP - INTERVAL '2 hours'"),
-    pool.query("DELETE FROM competition_receipts WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '1 day'"),
-    pool.query("DELETE FROM competition_runs WHERE expires_at < CURRENT_TIMESTAMP - INTERVAL '1 day'"),
-    pool.query("DELETE FROM cell_receipts WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '1 day'"),
-    pool.query("DELETE FROM cell_runs WHERE expires_at < CURRENT_TIMESTAMP - INTERVAL '1 day'")
-  ]);
+  // A missing RETURNING row means an already-saturated window: still denied.
+  return result.rows[0]?.allowed === true;
 }
 
 // Run once on every process/function start as well as periodically. Serverless runtimes do not
 // guarantee that an unreferenced background timer survives after a request finishes.
-await cleanupExpiredState();
-setInterval(() => { cleanupExpiredState().catch(() => {}); }, 15 * 60 * 1000).unref();
+await cleanupExpiredState(pool);
+setInterval(() => { cleanupExpiredState(pool).catch(() => {}); }, 15 * 60 * 1000).unref();
 
 function sendHtml(res, status, body) {
   const headers = {
@@ -430,13 +428,20 @@ async function handle(req, res) {
       }
       // Foreign keys remove every session, score, unlocked way, live run and receipt.
       await client.query("DELETE FROM users WHERE id = $1", [user.id]);
-      for (const [bucket, key] of [
+      // Delete exactly the same five account-specific throttling keys in one
+      // round trip. Keep paired buckets and hashes (rather than a cross-product).
+      const removalKeys = [
         ["account-change", String(user.id)], ["reauth", String(user.id)],
         ["drive-start", String(user.id)], ["drive-batch", String(user.id)],
         ["login-user", saved.username_key]
-      ]) {
-        await client.query("DELETE FROM auth_rate_limits WHERE bucket = $1 AND key_hash = $2", [bucket, opaqueRateKey(bucket, key)]);
-      }
+      ];
+      await client.query(
+        `DELETE FROM auth_rate_limits WHERE (bucket,key_hash) IN (
+          SELECT cleanup.bucket,cleanup.key_hash
+          FROM unnest($1::text[], $2::bytea[]) AS cleanup(bucket,key_hash)
+        )`,
+        [removalKeys.map(entry => entry[0]), removalKeys.map(([bucket, key]) => opaqueRateKey(bucket, key))]
+      );
       await client.query("COMMIT");
       return send(res, 200, { ok: true });
     } catch (error) {
@@ -458,7 +463,7 @@ async function handle(req, res) {
       return send(res, 400, { error: "leaderboard_visible must be boolean." });
     }
     await pool.query(
-      "UPDATE users SET leaderboard_visible = $1 WHERE id = $2",
+      "UPDATE users SET leaderboard_visible = $1 WHERE id = $2 AND leaderboard_visible IS DISTINCT FROM $1",
       [body.leaderboard_visible, user.id]
     );
     return send(res, 200, { leaderboard_visible: body.leaderboard_visible });

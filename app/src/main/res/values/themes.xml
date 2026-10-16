@@ -22,12 +22,19 @@
         <item name="android:textSize">15sp</item>
     </style>
 
+    <style name="RoadConquest.BackAction" parent="@style/RoadConquest.SettingsAction">
+        <item name="android:minHeight">48dp</item>
+        <item name="android:paddingStart">12dp</item>
+        <item name="android:paddingEnd">12dp</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
     <style name="RoadConquest.NavigationAction" parent="@style/RoadConquest.SettingsAction">
         <item name="android:gravity">center</item>
         <item name="android:paddingStart">2dp</item>
         <item name="android:paddingEnd">2dp</item>
-        <item name="android:textSize">13sp</item>
-        <item name="android:minHeight">48dp</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:minHeight">62dp</item>
     </style>
 
     <style name="RoadConquest.FilterAction" parent="@style/RoadConquest.SettingsAction">

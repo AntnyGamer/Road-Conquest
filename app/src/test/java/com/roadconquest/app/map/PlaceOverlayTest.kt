@@ -73,6 +73,45 @@ class PlaceOverlayTest {
         }
     }
 
+    @Test fun detailedTownViewportIncludesIntersectingPolygonsAndSafeFallbacks() {
+        val viewport = OverlayViewport.padded(-75.1, -74.9, 39.9, 40.1)!!
+        val nearby = OverlayViewport.ofGeometry(
+            """{"type":"Polygon","coordinates":[[
+                [-75.05,39.95],[-74.95,39.95],[-74.95,40.05],[-75.05,39.95]
+            ]]}"""
+        )
+        val distant = OverlayViewport.ofGeometry(
+            """{"type":"Polygon","coordinates":[[
+                [1.0,51.0],[1.1,51.0],[1.1,51.1],[1.0,51.0]
+            ]]}"""
+        )
+        assertTrue(viewport.intersects(nearby))
+        assertFalse(viewport.intersects(distant))
+        assertTrue(viewport.intersects(OverlayViewport.ofGeometry("invalid")))
+        // Out-of-world longitudes and dateline-crossing viewports are kept
+        // unfiltered instead of causing missing towns or broken wrap edges.
+        assertNull(OverlayViewport.padded(179.0, -179.0, 10.0, 11.0))
+        assertNull(OverlayViewport.ofGeometry(
+            """{"type":"Polygon","coordinates":[[
+                [179.0,10.0],[181.0,10.0],[181.0,11.0],[179.0,10.0]
+            ]]}"""
+        ))
+    }
+
+    @Test fun providerRetryAfterAcceptsSecondsAndHttpDatesWithoutUnboundedDelay() {
+        val now = java.time.Instant.parse("2026-10-15T12:00:00Z").toEpochMilli()
+        assertEquals(60_000L, PlaceOverlayClient.retryAfterMillis("60", now))
+        assertEquals(900_000L, PlaceOverlayClient.retryAfterMillis("99999", now))
+        assertEquals(120_000L, PlaceOverlayClient.retryAfterMillis(
+            "Thu, 15 Oct 2026 12:02:00 GMT", now
+        ))
+        assertEquals(0L, PlaceOverlayClient.retryAfterMillis(
+            "Thu, 15 Oct 2026 11:59:00 GMT", now
+        ))
+        assertEquals(0L, PlaceOverlayClient.retryAfterMillis("invalid", now))
+        assertEquals(0L, PlaceOverlayClient.retryAfterMillis(null, now))
+    }
+
     @Test fun verificationFlagIsReadWithTheCachedMunicipalPolygon() {
         val context = RuntimeEnvironment.getApplication()
         val place = PlaceDiscovery(
@@ -158,6 +197,70 @@ class PlaceOverlayTest {
         } finally {
             PlaceOverlayCache.clear(context)
         }
+    }
+
+    @Test fun boundaryCacheIsCompressedAndStillReadsPreviousPlainJson() {
+        val context = RuntimeEnvironment.getApplication()
+        val place = PlaceDiscovery(
+            PlaceKind.TOWN, "gb|test|compressed-cache", "Compressed Town",
+            "Test region", "United Kingdom", 1L, 51.5, -0.1
+        )
+        val data = PlaceOverlayData(place.key, place.displayName, place.kind, 123L, 4.5,
+            """{"type":"Polygon","coordinates":[[
+                [-0.2,51.4],[0.0,51.4],[0.0,51.6],[-0.2,51.6],[-0.2,51.4]
+            ]]}""")
+        PlaceOverlayCache.clear(context)
+        try {
+            assertTrue(PlaceOverlayCache.write(context, place, data, verifiedForDiscovery = true))
+            val cacheDir = File(context.filesDir, "place-overlays-v5-world-admin")
+            val file = cacheDir.listFiles()!!.single { it.name.endsWith(".json") }
+            val magic = file.inputStream().use { byteArrayOf(it.read().toByte(), it.read().toByte()) }
+            assertEquals(0x1f, magic[0].toInt() and 0xff)
+            assertEquals(0x8b, magic[1].toInt() and 0xff)
+            assertEquals(JSONObject(data.geometryJson).toString(),
+                PlaceOverlayCache.readVerifiedForDiscovery(context, place)?.geometryJson)
+
+            // Older installations wrote plain JSON under this exact cache name.
+            val old = JSONObject()
+                .put("found", true).put("fetched_at", System.currentTimeMillis())
+                .put("discovery_verified", true)
+                .put("name", place.displayName).put("kind", place.kind.name)
+                .put("population", 123).put("area_sq_km", data.areaSquareKilometers)
+                .put("geometry", JSONObject(data.geometryJson))
+            file.writeText(old.toString())
+            assertEquals(JSONObject(data.geometryJson).toString(),
+                PlaceOverlayCache.readVerifiedForDiscovery(context, place)?.geometryJson)
+        } finally { PlaceOverlayCache.clear(context) }
+    }
+
+    @Test fun cacheBudgetEvictsTheOldestOutlineWithoutErasingPlaces() {
+        val context = RuntimeEnvironment.getApplication()
+        PlaceOverlayCache.clear(context)
+        try {
+            val geometry = """{"type":"Polygon","coordinates":[[
+                [-0.2,51.4],[0.0,51.4],[0.0,51.6],[-0.2,51.6],[-0.2,51.4]
+            ]]}"""
+            val places = (1..3).map { n ->
+                PlaceDiscovery(PlaceKind.TOWN, "gb|budget|town$n", "Town$n",
+                    "Region", "United Kingdom", 1L, 51.5, -0.1)
+            }
+            places.forEach { place ->
+                assertTrue(PlaceOverlayCache.write(context, place, PlaceOverlayData(
+                    place.key, place.displayName, place.kind, null, 1.0, geometry
+                )))
+            }
+            val dir = File(context.filesDir, "place-overlays-v5-world-admin")
+            val files = dir.listFiles()!!.filter { it.name.endsWith(".json") }
+                .sortedBy { it.name }
+            assertEquals(3, files.size)
+            files.forEachIndexed { i, file ->
+                assertTrue(file.setLastModified(System.currentTimeMillis() - (3 - i) * 60_000L))
+            }
+            PlaceOverlayCache.trimForTest(context, Long.MAX_VALUE, 2)
+            assertFalse(files[0].exists())
+            assertTrue(files[1].exists())
+            assertTrue(files[2].exists())
+        } finally { PlaceOverlayCache.clear(context) }
     }
 
     @Test fun legacyV3CacheCannotReintroduceBadTownOutlines() {

@@ -2,6 +2,7 @@ package com.roadconquest.app.data
 
 import android.content.Context
 import android.location.Location
+import com.roadconquest.app.map.FogGrid
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
@@ -31,6 +32,28 @@ class TrackingRepositoryTest {
             this.speed = speed
             this.time = time
         })
+
+    @Test fun nearbyTileCountUsesOneQueryAndHandlesTheDateLine() {
+        val context = RuntimeEnvironment.getApplication()
+        AppDatabase.get(context).writableDatabase.delete("explored_grid", null, null)
+        val origin = FogGrid.cell(40.0, 179.999)!!
+        val nearby = FogGrid.neighbors(origin)
+        val acrossDateLine = nearby.first { it.row == origin.row && it.column == 0 }
+        val outside = FogGrid.neighbors(origin, radius = 3).first { it !in nearby }
+
+        fun unlock(cell: FogGrid.Cell) {
+            val (lat, lon) = FogGrid.center(cell)
+            assertTrue(repository.recordExploredGridCell(Location("gps").apply {
+                latitude = lat; longitude = lon; accuracy = 5f; time = 1_000_000L
+            }))
+        }
+        unlock(origin)
+        unlock(acrossDateLine)
+        unlock(outside)
+        assertEquals(2 to nearby.size, repository.nearbyExploration(40.0, 179.999))
+        // An invalid position must never report arbitrary unlocked cells.
+        assertEquals(0 to 0, repository.nearbyExploration(Double.NaN, 0.0))
+    }
 
     @Test fun wholeRoadVisitsUseSeparateJourneysAcrossDistinctTinySegments() {
         // Real exports split each named road into hundreds of little fragments,
@@ -199,6 +222,22 @@ class TrackingRepositoryTest {
         // A previously resolved gap may now have anchors.
         repository.markMatched(listOf(ids.last()))
         assertEquals(ids[5], repository.newestEligibleAnchoredGapStartId())
+    }
+
+    @Test fun liveMatchingBadgeIgnoresOldUnresolvedDrivesButShowsRecentPendingGps() {
+        val start = 1_000_000L
+        val now = start + 2 * 60 * 60_000L
+        val oldId = point(start, lon = -74.0)
+        assertFalse("A historic unresolved corner is not current tracking activity",
+            repository.hasUnmatchedDrivingFixes(now))
+        val recentId = point(now - 20_000L, lon = -74.0003)
+        assertTrue(repository.hasUnmatchedDrivingFixes(now))
+        repository.markMatched(listOf(recentId))
+        assertFalse("Old unmatched evidence remains saved but cannot cause a permanent live warning",
+            repository.hasUnmatchedDrivingFixes(now))
+        assertTrue("Old evidence must remain retryable", repository.loadMatchingWindow().points.any {
+            it.id == oldId
+        })
     }
 
     @Test fun pendingGpsIntervalsRemainContinuousUntilMatchingCompletes() {

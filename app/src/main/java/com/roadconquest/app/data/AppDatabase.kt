@@ -210,13 +210,15 @@ class AppDatabase private constructor(context: Context) :
         db.execSQL(
             "CREATE TABLE IF NOT EXISTS explored_grid (" +
                 "grid_row INTEGER NOT NULL, grid_col INTEGER NOT NULL, latitude REAL NOT NULL, " +
-                "longitude REAL NOT NULL, PRIMARY KEY (grid_row, grid_col))"
+                "longitude REAL NOT NULL, first_unlocked_at INTEGER NOT NULL DEFAULT 0, " +
+                "PRIMARY KEY (grid_row, grid_col))"
         )
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_explored_grid_bounds ON explored_grid(latitude, longitude)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_explored_grid_first_unlocked ON explored_grid(first_unlocked_at)")
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        if (oldVersion !in 10..12 || newVersion !in 11..13 || newVersion <= oldVersion) {
+        if (oldVersion !in 10..13 || newVersion !in 11..14 || newVersion <= oldVersion) {
             error("Database upgrade $oldVersion -> $newVersion is unsupported")
         }
         if (oldVersion == 10) {
@@ -249,6 +251,12 @@ class AppDatabase private constructor(context: Context) :
             } finally {
                 insert.close()
             }
+        }
+        // Existing exploration tiles have no trustworthy first-unlock date.
+        // Keep them unlocked with timestamp zero rather than inventing history.
+        if (oldVersion in 11..13 && newVersion >= 14) {
+            db.execSQL("ALTER TABLE explored_grid ADD COLUMN first_unlocked_at INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_explored_grid_first_unlocked ON explored_grid(first_unlocked_at)")
         }
         if (oldVersion < 12 && newVersion >= 12) {
             // Older releases marked inferred traversal counts as mathematically exact.
@@ -328,7 +336,7 @@ class AppDatabase private constructor(context: Context) :
 
     companion object {
         private const val DB_NAME = "roadconquest.db"
-        private const val DB_VERSION = 13
+        private const val DB_VERSION = 14
 
         @Volatile
         private var instance: AppDatabase? = null

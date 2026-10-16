@@ -57,6 +57,22 @@ class UnitedStatesMunicipalityAtPointTest {
         ))
     }
 
+    @Test fun stateLookupReadsFragmentedResponsesAndKeepsTheSizeBound() {
+        val json = """{"features":[{"attributes":{"STATE":"34"}}]}"""
+        val fragments = object : java.io.StringReader(json) {
+            override fun read(buffer: CharArray, offset: Int, length: Int): Int =
+                super.read(buffer, offset, minOf(length, 3))
+        }
+        val body = fragments.use(UnitedStatesMunicipalityAtPoint::readStateBody)
+        assertEquals(json, body)
+        assertEquals("New Jersey", UnitedStatesMunicipalityAtPoint.parseStateResponse(body))
+        assertEquals(4096, java.io.StringReader(" ".repeat(4096))
+            .use(UnitedStatesMunicipalityAtPoint::readStateBody).length)
+        assertThrows(java.io.IOException::class.java) {
+            java.io.StringReader(" ".repeat(4097)).use(UnitedStatesMunicipalityAtPoint::readStateBody)
+        }
+    }
+
     @Test fun consolidatedCityQueriesOnlyWhereTheCensusPublishesThatGeography() {
         assertTrue(UnitedStatesMunicipalBoundaries.hasConsolidatedCities("18"))
         assertTrue(UnitedStatesMunicipalBoundaries.hasConsolidatedCities("13"))

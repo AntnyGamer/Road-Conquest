@@ -56,18 +56,21 @@ internal object UnitedStatesMunicipalityAtPoint {
             if (connection.responseCode !in 200..299) {
                 throw IOException("Census state lookup HTTP ${connection.responseCode}")
             }
-            val body = connection.inputStream.bufferedReader().use { reader ->
-                val text = CharArray(4096)
-                val count = reader.read(text)
-                if (count < 0) "" else {
-                    val first = String(text, 0, count)
-                    if (reader.read() >= 0) throw IOException("Census state lookup response too large")
-                    first
-                }
-            }
+            val body = connection.inputStream.bufferedReader().use(::readStateBody)
             parseStateResponse(body)
         } finally {
             connection.disconnect()
+        }
+    }
+
+    internal fun readStateBody(reader: java.io.Reader): String {
+        val body = StringBuilder()
+        val buffer = CharArray(1024)
+        while (true) {
+            val count = reader.read(buffer)
+            if (count < 0) return body.toString()
+            if (body.length + count > 4096) throw IOException("Census state lookup response too large")
+            body.append(buffer, 0, count)
         }
     }
 

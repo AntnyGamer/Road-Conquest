@@ -36,7 +36,7 @@ class ExplorationUpgradeTest {
         for (tile in listOf(real, ghost, walked)) {
             val center = FogGrid.center(tile)
             db.execSQL(
-                "INSERT INTO explored_grid VALUES (?, ?, ?, ?)",
+                "INSERT INTO explored_grid (grid_row, grid_col, latitude, longitude) VALUES (?, ?, ?, ?)",
                 arrayOf(tile.row, tile.column, center.first, center.second)
             )
         }

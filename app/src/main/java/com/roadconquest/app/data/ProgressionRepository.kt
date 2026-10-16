@@ -60,7 +60,11 @@ data class ProgressionSnapshot(
     val adsWatched: Long,
     val lowestBatteryPercent: Int,
     val purchasedItems: Set<String>,
-    val rewardedAchievements: Set<String>
+    val rewardedAchievements: Set<String>,
+    /** Unique one-mile fog tiles stored in explored_grid; separate from leaderboard cells. */
+    val tilesUnlocked: Long = 0L,
+    /** Actual previously awarded amounts; historical milestones may have different pricing. */
+    val rewardedAchievementPoints: Map<String, Long> = emptyMap()
 )
 
 enum class PurchaseResult { PURCHASED, OWNED, INSUFFICIENT_POINTS }
@@ -565,15 +569,18 @@ class ProgressionRepository(context: Context) {
             .use { check(it.moveToFirst()); it.getLong(0) }
 
         val rewardedAchievements = linkedSetOf<String>()
+        val rewardedAchievementPoints = linkedMapOf<String, Long>()
         db.query(
             "progression_rewards",
-            arrayOf("reward_key"),
+            arrayOf("reward_key", "points"),
             "reward_key LIKE ?",
             arrayOf("achievement:%"),
             null, null, null
         ).use { cursor ->
             while (cursor.moveToNext()) {
-                rewardedAchievements += cursor.getString(0).removePrefix("achievement:")
+                val id = cursor.getString(0).removePrefix("achievement:")
+                rewardedAchievements += id
+                rewardedAchievementPoints[id] = cursor.getLong(1)
             }
         }
 
@@ -624,7 +631,13 @@ class ProgressionRepository(context: Context) {
             while (cursor.moveToNext()) counters[cursor.getString(0)] = cursor.getLong(1)
         }
 
+        // A single indexed SQLite count reads persisted mile tiles, not 50 m fog samples.
+        // Counting here avoids a second location listener or a separate reward counter.
+        val tilesUnlocked = db.rawQuery("SELECT COUNT(*) FROM explored_grid", null)
+            .use { check(it.moveToFirst()); it.getLong(0) }
+
         ProgressionSnapshot(
+            tilesUnlocked = tilesUnlocked,
             balance = (earned - spent).coerceAtLeast(0L),
             lifetimeEarned = earned,
             pointsSpent = spent,
@@ -636,7 +649,8 @@ class ProgressionRepository(context: Context) {
             lowestBatteryPercent = (counters[COUNTER_LOWEST_BATTERY] ?: 101L)
                 .toInt().coerceIn(0, 101),
             purchasedItems = purchases,
-            rewardedAchievements = rewardedAchievements
+            rewardedAchievements = rewardedAchievements,
+            rewardedAchievementPoints = rewardedAchievementPoints
         )
     }
 

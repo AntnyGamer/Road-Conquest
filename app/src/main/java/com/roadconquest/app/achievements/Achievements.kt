@@ -11,11 +11,14 @@ data class AchievementMetrics(
     val adsWatched: Long = 0L,
     val lowestBatteryPercent: Int = 101,
     val rewardedRoads: Long = 0L,
-    val rewardedAchievements: Set<String> = emptySet()
+    val tilesUnlocked: Long = 0L,
+    val rewardedAchievements: Set<String> = emptySet(),
+    val rewardedAchievementPoints: Map<String, Long> = emptyMap()
 )
 
 enum class AchievementCategory(val label: String) {
     ROADS("Road Conquest"),
+    TILES("Map Tiles"),
     DISTANCE("Mileage"),
     PLACES("Exploration"),
     ADS("Ad Rewards"),
@@ -66,6 +69,16 @@ object Achievements {
             AchievementProgress("roads_2500", "Road Master", "Unlock 2,500 roads", AchievementCategory.ROADS, roads, 2500.0, "roads", 2_500),
             AchievementProgress("roads_5000", "Road Legend", "Unlock 5,000 roads", AchievementCategory.ROADS, roads, 5000.0, "roads", 4_000),
             AchievementProgress("roads_10000", "Road Pioneer", "Unlock 10,000 roads", AchievementCategory.ROADS, roads, 10000.0, "roads", 6_500),
+            AchievementProgress("tiles_1", "First Square", "Explore your first one-mile map tile", AchievementCategory.TILES, metrics.tilesUnlocked.toDouble(), 1.0, "tiles", 75),
+            AchievementProgress("tiles_10", "Square Scout", "Explore 10 unique map tiles", AchievementCategory.TILES, metrics.tilesUnlocked.toDouble(), 10.0, "tiles", 150),
+            AchievementProgress("tiles_25", "Tile Tracker", "Explore 25 unique map tiles", AchievementCategory.TILES, metrics.tilesUnlocked.toDouble(), 25.0, "tiles", 250),
+            AchievementProgress("tiles_50", "Grid Explorer", "Explore 50 unique map tiles", AchievementCategory.TILES, metrics.tilesUnlocked.toDouble(), 50.0, "tiles", 450),
+            AchievementProgress("tiles_100", "Map Maker", "Explore 100 unique map tiles", AchievementCategory.TILES, metrics.tilesUnlocked.toDouble(), 100.0, "tiles", 750),
+            AchievementProgress("tiles_250", "Territory Trekker", "Explore 250 unique map tiles", AchievementCategory.TILES, metrics.tilesUnlocked.toDouble(), 250.0, "tiles", 1_250),
+            AchievementProgress("tiles_500", "Wide Explorer", "Explore 500 unique map tiles", AchievementCategory.TILES, metrics.tilesUnlocked.toDouble(), 500.0, "tiles", 2_000),
+            AchievementProgress("tiles_1000", "Master Cartographer", "Explore 1,000 unique map tiles", AchievementCategory.TILES, metrics.tilesUnlocked.toDouble(), 1000.0, "tiles", 3_000),
+            AchievementProgress("tiles_2500", "Territory Legend", "Explore 2,500 unique map tiles", AchievementCategory.TILES, metrics.tilesUnlocked.toDouble(), 2500.0, "tiles", 5_000),
+            AchievementProgress("tiles_5000", "World Mapper", "Explore 5,000 unique map tiles", AchievementCategory.TILES, metrics.tilesUnlocked.toDouble(), 5000.0, "tiles", 8_000),
             AchievementProgress("miles_10", "Beginner Driver", "Travel 10 miles", AchievementCategory.DISTANCE, miles, 10.0, "mi", 100),
             AchievementProgress("miles_100", "Average Driver", "Travel 100 miles", AchievementCategory.DISTANCE, miles, 100.0, "mi", 400),
             AchievementProgress("miles_250", "Distance Explorer", "Travel 250 miles", AchievementCategory.DISTANCE, miles, 250.0, "mi", 650),
@@ -91,19 +104,28 @@ object Achievements {
 
             AchievementProgress("countries_25", "Global Pathfinder", "Visit 25 different countries", AchievementCategory.PLACES, metrics.countries.toDouble(), 25.0, "countries", 7_000),
 
-            AchievementProgress("battery_5", "Running on Fumes", "Use Road Conquest with 5% battery or less", AchievementCategory.EXTRA, battery5, 1.0, "complete", 300),
-            AchievementProgress("battery_1", "Last Percent", "Use Road Conquest with 1% battery or less", AchievementCategory.EXTRA, battery1, 1.0, "complete", 1_000),
+            AchievementProgress("battery_5", "Running on Fumes", "Use Road Conquest with 5% battery or less", AchievementCategory.EXTRA, battery5, 1.0, "complete", 150),
+            AchievementProgress("battery_1", "Last Percent", "Use Road Conquest with 1% battery or less", AchievementCategory.EXTRA, battery1, 1.0, "complete", 350),
 
             AchievementProgress("ads_5", "Ad Starter", "Watch 5 ads", AchievementCategory.ADS, metrics.adsWatched.toDouble(), 5.0, "ads", 100),
             AchievementProgress("ads_10", "Ad Regular", "Watch 10 ads", AchievementCategory.ADS, metrics.adsWatched.toDouble(), 10.0, "ads", 200),
             AchievementProgress("ads_25", "Ad Supporter", "Watch 25 ads", AchievementCategory.ADS, metrics.adsWatched.toDouble(), 25.0, "ads", 500),
             AchievementProgress("ads_50", "Ad Veteran", "Watch 50 ads", AchievementCategory.ADS, metrics.adsWatched.toDouble(), 50.0, "ads", 1_000),
             AchievementProgress("ads_100", "Ad Legend", "Watch 100 ads", AchievementCategory.ADS, metrics.adsWatched.toDouble(), 100.0, "ads", 2_500)
-        ).map { item ->
+        ).asSequence().filter { item ->
+            // Retire low-battery challenges for NEW players: don't encourage
+            // running a GPS tracker until a phone is about to power off.
+            // Preserve the completed cards and exact historic payouts.
+            (item.id != "battery_5" && item.id != "battery_1") ||
+                item.id in metrics.rewardedAchievements
+        }.map { item ->
             // Road/place deduplication can reduce current totals. The durable
             // reward ledger preserves earned milestones across full restores.
-            if (item.id in metrics.rewardedAchievements) item.copy(progress = maxOf(item.progress, item.goal)) else item
-        }
+            if (item.id in metrics.rewardedAchievements) item.copy(
+                progress = maxOf(item.progress, item.goal),
+                rewardPoints = metrics.rewardedAchievementPoints[item.id] ?: item.rewardPoints
+            ) else item
+        }.toList()
     }
 
     fun progress(

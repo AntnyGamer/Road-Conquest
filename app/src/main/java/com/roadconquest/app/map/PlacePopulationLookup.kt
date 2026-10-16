@@ -1,5 +1,6 @@
 package com.roadconquest.app.map
 
+import android.content.Context
 import android.net.Uri
 import com.roadconquest.app.data.PlaceKind
 import org.json.JSONArray
@@ -23,6 +24,38 @@ internal object PlacePopulationLookup {
 
     private val officialGeoid = Regex("""[|]census-(1|3|4)-([0-9]+)$""")
     private val cached = ConcurrentHashMap<String, Value>()
+    private val cacheLock = Any()
+    @Volatile private var cacheGeneration = 0L
+    internal fun generation(): Long = cacheGeneration
+    private const val CENSUS_CACHE = "roadconquest_census2020_population"
+    private fun key(info: PlaceOverlayInfo) = info.kind.name + "|" + info.key
+
+    // Census 2020 counts are fixed historical figures. Never persist dynamic
+    // country counts or failed/ambiguous responses.
+    internal fun savedCensus(context: Context, info: PlaceOverlayInfo): Value? {
+        if (!isUnitedStates(info) || requestFor(info) == null) return null
+        val value = context.applicationContext.getSharedPreferences(CENSUS_CACHE, Context.MODE_PRIVATE)
+            .getLong(key(info), -1L)
+        return value.takeIf { it >= 0L }?.let { Value(it, "2020 Census") }
+    }
+
+    internal fun rememberCensus(
+        context: Context, info: PlaceOverlayInfo, value: Value,
+        startedAtGeneration: Long = generation()
+    ) = synchronized(cacheLock) {
+        // A request started before Delete all data must not restore old entries.
+        if (startedAtGeneration != cacheGeneration || value.source != "2020 Census" ||
+            !isUnitedStates(info) || requestFor(info) == null) return@synchronized
+        context.applicationContext.getSharedPreferences(CENSUS_CACHE, Context.MODE_PRIVATE)
+            .edit().putLong(key(info), value.count).apply()
+    }
+
+    fun clearCache(context: Context) = synchronized(cacheLock) {
+        cacheGeneration++
+        cached.clear()
+        check(context.applicationContext.getSharedPreferences(CENSUS_CACHE, Context.MODE_PRIVATE)
+            .edit().clear().commit()) { "Could not clear cached Census population data" }
+    }
     private const val CENSUS_BASE = "https://tigerweb.geo.census.gov/arcgis/rest/services/Census2020"
     private const val MAX_RESPONSE_CHARS = 8_192
     // The 2020 decennial Census US total, including the 50 states and D.C.
@@ -79,9 +112,21 @@ internal object PlacePopulationLookup {
         return Request(url, state, geoid)
     }
 
-    fun lookup(info: PlaceOverlayInfo): Value? {
+    fun lookup(context: Context, info: PlaceOverlayInfo): Value? {
+        val startedAtGeneration = generation()
         if (info.population != null) return Value(info.population, "Boundary provider")
-        cached[info.kind.name + "|" + info.key]?.let { return it }
+        cached[key(info)]?.let { return it }
+        savedCensus(context, info)?.let { saved ->
+            // A reset can occur between reading disk and populating the memory
+            // cache. Coordinate with clearCache so old data cannot reappear.
+            return synchronized(cacheLock) {
+                if (startedAtGeneration != cacheGeneration) null
+                else {
+                    cached.putIfAbsent(key(info), saved)
+                    saved
+                }
+            }
+        }
         val value = if (isUnitedStates(info) && info.kind == PlaceKind.COUNTRY) {
             Value(US_2020_POPULATION, "2020 Census")
         } else {
@@ -113,7 +158,12 @@ internal object PlacePopulationLookup {
                 connection.disconnect()
             }
         }
-        if (value != null) cached.putIfAbsent(info.kind.name + "|" + info.key, value)
+        if (value != null) synchronized(cacheLock) {
+            if (startedAtGeneration == cacheGeneration) {
+                cached.putIfAbsent(key(info), value)
+                rememberCensus(context, info, value, startedAtGeneration)
+            }
+        }
         return value
     }
 

@@ -53,6 +53,8 @@ test("real PostgreSQL protects simultaneous scoring, retries, derived cells, pri
     assert.deepEqual(results[0], results[1]);
     assert.equal(results[0].cells, 1);
     assert.equal(results[0].credited_cells, 1);
+    assert.equal((await pool.query("SELECT sequence FROM cell_runs WHERE user_id=$1", [alpha.id])).rows[0].sequence, 1);
+    assert.equal((await pool.query("SELECT count(*) FROM cell_receipts WHERE user_id=$1 AND sequence=0", [alpha.id])).rows[0].count, "1");
     assert.deepEqual(results[0].accepted_cells, [cellFor(points[0].lat, points[0].lon)]);
     assert.equal(results[0].verified, true);
     assert.equal(results[0].scoring_policy, 3);
@@ -97,6 +99,7 @@ test("real PostgreSQL protects simultaneous scoring, retries, derived cells, pri
     const repeat = await service.submit(alpha, second, "test");
     assert.equal(repeat.cells, 1);
     assert.equal(repeat.credited_cells, 0);
+    assert.equal((await pool.query("SELECT sequence FROM cell_runs WHERE user_id=$1", [alpha.id])).rows[0].sequence, 2);
     const repeatedWeek = (await pool.query("SELECT new_cells FROM cell_weeks WHERE user_id=$1", [alpha.id])).rows[0];
     assert.equal(Number(repeatedWeek.new_cells), 1);
     const betaRun = await service.begin(beta);

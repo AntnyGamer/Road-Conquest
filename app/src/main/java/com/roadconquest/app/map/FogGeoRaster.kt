@@ -50,8 +50,14 @@ internal class FogGeoRaster private constructor(
         require(corners.size % 8 == 0)
         val result = DoubleArray(corners.size)
         for (i in corners.indices step 8) {
-            val west = projectedLongitude(corners[i + 1])
-            val east = projectedLongitude(corners[i + 3])
+            // Wrap the square as a unit. Wrapping each edge independently can
+            // put -180 degrees at the right of a world raster and its eastern
+            // neighbor at the left, erasing a strip almost one world wide.
+            val westX = RADIUS * Math.toRadians(corners[i + 1])
+            val eastX = RADIUS * Math.toRadians(corners[i + 3])
+            val offset = floor((centerX - (westX + eastX) * 0.5) / WORLD_METERS + 0.5) * WORLD_METERS
+            val west = (westX + offset - westMeters) / metersPerPixel
+            val east = (eastX + offset - westMeters) / metersPerPixel
             val north = projectedLatitude(corners[i])
             val south = projectedLatitude(corners[i + 4])
             result[i] = west
@@ -113,7 +119,12 @@ internal class FogGeoRaster private constructor(
             latitude: Double, longitude: Double, zoom: Double, size: Int,
             viewportWidth: Int, viewportHeight: Int, viewportMetersPerPixel: Double
         ): FogGeoRaster {
-            val zoomReserve = minOf(4.0, (zoom - 6.0).coerceAtLeast(0.0))
+            // At zoom ~11 a four-level coarse backup reduced a one-mile
+            // visited cell to about one pixel. Reusing that texture while
+            // pinching back toward zoom 15 made already cleared cells opaque
+            // on Android 12. Keep the broad four-level reserve above zoom 14.5,
+            // but reserve no extra zoom-out at 11.5 so tile holes survive interpolation.
+            val zoomReserve = minOf(4.0, (zoom - 11.5).coerceAtLeast(0.0))
             return around(
                 latitude, longitude, zoom - zoomReserve, size,
                 viewportWidth, viewportHeight,
@@ -146,11 +157,18 @@ internal class FogGeoRaster private constructor(
                 // the fractional stages of a pinch-zoom gesture.
                 while (step < requiredStep) step *= 2.0
             }
+            // ImageSource cannot georeference pixels beyond the Mercator poles.
+            // Keep the square within one world, then shift it vertically at the
+            // poles instead of clamping only its advertised latitude corners.
+            // Otherwise those corners compress the image and move cleared cells.
+            step = minOf(step, WORLD_METERS / size)
+            val side = step * size
             val cx = RADIUS * Math.toRadians(longitude)
             val cy = RADIUS * ln(tan(PI / 4 + Math.toRadians(latitude.coerceIn(-MAX_LATITUDE, MAX_LATITUDE)) / 2))
             val snap = step * 32.0
-            val left = floor((cx - step * size / 2) / snap) * snap
-            val top = ceil((cy + step * size / 2) / snap) * snap
+            val left = floor((cx - side / 2) / snap) * snap
+            val top = (ceil((cy + side / 2) / snap) * snap)
+                .coerceIn(-HALF_WORLD + side, HALF_WORLD)
             return FogGeoRaster(left, top, step, size, size)
         }
 

@@ -85,6 +85,7 @@ CREATE TABLE IF NOT EXISTS competition_receipts (
     PRIMARY KEY (run_id, sequence)
 );
 CREATE INDEX IF NOT EXISTS competition_receipts_age_idx ON competition_receipts(created_at);
+CREATE INDEX IF NOT EXISTS competition_receipts_user_idx ON competition_receipts(user_id);
 
 -- Written in the same transaction as a verified batch and its idempotency receipt.
 CREATE TABLE IF NOT EXISTS competition_weeks (
@@ -112,6 +113,7 @@ CREATE TABLE IF NOT EXISTS friendships (
     CHECK (requested_by IN (user_low, user_high))
 );
 CREATE INDEX IF NOT EXISTS friendships_high_idx ON friendships(user_high);
+CREATE INDEX IF NOT EXISTS friendships_requested_by_idx ON friendships(requested_by);
 
 -- Policy 3: the existing app exploration grid; no road dataset or matcher is required.
 CREATE TABLE IF NOT EXISTS cell_scores (
@@ -149,6 +151,7 @@ CREATE TABLE IF NOT EXISTS cell_receipts (
     PRIMARY KEY (run_id, sequence)
 );
 CREATE INDEX IF NOT EXISTS cell_receipts_age_idx ON cell_receipts(created_at);
+CREATE INDEX IF NOT EXISTS cell_receipts_user_idx ON cell_receipts(user_id);
 CREATE TABLE IF NOT EXISTS cell_weeks (
     user_id BIGINT NOT NULL,
     dataset VARCHAR(32) NOT NULL,

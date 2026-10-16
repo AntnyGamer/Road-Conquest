@@ -11,6 +11,8 @@ import java.net.URL
 import java.net.URI
 import java.io.ByteArrayOutputStream
 import java.nio.charset.StandardCharsets
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -33,6 +35,14 @@ class OsrmMatcher(
 ) {
     private var nextRequestAt = 0L
     @Volatile private var rateLimitedUntil = 0L
+
+    // Matching windows can be revisited while their pending fixes wait for additional
+    // context. OSRM returns the same geometry for identical request parameters, so
+    // keep a few recent successful responses in memory rather than downloading them
+    // again. Reparse against today's points/IDs; never cache failed/ambiguous HTTP
+    // responses or persist location-containing URLs/bodies on disk.
+    private data class CachedResponse(val body: String, val receivedAtMs: Long)
+    private val recentResponses = LinkedHashMap<String, CachedResponse>(4, 0.75f, true)
 
     /** Only a provider's rate-limit response blocks new matching requests. */
     internal fun rateLimitRemainingMs(): Long =
@@ -70,8 +80,11 @@ class OsrmMatcher(
         val bearings = buildBearingGuidance(points)
         // The driving filter already removes bad fixes. Preserve dense accepted samples;
         // server-side tidy can turn otherwise usable samples into unmatched tracepoints.
+        // Parsing uses each step's full geometry, not the duplicate route overview.
+        // Hints are never consumed by RoadConquest. Suppress both unused response
+        // fields without removing a single GPS fix, step, or matching constraint.
         val path = "$baseUrl/match/v1/driving/$coordinates" +
-            "?steps=true&geometries=geojson&overview=full&annotations=false&tidy=false&gaps=ignore" +
+            "?steps=true&geometries=geojson&overview=false&annotations=false&generate_hints=false&tidy=false&gaps=ignore" +
             "&waypoints=$waypoints&timestamps=$timestamps&radiuses=$radiuses"
         val first = requestMatch(URI(path + (bearings?.let { "&bearings=$it" } ?: "")).toURL(), points)
         // Retry a supported, anchored turn without heading constraints first. If the
@@ -142,6 +155,18 @@ class OsrmMatcher(
 
     @Synchronized
     private fun requestMatch(url: URL, points: List<TrackPoint>): MatchResult? {
+        val cacheKey = url.toExternalForm()
+        val cached = recentResponses[cacheKey]
+        if (cached != null) {
+            val age = SystemClock.elapsedRealtime() - cached.receivedAtMs
+            if (age in 0L..RESPONSE_CACHE_TTL_MS) {
+                // Point IDs and already-matched flags may have changed since the
+                // previous window, even when OSRM's URL has not.
+                val result = runCatching { parse(cached.body, points) }.getOrNull()
+                if (result != null) return result
+            }
+            recentResponses.remove(cacheKey)
+        }
         if (rateLimitRemainingMs() > 0L) return null
         // Only the shared public demo needs pacing. The matcher runs on a
         // background executor, so no location callback or UI thread waits.
@@ -172,10 +197,20 @@ class OsrmMatcher(
                 // immediate request from this batch or the next GPS callback.
                 // The repository already retains unmatched fixes for later
                 // retries, so never invent a locally guessed road instead.
-                val seconds = connection.getHeaderField("Retry-After")
-                    ?.trim()?.toLongOrNull()?.coerceIn(1L, 3_600L)
+                // HTTP Retry-After may be a delay in seconds OR an RFC 1123
+                // date. Respect either form to avoid retrying during a provider
+                // outage/rate limit; retain the existing bounded cooldown.
+                val retryAfter = connection.getHeaderField("Retry-After")?.trim()
+                val retryDelayMs = retryAfter?.toLongOrNull()?.let {
+                    it.coerceIn(1L, 3_600L) * 1_000L
+                } ?: retryAfter?.let {
+                    runCatching {
+                        ZonedDateTime.parse(it, DateTimeFormatter.RFC_1123_DATE_TIME)
+                            .toInstant().toEpochMilli() - System.currentTimeMillis()
+                    }.getOrNull()?.coerceIn(0L, 3_600_000L)
+                } ?: 0L
                 val defaultMs = if (status == 429) 60_000L else 30_000L
-                val pauseMs = maxOf(defaultMs, (seconds ?: 0L) * 1_000L)
+                val pauseMs = maxOf(defaultMs, retryDelayMs)
                 rateLimitedUntil = SystemClock.elapsedRealtime() + pauseMs
                 return null
             }
@@ -191,7 +226,17 @@ class OsrmMatcher(
                 }
                 output.toString(StandardCharsets.UTF_8.name())
             }
-            parse(body, points)
+            val result = parse(body, points)
+            // Valid but ambiguous matches can also be repeated with identical
+            // parameters. Reuse them briefly until new GPS context changes the
+            // request, while failures and malformed responses remain uncached.
+            if (result != null && body.length <= MAX_CACHED_RESPONSE_CHARS) {
+                recentResponses[cacheKey] = CachedResponse(body, SystemClock.elapsedRealtime())
+                if (recentResponses.size > MAX_CACHED_RESPONSES) {
+                    recentResponses.entries.iterator().apply { next(); remove() }
+                }
+            }
+            result
         } catch (_: Exception) {
             null
         } finally {
@@ -809,6 +854,11 @@ class OsrmMatcher(
     companion object {
         // The public OSRM demo rejects larger traces with TooBig (verified 2026-10-03).
         const val MAX_MATCH_POINTS = 10
+        // Strict in-memory cap: at most four compact, successful OSRM responses for
+        // one minute. Changed coordinates/times/radii/bearings always bypass cache.
+        private const val RESPONSE_CACHE_TTL_MS = 60_000L
+        private const val MAX_CACHED_RESPONSES = 4
+        private const val MAX_CACHED_RESPONSE_CHARS = 256 * 1024
         // A point with alternatives is only accepted when it is internal to a trace, so fixes
         // on both sides constrain the route. Keep this identical to TrackingService's road
         // acceptance threshold; otherwise a 0.45-0.79 contextual match can retry forever.

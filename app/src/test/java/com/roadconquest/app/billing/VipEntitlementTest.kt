@@ -52,14 +52,14 @@ class VipEntitlementTest {
         val context = org.robolectric.RuntimeEnvironment.getApplication()
         VipEntitlement.updateFromPlay(context, false)
         try {
-            val oldQueryRevision = VipEntitlement.revision()
+            val oldQueryRevision = VipEntitlement.beginOwnershipQuery()
             VipEntitlement.updateFromPlay(context, true)
             VipEntitlement.updateIfCurrent(context, false, oldQueryRevision)
             assertTrue("An older ownership response must not undo a newer purchase",
                 VipEntitlement.isActive(context))
 
             // A new authoritative query still detects a refund.
-            VipEntitlement.updateIfCurrent(context, false, VipEntitlement.revision())
+            VipEntitlement.updateIfCurrent(context, false, VipEntitlement.beginOwnershipQuery())
             assertFalse(VipEntitlement.isActive(context))
         } finally {
             VipEntitlement.updateFromPlay(context, false)
@@ -91,6 +91,51 @@ class VipEntitlementTest {
             Prefs.resetCosmetics(context)
             VipEntitlement.updateFromPlay(context, false)
             repo.clearProgression()
+        }
+    }
+
+    @Test fun unchangedOwnershipConfirmationInvalidatesOlderQuery() {
+        val context = org.robolectric.RuntimeEnvironment.getApplication()
+        VipEntitlement.updateFromPlay(context, true)
+        try {
+            val olderQuery = VipEntitlement.beginOwnershipQuery()
+            val newerQuery = VipEntitlement.beginOwnershipQuery()
+            VipEntitlement.updateIfCurrent(context, true, newerQuery)
+            VipEntitlement.updateIfCurrent(context, false, olderQuery)
+            assertTrue("The latest confirmation must protect an already cached purchase",
+                VipEntitlement.isActive(context))
+        } finally {
+            VipEntitlement.updateFromPlay(context, false)
+        }
+    }
+
+    @Test fun olderQueryCannotChangeOwnershipWhileNewerQueryIsPending() {
+        val context = org.robolectric.RuntimeEnvironment.getApplication()
+        VipEntitlement.updateFromPlay(context, false)
+        try {
+            val olderQuery = VipEntitlement.beginOwnershipQuery()
+            val newerQuery = VipEntitlement.beginOwnershipQuery()
+            VipEntitlement.updateIfCurrent(context, true, olderQuery)
+            assertFalse("An older response must wait for the newer ownership check",
+                VipEntitlement.isActive(context))
+            VipEntitlement.updateIfCurrent(context, false, newerQuery)
+            assertFalse(VipEntitlement.isActive(context))
+        } finally {
+            VipEntitlement.updateFromPlay(context, false)
+        }
+    }
+
+    @Test fun repeatedPurchaseCallbackStillInvalidatesOlderQuery() {
+        val context = org.robolectric.RuntimeEnvironment.getApplication()
+        VipEntitlement.updateFromPlay(context, true)
+        try {
+            val olderQuery = VipEntitlement.beginOwnershipQuery()
+            VipEntitlement.updateFromPlay(context, true)
+            VipEntitlement.updateIfCurrent(context, false, olderQuery)
+            assertTrue("A purchase callback must protect even unchanged cached ownership",
+                VipEntitlement.isActive(context))
+        } finally {
+            VipEntitlement.updateFromPlay(context, false)
         }
     }
 

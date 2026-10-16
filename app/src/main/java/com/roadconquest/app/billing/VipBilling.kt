@@ -177,7 +177,7 @@ class VipBilling(
 
     private fun queryOwnership() {
         if (closed || !client.isReady) return
-        val revisionAtRequest = VipEntitlement.revision()
+        val revisionAtRequest = VipEntitlement.beginOwnershipQuery()
         client.queryPurchasesAsync(
             QueryPurchasesParams.newBuilder()
                 .setProductType(BillingClient.ProductType.INAPP).build()

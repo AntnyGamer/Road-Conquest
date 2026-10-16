@@ -29,7 +29,11 @@ object LocalDataReset {
         try {
             TrackingRepository(app).clearHistory()
             ProgressionManager.resetLocalProgression(app)
+            com.roadconquest.app.map.PlacePopulationLookup.clearCache(app)
             DataExporter.clearTemporarySnapshots(app)
+            // A new empty profile must not display the former profile's backup date.
+            app.getSharedPreferences("roadconquest_export_history", Context.MODE_PRIVATE)
+                .edit().clear().commit()
             listOf(com.roadconquest.app.export.DataImporter.previousBackup(app),
                 java.io.File(app.filesDir, "before-restore.tmp.zip")).forEach {
                 check(!it.exists() || it.delete()) { "Could not remove restore recovery data" }

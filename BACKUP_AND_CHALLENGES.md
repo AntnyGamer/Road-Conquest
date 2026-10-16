@@ -1,9 +1,9 @@
 # Progress restore and weekly challenges
 
 Settings → **Import and restore progress** accepts current Road Conquest export ZIPs
-(formats 9 and 10). Format 10 makes spreadsheet-safe text escaping reversible, including
+(formats 9, 10, and 11). Format 10 makes spreadsheet-safe text escaping reversible, including
 literal apostrophes; legacy format 9 could not distinguish an apostrophe before a formula
-from its spreadsheet-protection prefix.
+from its spreadsheet-protection prefix. Format 11 preserves the first-unlock timestamps for new mile tiles. Older imports retain explored tiles but have no reliable historical tile-unlock dates.
 
 The importer validates archive entries, CRCs, exact CSV columns, UTF-8, coordinates,
 geometry, timestamps, unique keys, road references, row counts, mileage and the points
@@ -42,6 +42,8 @@ controls and verified-drive sharing with `FeatureFlags.LEADERBOARDS_VISIBLE = fa
 No verification evidence is collected or uploaded while hidden. Local weekly goals and
 friend management remain available; the ranking implementation and existing scores are
 retained for a later enabled build.
+
+Free trip history covers 100 recent drives with basic distance, duration, newly matched roads, newly rewarded towns, dated new map tiles and pending GPS matching counts. VIP extends browsing to 500 drives and enables sharing text summaries and user-selected GPX files. GPX offers a privacy-first option that omits the first and last two minutes, or a deliberate full-route export. Free full-progress ZIP export/restore remains available to everyone.
 
 Trip replay respects raw GPS gaps even when the displayed route is downsampled. A trip
 selected before data deletion/restore cannot replay unrelated replacement history.

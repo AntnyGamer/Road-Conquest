@@ -28,15 +28,25 @@ function safelyInside(fix, cell) {
 
 export function scoreCells(fixes) {
   const cells = new Map();
+  // Each fix is shared by two neighboring pairs. Compute its cell and accuracy
+  // envelope once, without weakening either pair's two-fix verification.
+  let a = fixes[0];
+  let first = a && cellFor(a.lat, a.lon);
+  let firstInside = first != null && safelyInside(a, first);
   for (let i = 1; i < fixes.length; i++) {
-    const a = fixes[i - 1], b = fixes[i];
-    const first = cellFor(a.lat, a.lon), second = cellFor(b.lat, b.lon);
-    if (!first || !second || first.row !== second.row || first.column !== second.column ||
-        !safelyInside(a, first) || !safelyInside(b, second)) continue;
-    const meters = distance(a, b), seconds = (b.time - a.time) / 1000;
-    if (seconds < 2 || meters < Math.max(10, a.accuracy + b.accuracy) ||
-        meters / seconds < 2.5 || Math.max(a.speed, b.speed) < 3) continue;
-    cells.set(`${first.row}:${first.column}`, first);
+    const b = fixes[i];
+    const second = cellFor(b.lat, b.lon);
+    const secondInside = second != null && safelyInside(b, second);
+    if (firstInside && secondInside && first.row === second.row && first.column === second.column) {
+      const meters = distance(a, b), seconds = (b.time - a.time) / 1000;
+      if (seconds >= 2 && meters >= Math.max(10, a.accuracy + b.accuracy) &&
+          meters / seconds >= 2.5 && Math.max(a.speed, b.speed) >= 3) {
+        cells.set(`${first.row}:${first.column}`, first);
+      }
+    }
+    a = b;
+    first = second;
+    firstInside = secondInside;
   }
   // No interpolated cells, client totals, road IDs, or imported history can earn credit.
   return [...cells.values()];

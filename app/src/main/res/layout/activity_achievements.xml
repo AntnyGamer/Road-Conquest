@@ -12,6 +12,14 @@
         android:orientation="vertical"
         android:padding="22dp">
 
+        <Button
+            android:id="@+id/backNavButton"
+            style="@style/RoadConquest.BackAction"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:layout_marginBottom="8dp"
+            android:text="← Back" />
+
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -35,7 +43,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:text="Earn bonus points from driving, places, battery challenges, and optional rewarded ads."
+            android:text="Earn bonus points from roads, map tiles, mileage, places, and optional challenges."
             android:textColor="?attr/rcTextSecondary"
             android:textSize="13sp" />
 
@@ -63,6 +71,7 @@
                 android:orientation="horizontal">
 
                 <Button style="@style/RoadConquest.FilterAction" android:id="@+id/achievementRoadsButton" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Road Conquest" />
+                <Button style="@style/RoadConquest.FilterAction" android:id="@+id/achievementTilesButton" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:text="Map Tiles" />
                 <Button style="@style/RoadConquest.FilterAction" android:id="@+id/achievementDistanceButton" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:text="Mileage" />
                 <Button style="@style/RoadConquest.FilterAction" android:id="@+id/achievementPlacesButton" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:text="Exploration" />
                 <Button style="@style/RoadConquest.FilterAction" android:id="@+id/achievementAdsButton" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:text="Ad Rewards" />

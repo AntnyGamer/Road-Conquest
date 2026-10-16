@@ -3,17 +3,23 @@ package com.roadconquest.app.map
 import android.content.Context
 import android.net.Uri
 import android.os.SystemClock
+import android.util.AtomicFile
 import com.roadconquest.app.BuildConfig
 import com.roadconquest.app.data.PlaceDiscovery
 import com.roadconquest.app.data.PlaceKind
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
 import java.io.Reader
+import java.util.zip.GZIPInputStream
+import java.util.zip.GZIPOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.PI
@@ -67,15 +73,129 @@ object PlaceOverlayCache {
     private const val HEX_DIGITS = "0123456789abcdef"
     private val generation = AtomicLong()
     private val mutationLock = Any()
+    private const val CACHE_BUDGET_BYTES = 128L * 1024L * 1024L
+    private const val CACHE_BUDGET_FILES = 6_000
+    private const val MAX_DECODED_CACHE_CHARS = 16 * 1024 * 1024
+    private var initialTrimDone = false
+    private var cacheBytes = 0L
+    private var cacheFiles = 0
+
+    // Boundary caches are regenerable; visited places, achievements and earned
+    // rewards remain in SQLite. Keep recent polygons available offline while
+    // preventing an unlimited accumulation of remote administrative GeoJSON.
+    private fun trimCache(context: Context, keep: File? = null,
+                          maxBytes: Long = CACHE_BUDGET_BYTES,
+                          maxFiles: Int = CACHE_BUDGET_FILES) {
+        val files = listOf(DIRECTORY, TOWN_DIRECTORY, US_OFFICIAL_DIRECTORY)
+            .flatMap { name ->
+                File(context.applicationContext.filesDir, name).listFiles().orEmpty()
+                    .filter { it.isFile && it.name.endsWith(".json") }
+            }
+        var bytes = files.sumOf { it.length() }
+        var count = files.size
+        if (bytes <= maxBytes && count <= maxFiles) {
+            cacheBytes = bytes
+            cacheFiles = count
+            return
+        }
+        // The oldest cached outlines go first. The destination currently being
+        // written stays readable, even if it alone exceeds the cache budget.
+        for (candidate in files.sortedWith(compareBy<File> { it.lastModified() }.thenBy { it.name })) {
+            if (bytes <= maxBytes && count <= maxFiles) break
+            if (candidate == keep) continue
+            val length = candidate.length()
+            if (candidate.delete()) {
+                bytes -= length
+                count--
+            }
+        }
+        cacheBytes = bytes
+        cacheFiles = count
+    }
+
+    internal fun trimForTest(context: Context, maxBytes: Long, maxFiles: Int) =
+        synchronized(mutationLock) { trimCache(context, maxBytes = maxBytes, maxFiles = maxFiles) }
+
+    private fun initialTrim(context: Context) {
+        if (!initialTrimDone) {
+            trimCache(context)
+            initialTrimDone = true
+        }
+    }
+
+    private fun writeCacheFile(context: Context, target: File, json: JSONObject): Boolean {
+        initialTrim(context)
+        val existed = target.isFile
+        val oldBytes = if (existed) target.length() else 0L
+        val bytes = json.toString().toByteArray(Charsets.UTF_8)
+        val buffer = ByteArrayOutputStream()
+        GZIPOutputStream(buffer).use { it.write(bytes) }
+        val file = AtomicFile(target)
+        var stream: java.io.FileOutputStream? = null
+        return try {
+            stream = file.startWrite()
+            stream.write(buffer.toByteArray())
+            file.finishWrite(stream)
+            cacheBytes += target.length() - oldBytes
+            if (!existed) cacheFiles++
+            // Counting writes avoids walking thousands of cached files after
+            // every new town; full disk scans happen only at start or near cap.
+            if (cacheBytes > CACHE_BUDGET_BYTES || cacheFiles > CACHE_BUDGET_FILES) {
+                trimCache(context, keep = target)
+            }
+            true
+        } catch (_: Exception) {
+            if (stream != null) file.failWrite(stream)
+            false
+        }
+    }
+
+    private fun forgetCacheFile(file: File) {
+        val bytes = if (file.isFile) file.length() else 0L
+        AtomicFile(file).delete()
+        if (bytes > 0L && initialTrimDone) {
+            cacheBytes = (cacheBytes - bytes).coerceAtLeast(0L)
+            cacheFiles = (cacheFiles - 1).coerceAtLeast(0)
+        }
+    }
+
+    private fun readCacheJson(target: File): JSONObject {
+        AtomicFile(target).openRead().use { raw ->
+            val input = raw.buffered()
+            input.mark(2)
+            val gzip = input.read() == 0x1f && input.read() == 0x8b
+            input.reset()
+            val decoded = if (gzip) GZIPInputStream(input) else input
+            decoded.bufferedReader().use { reader ->
+                val buffer = CharArray(8192)
+                val json = StringBuilder()
+                while (true) {
+                    val read = reader.read(buffer)
+                    if (read < 0) break
+                    if (json.length + read > MAX_DECODED_CACHE_CHARS) {
+                        throw IOException("Boundary cache exceeds decoded size limit")
+                    }
+                    json.append(buffer, 0, read)
+                }
+                return JSONObject(json.toString())
+            }
+        }
+    }
 
     fun generation(): Long = generation.get()
 
     fun read(context: Context, place: PlaceDiscovery): PlaceOverlayCacheResult =
-        synchronized(mutationLock) { readCacheFile(file(context, place), place) }
+        synchronized(mutationLock) {
+            initialTrim(context)
+            readCacheFile(file(context, place), place)
+        }
 
     /** Census municipalities for all 50 states are cached separately from OSM. */
     fun readOfficialUs(context: Context, place: PlaceDiscovery): PlaceOverlayCacheResult =
-        synchronized(mutationLock) { readCacheFile(officialUsFile(context, place), place) }
+        synchronized(mutationLock) {
+            initialTrim(context)
+            readCacheFile(officialUsFile(context, place), place)
+        }
 
     fun writeOfficialUs(
         context: Context, place: PlaceDiscovery, data: PlaceOverlayData?,
@@ -99,7 +219,7 @@ object PlaceOverlayCache {
                 .put("area_sq_km", data.areaSquareKilometers)
                 .put("geometry", JSONObject(data.geometryJson))
         }
-        runCatching { target.writeText(json.toString()) }.isSuccess
+        writeCacheFile(context, target, json)
     }
 
     private fun officialUsFile(context: Context, place: PlaceDiscovery): File {
@@ -110,13 +230,20 @@ object PlaceOverlayCache {
     private fun readCacheFile(
         file: File, place: PlaceDiscovery, verifiedOnly: Boolean = false
     ): PlaceOverlayCacheResult {
-        if (!file.isFile) return PlaceOverlayCacheResult(false, null)
+        if (!file.isFile && !File(file.path + ".bak").isFile) {
+            return PlaceOverlayCacheResult(false, null)
+        }
         return runCatching {
-            val json = JSONObject(file.readText())
+            val json = readCacheJson(file)
+            // Metadata and geometry are stable, but an actively used polygon
+            // should survive eviction over one not opened for several hours.
+            if (System.currentTimeMillis() - file.lastModified() > 4L * 60L * 60L * 1000L) {
+                file.setLastModified(System.currentTimeMillis())
+            }
             if (!json.optBoolean("found", false)) {
                 val fetchedAt = json.optLong("fetched_at", 0L)
                 if (fetchedAt <= 0L || System.currentTimeMillis() - fetchedAt > NEGATIVE_CACHE_MS) {
-                    file.delete()
+                    forgetCacheFile(file)
                     PlaceOverlayCacheResult(false, null)
                 } else PlaceOverlayCacheResult(true, null)
             } else {
@@ -136,7 +263,7 @@ object PlaceOverlayCache {
                 )
             }
         }.getOrElse {
-            file.delete()
+            forgetCacheFile(file)
             PlaceOverlayCacheResult(false, null)
         }
     }
@@ -180,11 +307,14 @@ object PlaceOverlayCache {
                 .put("area_sq_km", data.areaSquareKilometers)
                 .put("geometry", JSONObject(data.geometryJson))
         }
-        runCatching { target.writeText(json.toString()) }.isSuccess
+        writeCacheFile(context, target, json)
     }
 
     fun clear(context: Context) = synchronized(mutationLock) {
         generation.incrementAndGet()
+        initialTrimDone = false
+        cacheBytes = 0L
+        cacheFiles = 0
         File(context.applicationContext.filesDir, DIRECTORY).deleteRecursively()
         File(context.applicationContext.filesDir, TOWN_DIRECTORY).deleteRecursively()
         File(context.applicationContext.filesDir, US_OFFICIAL_DIRECTORY).deleteRecursively()
@@ -213,7 +343,7 @@ class PlaceOverlayClient(
 
     fun fetch(place: PlaceDiscovery, requireContainment: Boolean = true): PlaceOverlayData? {
         val base = resolveEndpoint()
-        throttle()
+        throttle(base)
         val threshold = when (place.kind) {
             PlaceKind.COUNTRY -> "0.02"
             PlaceKind.STATE -> "0.005"
@@ -232,6 +362,9 @@ class PlaceOverlayClient(
         val connection = open(url, redirects = false, readTimeoutMs = 12_000)
         return try {
             val status = connection.responseCode
+            if (status == 429 || status == 503) {
+                noteProviderBackoff(base, status, connection.getHeaderField("Retry-After"))
+            }
             if (status !in 200..299) throw IOException("Place overlay service returned HTTP $status")
             parseResponse(place, readLimited(connection), requireContainment)
         } finally {
@@ -243,24 +376,25 @@ class PlaceOverlayClient(
         resolvedEndpoint?.let { return it }
         val url = configUrl.trim()
         if (!url.startsWith("https://")) throw IOException("Place overlay config must use HTTPS")
-        val value = try {
+        val (value, fetchedConfig) = try {
             val connection = open(url, redirects = true, readTimeoutMs = 5_000)
             try {
                 val status = connection.responseCode
                 if (status !in 200..299 || connection.url.protocol != "https") {
                     throw IOException("Place overlay config is unavailable")
                 }
-                connection.inputStream.bufferedReader().use(::readConfigEndpoint)
+                connection.inputStream.bufferedReader().use(::readConfigEndpoint) to true
             } finally {
                 connection.disconnect()
             }
         } catch (_: IOException) {
-            // Do not make all overlays disappear just because the remote provider config is
-            // temporarily unreachable. The configured file can still override this when online.
-            DEFAULT_ENDPOINT
+            // Keep using the safe public fallback when the config service is down.
+            // Do not pin that fallback for the whole batch: later requests should
+            // be able to recover if the configured provider comes back online.
+            DEFAULT_ENDPOINT to false
         }
         if (!value.startsWith("https://")) throw IOException("Place overlay service is disabled or invalid")
-        resolvedEndpoint = value
+        if (fetchedConfig) resolvedEndpoint = value
         return value
     }
 
@@ -277,14 +411,36 @@ class PlaceOverlayClient(
             setRequestProperty("Accept", "application/json, text/plain;q=0.9")
         }
 
-    private fun throttle() {
+    private fun throttle(base: String) {
         synchronized(rateLock) {
             val now = SystemClock.elapsedRealtime()
+            // Respect an explicit provider rejection without sleeping a worker
+            // for minutes. The saved place candidate is retried by the existing
+            // persistent discovery queue.
+            if (cooldownEndpoint == base && now < cooldownUntilElapsed) {
+                throw IOException("Place overlay provider requested a later retry")
+            }
             if (lastRequestElapsed != Long.MIN_VALUE) {
                 val delay = 1_100L - (now - lastRequestElapsed)
                 if (delay > 0L) Thread.sleep(delay)
             }
             lastRequestElapsed = SystemClock.elapsedRealtime()
+        }
+    }
+
+    private fun noteProviderBackoff(base: String, status: Int, retryAfter: String?) {
+        val delay = maxOf(
+            if (status == 429) 60_000L else 30_000L,
+            retryAfterMillis(retryAfter, System.currentTimeMillis())
+        )
+        synchronized(rateLock) {
+            val until = SystemClock.elapsedRealtime() + delay
+            if (cooldownEndpoint != base) {
+                cooldownEndpoint = base
+                cooldownUntilElapsed = until
+            } else {
+                cooldownUntilElapsed = maxOf(cooldownUntilElapsed, until)
+            }
         }
     }
 
@@ -319,6 +475,20 @@ class PlaceOverlayClient(
 
         private val rateLock = Any()
         private var lastRequestElapsed = Long.MIN_VALUE
+        private var cooldownEndpoint: String? = null
+        private var cooldownUntilElapsed = 0L
+
+        /** HTTP Retry-After is either seconds or an RFC 1123 date; cap local deferment. */
+        internal fun retryAfterMillis(raw: String?, nowMillis: Long): Long {
+            val value = raw?.trim().orEmpty()
+            if (value.isEmpty()) return 0L
+            value.toLongOrNull()?.let { return it.coerceIn(0L, 900L) * 1_000L }
+            return runCatching {
+                ZonedDateTime.parse(value, DateTimeFormatter.RFC_1123_DATE_TIME)
+                    .toInstant().toEpochMilli() - nowMillis
+            }.getOrNull()?.coerceIn(0L, 900_000L) ?: 0L
+        }
+
         private const val MAX_CONFIG_LENGTH = 2_048
         private const val DEFAULT_ENDPOINT = "https://nominatim.openstreetmap.org"
         private const val EARTH_RADIUS_M = 6_371_008.8

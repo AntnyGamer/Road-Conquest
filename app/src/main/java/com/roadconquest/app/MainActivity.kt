@@ -78,6 +78,7 @@ class MainActivity : Activity() {
     private lateinit var repository: TrackingRepository
     private lateinit var locationManager: LocationManager
     private var renderer: MapRenderer? = null
+    private var activeMap: MapLibreMap? = null
     private var previewBearingDegrees = 0.0
     private var startAfterPermissionGrant = false
     private var started = false
@@ -94,6 +95,9 @@ class MainActivity : Activity() {
     private var lastPlaceBackfillElapsed = -1L
     private val queuedPlaceResolution = Runnable { if (resumed) resolvePendingPlaces() }
     @Volatile private var summaryGeneration = 0
+    // Persist the last known pending-match label between rapid UI refreshes,
+    // avoiding a transient "Tracking" / "Pending" flicker every cycle.
+    private var lastMatchingPending = false
     @Volatile private var roadDetailsGeneration = 0
     private val statsHandler = Handler(Looper.getMainLooper())
     private var statsRefreshScheduled = false
@@ -102,6 +106,13 @@ class MainActivity : Activity() {
         if (resumed && !isDestroyed) {
             refreshControls()
             renderer?.refreshTracking()
+        }
+    }
+    /** Coalesce high-frequency road/fog notifications into one lightweight UI refresh. */
+    private fun scheduleStatsRefresh() {
+        if (resumed && !statsRefreshScheduled) {
+            statsRefreshScheduled = true
+            statsHandler.postDelayed(statsRefresh, 5_000L)
         }
     }
 
@@ -167,12 +178,7 @@ class MainActivity : Activity() {
                         intent.getLongExtra(TrackingService.EXTRA_LOCATION_AGE_MS, 0L)
                     )
                 }
-                TrackingService.ACTION_STATS_UPDATED -> {
-                    if (resumed && !statsRefreshScheduled) {
-                        statsRefreshScheduled = true
-                        statsHandler.postDelayed(statsRefresh, 5_000L)
-                    }
-                }
+                TrackingService.ACTION_STATS_UPDATED -> scheduleStatsRefresh()
                 LocationManager.PROVIDERS_CHANGED_ACTION, LocationManager.MODE_CHANGED_ACTION -> {
                     refreshControls()
                     if (!TrackingService.isRunning && !Prefs.isManualOnly(this@MainActivity) &&
@@ -188,6 +194,10 @@ class MainActivity : Activity() {
                 }
                 TrackingService.ACTION_EXPLORATION_UPDATED -> {
                     renderer?.refreshExploration()
+                    // Walking can unlock tiles without producing road-driving statistics.
+                    // Keep the visible wallet/milestones up to date with the same bounded
+                    // UI refresh as accepted driving fixes, with no added GPS work.
+                    scheduleStatsRefresh()
                     if (resumed) resolvePendingPlaces()
                 }
                 TrackingService.ACTION_PLACE_CANDIDATE_UPDATED -> {
@@ -263,13 +273,10 @@ class MainActivity : Activity() {
         findViewById<Button>(R.id.tripsNavButton).setOnClickListener {
             startActivity(Intent(this, TripHistoryActivity::class.java))
         }
-        findViewById<Button>(R.id.goalsNavButton).setOnClickListener {
+        findViewById<Button>(R.id.badgesNavButton).setOnClickListener {
             startActivity(Intent(this, AchievementsActivity::class.java))
         }
-        findViewById<Button>(R.id.garageNavButton).setOnClickListener {
-            startActivity(Intent(this, ShopActivity::class.java))
-        }
-        findViewById<Button>(R.id.friendsNavButton).setOnClickListener {
+        findViewById<Button>(R.id.weeklyGoalsNavButton).setOnClickListener {
             startActivity(Intent(this, ChallengesActivity::class.java))
         }
         applySafeAreaInsets(settingsButton, centerButton, overlayButton, controlPanel, statsText, pointsText)
@@ -277,6 +284,7 @@ class MainActivity : Activity() {
 
         mapView.getMapAsync { map ->
             if (isDestroyed) return@getMapAsync
+            activeMap = map
             configureMapChrome(map, controlPanel)
             map.addOnMapClickListener { point ->
                 val overlayInfo = renderer?.overlayInfoAt(map.projection.toScreenLocation(point))
@@ -355,9 +363,6 @@ class MainActivity : Activity() {
             renderer?.refreshPlaceOverlays()
         }
         renderer?.refreshCosmetics()
-        if (!Prefs.isDeviceDataDeletionPending(this)) {
-            ProgressionManager.recordBatteryFromSystem(this)
-        }
         // Road updates can finish while this activity is stopped and its receiver is
         // unregistered. A mere pause/resume keeps the receiver registered and can reuse cache.
         renderer?.resumeViewport(refreshRoadsAfterStop)
@@ -710,7 +715,9 @@ class MainActivity : Activity() {
             !hasPreciseLocation && hasApproximateLocation -> "Precise location required"
             !hasPreciseLocation -> "Location permission required"
             !locationEnabled -> if (active) "Tracking paused — Location is off" else "Location is off"
-            active -> "Tracking your driving"
+            active -> if (lastMatchingPending)
+                "Tracking your driving • GPS saved, road matching pending"
+            else "Tracking your driving"
             else -> "Not tracking"
         }
         // Avoid repeating the same live-region announcement on each data refresh.
@@ -736,16 +743,31 @@ class MainActivity : Activity() {
                         ProgressionManager.metrics(progression)
                     )
                 }
-                Triple(summary, progression, unlocked)
+                // The pending-match badge is only visible during active tracking.
+                // Avoid an otherwise pointless SQLite query when the app is paused,
+                // offline, deleting local data, or not recording.
+                val checkMatching = active && !trackingPaused && hasPreciseLocation &&
+                    locationEnabled && !deletionPending
+                Triple(summary, progression, unlocked) to
+                    (checkMatching && repository.hasUnmatchedDrivingFixes())
             }
             runOnUiThread {
                 if (isDestroyed || generation != summaryGeneration) return@runOnUiThread
                 result.fold(
-                    onSuccess = { (value, progression, unlocked) ->
-                        statsText.text = StatsText.format(this, value)
-                        pointsText.text = String.format(Locale.getDefault(), "⚔ %,d points", progression.balance)
+                    onSuccess = { (summaryValues, pendingMatching) ->
+                        lastMatchingPending = pendingMatching
+                        val (value, progression, unlocked) = summaryValues
+                        if (TrackingService.isRunning && !Prefs.isTrackingPaused(this) &&
+                            statusText.text.toString().startsWith("Tracking your driving")) {
+                            val matchingStatus = if (pendingMatching)
+                                "Tracking your driving • GPS saved, road matching pending"
+                            else "Tracking your driving"
+                            if (statusText.text.toString() != matchingStatus) statusText.text = matchingStatus
+                        }
+                        statsText.text = StatsText.mapOverview(this, value, progression.tilesUnlocked)
+                        pointsText.text = String.format(Locale.getDefault(), "Garage · ⚔ %,d", progression.balance)
                         pointsText.contentDescription = String.format(
-                            Locale.getDefault(), "%,d points. Open garage and shop.", progression.balance
+                            Locale.getDefault(), "Garage and shop. %,d points. Double tap to open.", progression.balance
                         )
                         if (unlocked.isNotEmpty()) {
                             val reward = unlocked.sumOf { it.rewardPoints }
@@ -766,8 +788,8 @@ class MainActivity : Activity() {
                     onFailure = { error ->
                         Log.e("RoadConquest", "Could not load data summary", error)
                         statsText.text = getString(R.string.saved_data_unavailable)
-                        pointsText.text = "Points unavailable"
-                        pointsText.contentDescription = "Points unavailable. Open garage and shop."
+                        pointsText.text = "Garage · Points unavailable"
+                        pointsText.contentDescription = "Open Garage and shop. Points are temporarily unavailable."
                     }
                 )
             }
@@ -816,9 +838,36 @@ class MainActivity : Activity() {
                 }
                 dialog.dismiss()
             }
+            .setNeutralButton("Explore nearby") { _, _ -> showNearbyExploration() }
             .setNegativeButton("Cancel", null)
             .create()
         dialog.show()
+    }
+
+    /** On-demand exploration goals, centered on the visible map, no extra GPS or network. */
+    private fun showNearbyExploration() {
+        val center = activeMap?.cameraPosition?.target ?: return
+        summaryExecutor.execute {
+            val result = runCatching { repository.nearbyExploration(center.latitude, center.longitude) }
+            runOnUiThread {
+                if (isDestroyed) return@runOnUiThread
+                result.fold({ (explored, total) ->
+                    val remaining = total - explored
+                    val percent = if (total == 0) 0 else explored * 100 / total
+                    AlertDialog.Builder(this)
+                        .setTitle("Explore nearby")
+                        .setMessage(
+                            "In the 5 × 5 mile-grid area around the map center:\n" +
+                                "Explored: $explored of $total tiles ($percent%)\n" +
+                                "Unexplored: $remaining tiles\n\n" +
+                                "Move the map to explore a different area. This estimate uses saved cells only, without route planning, additional GPS, or server requests. Walking can reveal tiles; only driving unlocks roads."
+                        )
+                        .setPositiveButton("Close", null).show()
+                }, {
+                    Toast.makeText(this, "Could not load nearby exploration.", Toast.LENGTH_SHORT).show()
+                })
+            }
+        }
     }
 
     private fun showOverlayInfo(info: PlaceOverlayInfo) {
@@ -866,7 +915,7 @@ class MainActivity : Activity() {
         }
         if (info.population == null && PlacePopulationLookup.canLookup(info)) {
             populationExecutor.execute {
-                val result = runCatching { PlacePopulationLookup.lookup(info) }.getOrNull()
+                val result = runCatching { PlacePopulationLookup.lookup(applicationContext, info) }.getOrNull()
                 runOnUiThread {
                     if (isDestroyed || !dialog.isShowing) return@runOnUiThread
                     population = result?.let { String.format(Locale.getDefault(), "%,d", it.count) }

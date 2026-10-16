@@ -23,6 +23,8 @@ import java.io.Closeable
 import java.io.File
 import java.io.FilterInputStream
 import java.io.InputStream
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.time.Instant
 import java.util.zip.CRC32
 import java.util.zip.ZipFile
@@ -114,7 +116,7 @@ object DataImporter {
                 }
                 var metadata = JSONObject()
                 readEntry("metadata.json") { metadata = JSONObject(Charsets.UTF_8.newDecoder().decode(java.nio.ByteBuffer.wrap(it.readBytes())).toString()) }
-                require(metadata.getString("app") == "Road Conquest" && metadata.getInt("schema_version") in 9..10) {
+                require(metadata.getString("app") == "Road Conquest" && metadata.getInt("schema_version") in 9..11) {
                     "Unsupported backup format; use a current Road Conquest export"
                 }
                 val schema = metadata.getInt("schema_version")
@@ -128,7 +130,8 @@ object DataImporter {
                             val decoder = Charsets.UTF_8.newDecoder().onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
                             val csv = CsvReader(java.io.InputStreamReader(stream, decoder).buffered())
                             val header = csv.next() ?: error("Missing $table header")
-                            val spec = columns.getValue(table)
+                            val spec = if (schema < 11 && table == "explored_grid")
+                                legacyGridColumns else columns.getValue(table)
                             require(header == spec.map { it.first }) { "Invalid $table columns" }
                             var rows = 0L
                             while (true) {
@@ -194,7 +197,11 @@ object DataImporter {
             try {
                 temporaryBackup.outputStream().use { DataExporter.writeZip(app, TrackingRepository(app), it) }
                 java.io.FileOutputStream(temporaryBackup, true).use { it.fd.sync() }
-                check(temporaryBackup.renameTo(previousBackup(app))) { "Could not save recovery backup" }
+                // Both paths are in filesDir. Require an atomic replacement so
+                // the old recovery copy survives any failed move. File.renameTo
+                // cannot replace an existing target on Windows test hosts.
+                Files.move(temporaryBackup.toPath(), previousBackup(app).toPath(),
+                    StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
             } finally { temporaryBackup.delete() }
             val live = helper.writableDatabase
             SQLiteDatabase.openDatabase(prepared.file.path, null, SQLiteDatabase.OPEN_READONLY).use { source ->
@@ -225,6 +232,10 @@ object DataImporter {
             helper.historyGeneration++
             helper.trackSummaryCache = null; helper.roadSummaryCache = null; helper.lastTrackPointCache = null
         } }
+        // A successful restore replaces local progress. A backup date from the
+        // previous local profile must not suggest that the new state was exported.
+        app.getSharedPreferences("roadconquest_export_history", Context.MODE_PRIVATE)
+            .edit().remove("last_completed_at").apply()
         // A cosmetic/icon failure after COMMIT must not claim that data was rolled back.
         // operationLock serializes reset/restore without holding historyLock while
         // taking Achievements' preference lock (its reads take these in reverse order).
@@ -310,6 +321,9 @@ object DataImporter {
     private fun spec(vararg definitions: String) = definitions.map { definition ->
         val parts = definition.split(':'); Triple(parts[0], parts[1], parts[2].single())
     }
+    private val legacyGridColumns = spec(
+        "row:grid_row:i", "column:grid_col:i", "latitude:latitude:d", "longitude:longitude:d"
+    )
     private val columns = mapOf(
         "track_points" to spec("id:id:i", "latitude:latitude:d", "longitude:longitude:d", "accuracy_m:accuracy_m:d", "speed_mps:speed_mps:d", "bearing_deg:bearing_deg:d",
             "timestamp_utc:timestamp_ms:t", "matched:matched:b", "next_match_attempt_utc:next_match_attempt_ms:t", "distance_m:distance_m:d"),
@@ -317,7 +331,7 @@ object DataImporter {
             "times_driven:drive_count:i", "times_driven_exact:drive_count_exact:b", "coordinates_json:geometry_json:j"),
         "road_visits" to spec("segment_id:segment_id:s", "started_at_utc:started_at:t", "ended_at_utc:ended_at:t"),
         "explored_places" to spec("latitude:latitude:d", "longitude:longitude:d"),
-        "explored_grid" to spec("row:grid_row:i", "column:grid_col:i", "latitude:latitude:d", "longitude:longitude:d"),
+        "explored_grid" to spec("row:grid_row:i", "column:grid_col:i", "latitude:latitude:d", "longitude:longitude:d", "first_unlocked_utc:first_unlocked_at:t"),
         "visited_places" to spec("kind:kind:s", "place_key:place_key:s", "display_name:display_name:s", "parent_name:parent_name:s", "country_name:country_name:s", "first_visited_utc:first_visited_at:t", "latitude:latitude:d", "longitude:longitude:d"),
         "place_candidates" to spec("cell_x:cell_x:i", "cell_y:cell_y:i", "latitude:latitude:d", "longitude:longitude:d", "first_seen_utc:first_seen_at:t", "attempts:attempts:i", "next_attempt_utc:next_attempt_ms:t"),
         "progression_rewards" to spec("reward_key:reward_key:s", "points:points:i", "awarded_at_utc:awarded_at:t"),

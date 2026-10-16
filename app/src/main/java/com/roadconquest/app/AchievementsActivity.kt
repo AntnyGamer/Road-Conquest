@@ -29,6 +29,7 @@ class AchievementsActivity : Activity() {
     private val executor = Executors.newSingleThreadExecutor()
     private var achievements: List<AchievementProgress> = emptyList()
     private var selectedCategory = AchievementCategory.ROADS
+    private var loadGeneration = 0
     private val categoryButtons = linkedMapOf<AchievementCategory, Button>()
 
     private companion object { const val PROGRESS_MAX = 1000 }
@@ -47,6 +48,7 @@ class AchievementsActivity : Activity() {
             isAppearanceLightNavigationBars = lightSystemBars
         }
         setContentView(R.layout.activity_achievements)
+        findViewById<Button>(R.id.backNavButton).setOnClickListener { finish() }
         ads = ScreenAds(this, findViewById(R.id.achievementsRoot))
         val root = findViewById<android.view.View>(R.id.achievementsRoot)
         val left = root.paddingLeft
@@ -62,12 +64,11 @@ class AchievementsActivity : Activity() {
         }
         ViewCompat.requestApplyInsets(root)
 
-        val text = findViewById<TextView>(R.id.achievementsText)
-        val points = findViewById<TextView>(R.id.achievementPointsText)
         val list = findViewById<LinearLayout>(R.id.achievementsList)
         categoryButtons.putAll(
             linkedMapOf(
                 AchievementCategory.ROADS to findViewById(R.id.achievementRoadsButton),
+                AchievementCategory.TILES to findViewById(R.id.achievementTilesButton),
                 AchievementCategory.DISTANCE to findViewById(R.id.achievementDistanceButton),
                 AchievementCategory.PLACES to findViewById(R.id.achievementPlacesButton),
                 AchievementCategory.ADS to findViewById(R.id.achievementAdsButton),
@@ -81,6 +82,11 @@ class AchievementsActivity : Activity() {
             }
         }
         updateCategoryButtons()
+    }
+
+    /** Reload progress when returning after a drive, restore, or earned reward. */
+    private fun refreshAchievements() {
+        val expected = ++loadGeneration
         executor.execute {
             val result = runCatching {
                 val summary = TrackingRepository(this).getSummary()
@@ -88,12 +94,19 @@ class AchievementsActivity : Activity() {
                 progression to Achievements.progress(this, summary, ProgressionManager.metrics(progression))
             }
             runOnUiThread {
-                if (isDestroyed) return@runOnUiThread
+                if (isDestroyed || expected != loadGeneration) return@runOnUiThread
+                val text = findViewById<TextView>(R.id.achievementsText)
+                val points = findViewById<TextView>(R.id.achievementPointsText)
+                val list = findViewById<LinearLayout>(R.id.achievementsList)
                 result.fold(
                     onSuccess = { (progression, achievements) ->
                         points.text = String.format(Locale.getDefault(), "⚔ %,d points", progression.balance)
                         text.visibility = android.view.View.GONE
                         this.achievements = achievements
+                        if (selectedCategory == AchievementCategory.EXTRA &&
+                            achievements.none { it.category == AchievementCategory.EXTRA }) {
+                            selectedCategory = AchievementCategory.ROADS
+                        }
                         renderCategory(list)
                     },
                     onFailure = {
@@ -111,6 +124,8 @@ class AchievementsActivity : Activity() {
         container.removeAllViews()
         Achievements.visibleAchievements(achievements, VipEntitlement.isActive(this)).asSequence()
             .filter { it.category == selectedCategory }
+            .sortedWith(compareBy<AchievementProgress> { it.unlocked }
+                .thenByDescending { (it.progress / it.goal).coerceIn(0.0, 1.0) })
             .forEach { addAchievement(container, it) }
         updateCategoryButtons()
     }
@@ -126,10 +141,11 @@ class AchievementsActivity : Activity() {
                 if (selected) R.attr.rcOnAccent else R.attr.rcTextPrimary))
             // VIP has no rewarded-ad offers: preserve earned ad milestones,
             // but do not show an empty page of impossible locked challenges.
-            button.visibility = if (category == AchievementCategory.ADS &&
-                VipEntitlement.isActive(this) && achievements.none {
-                    it.category == AchievementCategory.ADS && it.unlocked
-                }
+            button.visibility = if (
+                (category == AchievementCategory.ADS && VipEntitlement.isActive(this) &&
+                    achievements.none { it.category == AchievementCategory.ADS && it.unlocked }) ||
+                (category == AchievementCategory.EXTRA &&
+                    achievements.none { it.category == AchievementCategory.EXTRA })
             ) android.view.View.GONE else android.view.View.VISIBLE
         }
     }
@@ -206,6 +222,7 @@ class AchievementsActivity : Activity() {
                 }
             ) selectedCategory = AchievementCategory.ROADS
             renderCategory(findViewById(R.id.achievementsList))
+            refreshAchievements()
         }
     }
 
@@ -215,6 +232,7 @@ class AchievementsActivity : Activity() {
     }
 
     override fun onDestroy() {
+        loadGeneration++
         ads.destroy()
         executor.shutdownNow()
         super.onDestroy()

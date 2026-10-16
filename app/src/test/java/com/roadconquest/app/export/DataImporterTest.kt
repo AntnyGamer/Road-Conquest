@@ -80,6 +80,19 @@ class DataImporterTest {
         assertEquals(points, ProgressionRepository(context).snapshot().balance)
     }
 
+    @Test fun restoringProgressDoesNotClaimItWasAlreadyExported() {
+        TrackingRepository(context).insertLocation(fix(1_000_000))
+        val backup = export()
+        val exportPrefs = context.getSharedPreferences(
+            "roadconquest_export_history", Context.MODE_PRIVATE
+        )
+        exportPrefs.edit().putLong("last_completed_at", 123456789L).commit()
+        DataImporter.prepare(context, ByteArrayInputStream(backup)).use {
+            DataImporter.restore(context, it)
+        }
+        assertEquals(0L, exportPrefs.getLong("last_completed_at", 0L))
+    }
+
     @Test fun rejectsIncompleteUnsafeNonfiniteAndInconsistentBackupsBeforeChangingProgress() {
         TrackingRepository(context).insertLocation(fix(1_000_000))
         val original = export()
@@ -113,6 +126,29 @@ class DataImporterTest {
         assertEquals(0L, TrackingRepository(context).getSummary().trackPointCount)
     }
 
+    @Test fun failedRecoveryReplacementPreservesLiveProgressAndTheExistingTarget() {
+        val tracker = TrackingRepository(context)
+        tracker.insertLocation(fix(1_000_000))
+        val original = export()
+        tracker.insertLocation(fix(1_005_000, -74.0001))
+        val before = entries(export()).filterKeys { it != "metadata.json" }
+        val target = DataImporter.previousBackup(context)
+        assertTrue(target.mkdir())
+        val marker = java.io.File(target, "existing-recovery")
+        marker.writeText("preserve")
+        try {
+            DataImporter.prepare(context, ByteArrayInputStream(original)).use { backup ->
+                assertTrue(runCatching { DataImporter.restore(context, backup) }.isFailure)
+            }
+            assertEquals(before, entries(export()).filterKeys { it != "metadata.json" })
+            assertEquals("preserve", marker.readText())
+            assertFalse(java.io.File(context.filesDir, "before-restore.tmp.zip").exists())
+        } finally {
+            marker.delete()
+            target.delete()
+        }
+    }
+
     @Test fun restoringRebuildsAnExhaustedGpsIdCounterAndAllowsFutureDriving() {
         val originalId = TrackingRepository(context).insertLocation(fix(1_000_000))
         val bytes = export()
@@ -129,8 +165,44 @@ class DataImporterTest {
         ProgressionRepository(context).recordPlaceCandidate(fix(1_000_000))
         val values = entries(export()).toMutableMap()
         values["metadata.json"] = JSONObject(values.getValue("metadata.json")).put("schema_version", 9).toString()
+        // Legacy schema-9 and schema-10 had four grid columns, before
+        // first-unlock times were introduced in format 11.
+        values["explored_grid.csv"] = values.getValue("explored_grid.csv")
+            .trimEnd('\n').lineSequence().joinToString("\n") { it.substringBeforeLast(',') } + "\n"
         DataImporter.prepare(context, ByteArrayInputStream(repack(values))).use { DataImporter.restore(context, it) }
         assertEquals(values.getValue("place_candidates.csv"), entries(export()).getValue("place_candidates.csv"))
+    }
+
+    @Test fun importedFormatTenStillRestoresWithoutTileDiscoveryDates() {
+        val tracker = TrackingRepository(context)
+        tracker.recordExploredGridCell(fix(1_000_000L))
+        val values = entries(export()).toMutableMap()
+        values["metadata.json"] = JSONObject(values.getValue("metadata.json"))
+            .put("schema_version", 10).toString()
+        values["explored_grid.csv"] = values.getValue("explored_grid.csv")
+            .trimEnd('\n').lineSequence().joinToString("\n") { it.substringBeforeLast(',') } + "\n"
+        DataImporter.prepare(context, ByteArrayInputStream(repack(values))).use {
+            DataImporter.restore(context, it)
+        }
+        val db = AppDatabase.get(context).readableDatabase
+        db.rawQuery("SELECT first_unlocked_at FROM explored_grid LIMIT 1", null).use {
+            assertTrue(it.moveToFirst())
+            assertEquals(0L, it.getLong(0))
+        }
+    }
+
+    @Test fun currentBackupPreservesRealTileFirstUnlockDates() {
+        TrackingRepository(context).recordExploredGridCell(fix(1_000_000L))
+        val bytes = export()
+        TrackingRepository(context).clearHistory()
+        DataImporter.prepare(context, ByteArrayInputStream(bytes)).use {
+            DataImporter.restore(context, it)
+        }
+        val db = AppDatabase.get(context).readableDatabase
+        db.rawQuery("SELECT first_unlocked_at FROM explored_grid LIMIT 1", null).use {
+            assertTrue(it.moveToFirst())
+            assertEquals(1_000_000L, it.getLong(0))
+        }
     }
 
     @Test fun restoreWaitingForAnExportDoesNotDeadlockOrdinaryHistoryReaders() {
