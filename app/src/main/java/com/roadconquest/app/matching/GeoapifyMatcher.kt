@@ -186,17 +186,28 @@ class GeoapifyMatcher(
             val first = index++
             while (index < points.size && locations[index] != null && positions[index] > positions[index - 1]) index++
             if (index - first < 2) continue
-            val normalizedLegs = JSONArray()
-            var complete = true
+            var blockStart = first
+            var blockLegs = JSONArray()
+            fun flushBlock(lastPoint: Int) {
+                if (blockLegs.length() == 0) return
+                val group = matchings.length()
+                matchings.put(JSONObject().put("confidence", RoadGeometryValidator.MIN_ACCEPTABLE_CONFIDENCE)
+                    .put("legs", blockLegs))
+                for (p in blockStart..lastPoint) {
+                    tracepoints.put(p, JSONObject().put("matchings_index", group)
+                        .put("waypoint_index", p - blockStart).put("alternatives_count", 0)
+                        .put("location", locations[p]))
+                }
+                blockLegs = JSONArray()
+            }
             for (i in first until index - 1) {
                 val pieces = JSONArray()
-                // If a malformed step lies between two GPS fixes, no valid geometry
-                // may bridge it, even when the adjacent steps look convincing.
                 val fromStep = waypointSteps[i]
                 val toStep = waypointSteps[i + 1]
                 if (fromStep > toStep || (fromStep..toStep).any { !stepValid[it] }) {
-                    complete = false
-                    break
+                    flushBlock(i)
+                    blockStart = i + 1
+                    continue
                 }
                 var covered = positions[i]
                 for (s in stepValid.indices) {
@@ -218,26 +229,18 @@ class GeoapifyMatcher(
                         distance += meters(previousCoordinate, nextCoordinate)
                         previousCoordinate = nextCoordinate
                     }
-                    // Names and road classes were validated once for every route step.
                     pieces.put(JSONObject().put("name", stepNames[s]).put("distance", distance)
                         .put("geometry", JSONObject().put("type", "LineString").put("coordinates", coordinates))
                         .put("maneuver", JSONObject().put("type", if (stepCountable[s]) "turn" else "ramp")))
                 }
                 if (pieces.length() == 0 || covered < positions[i + 1] - 0.000001) {
-                    complete = false
-                    break
+                    flushBlock(i)
+                    blockStart = i + 1
+                    continue
                 }
-                normalizedLegs.put(JSONObject().put("steps", pieces))
+                blockLegs.put(JSONObject().put("steps", pieces))
             }
-            if (!complete) continue
-            val group = matchings.length()
-            matchings.put(JSONObject().put("confidence", RoadGeometryValidator.MIN_ACCEPTABLE_CONFIDENCE)
-                .put("legs", normalizedLegs))
-            for (i in first until index) {
-                tracepoints.put(i, JSONObject().put("matchings_index", group)
-                    .put("waypoint_index", i - first).put("alternatives_count", 0)
-                    .put("location", locations[i]))
-            }
+            flushBlock(index - 1)
         }
         if (matchings.length() == 0) return MatchResult(emptyList(), emptyMap())
         val normalized = JSONObject().put("code", "Ok").put("tracepoints", tracepoints)
