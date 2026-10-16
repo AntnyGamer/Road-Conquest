@@ -175,6 +175,88 @@ class ProviderFallbackTest {
         assertTrue(rejected == null || rejected.matchedPointConfidences.isEmpty())
     }
 
+    @Test fun malformedGeoapifyStepKeepsBothIndependentVerifiedSides() {
+        fun at(lat: Double) = JSONArray().put(-74.0).put(lat)
+        val line = JSONArray().put(at(40.0)).put(at(40.0001))
+            .put(at(40.0002)).put(at(40.0003))
+        val steps = JSONArray()
+            .put(JSONObject().put("from_index", 0).put("to_index", 1)
+                .put("name", "Approach").put("road_class", "residential"))
+            .put("malformed middle step")
+            .put(JSONObject().put("from_index", 2).put("to_index", 3)
+                .put("name", "Exit").put("road_class", "residential"))
+        val (json, fixes) = fixtureLine(line, steps, listOf(
+            at(40.0), at(40.0001), at(40.0002), at(40.0003)
+        ), listOf(0, 0, 2, 2), listOf(1_000_000L, 1_003_000L, 1_006_000L, 1_009_000L))
+        val result = requireNotNull(GeoapifyMatcher("https://maps.example").parse(json, fixes))
+        assertEquals(listOf("Approach", "Exit"), result.roads.map { it.name })
+        assertEquals(setOf(1L, 2L, 4L), result.matchedPointConfidences.keys)
+        assertFalse(3L in result.matchedPointConfidences)
+
+        // If the one remaining stretch is also corrupt, it cannot earn road credit.
+        val root = JSONObject(json)
+        val original = root.getJSONArray("features").getJSONObject(0).getJSONObject("properties")
+            .getJSONArray("legs").getJSONObject(0).getJSONArray("steps")
+        original.put(0, "bad start").put(2, "bad end")
+        assertNull(GeoapifyMatcher("https://maps.example").parse(root.toString(), fixes))
+    }
+
+    @Test fun malformedGeoapifyWaypointCannotJoinAcrossAnUnmatchedMiddle() {
+        fun at(lat: Double) = JSONArray().put(-74.0).put(lat)
+        val coords = (0..4).map { at(40.0 + it * 0.0001) }
+        val (json, fixes) = fixtureLine(
+            JSONArray(coords), JSONArray().put(JSONObject()
+                .put("from_index", 0).put("to_index", 4)
+                .put("name", "Main Street").put("road_class", "residential")),
+            coords, List(5) { 0 }, List(5) { 1_000_000L + it * 3_000L }
+        )
+        val root = JSONObject(json)
+        root.getJSONArray("features").getJSONObject(0).getJSONObject("properties")
+            .getJSONArray("waypoints").getJSONObject(2).put("location", "invalid")
+        val result = requireNotNull(GeoapifyMatcher("https://maps.example").parse(root.toString(), fixes))
+        assertEquals(2, result.roads.size)
+        assertEquals(setOf(1L, 2L, 5L), result.matchedPointConfidences.keys)
+        assertFalse(3L in result.matchedPointConfidences)
+        assertFalse(4L in result.matchedPointConfidences)
+    }
+
+    @Test fun disjointGeoapifyFeaturesKeepVerifiedSegmentsWithoutAcceptingAlternatives() {
+        fun at(lat: Double) = JSONArray().put(-74.0).put(lat)
+        fun feature(a: Double, b: Double): Pair<JSONObject, List<TrackPoint>> {
+            val first = at(a)
+            val last = at(b)
+            val (json, fixes) = fixtureLine(
+                JSONArray().put(first).put(last),
+                JSONArray().put(JSONObject().put("from_index", 0).put("to_index", 1)
+                    .put("name", "Verified Road").put("road_class", "residential")),
+                listOf(first, last), listOf(0, 0), listOf(1_000_000L, 1_003_000L)
+            )
+            return JSONObject(json).getJSONArray("features").getJSONObject(0) to fixes
+        }
+        val (left, firstFixes) = feature(40.0, 40.0001)
+        val (right, laterFixes) = feature(40.0002, 40.0003)
+        val waypoints = right.getJSONObject("properties").getJSONArray("waypoints")
+        waypoints.getJSONObject(0).put("original_index", 2)
+        waypoints.getJSONObject(1).put("original_index", 3)
+        val allFixes = firstFixes + laterFixes.mapIndexed { i, p ->
+            p.copy(id = i + 3L, timestampMillis = 1_006_000L + i * 3_000L)
+        }
+        fun response(second: JSONObject) = JSONObject().put("type", "FeatureCollection")
+            .put("features", JSONArray().put(left).put(second)).toString()
+        val matcher = GeoapifyMatcher("https://maps.example")
+        val result = requireNotNull(matcher.parse(response(right), allFixes))
+        assertEquals(2, result.roads.size)
+        assertEquals(setOf(1L, 2L, 4L), result.matchedPointConfidences.keys)
+
+        // A bad independent feature cannot erase the verified approach.
+        right.put("geometry", JSONObject().put("type", "invalid"))
+        val recovered = requireNotNull(matcher.parse(response(right), allFixes))
+        assertEquals(setOf(1L, 2L), recovered.matchedPointConfidences.keys)
+
+        // Two hypotheses claiming identical GPS fixes are ambiguous, not evidence.
+        assertNull(matcher.parse(response(left), allFixes))
+    }
+
     @Test fun namedPrimaryRoadsCountButMotorwayLinkRampsDoNot() {
         fun asClass(roadClass: String): MatchResult {
             val sample = JSONObject(example)
