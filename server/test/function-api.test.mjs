@@ -60,6 +60,8 @@ test("serverless accounts enforce authentication, privacy, limits and TLS with r
     assert.deepEqual(rankingWithMine.body, { metric: "cells", dataset: null, entries: [], verification_available: false });
     const ranking = await call("/v1/leaderboard?metric=cells");
     assert.equal(ranking.status, 200);
+    const unsignedMine = await call("/v1/leaderboard?metric=cells&mine=1");
+    assert.deepEqual(unsignedMine.body, ranking.body, 'Unsigned mine opt-in stays a public leaderboard');
     assert.deepEqual(ranking.body, { metric: "cells", dataset: null, entries: [], verification_available: false });
     assert.equal((await call("/v1/leaderboard?metric=invalid")).status, 400);
     assert.equal((await call("/v1/verified/batch", "POST", { miles: 999999 }, login.body.token)).status, 404);

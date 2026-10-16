@@ -290,3 +290,8 @@ schema, service plan, provider quota or credential change is required.
 - Friends, notification-device and enabled verified-scoring endpoints now combine their existing PostgreSQL-backed IP allowance reservation and currently valid session check in **one database query instead of two**. This saves one round trip on each normal authenticated call, including the combined friends/weekly-ranking screen request. Session hashes and user identities are not cached, and account deletion/logout/expiration checks stay in place.
 - Requests without a syntactically valid bearer token are still cheaply rejected as 401 before PostgreSQL; syntactically valid expired or forged tokens still consume the same IP budget. An exhausted window still returns 429 without disclosing account identity, and per-user write budgets remain separate and unchanged.
 - PostgreSQL regressions check allowed, nonexistent, exhausted and expired sessions, as well as accounting. An end-to-end Function test counts only two database calls for the authenticated friends screen (rate/session and friends list).
+
+## Public/verified leaderboard rate-limit consolidation (draft PR #96)
+
+- An authenticated optional `GET /v1/leaderboard?metric=cells&mine=1` now reuses the same single SQL statement to reserve the global leaderboard IP allowance and check the user's current session. The subsequent combined ranking/private-total SQL remains unchanged. This removes **one more PostgreSQL round trip per signed-in leaderboard refresh**.
+- Anonymous rankings, unsigned `mine=1` requests, and disabled competition still use the original public IP budget and response shape. Valid-but-expired session tokens remain rate limited and see only public results. No score, privacy filter, or cache rule changes.

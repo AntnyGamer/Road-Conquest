@@ -326,7 +326,12 @@ async function handle(req, res) {
     return send(res, 405, { error: "Method not allowed." });
   }
   if (req.method === "GET" && url.pathname === "/v1/leaderboard") {
-    if (!await rateLimit("competition-ip", ip, 180, 60 * 1000)) return send(res, 429, { error: "Try again later." });
+    // The public route stays public. Signed-in opt-in requests share a single
+    // SQL statement for the same IP allowance and fresh session validation.
+    const wantsMine = Boolean(competition) && url.searchParams.get("mine") === "1" && bearerToken(req) != null;
+    const access = wantsMine ? await rateLimitedUser(req, "competition-ip", 180, 60 * 1000) : null;
+    const allowed = access ? access.allowed : await rateLimit("competition-ip", ip, 180, 60 * 1000);
+    if (!allowed) return send(res, 429, { error: "Try again later." });
     const metric = url.searchParams.get("metric") || "cells";
     if (metric !== "cells") return send(res, 400, { error: "Choose cells." });
     // The public page can load before verification is provisioned. No scores are invented,
@@ -335,7 +340,7 @@ async function handle(req, res) {
       { metric, dataset: null, entries: [], verification_available: false });
     // The requested total is still tied to a freshly checked session. Public
     // rankings and invalid/anonymous sessions never reveal another user's score.
-    const user = url.searchParams.get("mine") === "1" ? await authenticatedUser(req) : null;
+    const user = access?.user || null;
     let ranking;
     if (user) {
       try { ranking = await competition.leaderboard(metric, user.id); }
