@@ -278,3 +278,9 @@ schema, service plan, provider quota or credential change is required.
 - Every syntactically valid 43-character bearer token still passes the original persistent IP rate limiter, current-session verification, user-specific limits and permission/scoring checks. Anonymous public rankings retain their original rate limits.
 - Under saturation, malformed authentication returns a cheap 401 rather than spending a 429 rate reservation; no valid authentication can bypass the existing limit. The offline/cold Function regression test asserts that such requests return without opening any PostgreSQL connection, even with startup schema application enabled.
 - This primarily saves Neon database work during unauthenticated probes; it does not reduce authenticated users' normal API request counts.
+
+## Shared sign-in budget and credential lookup (draft PR #96)
+
+- A normal login now retrieves the username's salt/hash/profile fields as part of the same PostgreSQL statement that reserves the per-IP and per-username budgets. Previously every permitted, validly formatted username needed a separate SELECT. This saves **one database round trip per permitted sign-in attempt**, not one password-hash operation.
+- The existing ordered IP/username budget CTEs and short-circuit/saturation behavior are unchanged. Denied budgets cannot return password hash fields; unknown or malformed usernames still consume their ordinary budgets and execute the full dummy scrypt password verification. Signup, login limits and session creation are unchanged.
+- Regression coverage verifies matched/missing users, saturated budget denial, no leaked hash fields on denial and null usernames. Existing end-to-end login and 100-way concurrency limit tests continue to apply.

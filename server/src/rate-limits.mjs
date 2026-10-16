@@ -20,6 +20,14 @@ function reservation(offset = 0, previous = null) {
 export const RATE_LIMIT_SQL = reservation();
 // A denied/saturated IP produces no username reservation, preserving short
 // circuit accounting. The two distinct bucket rows retain the same lock order.
-export const LOGIN_LIMIT_SQL = `WITH ip_limit AS (${reservation()}),
-  user_limit AS (${reservation(4, 'ip_limit')})
+const loginBudgetCtes = `WITH ip_limit AS (${reservation()}),
+  user_limit AS (${reservation(4, 'ip_limit')})`;
+export const LOGIN_LIMIT_SQL = `${loginBudgetCtes}
   SELECT COALESCE((SELECT allowed FROM user_limit),FALSE) AS allowed`;
+// The normal sign-in path can retrieve its account data in the SAME round trip
+// as both budgets. A denied budget yields only {allowed:false}, never a
+// password hash; unknown usernames still take the existing dummy scrypt path.
+export const LOGIN_WITH_USER_SQL = `${loginBudgetCtes},
+  permission AS (SELECT COALESCE((SELECT allowed FROM user_limit),FALSE) AS allowed)
+  SELECT p.allowed,u.id,u.username_display,u.password_salt,u.password_hash,u.leaderboard_visible
+  FROM permission p LEFT JOIN users u ON p.allowed AND u.username_key=$9`;

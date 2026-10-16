@@ -15,7 +15,7 @@ import { competitionConfig, createCompetition } from "./competition.mjs";
 import { createFriends } from "./friends.mjs";
 import { createNotifications, createFcmSender } from "./notifications.mjs";
 import { createRequestMaintenance } from "./maintenance.mjs";
-import { RATE_LIMIT_SQL, LOGIN_LIMIT_SQL } from "./rate-limits.mjs";
+import { RATE_LIMIT_SQL, LOGIN_WITH_USER_SQL } from "./rate-limits.mjs";
 
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -399,21 +399,18 @@ async function handle(req, res) {
     const key = username?.key || "invalid";
 
     await prepareDatabase();
-    const loginPermit = await pool.query(LOGIN_LIMIT_SQL, [
+    // Account selection shares the atomic pair of login reservations. A denied
+    // permit returns no account data. Unknown/malformed usernames still run the
+    // same dummy password check after consuming the same rate-limit budget.
+    const loginResult = await pool.query(LOGIN_WITH_USER_SQL, [
       "login-ip", opaqueRateKey("login-ip", ip), 15 * 60 * 1000, 20,
-      "login-user", opaqueRateKey("login-user", key), 15 * 60 * 1000, 8
+      "login-user", opaqueRateKey("login-user", key), 15 * 60 * 1000, 8,
+      username?.key || null
     ]);
-    if (loginPermit.rows[0]?.allowed !== true) {
+    if (loginResult.rows[0]?.allowed !== true) {
       return send(res, 429, { error: "Too many attempts. Try again later." });
     }
-
-    const result = username
-      ? await pool.query(
-          "SELECT id, username_display, password_salt, password_hash, leaderboard_visible FROM users WHERE username_key = $1",
-          [username.key]
-        )
-      : { rows: [] };
-    const user = result.rows[0];
+    const user = loginResult.rows[0]?.id == null ? null : loginResult.rows[0];
     const valid = user
       ? await verifyPassword(password, user.password_salt, user.password_hash, PEPPER)
       : await verifyPassword(password, dummy.salt, dummy.hash, PEPPER);
