@@ -294,6 +294,25 @@ class RoadGeometryTurnTest {
         assertNull(RoadGeometryValidator().parse(valid.toString(), points(a, b)))
     }
 
+    @Test fun malformedIndependentMatchingCannotEraseValidSiblingOrEarnCredit() {
+        val good = matching(leg("Verified Approach", a, b))
+        val invalid = matching(leg("Invalid", c, d))
+        val raw = response(listOf(
+            trace(0, 0, a), trace(0, 1, b),
+            trace(1, 0, c), trace(1, 3, d)
+        ), good, invalid)
+        val result = requireNotNull(RoadGeometryValidator().parse(raw, points(a, b, c, d)))
+        assertEquals(listOf("Verified Approach"), result.roads.map { it.name })
+        assertEquals(setOf(1L, 2L), result.matchedPointConfidences.keys)
+        assertFalse(3L in result.matchedPointConfidences)
+        assertFalse(4L in result.matchedPointConfidences)
+        // Even though the group has two tracepoints, a wrong waypoint sequence
+        // in the ONLY matching remains a failed batch rather than a credited road.
+        assertNull(RoadGeometryValidator().parse(response(listOf(
+            trace(0, 0, c), trace(0, 3, d)
+        ), invalid), points(c, d)))
+    }
+
     @Test fun confidentRouteKeepsAnInternalAlternativeWhenBothSidesProvideContext() {
         val result = requireNotNull(RoadGeometryValidator().parse(response(listOf(
             trace(0, 0, a), trace(0, 1, b), trace(0, 2, c, 2),

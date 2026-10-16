@@ -28,8 +28,8 @@ class RoadGeometryValidator {
         if (matchings.length() == 0) return null
 
         val confidences = DoubleArray(matchings.length()) { index ->
-            matchings.getJSONObject(index).optDouble("confidence", 0.0)
-                .takeIf { it.isFinite() && it in 0.0..1.0 } ?: 0.0
+            matchings.optJSONObject(index)?.optDouble("confidence", 0.0)
+                ?.takeIf { it.isFinite() && it in 0.0..1.0 } ?: 0.0
         }
         val tracepoints = root.optJSONArray("tracepoints") ?: return null
         if (tracepoints.length() != points.size) return null
@@ -53,10 +53,18 @@ class RoadGeometryValidator {
         for (m in traces.indices) {
             val trace = traces[m]
             if (trace.size < 2) continue
-            val legs = matchings.getJSONObject(m).optJSONArray("legs") ?: return null
-            // All input fixes are requested as waypoints. Reject shifted, duplicated or missing
-            // leg indices rather than assigning another fix's geometry and completion state.
-            if (legs.length() != trace.size - 1 || trace.indices.any { trace[it].waypoint != it }) return null
+            val legs = matchings.optJSONObject(m)?.optJSONArray("legs")
+            // A malformed matching must never be credited. When the provider
+            // also supplied OTHER independent matchings, preserve their already
+            // verified roads instead of discarding the entire response.
+            // Block this group's GPS IDs from seam repair as well.
+            if (legs == null || legs.length() != trace.size - 1 ||
+                trace.indices.any { trace[it].waypoint != it }
+            ) {
+                rejectedLeg = true
+                trace.forEach { blockedBridgeEndIds += points[it.input].id }
+                continue
+            }
             // Alternative candidates at an incremental trace endpoint still need more evidence.
             // Inside a confident trace, fixes on both sides already disambiguate the route;
             // discarding those legs creates holes at ordinary turns and junctions.

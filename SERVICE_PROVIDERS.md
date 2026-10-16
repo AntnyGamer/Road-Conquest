@@ -184,3 +184,8 @@ Crashlytics can receive real events only from an opted-in new build. The console
 
 - Both locally rejected geometry (`IllegalArgumentException`) and an invalid provider step object (`JSONException`) now use the SAME already-established per-leg rejection path. Properly validated sibling road legs still save; the invalid interval remains pending, and the no-valid-legs case retains its existing failure backoff.
 - The rejected interval remains explicitly blocked from inferred seam bridging. This is not a relaxed snap/road acceptance condition and does not cause any additional HTTP or provider requests. A focused turn test covers valid-before-malformed, no credit for the broken leg, and a malformed-only response.
+
+## Preserve independently validated matchings when another matching has bad indexing
+
+- A provider response with multiple independent route hypotheses may contain one unusable matching with shifted/duplicate waypoint numbers or absent/wrong leg count. The validator now **rejects that entire malformed matching and blocks its GPS IDs from seam bridging**, but can still save unrelated legs after all original distance, detour, confidence and snap checks. If no valid matching remains, the previous failure/backoff still applies.
+- No additional remote requests, fallback providers, model guesses, invented connectors, score rule changes or new permissive thresholds. A regression test confirms only the valid independent section is saved, and malformed-only input still fails closed.
