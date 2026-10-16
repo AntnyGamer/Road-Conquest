@@ -1461,8 +1461,9 @@ class MapRenderer(
         carIconBitmap?.recycle()
         carIconBitmap = null
         overlayGeneration++
-        loadedOverlayData = emptyList()
-        overlayBounds.clear()
+        // The overlay collections are owned by overlayExecutor. Do not clear
+        // its HashMap on this UI thread while an in-flight polygon conversion
+        // is reading it; shutdown and the renderer's lifecycle release them.
         executor.shutdownNow()
         fogExecutor.shutdownNow()
         overlayExecutor.shutdownNow()
