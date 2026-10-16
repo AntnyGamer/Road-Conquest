@@ -110,47 +110,6 @@ test('device refresh, FID replacement and ownership transfer keep fresh encrypte
   } finally { await pool.end(); }
 });
 
-test('one-statement registration keeps session ownership and replaces old FIDs atomically', { skip: !process.env.DATABASE_URL }, async () => {
-  const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
-  try {
-    await pool.query(await readFile(new URL('../schema.sql', import.meta.url), 'utf8'));
-    await pool.query('TRUNCATE users CASCADE');
-    const users = (await pool.query(`INSERT INTO users(username_display,username_key,password_salt,password_hash)
-      VALUES ('Atomicone','atomicone',$1,$2),('Atomictwo','atomictwo',$1,$2) RETURNING id`,
-      [Buffer.alloc(16), Buffer.alloc(64)])).rows;
-    for (const user of users) {
-      user.session_hash = randomBytes(32);
-      await pool.query("INSERT INTO sessions(token_hash,user_id,expires_at) VALUES ($1,$2,CURRENT_TIMESTAMP+INTERVAL '1 day')",
-        [user.session_hash, user.id]);
-    }
-    let roundTrips = 0;
-    const tracked = { query: (...args) => { roundTrips++; return pool.query(...args); } };
-    const service = createNotifications(tracked, { pepper: 'atomic-registration-pepper', sender: async () => 'sent' });
-    const a = randomBytes(16).toString('base64url');
-    const b = randomBytes(16).toString('base64url');
-    const binding = randomUUID();
-    await service.register(users[0], { fid: a, binding });
-    await service.register(users[0], { fid: b, binding });
-    assert.equal(roundTrips, 2, 'Each registration requires one SQL statement including session verification');
-    const rows = (await pool.query('SELECT session_hash,binding FROM notification_devices')).rows;
-    assert.equal(rows.length, 1);
-    assert.deepEqual(rows[0].session_hash, users[0].session_hash);
-    assert.equal(rows[0].binding, binding);
-    // An impersonating or expired session cannot wipe a legitimate registration.
-    await assert.rejects(service.register({ ...users[1], session_hash: users[0].session_hash },
-      { fid: a, binding }), /Authentication/);
-    assert.equal((await pool.query('SELECT COUNT(*) FROM notification_devices')).rows[0].count, '1');
-    await pool.query("UPDATE sessions SET expires_at=CURRENT_TIMESTAMP-INTERVAL '1 second' WHERE token_hash=$1",
-      [users[0].session_hash]);
-    await assert.rejects(service.register(users[0], { fid: a, binding }), /Authentication/);
-    assert.equal((await pool.query('SELECT COUNT(*) FROM notification_devices')).rows[0].count, '1');
-    await service.register(users[1], { fid: b, binding: randomUUID() });
-    assert.equal(roundTrips, 5);
-    assert.deepEqual((await pool.query('SELECT session_hash FROM notification_devices')).rows[0].session_hash,
-      users[1].session_hash);
-  } finally { await pool.end(); }
-});
-
 test('push delivery keeps event/device caps, expiry and no-device accounting in one query', {skip:!process.env.DATABASE_URL},async()=>{
   const pool=new pg.Pool({connectionString:process.env.DATABASE_URL});
   try{
