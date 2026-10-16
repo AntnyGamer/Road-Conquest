@@ -577,7 +577,7 @@ class TrackingRepositoryTest {
         assertEquals(2, before.size)
         val alternate = before.single { it.segmentId.startsWith("g") }
         val primary = before.single { !it.segmentId.startsWith("g") }
-        repository.writableDatabase().execSQL(
+        repository.readableDatabase().execSQL(
             "DELETE FROM roads WHERE segment_id = ?", arrayOf(primary.segmentId)
         )
         repository.upsertRoads(listOf(MatchedRoad("Loop Road", second, 500, 600, 1.0)))
