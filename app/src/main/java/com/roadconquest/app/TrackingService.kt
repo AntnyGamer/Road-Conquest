@@ -845,11 +845,7 @@ class TrackingService : Service(), LocationListener {
                         window.markableIds,
                         System.currentTimeMillis() + MATCH_SINGLE_POINT_DEFERRAL_MS
                     )
-                    if (batchIndex + 1 < MAX_MATCH_BATCHES_PER_RUN) {
-                        Thread.sleep(MATCH_BATCH_PAUSE_MS)
-                    } else {
-                        scheduleBacklogContinuation()
-                    }
+                    continueMatchingBatch(batchIndex)
                     return@repeat
                 }
 
@@ -901,11 +897,7 @@ class TrackingService : Service(), LocationListener {
                     // The newest batch may be intrinsically unmatchable, not merely
                     // offline. Since it is now deferred, keep draining older eligible
                     // history so one bad batch cannot permanently starve the queue.
-                    if (batchIndex + 1 < MAX_MATCH_BATCHES_PER_RUN) {
-                        Thread.sleep(MATCH_BATCH_PAUSE_MS)
-                    } else {
-                        scheduleBacklogContinuation()
-                    }
+                    continueMatchingBatch(batchIndex)
                     return@repeat
                 }
 
@@ -944,11 +936,7 @@ class TrackingService : Service(), LocationListener {
                     )
                 }
 
-                if (batchIndex + 1 < MAX_MATCH_BATCHES_PER_RUN) {
-                    Thread.sleep(MATCH_BATCH_PAUSE_MS)
-                } else {
-                    scheduleBacklogContinuation()
-                }
+                continueMatchingBatch(batchIndex)
             }
         } catch (_: InterruptedException) {
             Thread.currentThread().interrupt()
@@ -959,6 +947,15 @@ class TrackingService : Service(), LocationListener {
             matchingInFlight.set(false)
             if (ready) scheduleDeferredRetry(needsRecovery)
             if (matchingRerunRequested.getAndSet(false) && ready) maybeRunMatching()
+        }
+    }
+
+    // Keep the existing inter-batch pause and final backlog scheduling in one place.
+    private fun continueMatchingBatch(batchIndex: Int) {
+        if (batchIndex + 1 < MAX_MATCH_BATCHES_PER_RUN) {
+            Thread.sleep(MATCH_BATCH_PAUSE_MS)
+        } else {
+            scheduleBacklogContinuation()
         }
     }
 
