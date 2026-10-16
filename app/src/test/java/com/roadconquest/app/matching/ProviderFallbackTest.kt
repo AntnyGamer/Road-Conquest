@@ -193,11 +193,18 @@ class ProviderFallbackTest {
         assertEquals(setOf(1L, 2L, 4L), result.matchedPointConfidences.keys)
         assertFalse(3L in result.matchedPointConfidences)
 
-        // If the one remaining stretch is also corrupt, it cannot earn road credit.
+        // Even two pieces of the SAME named road cannot bridge the rejected step.
         val root = JSONObject(json)
-        val original = root.getJSONArray("features").getJSONObject(0).getJSONObject("properties")
-            .getJSONArray("legs").getJSONObject(0).getJSONArray("steps")
-        original.put(0, "bad start").put(2, "bad end")
+        val providerSteps = root.getJSONArray("features").getJSONObject(0)
+            .getJSONObject("properties").getJSONArray("legs").getJSONObject(0)
+            .getJSONArray("steps")
+        providerSteps.getJSONObject(2).put("name", "Approach")
+        val sameRoad = requireNotNull(GeoapifyMatcher("https://maps.example").parse(root.toString(), fixes))
+        assertEquals(2, sameRoad.roads.size)
+        assertEquals(setOf(1L, 2L, 4L), sameRoad.matchedPointConfidences.keys)
+
+        // If the one remaining stretch is also corrupt, it cannot earn road credit.
+        providerSteps.put(0, "bad start").put(2, "bad end")
         assertNull(GeoapifyMatcher("https://maps.example").parse(root.toString(), fixes))
     }
 
