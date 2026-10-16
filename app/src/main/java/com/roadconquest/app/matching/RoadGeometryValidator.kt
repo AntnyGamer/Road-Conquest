@@ -38,11 +38,17 @@ class RoadGeometryValidator {
         val traces = Array(matchings.length()) { mutableListOf<Trace>() }
         val invalidMatchings = BooleanArray(matchings.length())
         val invalidPointIds = HashSet<Long>()
+        val unknownGroupInputs = HashSet<Int>()
         for (i in points.indices) {
             val tracepoint = tracepoints.optJSONObject(i) ?: continue
             val matchingIndex = tracepoint.optInt("matchings_index", -1)
-            // An unknown group cannot be safely attributed to an independent route.
-            if (matchingIndex !in traces.indices) return null
+            // An unknown group is untrusted, but cannot erase unrelated valid groups.
+            // Invalidate every matching that spans its original input position below.
+            if (matchingIndex !in traces.indices) {
+                unknownGroupInputs += i
+                invalidPointIds += points[i].id
+                continue
+            }
             val waypoint = tracepoint.optInt("waypoint_index", -1)
             val alternatives = tracepoint.optInt("alternatives_count", -1)
             val location = tracepoint.optJSONArray("location")
@@ -62,9 +68,12 @@ class RoadGeometryValidator {
             addAll(invalidPointIds)
             addAll(additionallyBlockedBridgeEndIds)
         }
-        var rejectedLeg = false
+        var rejectedLeg = unknownGroupInputs.isNotEmpty()
         for (m in traces.indices) {
             val trace = traces[m]
+            if (trace.isNotEmpty() && unknownGroupInputs.any {
+                it in trace.first().input..trace.last().input
+            }) invalidMatchings[m] = true
             if (invalidMatchings[m]) {
                 // Never skip a malformed fix and join the two sides of its matching.
                 rejectedLeg = true
