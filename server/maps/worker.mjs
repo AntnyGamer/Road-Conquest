@@ -12,14 +12,18 @@ export class MapBudget {
     this.sql.exec('CREATE TABLE IF NOT EXISTS usage (day TEXT, bucket TEXT, used INTEGER NOT NULL, PRIMARY KEY(day,bucket))');
   }
   async fetch(request) {
-    const { bucket, limit, ipLimit } = await request.json();
-    if (!/^[a-f0-9]{64}$/.test(bucket) || !Number.isInteger(limit) || limit < 1 || limit > 2400 ||
-        !Number.isInteger(ipLimit) || ipLimit < 1 || ipLimit > limit) return json({ error: 'Invalid budget' }, 400);
+    const { bucket, limit, ipLimit, costUnits = 1 } = await request.json();
+    if (!/^[a-f0-9]{64}$/.test(bucket) || !Number.isInteger(limit) || limit < 1 || limit > 9600 ||
+        !Number.isInteger(ipLimit) || ipLimit < 1 || ipLimit > limit ||
+        !Number.isInteger(costUnits) || costUnits < 1 || costUnits > 40) return json({ error: 'Invalid budget' }, 400);
     const day = new Date().toISOString().slice(0, 10);
     // No await between reads and writes: reservations cannot interleave.
     this.sql.exec('DELETE FROM usage WHERE day < ?', day);
     const used = key => [...this.sql.exec('SELECT used FROM usage WHERE day = ? AND bucket = ?', day, key)][0]?.used || 0;
-    if (used('all') >= limit || used(bucket) >= ipLimit) {
+    // Pre-upgrade counters are in whole credits. Count those reservations conservatively
+    // alongside quarter-credit units, so a mid-day deployment cannot reset the budget.
+    if (used('all') * 4 + used('units:all') + costUnits > limit ||
+        used(bucket) * 4 + used('units:' + bucket) + costUnits > ipLimit) {
       return json({ error: 'Daily map allowance exhausted' }, 429,
         { 'Retry-After': String(Math.ceil((DAY - Date.now() % DAY) / 1000)) });
     }
@@ -27,8 +31,9 @@ export class MapBudget {
     // burst as exhausted daily quota. Waiting happens in the Worker, not here.
     const slot = Math.max(Date.now(), used('next-slot'));
     if (slot - Date.now() > 10_000) return json({ error: 'Map service busy' }, 503, { 'Retry-After': '10' });
-    for (const key of ['all', bucket]) this.sql.exec(
-      'INSERT INTO usage(day,bucket,used) VALUES(?,?,1) ON CONFLICT(day,bucket) DO UPDATE SET used = used + 1', day, key);
+    for (const key of ['units:all', 'units:' + bucket]) this.sql.exec(
+      'INSERT INTO usage(day,bucket,used) VALUES(?,?,?) ON CONFLICT(day,bucket) DO UPDATE SET used = used + excluded.used',
+      day, key, costUnits);
     this.sql.exec('INSERT INTO usage(day,bucket,used) VALUES(?,?,?) ON CONFLICT(day,bucket) DO UPDATE SET used = excluded.used', day, 'next-slot', slot + 250);
     return json({ allowed: true, waitMs: Math.max(0, slot - Date.now()) });
   }
@@ -36,7 +41,7 @@ export class MapBudget {
 
 function validWaypoints(body) {
   return body?.mode === 'drive' && Array.isArray(body.waypoints) && body.waypoints.length >= 2 &&
-    body.waypoints.length <= 10 && body.waypoints.every(p =>
+    body.waypoints.length <= 100 && body.waypoints.every(p =>
       Array.isArray(p.location) && p.location.length === 2 && p.location.every(Number.isFinite) &&
       Math.abs(p.location[0]) <= 180 && Math.abs(p.location[1]) <= 90 &&
       typeof p.timestamp === 'string' && Number.isFinite(Date.parse(p.timestamp)) &&
@@ -51,7 +56,7 @@ export function createMapsGateway(fetchUpstream = fetch) {
     let target;
     let payload;
     if (url.pathname === '/v1/mapmatching' && request.method === 'POST') {
-      if (Number(request.headers.get('Content-Length')) > 16_384) return json({ error: 'Request too large' }, 413);
+      if (Number(request.headers.get('Content-Length')) > 32_768) return json({ error: 'Request too large' }, 413);
       const reader = request.body?.getReader();
       if (!reader) return json({ error: 'Missing trace' }, 400);
       let raw = '';
@@ -61,7 +66,7 @@ export function createMapsGateway(fetchUpstream = fetch) {
         const { done, value } = await reader.read();
         if (done) break;
         length += value.byteLength;
-        if (length > 16_384) { await reader.cancel(); return json({ error: 'Request too large' }, 413); }
+        if (length > 32_768) { await reader.cancel(); return json({ error: 'Request too large' }, 413); }
         raw += decoder.decode(value, { stream: true });
       }
       raw += decoder.decode();
@@ -78,6 +83,9 @@ export function createMapsGateway(fetchUpstream = fetch) {
       if (+z > 19 || +x >= 2 ** +z || +y >= 2 ** +z) return json({ error: 'Invalid tile' }, 400);
       target = new URL(`https://maps.geoapify.com/v1/tile/${style}/${z}/${x}/${y}.png`);
     }
+    // Geoapify charges one credit per 100 matched waypoints and a quarter
+    // credit per raster tile. Represent both in integer quarter-credit units.
+    const costUnits = payload ? 4 * Math.ceil(payload.waypoints.length / 100) : 1;
     const ip = request.headers.get('CF-Connecting-IP');
     if (!ip || request.headers.has('CF-Worker') || ip === '2a06:98c0:3600::103') return json({ error: 'Direct client required' }, 403);
     const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(env.GEOAPIFY_API_KEY),
@@ -88,7 +96,7 @@ export function createMapsGateway(fetchUpstream = fetch) {
       const budget = env.MAP_BUDGET.get(env.MAP_BUDGET.idFromName('geoapify-free-allowance'));
       const limit = Math.max(1, Math.min(2400, Math.floor(Number(env.DAILY_CREDIT_CAP) || 2400)));
       const permit = await budget.fetch('https://budget/reserve', { method: 'POST', body: JSON.stringify({ bucket,
-        limit, ipLimit: Math.min(600, limit) }) });
+        limit: limit * 4, ipLimit: Math.min(600, limit) * 4, costUnits }) });
       if (!permit.ok) return permit;
       const { waitMs = 0 } = await permit.json();
       if (waitMs > 0) await new Promise(resolve => setTimeout(resolve, Math.min(waitMs, 10_000)));

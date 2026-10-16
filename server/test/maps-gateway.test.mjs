@@ -34,7 +34,7 @@ test('pinned upstream receives sanitized payload and no caller credentials', asy
 });
 test('malformed, oversized and untrusted-provenance requests never reach provider', async () => {
   const worker = createMapsGateway(() => { throw new Error('must not call'); });
-  assert.equal((await worker.fetch(request('/v1/mapmatching', {}, { ...body, waypoints: Array(11).fill(body.waypoints[0]) }), env())).status, 400);
+  assert.equal((await worker.fetch(request('/v1/mapmatching', {}, { ...body, waypoints: Array(101).fill(body.waypoints[0]) }), env())).status, 400);
   assert.equal((await worker.fetch(request('/v1/mapmatching', {}, { ...body, extra: 'x'.repeat(17000) }), env())).status, 413);
   assert.equal((await worker.fetch(request('/v1/mapmatching', { 'CF-Worker': 'untrusted.example' }), env())).status, 403);
   assert.equal((await worker.fetch(request('/v1/mapmatching', { 'CF-Connecting-IP': '2a06:98c0:3600::103' }), env())).status, 403);
@@ -65,14 +65,35 @@ test('only supported and bounded raster tiles are fetched', async () => {
   assert.equal((await worker.fetch(tile('/v1/tile/osm-liberty/2/9/1.png'), env())).status, 400);
   assert.equal((await worker.fetch(tile('/v1/tile/unknown/2/1/1.png'), env())).status, 404);
 });
+test('gateway reserves quarter-credit tiles and one-credit batches, even with 100 points', async () => {
+  const costs = [];
+  const captured = () => ({ GEOAPIFY_API_KEY: 'test-key-never-real', MAP_BUDGET: {
+    idFromName: name => name, get: () => ({ fetch: async (_url, init) => {
+      costs.push(JSON.parse(init.body)); return Response.json({ allowed: true });
+    } })
+  } });
+  const worker = createMapsGateway(async (url) => url.hostname === 'api.geoapify.com'
+    ? Response.json({ type: 'FeatureCollection', features: [] })
+    : new Response(new Uint8Array([137,80,78,71]), { headers: { 'Content-Type': 'image/png' } }));
+  const tile = new Request('https://maps.example/v1/tile/osm-liberty/2/1/1.png',
+    { headers: { 'CF-Connecting-IP': '192.0.2.1' } });
+  assert.equal((await worker.fetch(tile, captured())).status, 200);
+  assert.equal((await worker.fetch(request('/v1/mapmatching', {},
+    { ...body, waypoints: Array(100).fill(body.waypoints[0]) }), captured())).status, 200);
+  assert.equal(costs[0].costUnits, 1);
+  assert.equal(costs[1].costUnits, 4);
+  assert.equal(costs[1].limit, 9600);
+  assert.equal(costs[1].ipLimit, 2400);
+});
+
 test('durable reservations persist across instances and enforce global and client caps', async () => {
   const db = new DatabaseSync(':memory:');
   const ctx = { storage: { sql: { exec(sql, ...bindings) {
     const statement = db.prepare(sql);
     return sql.startsWith('SELECT') ? statement.all(...bindings) : (statement.run(...bindings), []);
   } } } };
-  const reserve = (budget, bucket, limit = 3, ipLimit = 2) => budget.fetch(new Request('https://budget/reserve', {
-    method: 'POST', body: JSON.stringify({ bucket: bucket.repeat(64), limit, ipLimit })
+  const reserve = (budget, bucket, limit = 12, ipLimit = 8, costUnits = 4) => budget.fetch(new Request('https://budget/reserve', {
+    method: 'POST', body: JSON.stringify({ bucket: bucket.repeat(64), limit, ipLimit, costUnits })
   }));
   const first = new MapBudget(ctx);
   assert.equal((await reserve(first, 'a')).status, 200);
@@ -81,5 +102,13 @@ test('durable reservations persist across instances and enforce global and clien
   assert.equal((await reserve(restarted, 'a')).status, 429);
   assert.equal((await reserve(restarted, 'b')).status, 200);
   assert.equal((await reserve(restarted, 'c')).status, 429);
+  // The next request must be rejected if its *cost*, not just request count,
+  // would cross the remaining allowance.
+  const restarted2 = new MapBudget(ctx);
+  assert.equal((await reserve(restarted2, 'b', 20, 20, 9)).status, 429);
+  // Old whole-credit records remain debited after a mid-day upgrade.
+  const day = new Date().toISOString().slice(0, 10);
+  db.prepare('INSERT INTO usage(day,bucket,used) VALUES(?,?,?)').run(day, 'all', 1);
+  assert.equal((await reserve(restarted2, 'd', 20, 20, 1)).status, 429);
   db.close();
 });
