@@ -40,12 +40,21 @@ class KnownRoadReuseTest {
         }, points.map { it.id }.toSet()) { "road" }.isEmpty())
     }
 
+    @Test fun nearbyRoadWithOpposingTravelDirectionIsNotConfirmedLocally() {
+        val points = trace().map { it.copy(bearingDegrees = 270f) }
+        assertTrue(KnownRoadReuse.identify(points, points.map { it.id }.toSet()) { "road" }.isEmpty())
+    }
+
+    @Test fun onlyThreeNearbyFixesCannotProveAnOfflineRevisit() {
+        val points = trace(3)
+        assertTrue(KnownRoadReuse.identify(points, points.map { it.id }.toSet()) { "road" }.isEmpty())
+    }
+
     @Test fun partialKnownRoadsDoNotResolveUnrelatedSections() {
         val points = trace(8)
         val result = KnownRoadReuse.identify(points, points.map { it.id }.toSet()) {
             if (it.id < 5L) "road-a" else if (it.id > 6L) "road-b" else null
         }
-        assertEquals(listOf(1L, 2L, 3L, 4L), result.flatMap { it.pointIds })
-        assertEquals(1, result.size)
+        assertTrue(result.isEmpty()) // Fewer than five consistent fixes cannot prove the revisit.
     }
 }
