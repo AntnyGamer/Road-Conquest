@@ -32,8 +32,16 @@ internal object KnownRoadReuse {
         // Only a continuous five-fix driving window can establish a verified
         // re-drive. Skip expensive nearby-road SQLite/geometry lookups for points
         // that cannot belong to one, without loosening any acceptance criteria.
+        val eligible = BooleanArray(points.size) { i ->
+            val p = points[i]
+            p.accuracyMeters in 0.01f..5f && p.speedMps in 2.2f..40f &&
+                p.latitude.isFinite() && p.longitude.isFinite() &&
+                p.latitude in -90.0..90.0 && p.longitude in -180.0..180.0
+        }
+        if (eligible.count { it } < 5) return emptyList()
         val validEdge = BooleanArray(points.lastIndex) { i ->
-            continuous(points[i], points[i + 1]) &&
+            eligible[i] && eligible[i + 1] &&
+                continuous(points[i], points[i + 1]) &&
                 headingAgreesWithTravel(points[i], points[i + 1])
         }
         val possible = BooleanArray(points.size)
@@ -45,10 +53,7 @@ internal object KnownRoadReuse {
         }
         if (possible.none { it }) return emptyList()
         val nearby = points.mapIndexed { i, point ->
-            if (!possible[i] || point.accuracyMeters !in 0.01f..5f || point.speedMps !in 2.2f..40f ||
-                !point.latitude.isFinite() || !point.longitude.isFinite() ||
-                point.latitude !in -90.0..90.0 || point.longitude !in -180.0..180.0
-            ) null else closestKnownSegment(point)
+            if (!possible[i]) null else closestKnownSegment(point)
         }
         val accepted = sortedMapOf<Int, String>()
         // Parallel roads and junctions are too ambiguous for three-fix proximity.
