@@ -73,6 +73,31 @@ class PlaceOverlayTest {
         }
     }
 
+    @Test fun detailedTownViewportIncludesIntersectingPolygonsAndSafeFallbacks() {
+        val viewport = OverlayViewport.padded(-75.1, -74.9, 39.9, 40.1)!!
+        val nearby = OverlayViewport.ofGeometry(
+            """{"type":"Polygon","coordinates":[[
+                [-75.05,39.95],[-74.95,39.95],[-74.95,40.05],[-75.05,39.95]
+            ]]}"""
+        )
+        val distant = OverlayViewport.ofGeometry(
+            """{"type":"Polygon","coordinates":[[
+                [1.0,51.0],[1.1,51.0],[1.1,51.1],[1.0,51.0]
+            ]]}"""
+        )
+        assertTrue(viewport.intersects(nearby))
+        assertFalse(viewport.intersects(distant))
+        assertTrue(viewport.intersects(OverlayViewport.ofGeometry("invalid")))
+        // Out-of-world longitudes and dateline-crossing viewports are kept
+        // unfiltered instead of causing missing towns or broken wrap edges.
+        assertNull(OverlayViewport.padded(179.0, -179.0, 10.0, 11.0))
+        assertNull(OverlayViewport.ofGeometry(
+            """{"type":"Polygon","coordinates":[[
+                [179.0,10.0],[181.0,10.0],[181.0,11.0],[179.0,10.0]
+            ]]}"""
+        ))
+    }
+
     @Test fun providerRetryAfterAcceptsSecondsAndHttpDatesWithoutUnboundedDelay() {
         val now = java.time.Instant.parse("2026-10-15T12:00:00Z").toEpochMilli()
         assertEquals(60_000L, PlaceOverlayClient.retryAfterMillis("60", now))
@@ -192,7 +217,8 @@ class PlaceOverlayTest {
             val magic = file.inputStream().use { byteArrayOf(it.read().toByte(), it.read().toByte()) }
             assertEquals(0x1f, magic[0].toInt() and 0xff)
             assertEquals(0x8b, magic[1].toInt() and 0xff)
-            assertEquals(data.geometryJson, PlaceOverlayCache.readVerifiedForDiscovery(context, place)?.geometryJson)
+            assertEquals(JSONObject(data.geometryJson).toString(),
+                PlaceOverlayCache.readVerifiedForDiscovery(context, place)?.geometryJson)
 
             // Older installations wrote plain JSON under this exact cache name.
             val old = JSONObject()
@@ -202,7 +228,8 @@ class PlaceOverlayTest {
                 .put("population", 123).put("area_sq_km", data.areaSquareKilometers)
                 .put("geometry", JSONObject(data.geometryJson))
             file.writeText(old.toString())
-            assertEquals(data.geometryJson, PlaceOverlayCache.readVerifiedForDiscovery(context, place)?.geometryJson)
+            assertEquals(JSONObject(data.geometryJson).toString(),
+                PlaceOverlayCache.readVerifiedForDiscovery(context, place)?.geometryJson)
         } finally { PlaceOverlayCache.clear(context) }
     }
 
