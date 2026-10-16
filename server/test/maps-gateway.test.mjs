@@ -108,8 +108,10 @@ test('gateway reserves quarter-credit tiles and one-credit batches, even with 10
 test('durable reservations persist across instances and enforce global and client caps', async () => {
   const db = new DatabaseSync(':memory:');
   let counterReads = 0;
+  let pruneCalls = 0;
   const ctx = { storage: { sql: { exec(sql, ...bindings) {
     if (sql.startsWith('SELECT')) counterReads++;
+    if (sql.startsWith('DELETE FROM usage')) pruneCalls++;
     const statement = db.prepare(sql);
     return sql.startsWith('SELECT') ? statement.all(...bindings) : (statement.run(...bindings), []);
   } } } };
@@ -120,11 +122,13 @@ test('durable reservations persist across instances and enforce global and clien
   assert.equal((await reserve(first, 'a')).status, 200);
   assert.equal((await reserve(first, 'a')).status, 200);
   assert.equal(counterReads, 2, 'Each reservation should need only one budget read');
+  assert.equal(pruneCalls, 1, 'Expired-day cleanup runs only once per active Durable Object');
   const restarted = new MapBudget(ctx);
   assert.equal((await reserve(restarted, 'a')).status, 429);
   assert.equal((await reserve(restarted, 'b')).status, 200);
   assert.equal((await reserve(restarted, 'c')).status, 429);
   assert.equal(counterReads, 5, 'Denied requests also use one read and make no reservation');
+  assert.equal(pruneCalls, 2, 'A restarted Durable Object safely rechecks expired rows once');
   // The next request must be rejected if its *cost*, not just request count,
   // would cross the remaining allowance.
   const restarted2 = new MapBudget(ctx);

@@ -105,6 +105,10 @@ class GeoapifyMatcher(
         val stepObjects = Array(steps.length()) { steps.getJSONObject(it) }
         val stepStarts = IntArray(stepObjects.size)
         val stepEnds = IntArray(stepObjects.size)
+        val stepNames = Array(stepObjects.size) { stepObjects[it].optString("name") }
+        val stepCountable = BooleanArray(stepObjects.size) {
+            stepObjects[it].optString("road_class") in COUNTABLE_ROAD_CLASSES
+        }
         for (i in stepObjects.indices) {
             val from = stepObjects[i].getInt("from_index")
             val to = stepObjects[i].getInt("to_index")
@@ -157,12 +161,10 @@ class GeoapifyMatcher(
                     val distance = (0 until coordinates.length() - 1).sumOf {
                         meters(coordinates.getJSONArray(it), coordinates.getJSONArray(it + 1))
                     }
-                    val step = stepObjects[s]
-                    // Preserve the same classification without allocating a new Set for each step.
-                    val drivableRoad = step.optString("road_class") in COUNTABLE_ROAD_CLASSES
-                    pieces.put(JSONObject().put("name", step.optString("name")).put("distance", distance)
+                    // Names and road classes were validated once for every route step.
+                    pieces.put(JSONObject().put("name", stepNames[s]).put("distance", distance)
                         .put("geometry", JSONObject().put("type", "LineString").put("coordinates", coordinates))
-                        .put("maneuver", JSONObject().put("type", if (drivableRoad) "turn" else "ramp")))
+                        .put("maneuver", JSONObject().put("type", if (stepCountable[s]) "turn" else "ramp")))
                 }
                 if (pieces.length() == 0) { complete = false; break }
                 normalizedLegs.put(JSONObject().put("steps", pieces))

@@ -9,6 +9,7 @@ const json = (body, status = 200, extra = {}) => Response.json(body, {
 export class MapBudget {
   constructor(ctx) {
     this.sql = ctx.storage.sql;
+    this.lastPrunedDay = null;
     this.sql.exec('CREATE TABLE IF NOT EXISTS usage (day TEXT, bucket TEXT, used INTEGER NOT NULL, PRIMARY KEY(day,bucket))');
   }
   async fetch(request) {
@@ -19,7 +20,12 @@ export class MapBudget {
         ![250, 1050].includes(spacingMs)) return json({ error: 'Invalid budget' }, 400);
     const day = new Date().toISOString().slice(0, 10);
     // No await between reads and writes: reservations cannot interleave.
-    this.sql.exec('DELETE FROM usage WHERE day < ?', day);
+    // Each Durable Object is the sole writer of its budget. Purge expired days
+    // once per UTC date per running object instead of issuing a DELETE for every request.
+    if (this.lastPrunedDay !== day) {
+      this.sql.exec('DELETE FROM usage WHERE day < ?', day);
+      this.lastPrunedDay = day;
+    }
     // Read the same five budget counters in one SQL statement. Quota decisions,
     // pre-upgrade accounting and persistent write ordering stay unchanged.
     const counters = new Map([...this.sql.exec(

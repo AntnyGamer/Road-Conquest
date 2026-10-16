@@ -29,8 +29,8 @@ HTTP 429, 401/403, 5xx, timeouts and connection failures move to an eligible bac
 
 ## Further no-regression optimizations
 
-- Cloudflare's Durable Object now reads all five daily budget counters in one SQLite SELECT rather than five separate queries per request. Accounting, free-plan caps, pacing and write ordering are preserved, including old whole-credit reservations. The server regression test verifies that allowed and rejected reservations each need only one read.
-- The already strict five-fix local re-drive check skips repository summary access for shorter traces. Geoapify's segment projection reuses waypoint coordinates rather than repeatedly decoding the same JSON fields. The geoBoundaries ISO-country validation reuses its compiled regex; neither changes acceptance criteria or network usage.
+- Cloudflare's Durable Object now reads all five daily budget counters in one SQLite SELECT rather than five separate queries per request. It also purges expired-day rows once per day per running object, rather than on every request; a restarted object purges on its first request. Accounting, free-plan caps, pacing and write ordering are preserved, including old whole-credit reservations. The server regression test verifies that allowed and rejected reservations each need only one read.
+- The already strict five-fix local re-drive check skips repository summary access for shorter traces. Geoapify's segment projection reuses waypoint coordinates, step names and road classes rather than repeatedly decoding the same JSON fields. The geoBoundaries ISO-country validation reuses its compiled regex; neither changes acceptance criteria or network usage.
 
 ## Gateway deployment and spending protection
 
