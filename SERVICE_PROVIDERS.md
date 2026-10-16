@@ -27,6 +27,11 @@ Geoapify provides no externally reported confidence probability or explicit ramp
 
 HTTP 429, 401/403, 5xx, timeouts and connection failures move to an eligible backup. Retry-After seconds and HTTP dates are respected, up to a day. Providers return in priority order when their cooldown expires. A provider's exhausted budget is never bypassed by changing keys, accounts or forwarding headers.
 
+## Additional allocation and boundary-cache optimizations
+
+- Cached administrative boundary polygons now stream gzip bytes straight into the existing atomic on-disk cache file, instead of keeping multiple copies of the full JSON and compressed data in heap memory. The gzip format, atomic rollback, decoded-size limit, historical plain-JSON compatibility and cache eviction semantics are unchanged. A large-polygon cache round-trip test was added.
+- geoBoundaries backup parsing scans candidate polygons once and keeps at most one match, instead of constructing an intermediate list of all features and matches. A second valid match is still treated as ambiguous and rejected. This only affects local parsing; request frequency and matching criteria are unchanged.
+
 ## Further no-regression optimizations
 
 - Cloudflare's Durable Object now reads all five daily budget counters in one SQLite SELECT rather than five separate queries per request. It also purges expired-day rows once per day per running object, rather than on every request; a restarted object purges on its first request. The shared and per-client counters are now updated together with one atomic SQLite INSERT instead of two separate statements; the pacing record remains its own write. Accounting, free-plan caps and pacing are preserved, including old whole-credit reservations. The server regression test verifies that allowed and rejected reservations each need only one read.

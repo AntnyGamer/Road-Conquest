@@ -199,6 +199,31 @@ class PlaceOverlayTest {
         }
     }
 
+    @Test fun largeBoundaryCacheStreamsGzipAndRoundTripsAllCoordinates() {
+        val context = org.robolectric.RuntimeEnvironment.getApplication()
+        val place = PlaceDiscovery(
+            PlaceKind.TOWN, "gb|large-cache-stream-test", "Large Test Town",
+            visitedAt = 1L, latitude = 40.0, longitude = -74.0
+        )
+        val coordinates = org.json.JSONArray()
+        for (i in 0..3_000) coordinates.put(org.json.JSONArray()
+            .put(-74.0 + (i % 17) * 0.00001).put(40.0 + i * 0.000001))
+        val ring = org.json.JSONArray().put(coordinates)
+        val geometry = JSONObject().put("type", "Polygon")
+            .put("coordinates", ring).toString()
+        val outline = PlaceOverlayData(place.key, place.displayName, place.kind,
+            null, 1.0, geometry)
+        PlaceOverlayCache.clear(context)
+        try {
+            assertTrue(PlaceOverlayCache.write(context, place, outline, verifiedForDiscovery = true))
+            val cacheDir = File(context.filesDir, "place-overlays-v5-world-admin")
+            val diskFile = cacheDir.listFiles()!!.single { it.name.endsWith(".json") }
+            assertEquals(0x1f, diskFile.inputStream().use { it.read() })
+            assertEquals(JSONObject(geometry).toString(),
+                PlaceOverlayCache.readVerifiedForDiscovery(context, place)?.geometryJson)
+        } finally { PlaceOverlayCache.clear(context) }
+    }
+
     @Test fun boundaryCacheIsCompressedAndStillReadsPreviousPlainJson() {
         val context = RuntimeEnvironment.getApplication()
         val place = PlaceDiscovery(

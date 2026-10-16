@@ -53,19 +53,23 @@ class GeoBoundariesClient(private val loadJson: (String, Int) -> JSONObject = ::
         internal fun parse(place: PlaceDiscovery, data: JSONObject, containment: Boolean): PlaceOverlayData? {
             if (place.kind == PlaceKind.TOWN || data.optString("type") != "FeatureCollection") return null
             val features = data.getJSONArray("features")
-            val matches = (0 until features.length()).map { features.getJSONObject(it) }.filter { feature ->
+            val expectedName = place.displayName.trim()
+            var geometry: JSONObject? = null
+            for (i in 0 until features.length()) {
+                val feature = features.getJSONObject(i)
                 val name = feature.getJSONObject("properties").optString("shapeName").trim()
-                (place.kind == PlaceKind.COUNTRY || name.equals(place.displayName.trim(), ignoreCase = true)) &&
-                    feature.optJSONObject("geometry")?.let { geometry ->
-                        geometry.optString("type") in setOf("Polygon", "MultiPolygon") &&
-                            (!containment || PlaceGeometry.contains(geometry, place.latitude, place.longitude))
-                    } == true
+                if (place.kind != PlaceKind.COUNTRY && !name.equals(expectedName, ignoreCase = true)) continue
+                val candidate = feature.optJSONObject("geometry") ?: continue
+                if (candidate.optString("type") !in setOf("Polygon", "MultiPolygon") ||
+                    (containment && !PlaceGeometry.contains(candidate, place.latitude, place.longitude))
+                ) continue
+                if (geometry != null) return null // Still reject ambiguous multiple matches.
+                geometry = candidate
             }
-            if (matches.size != 1) return null
-            val geometry = matches.single().getJSONObject("geometry")
-            val area = PlaceOverlayClient.areaSquareKilometers(geometry)
+            val selected = geometry ?: return null
+            val area = PlaceOverlayClient.areaSquareKilometers(selected)
             if (!area.isFinite() || area <= 0) return null
-            return PlaceOverlayData(place.key, place.displayName, place.kind, null, area, geometry.toString())
+            return PlaceOverlayData(place.key, place.displayName, place.kind, null, area, selected.toString())
         }
         private fun readJson(raw: String, limit: Int): JSONObject {
             var url = raw

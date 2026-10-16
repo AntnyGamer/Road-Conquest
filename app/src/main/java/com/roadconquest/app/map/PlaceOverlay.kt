@@ -9,7 +9,6 @@ import com.roadconquest.app.data.PlaceDiscovery
 import com.roadconquest.app.data.PlaceKind
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
 import java.io.Reader
@@ -127,14 +126,18 @@ object PlaceOverlayCache {
         initialTrim(context)
         val existed = target.isFile
         val oldBytes = if (existed) target.length() else 0L
-        val bytes = json.toString().toByteArray(Charsets.UTF_8)
-        val buffer = ByteArrayOutputStream()
-        GZIPOutputStream(buffer).use { it.write(bytes) }
         val file = AtomicFile(target)
         var stream: java.io.FileOutputStream? = null
         return try {
             stream = file.startWrite()
-            stream.write(buffer.toByteArray())
+            // Stream gzip into the existing crash-safe AtomicFile rather than
+            // allocating separate full JSON, compressed and copied byte arrays.
+            // finish() writes the gzip trailer without closing AtomicFile's stream.
+            val gzip = GZIPOutputStream(stream)
+            val writer = gzip.bufferedWriter(Charsets.UTF_8)
+            writer.write(json.toString())
+            writer.flush()
+            gzip.finish()
             file.finishWrite(stream)
             cacheBytes += target.length() - oldBytes
             if (!existed) cacheFiles++
