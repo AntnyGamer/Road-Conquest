@@ -41,8 +41,7 @@ internal object KnownRoadReuse {
         if (eligible.count { it } < 5) return emptyList()
         val validEdge = BooleanArray(points.lastIndex) { i ->
             eligible[i] && eligible[i + 1] &&
-                continuous(points[i], points[i + 1]) &&
-                headingAgreesWithTravel(points[i], points[i + 1])
+                continuousAndHeadingAgrees(points[i], points[i + 1])
         }
         val possible = BooleanArray(points.size)
         for (start in 0..points.size - 5) {
@@ -95,25 +94,18 @@ internal object KnownRoadReuse {
         return visits
     }
 
-    private fun headingAgreesWithTravel(a: TrackPoint, b: TrackPoint): Boolean {
-        val lonDelta = ((b.longitude - a.longitude + 540.0) % 360.0) - 180.0
-        val east = Math.toRadians(lonDelta) * cos(Math.toRadians((a.latitude + b.latitude) / 2.0))
+    private fun continuousAndHeadingAgrees(a: TrackPoint, b: TrackPoint): Boolean {
+        val elapsed = b.timestampMillis - a.timestampMillis
+        if (b.id != a.id + 1 || elapsed !in 1..12_000L) return false
+        val longitude = ((b.longitude - a.longitude + 540.0) % 360.0) - 180.0
+        val east = Math.toRadians(longitude) * cos(Math.toRadians((a.latitude + b.latitude) / 2.0))
         val north = Math.toRadians(b.latitude - a.latitude)
+        val distance = hypot(east * 6_371_008.8, north * 6_371_008.8)
+        if (distance !in 2.0..160.0 || distance / (elapsed / 1000.0) > 40.0) return false
         val course = (Math.toDegrees(kotlin.math.atan2(east, north)) + 360.0) % 360.0
         val bearing = a.bearingDegrees.toDouble()
         if (!bearing.isFinite() || bearing !in 0.0..360.0) return false
         val delta = kotlin.math.abs(((bearing - course + 540.0) % 360.0) - 180.0)
         return delta <= 25.0
-    }
-
-    private fun continuous(a: TrackPoint, b: TrackPoint): Boolean {
-        val elapsed = b.timestampMillis - a.timestampMillis
-        if (b.id != a.id + 1 || elapsed !in 1..12_000L) return false
-        val longitude = ((b.longitude - a.longitude + 540.0) % 360.0) - 180.0
-        val dx = Math.toRadians(longitude) *
-            cos(Math.toRadians((a.latitude + b.latitude) / 2.0)) * 6_371_008.8
-        val dy = Math.toRadians(b.latitude - a.latitude) * 6_371_008.8
-        val distance = hypot(dx, dy)
-        return distance in 2.0..160.0 && distance / (elapsed / 1000.0) <= 40.0
     }
 }

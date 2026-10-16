@@ -40,6 +40,22 @@ class KnownRoadReuseTest {
         }, points.map { it.id }.toSet()) { "road" }.isEmpty())
     }
 
+    @Test fun localRevisitStillEnforcesContinuitySpeedAndHeadingTogether() {
+        val valid = trace()
+        val ids = valid.map { it.id }.toSet()
+        fun accepted(points: List<TrackPoint>) =
+            KnownRoadReuse.identify(points, ids) { "known" }.isNotEmpty()
+        assertTrue(accepted(valid))
+        assertFalse(accepted(valid.mapIndexed { i, p ->
+            if (i == 3) p.copy(timestampMillis = p.timestampMillis + 12_001L) else p
+        }))
+        assertFalse(accepted(valid.map { it.copy(bearingDegrees = 270f) }))
+        assertFalse(accepted(valid.map { it.copy(speedMps = 41f) }))
+        assertFalse(accepted(valid.mapIndexed { i, p ->
+            if (i == 3) p.copy(latitude = p.latitude + 0.01) else p
+        }))
+    }
+
     @Test fun nearbyRoadWithOpposingTravelDirectionIsNotConfirmedLocally() {
         val points = trace().map { it.copy(bearingDegrees = 270f) }
         assertTrue(KnownRoadReuse.identify(points, points.map { it.id }.toSet()) { "road" }.isEmpty())

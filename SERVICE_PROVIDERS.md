@@ -41,6 +41,10 @@ HTTP 429, 401/403, 5xx, timeouts and connection failures move to an eligible bac
 - The same week-scoped road and town counts now run as two independently optimized SQL scalar subqueries within one SQLite statement per week instead of opening two cursors. Both original filters are unchanged.
 - Up to four earned challenge rewards are inserted with one atomic `INSERT OR IGNORE` statement rather than four individual writes. Existing reward keys, payout amounts, timestamp, idempotence and previous-week grace are preserved. The challenge tests now verify that repeated refreshes do not create extra weekly reward rows.
 
+## Combined local GPS continuity and heading check
+
+- Previously verified road revisits now compute east/north displacement once per GPS edge, using it for both distance/speed continuity and heading agreement. The precise five-point eligibility, distance, time-gap, speed and 25° direction limits remain unchanged, and saved-road SQLite lookups still happen only after prequalification. Adds a regression test for speed, heading, time gaps and jumps.
+
 ## Polygon-area and Census distance calculation improvements
 
 - The spherical GeoJSON area estimator now decodes each shared ring vertex, converts it to radians and computes its latitude sine once instead of twice per adjacent edge. The original edge accumulation order and area/hole formula remain unchanged; a test verifies reversal invariance and hole subtraction.
