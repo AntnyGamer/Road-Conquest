@@ -303,6 +303,11 @@ class ProviderFallbackTest {
         val salvaged = requireNotNull(matcher.parse(root.toString(), fixes))
         assertEquals(listOf("Approach"), salvaged.roads.map { it.name })
         assertEquals(setOf(1L, 2L), salvaged.matchedPointConfidences.keys)
+
+        // Unpaired route lines/legs have no reliable geometry association.
+        // Never guess which road the unmatched leg belongs to.
+        lines.remove(1)
+        assertNull(matcher.parse(root.toString(), fixes))
     }
 
     @Test fun namedPrimaryAndServiceOtherRoadsCountButMotorwayLinkRampsDoNot() {
