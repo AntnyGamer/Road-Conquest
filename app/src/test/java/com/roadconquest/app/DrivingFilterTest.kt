@@ -82,6 +82,13 @@ class DrivingFilterTest {
         assertFalse(service.skippedFixCarriesGeometry(a, straight, end))
     }
 
+    @Test fun backupCadenceScalesWithMatchingCapacity() {
+        val start = 1_000_000L
+        assertEquals(52_500L, TrackingService.remainingRemoteMatchingDelayMs(start, start, 25))
+        assertEquals(0L, TrackingService.remainingRemoteMatchingDelayMs(start + 52_500L, start, 25))
+        assertEquals(420_000L, TrackingService.remainingRemoteMatchingDelayMs(start, start, 200))
+    }
+
     @Test fun forcedRemoteRetriesRespectSevenMinuteCap() {
         val time = 1_000_000L
         assertEquals(0L, TrackingService.remainingRemoteMatchingDelayMs(time, 0L))

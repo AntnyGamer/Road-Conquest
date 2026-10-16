@@ -43,7 +43,7 @@ export class MapBudget {
 
 function validWaypoints(body) {
   return body?.mode === 'drive' && Array.isArray(body.waypoints) && body.waypoints.length >= 2 &&
-    body.waypoints.length <= 100 && body.waypoints.every(p =>
+    body.waypoints.length <= 200 && body.waypoints.every(p =>
       Array.isArray(p.location) && p.location.length === 2 && p.location.every(Number.isFinite) &&
       Math.abs(p.location[0]) <= 180 && Math.abs(p.location[1]) <= 90 &&
       typeof p.timestamp === 'string' && Number.isFinite(Date.parse(p.timestamp)) &&

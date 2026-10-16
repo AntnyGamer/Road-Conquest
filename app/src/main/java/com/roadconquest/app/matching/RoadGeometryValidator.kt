@@ -629,7 +629,7 @@ class RoadGeometryValidator {
 
     companion object {
         // The public provider demo rejects larger traces with TooBig (verified 2026-10-03).
-        const val MAX_MATCH_POINTS = 100
+        const val MAX_MATCH_POINTS = 200
         // Strict in-memory cap: at most four compact, successful provider responses for
         // one minute. Changed coordinates/times/radii/bearings always bypass cache.
         private const val RESPONSE_CACHE_TTL_MS = 60_000L

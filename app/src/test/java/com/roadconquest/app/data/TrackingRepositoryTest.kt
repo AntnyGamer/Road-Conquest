@@ -690,6 +690,21 @@ class TrackingRepositoryTest {
         assertEquals(2, repository.estimatedRoadVisitCount(road))
     }
 
+    @Test fun flushedCompressedEndpointRestoresMileageWithoutDuplicateDistance() {
+        fun fix(lon: Double, time: Long) = Location("gps").apply {
+            latitude = 40.0; longitude = lon; accuracy = 3f; speed = 8f; bearing = 90f
+            this.time = time
+        }
+        val a = fix(-74.0, 1_000_000L)
+        val skipped = fix(-73.9999, 1_003_000L)
+        repository.insertLocation(a)
+        repository.recordSkippedDrivingFix(skipped)
+        repository.insertLocation(skipped)
+        assertEquals(2L, repository.getSummary().trackPointCount)
+        assertEquals(TravelDistance.between(a.latitude, a.longitude, a.time,
+            skipped.latitude, skipped.longitude, skipped.time), repository.getSummary().distanceMeters, 0.5)
+    }
+
     @Test fun compressedGpsIsRetainedLocallyAndRestoresMeasuredTripDistance() {
         fun fix(lat: Double, lon: Double, time: Long) = Location("gps").apply {
             latitude = lat; longitude = lon; accuracy = 3f; speed = 8f; bearing = 90f
