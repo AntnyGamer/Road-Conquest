@@ -603,9 +603,13 @@ class RoadGeometryValidator {
     }
 
     private fun lineLengthMeters(coordinates: JSONArray): Double {
+        if (coordinates.length() < 2) return 0.0
         var meters = 0.0
-        for (i in 0 until coordinates.length() - 1) {
-            meters += coordinateDistanceMeters(coordinates.getJSONArray(i), coordinates.getJSONArray(i + 1))
+        var previous = coordinates.getJSONArray(0)
+        for (i in 1 until coordinates.length()) {
+            val current = coordinates.getJSONArray(i)
+            meters += coordinateDistanceMeters(previous, current)
+            previous = current
         }
         return meters
     }

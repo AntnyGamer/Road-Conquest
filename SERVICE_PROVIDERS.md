@@ -32,6 +32,7 @@ HTTP 429, 401/403, 5xx, timeouts and connection failures move to an eligible bac
 - Trip replay now creates `SavedTripPoint` objects only for samples actually displayed and the true endpoint, rather than for every raw GPS fix read from SQLite. It retains timestamp gap detection even across dropped samples, the original sampling stride and equality/deduplication behavior.
 - Town-overlap partitioning caches each immutable JTS polygon's bounding envelope once per render. Every overlap, ordering and clipping test still uses the exact same geometry.
 - Town polygon rings already supplied closed are decoded directly into JTS coordinate arrays, avoiding an extra mutable list and array conversion. Unclosed rings are still closed identically; a regression test compares both representations.
+- Remote Geoapify and normalized OSRM matching parsers now reuse each decoded polyline point as the preceding vertex of the next segment. This avoids requesting the same JSON array twice per segment; distance formulas, segment ordering and accumulated sums stay unchanged.
 
 ## Additional allocation and boundary-cache optimizations
 

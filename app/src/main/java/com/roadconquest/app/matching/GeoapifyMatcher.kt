@@ -158,8 +158,12 @@ class GeoapifyMatcher(
                         if (v.toDouble() < to) coordinates.put(line.getJSONArray(v))
                     }
                     coordinates.put(at(line, to))
-                    val distance = (0 until coordinates.length() - 1).sumOf {
-                        meters(coordinates.getJSONArray(it), coordinates.getJSONArray(it + 1))
+                    var distance = 0.0
+                    var previousCoordinate = coordinates.getJSONArray(0)
+                    for (vertex in 1 until coordinates.length()) {
+                        val nextCoordinate = coordinates.getJSONArray(vertex)
+                        distance += meters(previousCoordinate, nextCoordinate)
+                        previousCoordinate = nextCoordinate
                     }
                     // Names and road classes were validated once for every route step.
                     pieces.put(JSONObject().put("name", stepNames[s]).put("distance", distance)
