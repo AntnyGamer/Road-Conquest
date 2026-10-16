@@ -118,7 +118,7 @@ class LocationIqMatcherTest {
             server.enqueue(MockResponse().setBody("""{"type":"FeatureCollection","features":[]}"""))
             assertTrue(requireNotNull(matcher.match(points)).roads.isEmpty())
             assertEquals("/v1/mapmatching", server.takeRequest().path)
-            assertEquals(100, matcher.maxPoints)
+            assertEquals(200, matcher.maxPoints)
             assertEquals(3, server.requestCount)
         }
     }
