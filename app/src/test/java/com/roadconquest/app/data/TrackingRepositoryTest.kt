@@ -684,6 +684,24 @@ class TrackingRepositoryTest {
         assertNull(repository.findRoadNear(40.01, -74.0005, 30.0))
     }
 
+    @Test fun preciseRepeatDriveIsMatchedOnDeviceWithoutUnlockingNewRoads() {
+        repository.upsertRoads(listOf(MatchedRoad(
+            "Previously driven", "[[-74,40],[-73.999,40]]", 1_000_000L, 1_010_000L, 0.99)))
+        val ids = (0 until 6).map { index ->
+            point(2_000_000L + index * 6_000L, 40.0, -74.0 + index * 0.0001, 8f)
+        }
+        val window = repository.loadMatchingWindow(100)
+        val reused = com.roadconquest.app.matching.KnownRoadReuse.find(
+            repository, window.points, window.markableIds)
+        assertEquals(6, repository.completeKnownRoadVisits(reused))
+        assertEquals(ids, reused.flatMap { it.pointIds })
+        assertEquals(1L, repository.getSummary().roadSegmentCount)
+        assertTrue(repository.loadMatchingWindow(100).points.isEmpty())
+        val known = repository.getRoadsInBounds(41.0, -73.0, 39.0, -75.0).single()
+        assertEquals(2_030_000L, known.lastDrivenAt)
+        assertTrue(known.timesDriven >= 2)
+    }
+
     @Test fun backwardWallClockChangeBreaksTheMatchingWindow() {
         point(2_000_000)
         point(2_003_000)
