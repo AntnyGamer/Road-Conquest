@@ -26,9 +26,18 @@ for (const applySchema of ['0', '1']) test(`cold liveness and public pages need 
       }
       const head=await api.fetch(new Request('https://offline.example/health/live',{method:'HEAD'}));
       assert.equal(head.status,200);assert.equal(await head.text(),'');
+      let bodyReads=0;
+      for (const [type,status] of [['application/json',413],['text/plain',415]]) {
+        const body=new ReadableStream({pull(){bodyReads++;throw Error('Rejected request body must not be read');}}, {highWaterMark:0});
+        const rejected=await api.fetch(new Request('https://offline.example/v1/signup',{
+          method:'POST',headers:{'Content-Type':type,'Content-Length':'32769'},body,duplex:'half'
+        }));
+        assert.equal(rejected.status,status);await rejected.text();await body.cancel();
+      }
+      assert.equal(bodyReads,0);
       assert.equal(queries,0);assert.equal(pool.totalCount,0);
-      console.log(JSON.stringify({publicRequests:8,queries,connections:pool.totalCount}));
+      console.log(JSON.stringify({publicRequests:8,rejectedBodies:2,bodyReads,queries,connections:pool.totalCount}));
     } finally {await pool.end();}
   `], { env: environment, timeout: 15000 });
-  assert.deepEqual(JSON.parse(stdout.trim()), { publicRequests: 8, queries: 0, connections: 0 });
+  assert.deepEqual(JSON.parse(stdout.trim()), { publicRequests: 8, rejectedBodies:2, bodyReads:0, queries: 0, connections: 0 });
 });

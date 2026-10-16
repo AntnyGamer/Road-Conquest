@@ -1,17 +1,19 @@
 import { normalizeUsername } from "./security.mjs";
 import { EvidenceError } from "./scoring.mjs";
 
+const FRIEND_STATUS = ["accepted", "outgoing", "incoming"];
+
 export function createFriends(pool, notifyRequest = async () => {}) {
   return {
     async list(user) {
       const result = await pool.query(
-        `SELECT u.username_display AS username, f.accepted, f.requested_by = $1 AS outgoing
+        `SELECT u.username_display AS username,
+           CASE WHEN f.accepted THEN 0 WHEN f.requested_by=$1 THEN 1 ELSE 2 END AS status
          FROM friendships f JOIN users u ON u.id = CASE WHEN f.user_low = $1 THEN f.user_high ELSE f.user_low END
          WHERE f.user_low = $1 OR f.user_high = $1
          ORDER BY f.accepted DESC, u.username_key`, [user.id]
       );
-      return { friends: result.rows.map(r => ({ username: r.username,
-        status: r.accepted ? "accepted" : r.outgoing ? "outgoing" : "incoming" })) };
+      return { friends: result.rows.map(r => ({ username: r.username, status: FRIEND_STATUS[r.status] })) };
     },
     async change(user, username, action) {
       const normalized = normalizeUsername(username);

@@ -207,3 +207,56 @@ App request scheduling, known-road reuse, provider cooldowns, boundary caches,
 ads, Firebase consent and weekly reminder scheduling were reviewed without
 changing their behavior. No Android source update, schema migration, paid plan,
 weaker hashing, cached authorization or increased provider allowance is added.
+
+## Account and response cleanup
+
+A fourth pass compares with `8360092`:
+
+- Friend listing returns one private integer status instead of two booleans.
+  The Function maps it to the same accepted/outgoing/incoming JSON strings.
+  Accepted priority, either user-ID orientation and username ordering are tested;
+  no pagination, cap, privacy rule or result cache changes.
+- An exact current-username save returns its profile from the existing locked
+  password lookup after successful password verification and the same throttle.
+  It skips only the redundant `UPDATE`, preserving the user row version. A
+  conditional JSON column is populated only for an exact case-sensitive match;
+  real renames use the original update, uniqueness checks and response. Case-only
+  changes remain real renames. Row locking still writes WAL.
+- Reauthentication no longer reads the unused username key. Deletion still
+  reads it for the existing throttle-key cleanup. Rename lookup includes only
+  the conditional profile needed to skip an unchanged write.
+- `readJson` rejects a valid declared length above 32 KiB before reading the
+  stream. Content-Type retains precedence; chunked/missing/understated lengths
+  remain protected by the existing streaming byte guard. The limit is unchanged.
+
+| Fourth-pass local measurement | Before | After |
+|---|---:|---:|
+| 200 empty friend lists, database response bytes | 23,600 | 17,800 |
+| 200 ten-friend lists, database response bytes | 80,200 | 64,400 |
+| 200 fifty-friend lists, database response bytes | 312,200 | 256,400 |
+| 200 reauthentication lookups, database response bytes | 65,000 | 56,000 |
+| 500 unchanged-name transactions, SQL statements | 2,000 | 1,500 |
+| Same transactions, database response bytes | 248,000 | 202,000 |
+| Median WAL bytes for those transactions, three rounds | 86,728 | 48,120 |
+| 100 case-only rename transactions, database response bytes | 49,600 | 48,300 |
+| Declared 64-KiB rejected body, bytes read by `readJson` | 65,536 | 0 |
+
+Friend protocol data fell about 18–25%; reauthentication lookup data about 14%.
+Unchanged-name transactions saved 25% of statements, 19% of result data and 45%
+of WAL. Actual renames retain four transaction statements and comparable WAL.
+In the standalone sample, case-only rename work was about 0.03 ms/call slower;
+unchanged-name work was faster. Timing is not a production latency promise.
+
+Figures use captured real SQL on isolated synthetic PostgreSQL, established TCP
+connections, and three interleaved mutation rounds. Protocol bytes exclude TLS,
+HTTP and handshakes. Rename measurements include the transaction and locked
+password lookup, but exclude HTTP, hashing and throttle costs; those still run
+unchanged in the API. The body experiment called the real Fetch adapter with
+controlled local streams. Both versions still rejected missing/understated-length
+oversized streams with 413 and zero SQL. No player account was renamed or queried.
+
+All **72 server tests passed**, with zero failures/skips. New coverage checks
+friend status/order equivalence, unchanged row versions, case-only renames,
+content-type precedence and zero stream reads/SQL on cold oversized requests,
+with schema auto-apply both enabled and disabled. No Android source, Worker,
+schema, service plan, provider quota or credential change is required.

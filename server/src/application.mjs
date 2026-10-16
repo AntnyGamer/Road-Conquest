@@ -172,6 +172,12 @@ async function readJson(req) {
   if (typeof contentType !== "string" || !contentType.toLowerCase().startsWith("application/json")) {
     throw Object.assign(new Error("application/json required"), { status: 415 });
   }
+  // A valid announced length can reject an oversized body before consuming its
+  // stream. Keep the byte-count guard below for chunked/missing/false headers.
+  const contentLength = req.headers["content-length"];
+  if (typeof contentLength === "string" && /^\d+$/u.test(contentLength) && Number(contentLength) > JSON_LIMIT) {
+    throw Object.assign(new Error("request too large"), { status: 413 });
+  }
 
   let size = 0;
   const chunks = [];
@@ -444,8 +450,11 @@ async function handle(req, res) {
     try {
       await client.query("BEGIN");
       const result = await client.query(
-        "SELECT password_salt, password_hash, username_key FROM users WHERE id = $1 FOR UPDATE",
-        [user.id]
+        `SELECT password_salt,password_hash${renameAccount ? `,
+          CASE WHEN username_display COLLATE "C"=$2 THEN
+            json_build_object('username',username_display,'leaderboard_visible',leaderboard_visible)
+          END AS unchanged` : deleteAccount ? ',username_key' : ''} FROM users WHERE id=$1 FOR UPDATE`,
+        renameAccount ? [user.id,username.display] : [user.id]
       );
       const saved = result.rows[0];
       if (!saved) {
@@ -461,6 +470,12 @@ async function handle(req, res) {
         return send(res, 200, { ok: true });
       }
       if (renameAccount) {
+        // The user lock protects this profile snapshot. Still verify the current
+        // password and consume the same rate budget before an unchanged save.
+        if (saved.unchanged) {
+          await client.query("COMMIT");
+          return send(res, 200, saved.unchanged);
+        }
         const renamed = await client.query(
           "UPDATE users SET username_display = $1, username_key = $2 WHERE id = $3 RETURNING username_display, leaderboard_visible",
           [username.display, username.key, user.id]

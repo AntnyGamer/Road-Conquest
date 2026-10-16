@@ -5,6 +5,25 @@ import { readFile } from "node:fs/promises";
 import { createFriends } from "../src/friends.mjs";
 import { createCompetition } from "../src/competition.mjs";
 
+test("friend status compaction preserves accepted priority, both ID orientations and username order",{skip:!process.env.DATABASE_URL},async()=>{
+  const pool=new pg.Pool({connectionString:process.env.DATABASE_URL});
+  try{
+    await pool.query(await readFile(new URL('../schema.sql',import.meta.url),'utf8'));
+    await pool.query('TRUNCATE users CASCADE');
+    const users=(await pool.query(`INSERT INTO users(username_display,username_key,password_salt,password_hash)
+      SELECT 'Status_'||g,'status_'||g,$1,$2 FROM generate_series(0,5) g ORDER BY g RETURNING id`,[Buffer.alloc(16),Buffer.alloc(64)])).rows;
+    const owner=users[2];
+    for(const [low,high,by,accepted] of [[0,2,0,false],[1,2,2,false],[2,3,2,true],[2,4,4,true]]){
+      await pool.query('INSERT INTO friendships(user_low,user_high,requested_by,accepted) VALUES ($1,$2,$3,$4)',
+        [users[low].id,users[high].id,users[by].id,accepted]);
+    }
+    const service=createFriends(pool);
+    assert.deepEqual((await service.list(owner)).friends,[{username:'Status_3',status:'accepted'},
+      {username:'Status_4',status:'accepted'},{username:'Status_0',status:'incoming'},{username:'Status_1',status:'outgoing'}]);
+    assert.deepEqual(await service.list(users[5]),{friends:[]});
+  }finally{await pool.end();}
+});
+
 test("concurrent requests preserve both users' fifty-relationship cap and notify only once", { skip: !process.env.DATABASE_URL }, async () => {
   const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
   try {

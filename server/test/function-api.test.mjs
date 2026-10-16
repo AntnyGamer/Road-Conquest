@@ -88,6 +88,13 @@ test("serverless accounts enforce authentication, privacy, limits and TLS with r
     assert.equal(renamed.status, 200);
     assert.equal(renamed.body.username, "FunctionRenamed");
     assert.equal((await call("/v1/me", "GET", undefined, signup.body.token)).body.username, "FunctionRenamed");
+    const version=(await admin.query("SELECT xmin::text AS version FROM users WHERE username_key='functionrenamed'")).rows[0].version;
+    const unchanged=await call('/v1/username','PUT',{username:'FunctionRenamed',password:credentials.password},login.body.token);
+    assert.equal(unchanged.status,200);assert.deepEqual(unchanged.body,renamed.body);
+    assert.equal((await admin.query("SELECT xmin::text AS version FROM users WHERE username_key='functionrenamed'")).rows[0].version,version);
+    const caseChange=await call('/v1/username','PUT',{username:'FUNCTIONRENAMED',password:credentials.password},login.body.token);
+    assert.equal(caseChange.status,200);assert.equal(caseChange.body.username,'FUNCTIONRENAMED');
+    assert.notEqual((await admin.query("SELECT xmin::text AS version FROM users WHERE username_key='functionrenamed'")).rows[0].version,version);
     assert.equal((await call("/v1/reauth", "POST", { password: "wrong password" }, login.body.token)).status, 403);
     assert.equal((await call("/v1/reauth", "POST", { password: credentials.password }, login.body.token)).status, 200);
     assert.equal((await call("/v1/me", "GET", undefined, login.body.token)).status, 200);
