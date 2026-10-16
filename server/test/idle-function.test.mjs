@@ -19,7 +19,8 @@ for (const applySchema of ['0', '1']) test(`cold liveness and public pages need 
     pool.query=(...args)=>{queries++;return query(...args);};
     try {
       for (const [path,status] of [['/health/live',200],['/privacy',200],['/delete-account',200],
-        ['/v1/competition',200],['/missing',404],['/v1/me',401],['/v1/verified/batch',404]]) {
+        ['/v1/competition',200],['/missing',404],['/v1/me',401],['/v1/verified/batch',404],
+        ['/v1/friends',401],['/v1/friends/weekly',401],['/v1/notifications/device',401]]) {
         const response=await api.fetch(new Request('https://offline.example'+path));
         assert.equal(response.status,status,path);
         await response.text();
@@ -35,9 +36,15 @@ for (const applySchema of ['0', '1']) test(`cold liveness and public pages need 
         assert.equal(rejected.status,status);await rejected.text();await body.cancel();
       }
       assert.equal(bodyReads,0);
+      for (const [path,method] of [['/v1/friends','POST'],['/v1/notifications/device','POST']]) {
+        const response=await api.fetch(new Request('https://offline.example'+path,
+          {method,headers:{Authorization:'Bearer malformed'},body:'{}'}));
+        assert.equal(response.status,401);
+        await response.text();
+      }
       assert.equal(queries,0);assert.equal(pool.totalCount,0);
-      console.log(JSON.stringify({publicRequests:8,rejectedBodies:2,bodyReads,queries,connections:pool.totalCount}));
+      console.log(JSON.stringify({publicRequests:11,unauthenticatedPosts:2,rejectedBodies:2,bodyReads,queries,connections:pool.totalCount}));
     } finally {await pool.end();}
   `], { env: environment, timeout: 15000 });
-  assert.deepEqual(JSON.parse(stdout.trim()), { publicRequests: 8, rejectedBodies:2, bodyReads:0, queries: 0, connections: 0 });
+  assert.deepEqual(JSON.parse(stdout.trim()), { publicRequests: 11, unauthenticatedPosts:2, rejectedBodies:2, bodyReads:0, queries: 0, connections: 0 });
 });

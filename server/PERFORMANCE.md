@@ -271,3 +271,10 @@ schema, service plan, provider quota or credential change is required.
   participant counts, score ranks, privacy/eligibility, and the 50-friend cap.
   The friendship integration test explicitly checks distinct ranking entries.
   This reduces PostgreSQL ranking work but does not reduce HTTP request count.
+
+## Reject syntactically unauthenticated private routes before database work (draft PR #96)
+
+- Notifications-device and friends routes now reject missing/malformed bearer tokens before allocating a PostgreSQL-backed IP rate-limit entry. Enabled verified endpoints do the same; disabled verified endpoints continue to return their existing 404.
+- Every syntactically valid 43-character bearer token still passes the original persistent IP rate limiter, current-session verification, user-specific limits and permission/scoring checks. Anonymous public rankings retain their original rate limits.
+- Under saturation, malformed authentication returns a cheap 401 rather than spending a 429 rate reservation; no valid authentication can bypass the existing limit. The offline/cold Function regression test asserts that such requests return without opening any PostgreSQL connection, even with startup schema application enabled.
+- This primarily saves Neon database work during unauthenticated probes; it does not reduce authenticated users' normal API request counts.

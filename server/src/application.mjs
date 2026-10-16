@@ -262,6 +262,10 @@ async function handle(req, res) {
 
   const ip = clientIp(req);
   if (url.pathname === "/v1/notifications/device") {
+    // No database-backed rate-limit reservation or session lookup is needed
+    // for an absent/malformed bearer token. Validly shaped but invalid tokens
+    // retain the original persistent IP/session limits.
+    if (!bearerToken(req)) return send(res, 401, { error: "Authentication required." });
     if (!await rateLimit("push-ip", ip, 60, 60 * 1000)) return send(res, 429, { error: "Try again later." });
     const user = await authenticatedUser(req);
     if (!user) return send(res, 401, { error: "Authentication required." });
@@ -271,6 +275,7 @@ async function handle(req, res) {
     return send(res, 405, { error: "Method not allowed." });
   }
   if (url.pathname === "/v1/friends" || url.pathname === "/v1/friends/weekly") {
+    if (!bearerToken(req)) return send(res, 401, { error: "Authentication required." });
     if (!await rateLimit("friends-ip", ip, 120, 60 * 1000)) return send(res, 429, { error: "Try again later." });
     const user = await authenticatedUser(req);
     if (!user) return send(res, 401, { error: "Authentication required." });
@@ -326,6 +331,7 @@ async function handle(req, res) {
   }
   if (url.pathname.startsWith("/v1/verified/")) {
     if (!competition) return send(res, 404, { error: "Verified leaderboards are unavailable." });
+    if (!bearerToken(req)) return send(res, 401, { error: "Authentication required." });
     if (!await rateLimit("competition-ip", ip, 180, 60 * 1000)) return send(res, 429, { error: "Try again later." });
     const user = await authenticatedUser(req);
     if (!user) return send(res, 401, { error: "Authentication required." });
