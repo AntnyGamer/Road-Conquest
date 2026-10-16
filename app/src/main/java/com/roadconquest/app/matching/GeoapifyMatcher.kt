@@ -87,9 +87,43 @@ class GeoapifyMatcher(
         require(root.getString("type") == "FeatureCollection")
         val features = root.getJSONArray("features")
         if (features.length() == 0) return MatchResult(emptyList(), emptyMap())
-        // Disconnected/multiple hypotheses require more GPS evidence, not a guessed join.
-        if (features.length() != 1) return null
-        val feature = features.getJSONObject(0)
+        if (features.length() == 1) return parseFeature(features.getJSONObject(0), points)
+
+        // Multiple features are safe to salvage only when each explicitly identifies
+        // disjoint, original GPS fixes. Overlapping hypotheses stay ambiguous.
+        val claimed = HashSet<Int>()
+        val roads = ArrayList<com.roadconquest.app.data.MatchedRoad>()
+        val resolved = HashMap<Long, Double>()
+        var parsed = false
+        for (i in 0 until features.length()) {
+            val feature = features.optJSONObject(i) ?: return null
+            val source = feature.optJSONObject("properties")?.optJSONArray("waypoints") ?: return null
+            val waypoints = JSONArray().apply { repeat(points.size) { put(JSONObject.NULL) } }
+            val local = HashSet<Int>()
+            for (j in 0 until source.length()) {
+                val waypoint = source.optJSONObject(j) ?: continue
+                if (waypoint.optString("match_type") != "matched") continue
+                val index = waypoint.optInt("original_index", -1)
+                val original = waypoint.optJSONArray("original_location")
+                if (index !in points.indices || original == null || !valid(original) ||
+                    abs(original.getDouble(0) - points[index].longitude) >= 0.000001 ||
+                    abs(original.getDouble(1) - points[index].latitude) >= 0.000001 ||
+                    !local.add(index) || !claimed.add(index)
+                ) return null
+                waypoints.put(index, waypoint)
+            }
+            // A malformed sibling's geometry is never used to join independent roads.
+            val result = runCatching { parseFeature(feature, points, waypoints) }.getOrNull() ?: continue
+            parsed = true
+            roads.addAll(result.roads)
+            resolved.putAll(result.matchedPointConfidences)
+        }
+        return if (parsed) MatchResult(roads, resolved) else null
+    }
+
+    private fun parseFeature(
+        feature: JSONObject, points: List<TrackPoint>, suppliedWaypoints: JSONArray? = null
+    ): MatchResult? {
         val geometry = feature.getJSONObject("geometry")
         val props = feature.getJSONObject("properties")
         if (props.optString("mode") != "drive" || geometry.optString("type") != "MultiLineString") return null
@@ -101,41 +135,48 @@ class GeoapifyMatcher(
         for (i in 0 until line.length()) if (!valid(line.getJSONArray(i))) return null
         val steps = legs.getJSONObject(0).getJSONArray("steps")
         if (steps.length() == 0) return null
-        // Parse provider step metadata just once, not for every GPS leg.
-        val stepObjects = Array(steps.length()) { steps.getJSONObject(it) }
-        val stepStarts = IntArray(stepObjects.size)
-        val stepEnds = IntArray(stepObjects.size)
-        val stepNames = Array(stepObjects.size) { stepObjects[it].optString("name") }
-        val stepCountable = BooleanArray(stepObjects.size) {
-            stepObjects[it].optString("road_class") in COUNTABLE_ROAD_CLASSES
-        }
-        for (i in stepObjects.indices) {
-            val from = stepObjects[i].getInt("from_index")
-            val to = stepObjects[i].getInt("to_index")
-            if (from !in 0 until line.length() || to !in from until line.length()) return null
+        // Malformed steps must not erase sound siblings or become artificial joins.
+        // Only sections fully covered by validated provider steps can be saved.
+        val stepStarts = IntArray(steps.length()) { -1 }
+        val stepEnds = IntArray(steps.length()) { -1 }
+        val stepNames = Array(steps.length()) { "" }
+        val stepCountable = BooleanArray(steps.length())
+        val stepValid = BooleanArray(steps.length())
+        for (i in stepValid.indices) {
+            val step = steps.optJSONObject(i) ?: continue
+            val from = step.optInt("from_index", -1)
+            val to = step.optInt("to_index", -1)
+            if (from !in 0 until line.length() || to !in from until line.length()) continue
             stepStarts[i] = from
             stepEnds[i] = to
+            stepNames[i] = step.optString("name")
+            stepCountable[i] = step.optString("road_class") in COUNTABLE_ROAD_CLASSES
+            stepValid[i] = true
         }
-        val waypoints = props.getJSONArray("waypoints")
+        val waypoints = suppliedWaypoints ?: props.getJSONArray("waypoints")
         if (waypoints.length() != points.size) return null
         val positions = DoubleArray(points.size)
         val locations = arrayOfNulls<JSONArray>(points.size)
+        val waypointSteps = IntArray(points.size) { -1 }
         for (index in points.indices) {
-            val waypoint = waypoints.getJSONObject(index)
-            require(waypoint.getInt("original_index") == index)
-            val original = waypoint.getJSONArray("original_location")
-            require(valid(original) && abs(original.getDouble(0) - points[index].longitude) < 0.000001 &&
-                abs(original.getDouble(1) - points[index].latitude) < 0.000001)
-            // Neither interpolated nor unmatched points establish a driven road.
-            // Keep them pending and salvage only independent, continuous matched legs.
-            if (waypoint.optString("match_type") != "matched") continue
-            if (waypoint.optInt("leg_index", -1) != 0) return null
-            val location = waypoint.getJSONArray("location")
-            if (!valid(location)) return null
+            val waypoint = waypoints.optJSONObject(index) ?: continue
+            val original = waypoint.optJSONArray("original_location")
+            // A malformed waypoint is a HOLE, never evidence for either neighboring leg.
+            if (waypoint.optInt("original_index", -1) != index || original == null ||
+                !valid(original) ||
+                abs(original.getDouble(0) - points[index].longitude) >= 0.000001 ||
+                abs(original.getDouble(1) - points[index].latitude) >= 0.000001 ||
+                waypoint.optString("match_type") != "matched" ||
+                waypoint.optInt("leg_index", -1) != 0
+            ) continue
+            val location = waypoint.optJSONArray("location") ?: continue
             val stepIndex = waypoint.optInt("step_index", -1)
-            if (stepIndex !in 0 until steps.length()) return null
-            positions[index] = position(line, location, stepStarts[stepIndex], stepEnds[stepIndex]) ?: return null
+            if (!valid(location) || stepIndex !in stepValid.indices || !stepValid[stepIndex]) continue
+            val projected = position(line, location, stepStarts[stepIndex], stepEnds[stepIndex])
+                ?: continue
+            positions[index] = projected
             locations[index] = location
+            waypointSteps[index] = stepIndex
         }
         val matchings = JSONArray()
         val tracepoints = JSONArray().apply { repeat(points.size) { put(JSONObject.NULL) } }
@@ -149,10 +190,22 @@ class GeoapifyMatcher(
             var complete = true
             for (i in first until index - 1) {
                 val pieces = JSONArray()
-                for (s in stepObjects.indices) {
+                // If a malformed step lies between two GPS fixes, no valid geometry
+                // may bridge it, even when the adjacent steps look convincing.
+                val fromStep = waypointSteps[i]
+                val toStep = waypointSteps[i + 1]
+                if (fromStep > toStep || (fromStep..toStep).any { !stepValid[it] }) {
+                    complete = false
+                    break
+                }
+                var covered = positions[i]
+                for (s in stepValid.indices) {
+                    if (!stepValid[s]) continue
                     val from = maxOf(positions[i], stepStarts[s].toDouble())
                     val to = minOf(positions[i + 1], stepEnds[s].toDouble())
                     if (to - from < 0.000001) continue
+                    if (from > covered + 0.000001) break
+                    covered = maxOf(covered, to)
                     val coordinates = JSONArray().put(at(line, from))
                     for (v in (floor(from).toInt() + 1)..ceil(to).toInt()) {
                         if (v.toDouble() < to) coordinates.put(line.getJSONArray(v))
@@ -170,7 +223,10 @@ class GeoapifyMatcher(
                         .put("geometry", JSONObject().put("type", "LineString").put("coordinates", coordinates))
                         .put("maneuver", JSONObject().put("type", if (stepCountable[s]) "turn" else "ramp")))
                 }
-                if (pieces.length() == 0) { complete = false; break }
+                if (pieces.length() == 0 || covered < positions[i + 1] - 0.000001) {
+                    complete = false
+                    break
+                }
                 normalizedLegs.put(JSONObject().put("steps", pieces))
             }
             if (!complete) continue
