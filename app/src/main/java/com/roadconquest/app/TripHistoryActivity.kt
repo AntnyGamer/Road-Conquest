@@ -442,7 +442,10 @@ class TripHistoryActivity : Activity() {
         val uri = data?.data ?: return
         if (resultCode != Activity.RESULT_OK || trip == null || !VipEntitlement.isActive(this)) return
         val hideEnds = redactGpxEnds
-        worker.execute {
+        // A user-requested document save must finish if the Trips Activity is
+        // recreated or closed. The screen's read/replay executor is cancelled
+        // in onDestroy(), so use a dedicated short-lived export thread instead.
+        Thread({
             var cleanupFailed = false
             val result = runCatching {
                 val stream = contentResolver.openOutputStream(uri, "w")
@@ -478,7 +481,7 @@ class TripHistoryActivity : Activity() {
                 }
                 Toast.makeText(this, message, Toast.LENGTH_LONG).show()
             }
-        }
+        }, "GpxExport").start()
     }
 
     private fun loadTrip(trip: SavedTrip) {
