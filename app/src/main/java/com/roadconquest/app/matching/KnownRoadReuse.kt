@@ -29,8 +29,23 @@ internal object KnownRoadReuse {
         closestKnownSegment: (TrackPoint) -> String?
     ): List<KnownRoadVisit> {
         if (points.size < 5 || markableIds.isEmpty()) return emptyList()
-        val nearby = points.map { point ->
-            if (point.accuracyMeters !in 0.01f..5f || point.speedMps !in 2.2f..40f ||
+        // Only a continuous five-fix driving window can establish a verified
+        // re-drive. Skip expensive nearby-road SQLite/geometry lookups for points
+        // that cannot belong to one, without loosening any acceptance criteria.
+        val validEdge = BooleanArray(points.lastIndex) { i ->
+            continuous(points[i], points[i + 1]) &&
+                headingAgreesWithTravel(points[i], points[i + 1])
+        }
+        val possible = BooleanArray(points.size)
+        for (start in 0..points.size - 5) {
+            if ((start until start + 4).any { !validEdge[it] } ||
+                (start until start + 5).none { !points[it].matched && points[it].id in markableIds }
+            ) continue
+            for (i in start until start + 5) possible[i] = true
+        }
+        if (possible.none { it }) return emptyList()
+        val nearby = points.mapIndexed { i, point ->
+            if (!possible[i] || point.accuracyMeters !in 0.01f..5f || point.speedMps !in 2.2f..40f ||
                 !point.latitude.isFinite() || !point.longitude.isFinite() ||
                 point.latitude !in -90.0..90.0 || point.longitude !in -180.0..180.0
             ) null else closestKnownSegment(point)
@@ -42,8 +57,7 @@ internal object KnownRoadReuse {
             val segment = nearby[i] ?: continue
             val window = (i - 2)..(i + 2)
             if (window.any { nearby[it] != segment }) continue
-            if ((i - 2 until i + 2).any { !continuous(points[it], points[it + 1]) ||
-                    !headingAgreesWithTravel(points[it], points[it + 1]) }) continue
+            if ((i - 2 until i + 2).any { !validEdge[it] }) continue
             val first = points[i - 2]
             val last = points[i + 2]
             val lonDelta = ((last.longitude - first.longitude + 540.0) % 360.0) - 180.0

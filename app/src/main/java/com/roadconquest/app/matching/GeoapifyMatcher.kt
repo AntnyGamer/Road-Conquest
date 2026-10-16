@@ -42,6 +42,7 @@ class GeoapifyMatcher(
             return runCatching { parse(requireNotNull(cachedBody), points) }.getOrNull()
         }
         if (rateLimitRemainingMs() > 0) { unavailable = true; return null }
+        val payloadBytes = payload.toByteArray(Charsets.UTF_8)
         var connection: HttpURLConnection? = null
         return try {
             connection = (URL(origin.trimEnd('/') + "/v1/mapmatching").openConnection() as HttpURLConnection).apply {
@@ -52,9 +53,9 @@ class GeoapifyMatcher(
                 doOutput = true
                 setRequestProperty("Content-Type", "application/json")
                 setRequestProperty("Accept", "application/json")
-                setFixedLengthStreamingMode(payload.toByteArray(Charsets.UTF_8).size)
+                setFixedLengthStreamingMode(payloadBytes.size)
             }
-            connection.outputStream.use { it.write(payload.toByteArray(Charsets.UTF_8)) }
+            connection.outputStream.use { it.write(payloadBytes) }
             val status = connection.responseCode
             if (status !in 200..299) {
                 unavailable = status in listOf(401, 403, 429) || status >= 500 || status in 300..399

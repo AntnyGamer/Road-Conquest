@@ -29,6 +29,9 @@ HTTP 429, 401/403, 5xx, timeouts and connection failures move to an eligible bac
 
 ## Gateway deployment and spending protection
 
+The map Worker enables Cloudflare's native Worker response cache. Identical public Geoapify tile URLs served from that cache bypass Worker execution, Durable Object reservations and provider requests, without caching individual driving traces. Only successful public tile responses advertise a one-day cache lifetime; matching, health and error responses remain `no-store`. Geoapify permits storing/reusing raster tiles. Caching is an optimization rather than a guaranteed hit rate; the existing shared credit caps still apply to cache misses.
+
+
 `server/maps/wrangler.jsonc` creates a standalone Worker with a small SQLite-backed Durable Object for shared reservations. It does not replace either account Worker or Neon. SQLite-backed Durable Objects are [available on Workers Free](https://developers.cloudflare.com/durable-objects/platform/pricing/).
 
 ```powershell

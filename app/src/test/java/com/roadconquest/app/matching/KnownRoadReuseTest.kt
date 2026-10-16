@@ -50,6 +50,29 @@ class KnownRoadReuseTest {
         assertTrue(KnownRoadReuse.identify(points, points.map { it.id }.toSet()) { "road" }.isEmpty())
     }
 
+    @Test fun impossibleRevisitWindowsDoNotQuerySavedRoadGeometries() {
+        val points = trace(8).mapIndexed { i, p ->
+            if (i % 2 == 0) p.copy(timestampMillis = p.timestampMillis + 20_000L) else p
+        }
+        var lookups = 0
+        val result = KnownRoadReuse.identify(points, points.map { it.id }.toSet()) {
+            lookups++
+            "known-road"
+        }
+        assertTrue(result.isEmpty())
+        assertEquals(0, lookups)
+    }
+
+    @Test fun fullyResolvedPointsDoNotQuerySavedRoadGeometries() {
+        val points = trace().map { it.copy(matched = true) }
+        var lookups = 0
+        assertTrue(KnownRoadReuse.identify(points, points.map { it.id }.toSet()) {
+            lookups++
+            "known-road"
+        }.isEmpty())
+        assertEquals(0, lookups)
+    }
+
     @Test fun partialKnownRoadsDoNotResolveUnrelatedSections() {
         val points = trace(8)
         val result = KnownRoadReuse.identify(points, points.map { it.id }.toSet()) {

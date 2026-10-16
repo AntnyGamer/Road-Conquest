@@ -4,6 +4,7 @@
   "compatibility_date": "2026-10-15",
   "workers_dev": true,
   "preview_urls": false,
+  "cache": { "enabled": true },
   "vars": { "DAILY_CREDIT_CAP": "2400", "LOCATIONIQ_DAILY_REQUEST_CAP": "4000" },
   "durable_objects": { "bindings": [{ "name": "MAP_BUDGET", "class_name": "MapBudget" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["MapBudget"] }]
