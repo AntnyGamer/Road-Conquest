@@ -195,6 +195,9 @@ class TrackingService : Service(), LocationListener {
         // actually become a location foreground service. Delaying them avoids unnecessary
         // setup on blocked restarts (paused tracking, missing permission, or Location off).
         repository = TrackingRepository(this)
+        // Android may terminate a service without onDestroy; never lose its final GPS fix.
+        runCatching { repository.recoverTrailingSkippedDrivingFix() }
+            .onFailure { Log.w("RoadConquest", "Trailing GPS recovery will retry next start", it) }
         progressionRepository = ProgressionRepository(this)
         verifiedDriving = VerifiedDriving(this)
 

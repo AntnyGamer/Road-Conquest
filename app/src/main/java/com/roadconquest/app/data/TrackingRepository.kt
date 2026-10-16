@@ -146,6 +146,31 @@ class TrackingRepository(context: Context) {
         }
     }
 
+    /**
+     * Recover the final compressed point when Android killed tracking without onDestroy.
+     * Every skipped fix already survived in SQLite; this promotes only the missing
+     * endpoint into the matching queue and restores its intervening mileage once.
+     */
+    @Synchronized
+    fun recoverTrailingSkippedDrivingFix(): Boolean = synchronized(dbHelper.historyLock) {
+        if (historyGeneration != dbHelper.historyGeneration) return@synchronized false
+        val db = dbHelper.writableDatabase
+        val endpoint = db.rawQuery(
+            """SELECT latitude, longitude, accuracy_m, speed_mps, bearing_deg, timestamp_ms
+               FROM skipped_driving_fixes
+               WHERE timestamp_ms > COALESCE((SELECT MAX(timestamp_ms) FROM track_points), 0)
+               ORDER BY timestamp_ms DESC, id DESC LIMIT 1""", null
+        ).use { cursor ->
+            if (!cursor.moveToFirst()) null else Location("gps").apply {
+                latitude = cursor.getDouble(0); longitude = cursor.getDouble(1)
+                accuracy = cursor.getFloat(2); speed = cursor.getFloat(3)
+                bearing = cursor.getFloat(4); time = cursor.getLong(5)
+            }
+        } ?: return@synchronized false
+        insertLocation(endpoint)
+        true
+    }
+
     /** Preserve accepted driving evidence omitted from the compressed online matching queue. */
     @Synchronized
     fun recordSkippedDrivingFix(location: Location) {
