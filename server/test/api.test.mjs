@@ -158,6 +158,9 @@ test("signup/login/privacy/logout are server-enforced and duplicate usernames ar
       { friends: [], weekly: { available: false, entries: [] } });
     assert.deepEqual((await json(baseUrl, "/v1/friends", "GET", undefined, login.payload.token)).payload,
       { friends: [] });
+    const combinedRanking = await json(baseUrl, "/v1/leaderboard?metric=cells&mine=1", "GET", undefined, login.payload.token);
+    assert.equal(combinedRanking.status, 200);
+    assert.deepEqual(combinedRanking.payload, { metric: "cells", dataset: null, entries: [], verification_available: false });
     const leaderboard = await json(baseUrl, "/v1/leaderboard", "GET");
     assert.equal(leaderboard.status, 200);
     assert.deepEqual(leaderboard.payload, { metric: "cells", dataset: null, entries: [], verification_available: false });

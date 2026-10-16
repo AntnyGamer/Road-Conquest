@@ -79,8 +79,12 @@ object AccountClient {
         if (it.optBoolean("available")) requireVerifiedPolicy(it)
     }
 
-    fun leaderboard(): JSONObject {
-        return request("/v1/leaderboard?metric=cells", "GET", null, null).also {
+    fun leaderboard(token: String? = null): JSONObject {
+        val includeMine = !token.isNullOrBlank()
+        return request(
+            if (includeMine) "/v1/leaderboard?metric=cells&mine=1"
+            else "/v1/leaderboard?metric=cells", "GET", null, token
+        ).also {
             if (it.optBoolean("verification_available", true)) requireVerifiedPolicy(it)
             else if (it.getJSONArray("entries").length() != 0) throw ApiException("Unverified scores cannot enter a leaderboard.")
         }

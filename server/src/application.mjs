@@ -286,9 +286,19 @@ async function handle(req, res) {
     if (metric !== "cells") return send(res, 400, { error: "Choose cells." });
     // The public page can load before verification is provisioned. No scores are invented,
     // and every drive-writing endpoint below remains gated on strict competition setup.
-    return send(res, 200, competition
+    const ranking = competition
       ? { ...await competition.leaderboard(metric), verification_available: true }
-      : { metric, dataset: null, entries: [], verification_available: false });
+      : { metric, dataset: null, entries: [], verification_available: false };
+    if (competition && url.searchParams.get("mine") === "1") {
+      // An optional authenticated total avoids another HTTP request and
+      // rate-limit DB write. Public rankings remain accessible anonymously.
+      const user = await authenticatedUser(req);
+      if (user) {
+        try { ranking.mine = await competition.totals(user); }
+        catch { /* Keep the public rankings if the personal count is unavailable. */ }
+      }
+    }
+    return send(res, 200, ranking);
   }
   if (url.pathname.startsWith("/v1/verified/")) {
     if (!competition) return send(res, 404, { error: "Verified leaderboards are unavailable." });

@@ -41,6 +41,11 @@ HTTP 429, 401/403, 5xx, timeouts and connection failures move to an eligible bac
 - The same week-scoped road and town counts now run as two independently optimized SQL scalar subqueries within one SQLite statement per week instead of opening two cursors. Both original filters are unchanged.
 - Up to four earned challenge rewards are inserted with one atomic `INSERT OR IGNORE` statement rather than four individual writes. Existing reward keys, payout amounts, timestamp, idempotence and previous-week grace are preserved. The challenge tests now verify that repeated refreshes do not create extra weekly reward rows.
 
+## Reducing personal leaderboard request load
+
+- An authenticated `GET /v1/leaderboard?metric=cells&mine=1` may include the same verified-only `mine` total returned by the existing `/v1/verified/me` endpoint. The global leaderboard can then load its list and the current user's total in one HTTP request and one IP-rate-limit reservation, while retaining the original fallback when talking to older account servers.
+- The optional `mine` field is returned only after session authentication, never for anonymous or invalid credentials. A failed personal-total lookup does not suppress the public ranking; the Android client still validates the bundled result's scoring policy. All pre-existing endpoint shapes remain supported.
+
 ## Reducing authenticated account-server round trips
 
 - When the Challenges screen displays both the friend list and verified weekly standings, it requests `GET /v1/friends?include=weekly`. An updated server returns the same friend data and the existing verified-only weekly response together, eliminating one separate authenticated HTTP request, session lookup and rate-limit reservation per refresh.

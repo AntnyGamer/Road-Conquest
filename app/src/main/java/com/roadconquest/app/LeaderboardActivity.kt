@@ -74,13 +74,20 @@ class LeaderboardActivity : Activity() {
         executor.execute {
             if (current != generation) return@execute
             val result = runCatching {
-                val ranking = AccountClient.leaderboard()
-                // Skip the second account request if a newer refresh superseded this one.
-                if (current != generation) return@execute
                 val session = AccountStore.load(this)
+                val ranking = AccountClient.leaderboard(session?.token)
+                // Updated account servers bundle the personal verified total.
+                // Older deployments omit it, so preserve the original fallback.
+                if (current != generation) return@execute
                 val verificationAvailable = ranking.optBoolean("verification_available", true)
                 val mine = if (verificationAvailable) session?.let {
-                    runCatching { AccountClient.verifiedTotals(it.token) }.getOrNull()
+                    val bundled = ranking.optJSONObject("mine")
+                    if (bundled != null) {
+                        runCatching { AccountClient.requireVerifiedPolicy(bundled) }
+                            .map { bundled }.getOrNull()
+                    } else {
+                        runCatching { AccountClient.verifiedTotals(it.token) }.getOrNull()
+                    }
                 } else null
                 val header = buildString {
                     if (!verificationAvailable) append("Verified scoring is not active yet. New drives cannot earn leaderboard credit until verification is available.\n")
