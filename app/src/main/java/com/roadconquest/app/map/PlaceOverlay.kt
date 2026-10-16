@@ -14,6 +14,8 @@ import java.io.Reader
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.PI
@@ -213,7 +215,7 @@ class PlaceOverlayClient(
 
     fun fetch(place: PlaceDiscovery, requireContainment: Boolean = true): PlaceOverlayData? {
         val base = resolveEndpoint()
-        throttle()
+        throttle(base)
         val threshold = when (place.kind) {
             PlaceKind.COUNTRY -> "0.02"
             PlaceKind.STATE -> "0.005"
@@ -232,6 +234,9 @@ class PlaceOverlayClient(
         val connection = open(url, redirects = false, readTimeoutMs = 12_000)
         return try {
             val status = connection.responseCode
+            if (status == 429 || status == 503) {
+                noteProviderBackoff(base, status, connection.getHeaderField("Retry-After"))
+            }
             if (status !in 200..299) throw IOException("Place overlay service returned HTTP $status")
             parseResponse(place, readLimited(connection), requireContainment)
         } finally {
@@ -278,14 +283,36 @@ class PlaceOverlayClient(
             setRequestProperty("Accept", "application/json, text/plain;q=0.9")
         }
 
-    private fun throttle() {
+    private fun throttle(base: String) {
         synchronized(rateLock) {
             val now = SystemClock.elapsedRealtime()
+            // Respect an explicit provider rejection without sleeping a worker
+            // for minutes. The saved place candidate is retried by the existing
+            // persistent discovery queue.
+            if (cooldownEndpoint == base && now < cooldownUntilElapsed) {
+                throw IOException("Place overlay provider requested a later retry")
+            }
             if (lastRequestElapsed != Long.MIN_VALUE) {
                 val delay = 1_100L - (now - lastRequestElapsed)
                 if (delay > 0L) Thread.sleep(delay)
             }
             lastRequestElapsed = SystemClock.elapsedRealtime()
+        }
+    }
+
+    private fun noteProviderBackoff(base: String, status: Int, retryAfter: String?) {
+        val delay = maxOf(
+            if (status == 429) 60_000L else 30_000L,
+            retryAfterMillis(retryAfter, System.currentTimeMillis())
+        )
+        synchronized(rateLock) {
+            val until = SystemClock.elapsedRealtime() + delay
+            if (cooldownEndpoint != base) {
+                cooldownEndpoint = base
+                cooldownUntilElapsed = until
+            } else {
+                cooldownUntilElapsed = maxOf(cooldownUntilElapsed, until)
+            }
         }
     }
 
@@ -320,6 +347,20 @@ class PlaceOverlayClient(
 
         private val rateLock = Any()
         private var lastRequestElapsed = Long.MIN_VALUE
+        private var cooldownEndpoint: String? = null
+        private var cooldownUntilElapsed = 0L
+
+        /** HTTP Retry-After is either seconds or an RFC 1123 date; cap local deferment. */
+        internal fun retryAfterMillis(raw: String?, nowMillis: Long): Long {
+            val value = raw?.trim().orEmpty()
+            if (value.isEmpty()) return 0L
+            value.toLongOrNull()?.let { return it.coerceIn(0L, 900L) * 1_000L }
+            return runCatching {
+                ZonedDateTime.parse(value, DateTimeFormatter.RFC_1123_DATE_TIME)
+                    .toInstant().toEpochMilli() - nowMillis
+            }.getOrNull()?.coerceIn(0L, 900_000L) ?: 0L
+        }
+
         private const val MAX_CONFIG_LENGTH = 2_048
         private const val DEFAULT_ENDPOINT = "https://nominatim.openstreetmap.org"
         private const val EARTH_RADIUS_M = 6_371_008.8
