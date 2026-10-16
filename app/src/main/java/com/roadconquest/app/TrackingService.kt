@@ -352,6 +352,10 @@ class TrackingService : Service(), LocationListener {
         ) previous else null
 
         val accepted = requireNotNull(lastObserved)
+        // Keep the live car, fog and verification stream at the original GPS rate.
+        // Only omit redundant high-quality straight-line *stored* fixes; retain every
+        // uncertain fix and directional change so junctions can still be matched.
+        if (lastAccepted?.let { !shouldPersistDrivingSample(it, accepted) } == true) return
         lastAccepted = accepted
         val placeCandidate = if (!accepted.isMock && accepted.hasAccuracy() &&
             accepted.accuracy in 0.01f..25f &&
@@ -606,6 +610,20 @@ class TrackingService : Service(), LocationListener {
         val movedBeyondAccuracy = distance > maxOf(5f, previous.accuracy + location.accuracy)
         return measuredSpeed >= MIN_DRIVING_SPEED_MPS ||
             (movedBeyondAccuracy && inferredSpeed >= MIN_DRIVING_SPEED_MPS)
+    }
+
+    /** Conservative on-device GPS compression: never skip a bend, uncertain fix or gap. */
+    internal fun shouldPersistDrivingSample(previousSaved: Location, current: Location): Boolean {
+        val ageMs = elapsedMillis(previousSaved, current)
+        if (ageMs <= 0L || ageMs >= MIN_STRAIGHT_SAMPLE_INTERVAL_MS ||
+            !previousSaved.hasBearing() || !current.hasBearing() ||
+            !previousSaved.hasAccuracy() || !current.hasAccuracy() ||
+            previousSaved.accuracy !in 0.01f..15f || current.accuracy !in 0.01f..15f ||
+            !previousSaved.hasSpeed() || !current.hasSpeed() ||
+            previousSaved.speed < MIN_DRIVING_SPEED_MPS || current.speed < MIN_DRIVING_SPEED_MPS
+        ) return true
+        val delta = kotlin.math.abs(((current.bearing - previousSaved.bearing + 540f) % 360f) - 180f)
+        return !delta.isFinite() || delta >= MIN_RETAINED_BEND_DEGREES
     }
 
     private fun isFreshLocation(location: Location): Boolean {
@@ -948,16 +966,19 @@ class TrackingService : Service(), LocationListener {
         private const val MAX_LOCATION_AGE_NANOS = MAX_LOCATION_AGE_MS * 1_000_000L
         private const val MAX_START_ANCHOR_AGE_MS = 10_000L
         private const val BACKGROUND_PLACE_DISCOVERY_INTERVAL_MS = 60_000L
-        private const val MATCH_INTERVAL_MS = 10_000L
+        // The pending-route overlay remains live while verified matches are batched.
+        private const val MATCH_INTERVAL_MS = 7 * 60_000L
+        private const val MIN_STRAIGHT_SAMPLE_INTERVAL_MS = 5_500L
+        private const val MIN_RETAINED_BEND_DEGREES = 18f
         private const val PLACE_CANDIDATE_MIN_DISTANCE_M = 55f
         private const val MAX_EXPLORED_CELL_CACHE = 4_096
         // A partial result usually means an intersection needs one or two newer fixes.
         // Retry on the normal matching cadence so turn holes close while the drive is still live.
-        private const val MATCH_RETRY_AFTER_PARTIAL_MS = MATCH_INTERVAL_MS
+        private const val MATCH_RETRY_AFTER_PARTIAL_MS = 5 * 60_000L
         private const val MATCH_RETRY_AFTER_FAILURE_MS = 5 * 60 * 1000L
         private const val MATCH_SINGLE_POINT_DEFERRAL_MS = 30_000L
         private const val MATCH_BACKLOG_CONTINUATION_MS = 30_000L
-        private const val MATCH_BATCH_SIZE = OsrmMatcher.MAX_MATCH_POINTS
+        private const val MATCH_BATCH_SIZE = com.roadconquest.app.matching.GeoapifyMatcher.MAX_MATCH_POINTS
         private const val MAX_MATCH_BATCHES_PER_RUN = 4
         private const val MATCH_BATCH_PAUSE_MS = 1_100L
 

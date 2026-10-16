@@ -61,6 +61,17 @@ class DrivingFilterTest {
         assertFalse(TrackingService.shouldRecoverLocationUpdates(now, now - 180_000L, now + 1L))
     }
 
+    @Test fun straightFixesAreCompressedButCornersAndUncertainFixesArePreserved() {
+        val service = TrackingService()
+        val a = point(40.0, 10, 8f).apply { bearing = 90f }
+        val straight = point(40.00002, 13, 8f).apply { bearing = 94f }
+        assertFalse(service.shouldPersistDrivingSample(a, straight))
+        assertTrue(service.shouldPersistDrivingSample(a, point(40.00004, 16, 8f).apply { bearing = 94f }))
+        assertTrue(service.shouldPersistDrivingSample(a, point(40.00002, 13, 8f).apply { bearing = 112f }))
+        assertTrue(service.shouldPersistDrivingSample(a, straight.apply { accuracy = 30f }))
+        assertTrue(service.shouldPersistDrivingSample(a, straight.apply { accuracy = 5f; removeBearing() }))
+    }
+
     @Test fun nanAccuracyCannotAuthorizeDriving() {
         assertFalse(accepts(point(40.0002, 13).apply { accuracy = Float.NaN }, point(40.0, 10)))
     }

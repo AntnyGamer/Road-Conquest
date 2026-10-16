@@ -16,6 +16,7 @@ class GeoapifyMatcher(
     private val origin: String,
     private val health: ProviderHealth = ProviderHealth.shared
 ) : RoadMatcher {
+    companion object { const val MAX_MATCH_POINTS = 100 }
     override var unavailable = false
         private set
     private val providerId = "matching:$origin"
@@ -27,7 +28,7 @@ class GeoapifyMatcher(
 
     @Synchronized override fun match(points: List<TrackPoint>): MatchResult? {
         unavailable = false
-        if (points.size !in 2..OsrmMatcher.MAX_MATCH_POINTS) return null
+        if (points.size !in 2..MAX_MATCH_POINTS) return null
         val payload = JSONObject().put("mode", "drive").put("waypoints", JSONArray().apply {
             var previous = Long.MIN_VALUE
             points.forEach { point ->
