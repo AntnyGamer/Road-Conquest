@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createMapsGateway, MapBudget } from '../maps/worker.mjs';
 import { DatabaseSync } from 'node:sqlite';
+import { readFileSync } from 'node:fs';
 
 const body = { mode: 'drive', waypoints: [
   { location: [-74, 40], timestamp: '2026-01-01T00:00:00Z' },
@@ -12,6 +13,21 @@ const request = (path = '/v1/mapmatching', headers = {}, value = body) => new Re
 const env = permit => ({ GEOAPIFY_API_KEY: 'test-key-never-real', MAP_BUDGET: {
   idFromName: name => name, get: () => ({ fetch: async () => permit || Response.json({ allowed: true }) })
 } });
+
+test('native tile caching never enables caching private GPS matching responses', async () => {
+  const configuration = JSON.parse(readFileSync(new URL('../maps/wrangler.jsonc', import.meta.url), 'utf8'));
+  assert.equal(configuration.cache.enabled, true);
+  const worker = createMapsGateway(async url => url.pathname.includes('/tile/')
+    ? new Response(new Uint8Array([137, 80, 78, 71]), { headers: { 'Content-Type': 'image/png' } })
+    : Response.json({ type: 'FeatureCollection', features: [] }));
+  const tile = await worker.fetch(new Request('https://maps.example/v1/tile/positron/1/0/0.png',
+    { headers: { 'CF-Connecting-IP': '192.0.2.1' } }), env());
+  assert.equal(tile.headers.get('Cache-Control'), 'public, max-age=86400');
+  const matching = await worker.fetch(request(), env());
+  assert.equal(matching.headers.get('Cache-Control'), 'no-store');
+  const error = await worker.fetch(new Request('https://maps.example/bad'), env());
+  assert.equal(error.headers.get('Cache-Control'), 'no-store');
+});
 
 test('maps gateway fails closed without secrets or a shared budget', async () => {
   const worker = createMapsGateway(() => { throw new Error('must not call'); });
