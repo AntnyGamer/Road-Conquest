@@ -352,6 +352,15 @@ class RoadGeometryTurnTest {
         assertEquals(listOf("Exit"), withheld.roads.map { it.name })
         assertEquals(setOf(5L), withheld.matchedPointConfidences.keys)
 
+        // An invalid JSON tracepoint is not the same as the provider's explicit
+        // null/unmatched value; it cannot justify the neighboring route either.
+        val brokenObject = JSONObject(inside)
+        brokenObject.getJSONArray("tracepoints").put(1, "malformed tracepoint")
+        val noBridge = requireNotNull(RoadGeometryValidator().parse(
+            brokenObject.toString(), points(a, b, c, d, e)))
+        assertEquals(listOf("Exit"), noBridge.roads.map { it.name })
+        assertEquals(setOf(5L), noBridge.matchedPointConfidences.keys)
+
         val entirelyUnknown = response(listOf(
             trace(99, 0, a), trace(99, 1, b)
         ), matching(leg("Not evidence", a, b)))
