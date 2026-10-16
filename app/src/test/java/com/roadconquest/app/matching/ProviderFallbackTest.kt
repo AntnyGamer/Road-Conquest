@@ -264,6 +264,47 @@ class ProviderFallbackTest {
         assertNull(matcher.parse(response(left), allFixes))
     }
 
+    @Test fun multiLegGeoapifyResponseKeepsOnlyEachVerifiedLeg() {
+        fun at(lat: Double) = JSONArray().put(-74.0).put(lat)
+        val routePoints = (0..3).map { at(40.0 + it * 0.0001) }
+        val fixes = routePoints.mapIndexed { i, p ->
+            TrackPoint(i + 1L, p.getDouble(1), p.getDouble(0), 3f, 8f, 0f,
+                1_000_000L + i * 3_000L, false)
+        }
+        fun leg(name: String) = JSONObject().put("steps", JSONArray().put(
+            JSONObject().put("from_index", 0).put("to_index", 1)
+                .put("name", name).put("road_class", "residential")
+        ))
+        val waypoints = JSONArray()
+        routePoints.forEachIndexed { i, point ->
+            waypoints.put(JSONObject()
+                .put("original_index", i).put("original_location", point)
+                .put("location", point).put("match_type", "matched")
+                .put("leg_index", i / 2).put("step_index", 0))
+        }
+        val legs = JSONArray().put(leg("Approach")).put(leg("Exit"))
+        val lines = JSONArray()
+            .put(JSONArray().put(routePoints[0]).put(routePoints[1]))
+            .put(JSONArray().put(routePoints[2]).put(routePoints[3]))
+        val feature = JSONObject().put("properties", JSONObject()
+            .put("mode", "drive").put("legs", legs).put("waypoints", waypoints))
+            .put("geometry", JSONObject().put("type", "MultiLineString")
+                .put("coordinates", lines))
+        val root = JSONObject().put("type", "FeatureCollection")
+            .put("features", JSONArray().put(feature))
+        val matcher = GeoapifyMatcher("https://maps.example")
+        val result = requireNotNull(matcher.parse(root.toString(), fixes))
+        assertEquals(listOf("Approach", "Exit"), result.roads.map { it.name })
+        assertEquals(setOf(1L, 2L, 4L), result.matchedPointConfidences.keys)
+        assertFalse(3L in result.matchedPointConfidences)
+
+        // One bad leg cannot erase a good sibling or earn a fabricated connector.
+        legs.put(1, JSONObject().put("steps", JSONArray().put("invalid")))
+        val salvaged = requireNotNull(matcher.parse(root.toString(), fixes))
+        assertEquals(listOf("Approach"), salvaged.roads.map { it.name })
+        assertEquals(setOf(1L, 2L), salvaged.matchedPointConfidences.keys)
+    }
+
     @Test fun namedPrimaryRoadsCountButMotorwayLinkRampsDoNot() {
         fun asClass(roadClass: String): MatchResult {
             val sample = JSONObject(example)
