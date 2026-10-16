@@ -11,7 +11,7 @@ import org.robolectric.annotation.Config
 @Config(sdk = [31, 37], manifest = Config.NONE)
 class RoadGeometryValidatorTest {
     @Test fun normalGpsUncertaintyNeverOverridesPermanentSnapPlausibility() {
-        // A candidate 30+ m from the recorded route remains rejected despite high OSRM confidence.
+        // A candidate 30+ m from the recorded route remains rejected despite a high reported confidence.
         val recorded = listOf(
             TrackPoint(1L, 40.0, -74.00030, 3.8f, 8f, 0f, 100_000L, false),
             TrackPoint(2L, 40.0, -74.00000, 3.8f, 8f, 0f, 103_000L, false),

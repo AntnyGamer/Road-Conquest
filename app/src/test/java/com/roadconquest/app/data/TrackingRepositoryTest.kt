@@ -315,11 +315,11 @@ class TrackingRepositoryTest {
         assertEquals(1L, repository.getSummary().roadsUnlockedCount)
     }
 
-    @Test fun shortTurnRetryUsesSpareContextSlotsAtProductionBatchSize() {
+    @Test fun shortTurnRetryUsesSpareContextSlotsAtTenPointLimit() {
         val ids = (0..6).map { point(1_000_000L + it * 3_000L, lon = -74.0 + it * 0.0001) }
         repository.markMatched(listOf(ids[0], ids[1], ids[3], ids[4], ids[5], ids[6]))
 
-        val retry = repository.loadMatchingWindow(limit = com.roadconquest.app.matching.OsrmMatcher.MAX_MATCH_POINTS)
+        val retry = repository.loadMatchingWindow(limit = 10)
         assertEquals(setOf(ids[2]), retry.markableIds)
         assertEquals(ids, retry.points.map { it.id })
     }
@@ -378,12 +378,12 @@ class TrackingRepositoryTest {
         assertEquals(setOf(ids[2]), middle.markableIds)
     }
 
-    @Test fun publicServerSizeBatchesDrainBacklogWithoutMissingBoundaryEdges() {
+    @Test fun tenPointBatchesDrainBacklogWithoutMissingBoundaryEdges() {
         val ids = (0 until 27).map { point(1_000_000L + it * 3_000L) }
         val covered = mutableSetOf<Pair<Long, Long>>()
         var batches = 0
         while (true) {
-            val window = repository.loadMatchingWindow(limit = com.roadconquest.app.matching.OsrmMatcher.MAX_MATCH_POINTS)
+            val window = repository.loadMatchingWindow(limit = 10)
             if (window.points.isEmpty()) break
             assertTrue(window.points.size in 2..10)
             covered += window.points.map { it.id }.zipWithNext()
@@ -391,6 +391,22 @@ class TrackingRepositoryTest {
             assertTrue("Backlog must make progress", ++batches <= 5)
         }
         assertEquals(4, batches)
+        assertEquals(ids.zipWithNext().toSet(), covered)
+    }
+
+    @Test fun hundredPointProductionBatchesDrainLongDriveInTwoCalls() {
+        val ids = (0 until 180).map { point(1_000_000L + it * 3_000L, lon = -74.0 + it * 0.00001) }
+        val covered = mutableSetOf<Pair<Long, Long>>()
+        var batches = 0
+        while (true) {
+            val window = repository.loadMatchingWindow(limit = 100)
+            if (window.points.isEmpty()) break
+            assertTrue(window.points.size in 2..100)
+            covered += window.points.map { it.id }.zipWithNext()
+            repository.markMatched(window.markableIds.toList())
+            assertTrue("Bulk matching must drain the queue", ++batches <= 3)
+        }
+        assertEquals(2, batches)
         assertEquals(ids.zipWithNext().toSet(), covered)
     }
 
