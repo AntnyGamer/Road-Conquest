@@ -18,6 +18,14 @@ function reservation(offset = 0, previous = null) {
 }
 
 export const RATE_LIMIT_SQL = reservation();
+// An authenticated route can reserve its existing IP rate limit and check
+// its current session in one PostgreSQL round trip. The permission CTE
+// prevents an exhausted window from reading identity at all.
+export const RATE_LIMIT_SESSION_SQL = `WITH permit AS (${RATE_LIMIT_SQL})
+  SELECT COALESCE((SELECT allowed FROM permit), FALSE) AS allowed,
+    (SELECT user_id FROM sessions WHERE token_hash=$5
+      AND expires_at>CURRENT_TIMESTAMP
+      AND EXISTS(SELECT 1 FROM permit WHERE allowed)) AS id`;
 // A denied/saturated IP produces no username reservation, preserving short
 // circuit accounting. The two distinct bucket rows retain the same lock order.
 const loginBudgetCtes = `WITH ip_limit AS (${reservation()}),

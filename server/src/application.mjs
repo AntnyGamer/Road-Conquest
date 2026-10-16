@@ -15,7 +15,7 @@ import { competitionConfig, createCompetition } from "./competition.mjs";
 import { createFriends } from "./friends.mjs";
 import { createNotifications, createFcmSender } from "./notifications.mjs";
 import { createRequestMaintenance } from "./maintenance.mjs";
-import { RATE_LIMIT_SQL, LOGIN_WITH_USER_SQL } from "./rate-limits.mjs";
+import { RATE_LIMIT_SQL, RATE_LIMIT_SESSION_SQL, LOGIN_WITH_USER_SQL } from "./rate-limits.mjs";
 
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -134,6 +134,22 @@ async function rateLimit(bucket, key, limit, windowMs) {
   );
   // A missing RETURNING row means an already-saturated window: still denied.
   return result.rows[0]?.allowed === true;
+}
+
+// Authenticated-only routes used to run this rate-limit write and a separate
+// session lookup. Keep the same rate budget and expiry check in one statement;
+// never cache a session, skip a limit, or return identity for a denied request.
+async function rateLimitedUser(req, bucket, limit, windowMs) {
+  const token = bearerToken(req);
+  if (!token) return { allowed: true, user: null };
+  await prepareDatabase();
+  const sessionHash = hashSessionToken(token);
+  const result = await pool.query(RATE_LIMIT_SESSION_SQL, [
+    bucket, opaqueRateKey(bucket, clientIp(req)), windowMs, limit, sessionHash
+  ]);
+  const row = result.rows[0];
+  return { allowed: row?.allowed === true,
+    user: row?.allowed === true && row.id != null ? { id: row.id, session_hash: sessionHash } : null };
 }
 
 function sendHtml(res, status, body) {
@@ -266,8 +282,9 @@ async function handle(req, res) {
     // for an absent/malformed bearer token. Validly shaped but invalid tokens
     // retain the original persistent IP/session limits.
     if (!bearerToken(req)) return send(res, 401, { error: "Authentication required." });
-    if (!await rateLimit("push-ip", ip, 60, 60 * 1000)) return send(res, 429, { error: "Try again later." });
-    const user = await authenticatedUser(req);
+    const access = await rateLimitedUser(req, "push-ip", 60, 60 * 1000);
+    if (!access.allowed) return send(res, 429, { error: "Try again later." });
+    const user = access.user;
     if (!user) return send(res, 401, { error: "Authentication required." });
     if (!await rateLimit("push-user", String(user.id), 20, 60 * 1000)) return send(res, 429, { error: "Try again later." });
     if (req.method === "POST") return send(res, 200, await notifications.register(user, await readJson(req)));
@@ -276,8 +293,9 @@ async function handle(req, res) {
   }
   if (url.pathname === "/v1/friends" || url.pathname === "/v1/friends/weekly") {
     if (!bearerToken(req)) return send(res, 401, { error: "Authentication required." });
-    if (!await rateLimit("friends-ip", ip, 120, 60 * 1000)) return send(res, 429, { error: "Try again later." });
-    const user = await authenticatedUser(req);
+    const access = await rateLimitedUser(req, "friends-ip", 120, 60 * 1000);
+    if (!access.allowed) return send(res, 429, { error: "Try again later." });
+    const user = access.user;
     if (!user) return send(res, 401, { error: "Authentication required." });
     if (req.method === "GET" && url.pathname === "/v1/friends/weekly") {
       const metric = url.searchParams.get("metric") || "cells";
@@ -332,8 +350,9 @@ async function handle(req, res) {
   if (url.pathname.startsWith("/v1/verified/")) {
     if (!competition) return send(res, 404, { error: "Verified leaderboards are unavailable." });
     if (!bearerToken(req)) return send(res, 401, { error: "Authentication required." });
-    if (!await rateLimit("competition-ip", ip, 180, 60 * 1000)) return send(res, 429, { error: "Try again later." });
-    const user = await authenticatedUser(req);
+    const access = await rateLimitedUser(req, "competition-ip", 180, 60 * 1000);
+    if (!access.allowed) return send(res, 429, { error: "Try again later." });
+    const user = access.user;
     if (!user) return send(res, 401, { error: "Authentication required." });
     if (req.method === "GET" && url.pathname === "/v1/verified/me") {
       return send(res, 200, await competition.totals(user));

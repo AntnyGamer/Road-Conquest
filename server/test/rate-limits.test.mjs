@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import pg from 'pg';
-import { LOGIN_LIMIT_SQL, LOGIN_WITH_USER_SQL } from '../src/rate-limits.mjs';
+import { LOGIN_LIMIT_SQL, LOGIN_WITH_USER_SQL, RATE_LIMIT_SESSION_SQL } from '../src/rate-limits.mjs';
 
 test('paired login budgets preserve short circuit counts, saturation and independent window resets', { skip: !process.env.DATABASE_URL }, async () => {
   const pool = new pg.Pool({ connectionString:process.env.DATABASE_URL });
@@ -67,5 +67,32 @@ test('one-round-trip login lookup preserves both budgets and hides denied accoun
     const noName=(await pool.query(LOGIN_WITH_USER_SQL,
       ['login-ip',Buffer.alloc(32,6),900000,4,'login-user',Buffer.alloc(32,7),900000,2,null])).rows[0];
     assert.equal(noName.allowed,true);assert.equal(noName.id,null);
+  } finally { await pool.end(); }
+});
+
+test('single-query session and IP budget preserve expiry, denial and window accounting', { skip: !process.env.DATABASE_URL }, async () => {
+  const pool=new pg.Pool({connectionString:process.env.DATABASE_URL});
+  try {
+    await pool.query(await readFile(new URL('../schema.sql',import.meta.url),'utf8'));
+    await pool.query('TRUNCATE auth_rate_limits, sessions, users CASCADE');
+    const user=(await pool.query(`INSERT INTO users(username_display,username_key,password_salt,password_hash)
+      VALUES ('SessionUser','sessionuser',$1,$2) RETURNING id`,[Buffer.alloc(16),Buffer.alloc(64)])).rows[0];
+    const valid=Buffer.alloc(32,51), forged=Buffer.alloc(32,52);
+    await pool.query("INSERT INTO sessions(token_hash,user_id,expires_at) VALUES($1,$2,CURRENT_TIMESTAMP+INTERVAL '1 day')", [valid,user.id]);
+    const bucket=['friends-ip',Buffer.alloc(32,53),60000,2];
+    let queries=0;
+    async function check(hash) { queries++; return (await pool.query(RATE_LIMIT_SESSION_SQL,[...bucket,hash])).rows[0]; }
+    const good=await check(valid);
+    assert.equal(good.allowed,true);assert.equal(good.id,user.id);
+    const missing=await check(forged);
+    assert.equal(missing.allowed,true);assert.equal(missing.id,null);
+    const limited=await check(valid);
+    assert.equal(limited.allowed,false);assert.equal(limited.id,null);
+    assert.equal(queries,3);
+    assert.equal((await pool.query("SELECT attempts FROM auth_rate_limits WHERE bucket='friends-ip'")).rows[0].attempts,3);
+    await pool.query("UPDATE auth_rate_limits SET window_started_at=CURRENT_TIMESTAMP-INTERVAL '2 minutes'");
+    await pool.query("UPDATE sessions SET expires_at=CURRENT_TIMESTAMP-INTERVAL '1 second' WHERE token_hash=$1",[valid]);
+    const expired=await check(valid);
+    assert.equal(expired.allowed,true);assert.equal(expired.id,null);
   } finally { await pool.end(); }
 });

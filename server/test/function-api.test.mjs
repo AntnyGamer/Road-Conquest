@@ -71,7 +71,14 @@ test("serverless accounts enforce authentication, privacy, limits and TLS with r
     assert.equal((await call("/v1/notifications/device", "POST", {})).status, 401);
     assert.equal((await call("/v1/notifications/device", "POST", {}, login.body.token)).status, 400);
     assert.equal((await call("/v1/notifications/device", "DELETE", undefined, login.body.token)).status, 200);
+    // Warm authenticated reads now reserve the IP budget and check the session
+    // together, then query the friend list. No extra session SELECT is needed.
+    const realQuery = runtimePool.query.bind(runtimePool);
+    let friendQueries = 0;
+    runtimePool.query = (...args) => { friendQueries++; return realQuery(...args); };
     assert.deepEqual((await call("/v1/friends", "GET", undefined, login.body.token)).body, { friends: [] });
+    runtimePool.query = realQuery;
+    assert.equal(friendQueries, 2, 'Friends list needs only combined IP/session check and list query');
     assert.deepEqual((await call("/v1/friends?include=weekly", "GET", undefined, login.body.token)).body,
       { friends: [], weekly: { available: false, entries: [] } });
     const friend = await call("/v1/signup", "POST", { username: "FriendDriver", password: credentials.password });
