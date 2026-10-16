@@ -1,6 +1,10 @@
 Additional services
 
 Road matching and backup street-map tiles: Geoapify (https://www.geoapify.com/).
+Fallback road matching: Search by LocationIQ.com (https://locationiq.com).
+LocationIQ road data © OpenStreetMap contributors, ODbL 1.0 (https://www.openstreetmap.org/copyright).
+LocationIQ Free permits commercial use with attribution and permanent storage of response data.
+Request-response caching is limited to 48 hours on Free; this app caches it in memory for at most 60 seconds.
 Map data: OpenStreetMap contributors (https://www.openstreetmap.org/copyright).
 Backup Geoapify map tiles also use OpenMapTiles (https://openmaptiles.org/).
 The backup map visibly credits Powered by Geoapify, OpenStreetMap contributors, and OpenMapTiles.

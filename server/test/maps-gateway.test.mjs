@@ -16,7 +16,7 @@ const env = permit => ({ GEOAPIFY_API_KEY: 'test-key-never-real', MAP_BUDGET: {
 test('maps gateway fails closed without secrets or a shared budget', async () => {
   const worker = createMapsGateway(() => { throw new Error('must not call'); });
   assert.equal((await worker.fetch(request(), {})).status, 503);
-  assert.deepEqual(await (await worker.fetch(new Request('https://maps.example/health'), {})).json(), { ok: true, configured: false });
+  assert.deepEqual(await (await worker.fetch(new Request('https://maps.example/health'), {})).json(), { ok: true, configured: false, locationiqConfigured: false });
 });
 test('pinned upstream receives sanitized payload and no caller credentials', async () => {
   const worker = createMapsGateway(async (url, init) => {
@@ -110,5 +110,115 @@ test('durable reservations persist across instances and enforce global and clien
   const day = new Date().toISOString().slice(0, 10);
   db.prepare('INSERT INTO usage(day,bucket,used) VALUES(?,?,?)').run(day, 'all', 1);
   assert.equal((await reserve(restarted2, 'd', 16, 16, 1)).status, 429);
+  db.close();
+});
+
+const fallbackBody = { mode: 'drive', waypoints: body.waypoints.map(p => ({ ...p, accuracyMeters: 3 })) };
+const fallbackEnv = () => ({ ...env(), LOCATIONIQ_API_KEY: 'fallback-key-never-real' });
+
+test('LocationIQ has its own capped budget and a pinned matching-only upstream', async () => {
+  let reserved;
+  const settings = fallbackEnv();
+  // Losing Geoapify configuration or quota must not disable the backup.
+  delete settings.GEOAPIFY_API_KEY;
+  settings.LOCATIONIQ_DAILY_REQUEST_CAP = '999999';
+  settings.MAP_BUDGET = { idFromName: name => name, get: name => {
+    assert.equal(name, 'locationiq-free-allowance');
+    return { fetch: async (_url, init) => { reserved = JSON.parse(init.body); return Response.json({ allowed: true }); } };
+  } };
+  const worker = createMapsGateway(async (url, init) => {
+    assert.equal(url.origin, 'https://us1.locationiq.com');
+    assert.equal(url.pathname, '/v1/matching/driving/-74,40;-74.001,40');
+    assert.equal(url.searchParams.get('key'), settings.LOCATIONIQ_API_KEY);
+    assert.equal(url.searchParams.get('steps'), 'true');
+    assert.equal(url.searchParams.get('geometries'), 'geojson');
+    assert.equal(url.searchParams.get('tidy'), 'false');
+    assert.equal(url.searchParams.get('gaps'), 'split');
+    assert.equal(url.searchParams.get('radiuses'), '3;3');
+    assert.equal(url.searchParams.get('timestamps'), '1767225600;1767225610');
+    assert.equal(url.searchParams.get('generate_hints'), 'false');
+    assert.equal(init.method, 'GET');
+    assert.equal(init.body, undefined);
+    assert.equal(init.headers.Authorization, undefined);
+    assert.equal(init.headers['CF-Connecting-IP'], undefined);
+    assert.equal(init.redirect, 'manual');
+    return Response.json({ code: 'Ok', matchings: [], tracepoints: [] });
+  });
+  const response = await worker.fetch(request('/v1/locationiq/mapmatching?key=caller&tidy=true',
+    { Authorization: 'account-token' }, { ...fallbackBody, target: 'https://evil.example', profile: 'walking' }), settings);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('Cache-Control'), 'no-store');
+  assert.equal(reserved.limit, 4000);
+  assert.equal(reserved.ipLimit, 1000);
+  assert.equal(reserved.costUnits, 1);
+  assert.equal(reserved.spacingMs, 1050);
+});
+
+test('LocationIQ rejects oversized windows, invalid accuracy, bad timestamps and Worker provenance without spending', async () => {
+  const settings = fallbackEnv();
+  settings.MAP_BUDGET.get = () => { throw new Error('must not reserve'); };
+  const worker = createMapsGateway(() => { throw new Error('must not call'); });
+  for (const value of [
+    { ...fallbackBody, waypoints: Array(26).fill(fallbackBody.waypoints[0]) },
+    { ...fallbackBody, waypoints: fallbackBody.waypoints.map(p => ({ ...p, accuracyMeters: 0 })) },
+    { ...fallbackBody, waypoints: fallbackBody.waypoints.map(p => ({ ...p, accuracyMeters: 1001 })) },
+    { ...fallbackBody, waypoints: fallbackBody.waypoints.map(p => ({ ...p, timestamp: body.waypoints[0].timestamp })) }
+  ]) assert.equal((await worker.fetch(request('/v1/locationiq/mapmatching', {}, value), settings)).status, 400);
+  assert.equal((await worker.fetch(request('/v1/locationiq/mapmatching', { 'CF-Worker': 'untrusted.example' }, fallbackBody), settings)).status, 403);
+  assert.equal((await worker.fetch(request('/v1/locationiq/mapmatching', {}, fallbackBody), env())).status, 503);
+});
+
+test('LocationIQ accepts 25 timestamped points in one request and obeys exhausted shared allowance', async () => {
+  let calls = 0;
+  const worker = createMapsGateway(async url => {
+    calls++;
+    assert.equal(url.pathname.split('/').at(-1).split(';').length, 25);
+    return Response.json({ code: 'NoMatch' });
+  });
+  const trace = { mode: 'drive', waypoints: Array.from({ length: 25 }, (_, i) => ({
+    location: [-74 + i / 10000, 40], accuracyMeters: 3, timestamp: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString()
+  })) };
+  assert.equal((await worker.fetch(request('/v1/locationiq/mapmatching', {}, trace), fallbackEnv())).status, 200);
+  const settings = fallbackEnv();
+  settings.MAP_BUDGET.get = () => ({ fetch: async () => Response.json({}, { status: 429, headers: { 'Retry-After': '3600' } }) });
+  const blocked = await worker.fetch(request('/v1/locationiq/mapmatching', {}, trace), settings);
+  assert.equal(blocked.status, 429);
+  assert.equal(blocked.headers.get('Retry-After'), '3600');
+  assert.equal(calls, 1);
+});
+
+test('documented LocationIQ NoMatch is valid while unknown errors remain secret-safe failures', async () => {
+  for (const code of ['NoMatch', 'NoSegment']) {
+    const worker = createMapsGateway(async () => Response.json({ code, message: 'private upstream detail' }, { status: 404 }));
+    const response = await worker.fetch(request('/v1/locationiq/mapmatching', {}, fallbackBody), fallbackEnv());
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { code });
+  }
+  for (const status of [302, 401, 403, 404, 429, 500]) {
+    const worker = createMapsGateway(async () => new Response('private upstream key', { status,
+      headers: { Location: 'https://evil.example', 'Retry-After': '120' } }));
+    const response = await worker.fetch(request('/v1/locationiq/mapmatching', {}, fallbackBody), fallbackEnv());
+    assert.equal(response.status, status === 429 ? 429 : [401, 403].includes(status) ? 403 : 502);
+    assert.equal(response.headers.get('Location'), null);
+    assert.equal(response.headers.get('Retry-After'), '120');
+    assert.equal((await response.text()).includes('private'), false);
+  }
+});
+
+test('LocationIQ pacing survives restart and reserves fewer than 60 calls per minute', async () => {
+  const db = new DatabaseSync(':memory:');
+  const ctx = { storage: { sql: { exec(sql, ...bindings) {
+    const statement = db.prepare(sql);
+    return sql.startsWith('SELECT') ? statement.all(...bindings) : (statement.run(...bindings), []);
+  } } } };
+  const reserve = budget => budget.fetch(new Request('https://budget/reserve', { method: 'POST',
+    body: JSON.stringify({ bucket: 'a'.repeat(64), limit: 4000, ipLimit: 1000, spacingMs: 1050 }) }));
+  const first = await (await reserve(new MapBudget(ctx))).json();
+  assert.equal(first.waitMs, 0);
+  const second = await (await reserve(new MapBudget(ctx))).json();
+  assert.ok(second.waitMs > 900 && second.waitMs <= 1050);
+  const day = new Date().toISOString().slice(0, 10);
+  db.prepare('UPDATE usage SET used = ? WHERE day = ? AND bucket = ?').run(1000, day, 'units:' + 'a'.repeat(64));
+  assert.equal((await reserve(new MapBudget(ctx))).status, 429);
   db.close();
 });

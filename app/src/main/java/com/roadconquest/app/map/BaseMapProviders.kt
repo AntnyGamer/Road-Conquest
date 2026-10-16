@@ -62,7 +62,7 @@ object BaseMapProviders {
                 if (provider == "openfreemap-streets") MapMode.STREETS.styleAsset else mode.styleAsset
             ).bufferedReader().use { it.readText() })
             val source = root.getJSONObject("sources").getJSONObject("openmaptiles")
-            val extra = (if (BuildConfig.MAP_GATEWAY_URL.isNotBlank()) " | <a href=\"https://www.geoapify.com/\">Geoapify</a>" else "") +
+            val extra = (if (BuildConfig.MAP_GATEWAY_URL.isNotBlank()) " | <a href=\"https://www.geoapify.com/\">Geoapify</a> | <a href=\"https://locationiq.com\">Search by LocationIQ.com</a>" else "") +
                 " | <a href=\"https://www.geoboundaries.org/\">geoBoundaries</a>"
             source.put("attribution", source.optString("attribution") + extra)
             return root.toString()
@@ -77,7 +77,7 @@ object BaseMapProviders {
             val style = when (mode) { MapMode.NIGHT -> "dark-matter"; MapMode.MINIMAL -> "positron"; else -> "osm-liberty" }
             sources.put("backup-map", JSONObject().put("type", "raster").put("tileSize", 256).put("maxzoom", 19)
                 .put("tiles", JSONArray().put(gateway.trimEnd('/') + "/v1/tile/$style/{z}/{x}/{y}.png"))
-                .put("attribution", "<a href=\"https://www.geoapify.com/\">Powered by Geoapify</a> | <a href=\"https://www.openstreetmap.org/copyright\">© OpenStreetMap contributors</a> | <a href=\"https://openmaptiles.org/\">© OpenMapTiles</a> | <a href=\"https://www.geoboundaries.org/\">geoBoundaries</a>"))
+                .put("attribution", "<a href=\"https://www.geoapify.com/\">Powered by Geoapify</a> | <a href=\"https://locationiq.com\">Search by LocationIQ.com</a> | <a href=\"https://www.openstreetmap.org/copyright\">© OpenStreetMap contributors</a> | <a href=\"https://openmaptiles.org/\">© OpenMapTiles</a> | <a href=\"https://www.geoboundaries.org/\">geoBoundaries</a>"))
             layers.put(JSONObject().put("id", "backup-map").put("type", "raster").put("source", "backup-map"))
         }
         return JSONObject().put("version", 8).put("sources", sources).put("layers", layers).toString()

@@ -6,6 +6,7 @@ import com.roadconquest.app.data.TrackPoint
 interface RoadMatcher {
     fun match(points: List<TrackPoint>): MatchResult?
     fun rateLimitRemainingMs(): Long
+    val maxPoints: Int get() = GeoapifyMatcher.MAX_MATCH_POINTS
     /** A valid NoMatch/ambiguous trace is not an outage and must not shop for an easier result. */
     val unavailable: Boolean
 }
@@ -17,17 +18,24 @@ class FallbackRoadMatcher(private val providers: List<RoadMatcher>) : RoadMatche
         unavailable = false
         for (provider in providers) {
             if (provider.rateLimitRemainingMs() > 0L) continue
-            val result = provider.match(points)
+            // A fallback may have a smaller request limit. Submit one prefix;
+            // unsubmitted fixes remain in the persistent queue, without fan-out.
+            val result = provider.match(points.take(provider.maxPoints))
             if (result != null || !provider.unavailable) return result
         }
         unavailable = true
         return null // The persistent GPS queue retries; never synthesize a route.
     }
     override fun rateLimitRemainingMs(): Long = providers.minOfOrNull { it.rateLimitRemainingMs() } ?: 300_000L
+    override val maxPoints: Int get() = providers.firstOrNull { it.rateLimitRemainingMs() == 0L }?.maxPoints
+        ?: GeoapifyMatcher.MAX_MATCH_POINTS
 
     companion object {
         fun configured(): FallbackRoadMatcher = FallbackRoadMatcher(buildList {
-            if (BuildConfig.MAP_GATEWAY_URL.isNotBlank()) add(GeoapifyMatcher(BuildConfig.MAP_GATEWAY_URL))
+            if (BuildConfig.MAP_GATEWAY_URL.isNotBlank()) {
+                add(GeoapifyMatcher(BuildConfig.MAP_GATEWAY_URL))
+                add(LocationIqMatcher(BuildConfig.MAP_GATEWAY_URL))
+            }
         })
     }
 }

@@ -806,8 +806,8 @@ class TrackingService : Service(), LocationListener {
                 // Priority turn repairs keep ten-point context; bulk successful driving
                 // uses up to 100 points per paid credit. Shorter traces avoid repeatedly
                 // rejecting an entire long route at one complex junction.
-                val pointLimit = if (retryStartId != null) minOf(10, adaptiveMatchPointLimit)
-                    else adaptiveMatchPointLimit
+                val pointLimit = if (retryStartId != null) minOf(10, adaptiveMatchPointLimit, matcher.maxPoints)
+                    else minOf(adaptiveMatchPointLimit, matcher.maxPoints)
                 val window = repository.loadMatchingWindow(pointLimit, retryGapStartId = retryStartId)
                 val points = window.points
                 if (points.isEmpty()) return

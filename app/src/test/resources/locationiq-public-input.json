@@ -1,0 +1,32 @@
+{
+  "source": "Geoapify's public Morisse example, with intermediate samples along its published OpenStreetMap geometry; no private user route",
+  "points": [
+    [
+      10.694703,
+      47.567028
+    ],
+    [
+      10.694792,
+      47.567251
+    ],
+    [
+      10.694887,
+      47.567512
+    ],
+    [
+      10.694994,
+      47.56774
+    ],
+    [
+      10.6950319,
+      47.567783
+    ]
+  ],
+  "times": [
+    1767251374,
+    1767251377,
+    1767251381,
+    1767251384,
+    1767251385
+  ]
+}

@@ -54,6 +54,29 @@ class ProviderFallbackTest {
         assertEquals(2000L, matcher.rateLimitRemainingMs())
         assertNull(FallbackRoadMatcher(emptyList()).match(points))
     }
+    @Test fun smallerFallbackGetsOnePrefixAndCannotResolveUnsubmittedFixes() {
+        val primary = Fake(unavailable = true)
+        var submitted = emptyList<TrackPoint>()
+        val fallback = object : RoadMatcher {
+            override val maxPoints = 25
+            override val unavailable = false
+            override fun rateLimitRemainingMs() = 0L
+            override fun match(points: List<TrackPoint>): MatchResult {
+                submitted = points
+                return MatchResult(emptyList(), points.associate { it.id to 0.9 })
+            }
+        }
+        val matcher = FallbackRoadMatcher(listOf(primary, fallback))
+        val input = List(100) { points.first().copy(id = it + 1L) }
+        assertEquals(100, matcher.maxPoints)
+        val result = requireNotNull(matcher.match(input))
+        assertEquals(input.take(25), submitted)
+        assertEquals((1L..25L).toSet(), result.matchedPointConfidences.keys)
+        primary.cooldown = 1000L
+        assertEquals(25, matcher.maxPoints)
+        primary.cooldown = 0L
+        assertEquals(100, matcher.maxPoints)
+    }
     @Test fun realGeoapifyPublicExamplePassesExistingGeometryAndSnapValidation() {
         val result = requireNotNull(GeoapifyMatcher("https://maps.example").parse(example, points))
         assertTrue(result.roads.isNotEmpty())
