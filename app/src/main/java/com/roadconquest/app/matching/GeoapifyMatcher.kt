@@ -16,7 +16,13 @@ class GeoapifyMatcher(
     private val origin: String,
     private val health: ProviderHealth = ProviderHealth.shared
 ) : RoadMatcher {
-    companion object { const val MAX_MATCH_POINTS = 200 }
+    companion object {
+        const val MAX_MATCH_POINTS = 200
+        private val COUNTABLE_ROAD_CLASSES = setOf(
+            "motorway", "trunk", "primary", "secondary", "tertiary",
+            "residential", "unclassified", "living_street", "service"
+        )
+    }
     override var unavailable = false
         private set
     private val providerId = "matching:$origin"
@@ -95,10 +101,16 @@ class GeoapifyMatcher(
         for (i in 0 until line.length()) if (!valid(line.getJSONArray(i))) return null
         val steps = legs.getJSONObject(0).getJSONArray("steps")
         if (steps.length() == 0) return null
-        for (i in 0 until steps.length()) {
-            val step = steps.getJSONObject(i)
-            val from = step.getInt("from_index"); val to = step.getInt("to_index")
+        // Parse provider step metadata just once, not for every GPS leg.
+        val stepObjects = Array(steps.length()) { steps.getJSONObject(it) }
+        val stepStarts = IntArray(stepObjects.size)
+        val stepEnds = IntArray(stepObjects.size)
+        for (i in stepObjects.indices) {
+            val from = stepObjects[i].getInt("from_index")
+            val to = stepObjects[i].getInt("to_index")
             if (from !in 0 until line.length() || to !in from until line.length()) return null
+            stepStarts[i] = from
+            stepEnds[i] = to
         }
         val waypoints = props.getJSONArray("waypoints")
         if (waypoints.length() != points.size) return null
@@ -118,8 +130,7 @@ class GeoapifyMatcher(
             if (!valid(location)) return null
             val stepIndex = waypoint.optInt("step_index", -1)
             if (stepIndex !in 0 until steps.length()) return null
-            val step = steps.getJSONObject(stepIndex)
-            positions[index] = position(line, location, step.getInt("from_index"), step.getInt("to_index")) ?: return null
+            positions[index] = position(line, location, stepStarts[stepIndex], stepEnds[stepIndex]) ?: return null
             locations[index] = location
         }
         val matchings = JSONArray()
@@ -134,10 +145,9 @@ class GeoapifyMatcher(
             var complete = true
             for (i in first until index - 1) {
                 val pieces = JSONArray()
-                for (s in 0 until steps.length()) {
-                    val step = steps.getJSONObject(s)
-                    val from = maxOf(positions[i], step.getInt("from_index").toDouble())
-                    val to = minOf(positions[i + 1], step.getInt("to_index").toDouble())
+                for (s in stepObjects.indices) {
+                    val from = maxOf(positions[i], stepStarts[s].toDouble())
+                    val to = minOf(positions[i + 1], stepEnds[s].toDouble())
                     if (to - from < 0.000001) continue
                     val coordinates = JSONArray().put(at(line, from))
                     for (v in (floor(from).toInt() + 1)..ceil(to).toInt()) {
@@ -147,12 +157,9 @@ class GeoapifyMatcher(
                     val distance = (0 until coordinates.length() - 1).sumOf {
                         meters(coordinates.getJSONArray(it), coordinates.getJSONArray(it + 1))
                     }
-                    val roadClass = step.optString("road_class")
-                    // Count geometrically verified drivable roads, including unnamed
-                    // streets and roundabouts; exclude link ramps, footways and unknown classes.
-                    val drivableRoad = roadClass in setOf("motorway", "trunk", "primary",
-                        "secondary", "tertiary", "residential", "unclassified",
-                        "living_street", "service")
+                    val step = stepObjects[s]
+                    // Preserve the same classification without allocating a new Set for each step.
+                    val drivableRoad = step.optString("road_class") in COUNTABLE_ROAD_CLASSES
                     pieces.put(JSONObject().put("name", step.optString("name")).put("distance", distance)
                         .put("geometry", JSONObject().put("type", "LineString").put("coordinates", coordinates))
                         .put("maneuver", JSONObject().put("type", if (drivableRoad) "turn" else "ramp")))
