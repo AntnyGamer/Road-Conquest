@@ -27,6 +27,10 @@ Geoapify provides no externally reported confidence probability or explicit ramp
 
 HTTP 429, 401/403, 5xx, timeouts and connection failures move to an eligible backup. Retry-After seconds and HTTP dates are respected, up to a day. Providers return in priority order when their cooldown expires. A provider's exhausted budget is never bypassed by changing keys, accounts or forwarding headers.
 
+## Avoid duplicate cached boundary decompression
+
+- A normal background overlay refresh of an already verified town now checks the cached verification bit in its first gzip read, rather than decompressing and parsing the complete polygon twice. Valid negative-result protection and strict verified-candidate requirements are preserved. Existing cache regression tests exercise both behaviors.
+
 ## Weekly challenge SQLite batching
 
 - The same week-scoped road and town counts now run as two independently optimized SQL scalar subqueries within one SQLite statement per week instead of opening two cursors. Both original filters are unchanged.

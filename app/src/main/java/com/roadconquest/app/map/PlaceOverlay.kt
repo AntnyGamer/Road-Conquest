@@ -288,13 +288,16 @@ object PlaceOverlayCache {
     ): Boolean = synchronized(mutationLock) {
         if (expectedGeneration != null && generation.get() != expectedGeneration) return@synchronized false
         val target = file(context, place)
-        val cached = readCacheFile(target, place)
-        // Preserve an already-verified town polygon against a stale generic
-        // overlay refresh, and never replace a valid polygon with a miss.
-        if (cached.data != null && (data == null ||
-                place.kind == PlaceKind.TOWN && !verifiedForDiscovery &&
-                readCacheFile(target, place, verifiedOnly = true).data != null)
-        ) return@synchronized true
+        // A generic refresh must not replace a verified town polygon. Ask
+        // the cache reader to enforce that in its single decode; previously the
+        // large gzip polygon was decompressed and parsed twice on this path.
+        val preserveVerifiedTown = data != null && place.kind == PlaceKind.TOWN &&
+            !verifiedForDiscovery
+        val cached = readCacheFile(target, place, verifiedOnly = preserveVerifiedTown)
+        // A negative response must also preserve any existing valid polygon.
+        if (cached.data != null && (data == null || preserveVerifiedTown)) {
+            return@synchronized true
+        }
         val directory = target.parentFile ?: return@synchronized false
         if (!directory.exists() && !directory.mkdirs()) return@synchronized false
         val json = JSONObject()
