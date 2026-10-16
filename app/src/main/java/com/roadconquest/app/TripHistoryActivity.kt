@@ -443,6 +443,7 @@ class TripHistoryActivity : Activity() {
         if (resultCode != Activity.RESULT_OK || trip == null || !VipEntitlement.isActive(this)) return
         val hideEnds = redactGpxEnds
         worker.execute {
+            var cleanupFailed = false
             val result = runCatching {
                 val stream = contentResolver.openOutputStream(uri, "w")
                     ?: error("Could not open selected file")
@@ -454,21 +455,28 @@ class TripHistoryActivity : Activity() {
                 check(history.isCurrentTrip(trip)) { "Trip history changed while saving GPX" }
                 if (pointCount == 0) {
                     // A short drive has no privacy-safe coordinates to export.
-                    // Don't leave an empty document in the user's selected folder.
-                    runCatching { contentResolver.delete(uri, null, null) }
+                    // Do not report a clean deletion if the provider refused it.
+                    check(contentResolver.delete(uri, null, null) > 0) {
+                        "Could not remove empty GPX document"
+                    }
                 }
                 pointCount
             }.onFailure {
-                // A cloud document provider may be slow: delete incomplete files
-                // on the worker rather than blocking the Android UI thread.
-                runCatching { contentResolver.delete(uri, null, null) }
+                // A cloud document provider may be slow or refuse deletion.
+                // Warn about a possibly retained private route instead of
+                // claiming a failed write always removed its document.
+                cleanupFailed = !runCatching { contentResolver.delete(uri, null, null) > 0 }
+                    .getOrDefault(false)
             }
             runOnUiThread {
                 if (isDestroyed) return@runOnUiThread
-                Toast.makeText(this, result.fold(
-                    { if (it == 0) "No coordinates remain after hiding endpoints. Consider a different trip." else "GPX saved ($it GPS points)" },
-                    { "Could not save GPX. Choose another file or reload the trip." }
-                ), Toast.LENGTH_LONG).show()
+                val message = when {
+                    cleanupFailed -> "GPX export failed. The created file may remain; delete it manually in Files."
+                    result.isFailure -> "Could not save GPX. Choose another file or reload the trip."
+                    result.getOrThrow() == 0 -> "No coordinates remain after hiding endpoints. Consider a different trip."
+                    else -> "GPX saved (${result.getOrThrow()} GPS points)"
+                }
+                Toast.makeText(this, message, Toast.LENGTH_LONG).show()
             }
         }
     }
