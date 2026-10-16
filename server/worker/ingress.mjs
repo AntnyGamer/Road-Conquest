@@ -23,9 +23,17 @@ function configuredOrigin(value) {
 }
 
 function trustedEdgeIp(request) {
+  // Same-zone Worker subrequests can derive CF-Connecting-IP from a mutable
+  // x-real-ip header. Do not turn an upstream Worker's claim into our signature.
+  // Cloudflare adds CF-Worker to fetch subrequests; an extra caller-supplied
+  // marker can only opt down to Neon's anonymous budget, never gain trust.
+  if (request.headers.has("CF-Worker")) return null;
   // Only the Cloudflare-injected edge header is eligible. The backend performs
   // the final IPv4/IPv6 parsing and signature verification.
   const ip = request.headers.get("CF-Connecting-IP");
+  // Cross-zone Worker subrequests use this shared placeholder, not a real
+  // external client's address. Keep those on the anonymous fallback as well.
+  if (ip?.toLowerCase() === "2a06:98c0:3600::103") return null;
   return ip && ip.length <= 45 && /^[0-9a-fA-F:.]+$/.test(ip) &&
     (ip.includes(":") || ip.includes(".")) ? ip : null;
 }
@@ -68,11 +76,13 @@ export function createAccountIngress(upstreamFetch = fetch, now = () => Date.now
     // that actual forwarded request exactly once before adding signed identity.
     // Preserve the method, body, credentials and query parameters unchanged.
     const forwarded = new Request(target, request);
-    for (const name of [
-      "host", "cf-connecting-ip", "cf-connecting-ipv6", "x-forwarded-for",
-      "x-real-ip", "x-roadconquest-client-ip", "x-roadconquest-client-timestamp",
-      "x-roadconquest-client-signature"
-    ]) forwarded.headers.delete(name);
+    for (const name of [...forwarded.headers.keys()]) {
+      if (name === "host" || name === "forwarded" || name === "x-real-ip" ||
+          name === "true-client-ip" || name === "cf-connecting-ip" ||
+          name === "cf-connecting-ipv6" || name === "cf-pseudo-ipv4" ||
+          name === "cf-worker" || name.startsWith("x-forwarded-") ||
+          name.startsWith("x-roadconquest-client-")) forwarded.headers.delete(name);
+    }
     const ip = trustedEdgeIp(request);
     if (ip) {
       const timestamp = String(now());

@@ -1,7 +1,7 @@
 # Road Conquest account service
 
 This service backs Road Conquest accounts and the leaderboard-privacy preference. Release builds
-and debug builds default to the live Road Conquest Neon HTTPS endpoint. Automated tests override
+and debug builds default to the existing Road Conquest Cloudflare Worker HTTPS endpoint. Automated tests override
 the endpoint to avoid production accounts. Override either build with a Gradle property:
 
 ```properties
@@ -124,24 +124,66 @@ is **not** deployed by GitHub CI. It signs Cloudflare's edge-provided
 so unrelated legitimate users no longer share the fallback eight-signups/hour
 budget. It does **not** trust client-supplied forwarding or signature headers.
 
-1. Create or edit a **Cloudflare Worker on the Free plan**, using the module in
-   `server/worker/ingress.mjs` as its entrypoint. Do not overwrite an existing
-   production Worker without first confirming its current routes and behavior.
+1. Use a **new Cloudflare Worker on the Free plan**. The nonsecret configuration is
+   `server/worker/wrangler.jsonc`; its `main` path is relative to that file, not the
+   repository root. It enables the standalone `workers.dev` URL and disables preview
+   URLs. First authenticate with `npx wrangler login`, run `npx wrangler whoami`, and
+   inspect Workers & Pages and routes in the selected account. Confirm the account's
+   Workers plan is Free and the configured name `roadconquest-ingress` is unused.
+   If that name exists, choose a new unused name in the config. Do not overwrite,
+   redirect, or edit `roadconquest-api` or another existing Worker.
 2. Configure `API_ORIGIN` as the **base HTTPS invocation origin** of the active
    Neon `roadconquest` Function, without a path or query. Configure
    `RATE_LIMIT_IP_SIGNATURE_KEY` as a **Cloudflare Worker secret** with the
    exact same 32+-character random value held by the Neon Function. Never put
    the secret in Android, JavaScript delivered to browsers, source control or logs.
+   Verify the origin against Neon's active function metadata before deployment.
+   The checked-in hostname is public configuration, not a database credential.
+
+   From the repository root, validate and deploy only the new Worker:
+
+   ```sh
+   node --test server/test/ingress.test.mjs server/test/fetch-adapter.test.mjs
+   npx wrangler deploy --dry-run --config server/worker/wrangler.jsonc
+   npx wrangler deploy --config server/worker/wrangler.jsonc
+   npx wrangler secret put RATE_LIMIT_IP_SIGNATURE_KEY --config server/worker/wrangler.jsonc
+   ```
+
+   Enter the existing key only at Wrangler's hidden secret prompt or in Cloudflare's
+   secret UI. Do not pass it as a command argument or put it in `vars`. A new Worker
+   without the key returns `503`; no Android traffic should point to it yet. Record
+   the actual URL returned by Cloudflare rather than deriving one from an account
+   name. Do not declare a required secret before the initial Worker/secret setup.
+
+   If the existing Neon key cannot be securely recovered, stop before setting an
+   unrelated value or rotating Neon. Inventory existing trusted ingress dependents,
+   then obtain the owner's explicit approval for a coordinated rotation. Preserve
+   every other Neon environment variable, update all dependents, and verify them
+   after rotation. Local `.env*`, `.dev.vars*`, and `.wrangler/` state are ignored;
+   keep any secret-bearing scratch files outside the checkout.
 3. Verify `GET /health`, `GET /privacy`, `GET /delete-account`, two distinct
    client IPs' signup/login budgets, logout, username changes and account
-   deletion from the Worker URL. Test spoofed `X-Forwarded-For` and
+   deletion from the Worker URL, using explicitly authorized disposable test accounts
+   only. Include `GET /v1/competition`, status/body propagation, HTTPS and `no-store`.
+   Test spoofed `X-Forwarded-For`, `X-Real-IP` and
    `X-RoadConquest-Client-*` request headers; no caller-supplied IP may bypass
    the verified signature check. Run `node --test test/ingress.test.mjs`
    from `server/` before publishing changes to the Worker.
-4. Only after live end-to-end checks pass, configure
-   `ROADCONQUEST_ACCOUNT_API_URL` for the **release** build to the confirmed
-   Worker URL. `app/build.gradle.kts` has a default URL which must not be
-   assumed to be correctly configured merely because it is present in code.
+   The distinct-IP check requires two real external clients (for example, home
+   broadband and cellular), or safe backend metrics proving independent buckets.
+   Header spoofing and local simulated-IP tests are not live attribution evidence.
+   Confirm unsigned direct-to-Neon requests still receive the shared fallback budget.
+4. Keep the existing Android default unchanged. Once all live checks pass, an
+   internal test build can explicitly override `ROADCONQUEST_ACCOUNT_API_URL` with
+   the actual tested Worker URL. Obtain the owner's separate approval before any
+   production endpoint switch, merge, app release, or Google Play upload.
+
+The ingress does not sign client identity for requests marked `CF-Worker` or for
+Cloudflare's cross-zone Worker placeholder IP. Same-zone Worker subrequests can
+alter `CF-Connecting-IP` through `x-real-ip`; those requests deliberately retain
+Neon's shared fallback budget. All `X-RoadConquest-Client-*` and forwarding identity
+headers are removed before a directly received edge identity is signed. See
+[Cloudflare's header provenance documentation](https://developers.cloudflare.com/fundamentals/reference/http-headers/#cf-connecting-ip-in-worker-subrequests).
 
 The direct Neon invocation URL may remain publicly reachable; unsigned direct
 requests deliberately retain the conservative shared budget. Worker requests
