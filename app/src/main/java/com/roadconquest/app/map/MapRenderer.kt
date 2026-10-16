@@ -101,6 +101,14 @@ class MapRenderer(
     @Volatile private var shownOverlayCacheGeneration = -1L
     private val overlayClient = PlaceOverlayClient()
     @Volatile private var overlayGeneration = 0
+    @Volatile private var visibleTownViewport: OverlayViewport? = null
+    // These are owned by overlayExecutor. Camera changes can redraw a new
+    // viewport from memory instead of refetching every visited boundary.
+    private var loadedOverlayGeneration = -1
+    private var loadedOverlayKind: PlaceKind? = null
+    private var loadedOverlayCacheGeneration = -1L
+    private var loadedOverlayData: List<PlaceOverlayData> = emptyList()
+    private val overlayBounds = HashMap<String, OverlayViewport?>()
     @Volatile private var destroyed = false
     private val liveLocation = LiveLocation()
     private var displayedRoads = OverlayRoads.EMPTY
@@ -163,6 +171,7 @@ class MapRenderer(
         scheduleFogRender()
         updateFogCoverage(cameraPosition = cameraPosition)
         refreshViewport()
+        refreshVisibleTownOverlays()
     }
 
     fun initialize(onReady: () -> Unit) {
@@ -204,10 +213,38 @@ class MapRenderer(
         refreshPlaceOverlays()
     }
 
+    private fun captureTownViewport(): OverlayViewport? {
+        if (map.cameraPosition.zoom < 8.0) return null
+        val bounds = map.projection.visibleRegion.latLngBounds
+        return OverlayViewport.padded(
+            bounds.longitudeWest, bounds.longitudeEast,
+            bounds.latitudeSouth, bounds.latitudeNorth
+        )
+    }
+
+    private fun refreshVisibleTownOverlays() {
+        if (destroyed || overlayMode != PlaceOverlayMode.TOWN) return
+        visibleTownViewport = captureTownViewport()
+        val generation = overlayGeneration
+        val cacheGeneration = PlaceOverlayCache.generation()
+        runCatching {
+            overlayExecutor.execute {
+                if (!destroyed && generation == overlayGeneration &&
+                    loadedOverlayGeneration == generation &&
+                    loadedOverlayKind == PlaceKind.TOWN &&
+                    loadedOverlayCacheGeneration == cacheGeneration
+                ) {
+                    postPlaceOverlay(generation, PlaceKind.TOWN, loadedOverlayData, cacheGeneration)
+                }
+            }
+        }
+    }
+
     fun refreshPlaceOverlays() {
         if (destroyed) return
         val generation = ++overlayGeneration
         val kind = overlayMode.kind ?: return
+        visibleTownViewport = if (kind == PlaceKind.TOWN) captureTownViewport() else null
         val cacheGeneration = PlaceOverlayCache.generation()
         overlayExecutor.execute {
             val places = runCatching { ProgressionRepository(context).visitedPlaces(kind) }
@@ -217,6 +254,8 @@ class MapRenderer(
                 }
             if (destroyed || generation != overlayGeneration ||
                 cacheGeneration != PlaceOverlayCache.generation()) return@execute
+            // A fresh overlay generation invalidates old in-memory shapes.
+            overlayBounds.clear()
             val loaded = ArrayList<PlaceOverlayData>(places.size)
             val missing = ArrayList<com.roadconquest.app.data.PlaceDiscovery>()
             for (place in places) {
@@ -226,7 +265,13 @@ class MapRenderer(
                 if (!cached.cached) missing += place
                 cached.data?.let(loaded::add)
             }
+            loadedOverlayData = loaded
+            loadedOverlayGeneration = generation
+            loadedOverlayKind = kind
+            loadedOverlayCacheGeneration = cacheGeneration
             postPlaceOverlay(generation, kind, loaded, cacheGeneration)
+            var changesSincePost = 0
+            var lastPostedAt = SystemClock.elapsedRealtime()
             for (place in missing) {
                 if (destroyed || generation != overlayGeneration ||
                     cacheGeneration != PlaceOverlayCache.generation()) return@execute
@@ -261,10 +306,22 @@ class MapRenderer(
                 } else data
                 if (resolved != null) {
                     loaded += resolved
-                    // Show completed boundaries immediately without waiting for
-                    // a future viewport or discovery refresh.
-                    postPlaceOverlay(generation, kind, loaded, cacheGeneration)
+                    changesSincePost++
+                    val now = SystemClock.elapsedRealtime()
+                    // Do not build and upload an increasingly huge source after
+                    // EVERY polygon. Keep the first result responsive, then
+                    // batch incremental native-map updates (~1.5 seconds max).
+                    if (loaded.size == 1 || changesSincePost >= 6 ||
+                        now - lastPostedAt >= 1_500L
+                    ) {
+                        postPlaceOverlay(generation, kind, loaded, cacheGeneration)
+                        changesSincePost = 0
+                        lastPostedAt = now
+                    }
                 }
+            }
+            if (changesSincePost > 0 && !destroyed && generation == overlayGeneration) {
+                postPlaceOverlay(generation, kind, loaded, cacheGeneration)
             }
         }
     }
@@ -690,7 +747,15 @@ class MapRenderer(
     ) {
         // Polygon conversion can be expensive for many visited municipalities.
         // Build immutable GeoJSON on overlayExecutor instead of blocking the map's UI thread.
-        val snapshot = data.toList()
+        val viewport = if (kind == PlaceKind.TOWN && data.size >= 200) visibleTownViewport else null
+        val snapshot = if (viewport != null) {
+            data.filter { place ->
+                val key = "${place.key}:${place.geometryJson.hashCode()}"
+                viewport.intersects(overlayBounds.getOrPut(key) {
+                    OverlayViewport.ofGeometry(place.geometryJson)
+                })
+            }
+        } else data.toList()
         val keys = snapshot.map { "${it.key}:${it.geometryJson.hashCode()}" }
         // This gets called after normal activity refreshes as well as during
         // incremental downloads. If the complete geometry set is already drawn,
@@ -1396,6 +1461,8 @@ class MapRenderer(
         carIconBitmap?.recycle()
         carIconBitmap = null
         overlayGeneration++
+        loadedOverlayData = emptyList()
+        overlayBounds.clear()
         executor.shutdownNow()
         fogExecutor.shutdownNow()
         overlayExecutor.shutdownNow()
