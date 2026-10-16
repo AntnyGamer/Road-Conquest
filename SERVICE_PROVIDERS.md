@@ -41,6 +41,11 @@ HTTP 429, 401/403, 5xx, timeouts and connection failures move to an eligible bac
 - The same week-scoped road and town counts now run as two independently optimized SQL scalar subqueries within one SQLite statement per week instead of opening two cursors. Both original filters are unchanged.
 - Up to four earned challenge rewards are inserted with one atomic `INSERT OR IGNORE` statement rather than four individual writes. Existing reward keys, payout amounts, timestamp, idempotence and previous-week grace are preserved. The challenge tests now verify that repeated refreshes do not create extra weekly reward rows.
 
+## Minimizing map gateway budget database statements
+
+- Each successful provider-credit reservation now updates the global credit counter, the per-client credit counter and the provider's next rate-limit slot in **one** SQLite statement rather than two. The statement is atomic and retains the exact daily caps, previous-version counter compatibility, 250 ms / 1050 ms pacing and safe failures. Tests check one write per allowed reservation and none on exhausted quotas.
+- This reduces Durable Object SQLite statement count; it does **not** claim a reduction in the three actual quota rows written per reservation or in upstream map matching requests.
+
 ## Reducing personal leaderboard request load
 
 - An authenticated `GET /v1/leaderboard?metric=cells&mine=1` may include the same verified-only `mine` total returned by the existing `/v1/verified/me` endpoint. The global leaderboard can then load its list and the current user's total in one HTTP request and one IP-rate-limit reservation, while retaining the original fallback when talking to older account servers.

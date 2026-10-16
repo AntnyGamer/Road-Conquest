@@ -125,14 +125,14 @@ test('durable reservations persist across instances and enforce global and clien
   assert.equal((await reserve(first, 'a')).status, 200);
   assert.equal(counterReads, 2, 'Each reservation should need only one budget read');
   assert.equal(pruneCalls, 1, 'Expired-day cleanup runs only once per active Durable Object');
-  assert.equal(insertStatements, 4, 'Two allowed requests need two writes apiece');
+  assert.equal(insertStatements, 2, 'Each reservation advances both budgets and provider pacing in one write');
   const restarted = new MapBudget(ctx);
   assert.equal((await reserve(restarted, 'a')).status, 429);
   assert.equal((await reserve(restarted, 'b')).status, 200);
   assert.equal((await reserve(restarted, 'c')).status, 429);
   assert.equal(counterReads, 5, 'Denied requests also use one read and make no reservation');
   assert.equal(pruneCalls, 2, 'A restarted Durable Object safely rechecks expired rows once');
-  assert.equal(insertStatements, 6, 'Quota-rejected requests never write counters');
+  assert.equal(insertStatements, 3, 'Quota-rejected requests never write counters');
   // The next request must be rejected if its *cost*, not just request count,
   // would cross the remaining allowance.
   const restarted2 = new MapBudget(ctx);
