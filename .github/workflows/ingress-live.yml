@@ -1,0 +1,63 @@
+name: Live account ingress verification
+on:
+  push:
+    branches: [ui-modernization-tile-milestones]
+    paths:
+      - .github/workflows/ingress-live.yml
+      - server/tools/verify-live-ingress.mjs
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: roadconquest-live-ingress
+  cancel-in-progress: false
+jobs:
+  client-a:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '22'
+      - run: node server/tools/verify-live-ingress.mjs client-a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: ingress-client-a
+          path: live-ingress-evidence/client-a.json
+          retention-days: 7
+  client-b:
+    needs: client-a
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '22'
+      - run: node server/tools/verify-live-ingress.mjs client-b
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: ingress-client-b
+          path: live-ingress-evidence/client-b.json
+          retention-days: 7
+  audit:
+    needs: [client-a, client-b]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: ingress-client-*
+      - run: node server/tools/verify-live-ingress.mjs audit
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: live-ingress-results
+          path: live-ingress-results.json
+          retention-days: 7
