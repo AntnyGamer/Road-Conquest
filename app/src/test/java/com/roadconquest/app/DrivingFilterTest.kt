@@ -72,6 +72,15 @@ class DrivingFilterTest {
         assertTrue(service.shouldPersistDrivingSample(a, straight.apply { accuracy = 5f; removeBearing() }))
     }
 
+    @Test fun forcedRemoteRetriesRespectTheSameSixMinuteLimit() {
+        val time = 1_000_000L
+        assertEquals(0L, TrackingService.remainingRemoteMatchingDelayMs(time, 0L))
+        assertEquals(360_000L, TrackingService.remainingRemoteMatchingDelayMs(time, time))
+        assertEquals(240_000L, TrackingService.remainingRemoteMatchingDelayMs(time + 120_000L, time))
+        assertEquals(0L, TrackingService.remainingRemoteMatchingDelayMs(time + 360_000L, time))
+        assertEquals(0L, TrackingService.remainingRemoteMatchingDelayMs(time - 1L, time))
+    }
+
     @Test fun nanAccuracyCannotAuthorizeDriving() {
         assertFalse(accepts(point(40.0002, 13).apply { accuracy = Float.NaN }, point(40.0, 10)))
     }

@@ -812,7 +812,14 @@ class TrackingService : Service(), LocationListener {
                         return@repeat
                     }
                 }
-                lastMatchAttempt = SystemClock.elapsedRealtime()
+                val nowElapsed = SystemClock.elapsedRealtime()
+                val wait = remainingRemoteMatchingDelayMs(nowElapsed, lastMatchAttempt)
+                if (wait > 0L) {
+                    // This also covers final flushes and forced backlog retry runs.
+                    scheduleBacklogContinuation(wait)
+                    return
+                }
+                lastMatchAttempt = nowElapsed
                 val result = matcher.match(points)
                 if (result == null) {
                     val providerCooldown = matcher.rateLimitRemainingMs()
@@ -891,7 +898,7 @@ class TrackingService : Service(), LocationListener {
         }
     }
 
-    private fun scheduleBacklogContinuation() {
+    private fun scheduleBacklogContinuation(delayMs: Long = MATCH_BACKLOG_CONTINUATION_MS) {
         if (!backlogContinuationScheduled.compareAndSet(false, true)) return
         runCatching {
             matchingExecutor.schedule(
@@ -899,7 +906,7 @@ class TrackingService : Service(), LocationListener {
                     backlogContinuationScheduled.set(false)
                     if (ready) maybeRunMatching(force = true)
                 },
-                MATCH_BACKLOG_CONTINUATION_MS,
+                delayMs.coerceAtLeast(1_000L),
                 TimeUnit.MILLISECONDS
             )
         }.onFailure { backlogContinuationScheduled.set(false) }
@@ -1019,6 +1026,12 @@ class TrackingService : Service(), LocationListener {
         private const val BACKGROUND_PLACE_DISCOVERY_INTERVAL_MS = 60_000L
         // The pending-route overlay remains live while verified matches are batched.
         private const val MATCH_INTERVAL_MS = 7 * 60_000L
+        // No more than one remote attempt per six minutes while the service is running.
+        private const val MIN_REMOTE_MATCH_INTERVAL_MS = 6 * 60_000L
+
+        internal fun remainingRemoteMatchingDelayMs(nowElapsed: Long, lastElapsed: Long): Long =
+            if (lastElapsed <= 0 || nowElapsed < lastElapsed) 0L
+            else (MIN_REMOTE_MATCH_INTERVAL_MS - (nowElapsed - lastElapsed)).coerceAtLeast(0L)
         private const val MIN_STRAIGHT_SAMPLE_INTERVAL_MS = 5_500L
         private const val MIN_RETAINED_BEND_DEGREES = 18f
         private const val PLACE_CANDIDATE_MIN_DISTANCE_M = 55f
