@@ -32,7 +32,9 @@ class OsrmMatcher(
     // OSRM deployments unthrottled unless they explicitly report a limit.
     private val minimumRequestIntervalMs: Long =
         if (baseUrl.trimEnd('/') == "https://router.project-osrm.org") 1_100L else 0L
-) {
+) : RoadMatcher {
+    override var unavailable = false
+        private set
     private var nextRequestAt = 0L
     @Volatile private var rateLimitedUntil = 0L
 
@@ -45,10 +47,11 @@ class OsrmMatcher(
     private val recentResponses = LinkedHashMap<String, CachedResponse>(4, 0.75f, true)
 
     /** Only a provider's rate-limit response blocks new matching requests. */
-    internal fun rateLimitRemainingMs(): Long =
+    override fun rateLimitRemainingMs(): Long =
         (rateLimitedUntil - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
 
-    fun match(points: List<TrackPoint>): MatchResult? {
+    override fun match(points: List<TrackPoint>): MatchResult? {
+        unavailable = false
         if (points.size !in 2..MAX_MATCH_POINTS) return null
         val coordinates = points.joinToString(";") { "${it.longitude},${it.latitude}" }
         var previousSecond = Long.MIN_VALUE
@@ -167,7 +170,7 @@ class OsrmMatcher(
             }
             recentResponses.remove(cacheKey)
         }
-        if (rateLimitRemainingMs() > 0L) return null
+        if (rateLimitRemainingMs() > 0L) { unavailable = true; return null }
         // Only the shared public demo needs pacing. The matcher runs on a
         // background executor, so no location callback or UI thread waits.
         val waitMs = nextRequestAt - SystemClock.elapsedRealtime()
@@ -185,6 +188,7 @@ class OsrmMatcher(
         var connection: HttpURLConnection? = null
         return try {
             connection = (url.openConnection() as HttpURLConnection).apply {
+                instanceFollowRedirects = false
                 requestMethod = "GET"
                 connectTimeout = 8_000
                 readTimeout = 12_000
@@ -192,6 +196,10 @@ class OsrmMatcher(
                 setRequestProperty("User-Agent", "RoadConquest/1.0 (Android road-history app)")
             }
             val status = connection.responseCode
+            unavailable = status == 401 || status == 403 || status == 429 || status >= 500 || status in 300..399
+            if (unavailable && status != 429 && status != 503) {
+                rateLimitedUntil = SystemClock.elapsedRealtime() + if (status == 401 || status == 403) 86_400_000L else 30_000L
+            }
             if (status == 429 || status == 503) {
                 // A rate-limited/unavailable provider must not receive another
                 // immediate request from this batch or the next GPS callback.
@@ -237,7 +245,9 @@ class OsrmMatcher(
                 }
             }
             result
-        } catch (_: Exception) {
+        } catch (error: Exception) {
+            unavailable = true
+            if (error is java.io.IOException) rateLimitedUntil = SystemClock.elapsedRealtime() + 30_000L
             null
         } finally {
             connection?.disconnect()

@@ -373,6 +373,19 @@
                 android:textColor="?attr/rcTextSecondary"
                 android:textSize="13sp" />
 
+            <Switch
+                android:id="@+id/crashReportingSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:text="Share crash reports with Firebase"
+                android:textColor="?attr/rcTextPrimary" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Optional diagnostics include crash details and device information. Your saved routes and account details are not attached."
+                android:textColor="?attr/rcTextSecondary"
+                android:textSize="13sp" />
             <Button
                 android:id="@+id/privacyPolicyButton"
                 style="@style/RoadConquest.SettingsAction"

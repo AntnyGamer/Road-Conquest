@@ -340,9 +340,18 @@ class PlaceOverlayClient(
     private val configUrl: String = BuildConfig.PLACE_OVERLAY_CONFIG_URL
 ) {
     private var resolvedEndpoint: String? = null
+    private val boundaryBackup = GeoBoundariesClient()
 
     fun fetch(place: PlaceDiscovery, requireContainment: Boolean = true): PlaceOverlayData? {
         val base = resolveEndpoint()
+        return try {
+            fetchPrimary(base, place, requireContainment) ?: boundaryBackup.fetch(place, requireContainment)
+        } catch (error: IOException) {
+            boundaryBackup.fetch(place, requireContainment) ?: throw error
+        }
+    }
+
+    private fun fetchPrimary(base: String, place: PlaceDiscovery, requireContainment: Boolean): PlaceOverlayData? {
         throttle(base)
         val threshold = when (place.kind) {
             PlaceKind.COUNTRY -> "0.02"

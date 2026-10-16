@@ -1,0 +1,16 @@
+Additional services
+
+Road matching and backup street-map tiles: Geoapify (https://www.geoapify.com/).
+Map data: OpenStreetMap contributors (https://www.openstreetmap.org/copyright).
+Geoapify use is limited to the configured free allowance. No automatic paid upgrade.
+
+Backup country and first-level region display boundaries: geoBoundaries gbOpen,
+William & Mary geoLab and contributors (https://www.geoboundaries.org/).
+geoBoundaries is licensed under Creative Commons Attribution 4.0:
+https://creativecommons.org/licenses/by/4.0/
+Individual source licensing is checked against metadata before use. These backup
+boundaries do not establish municipality visits or verified competitive credit.
+
+Optional crash diagnostics: Firebase Crashlytics, Google.
+https://firebase.google.com/support/privacy
+Crash reporting is off until enabled in Settings. Google Analytics is not included.

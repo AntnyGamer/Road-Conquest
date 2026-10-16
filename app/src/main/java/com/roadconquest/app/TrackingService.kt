@@ -27,6 +27,8 @@ import com.roadconquest.app.data.TrackingRepository
 import com.roadconquest.app.data.ProgressionRepository
 import com.roadconquest.app.account.VerifiedDriving
 import com.roadconquest.app.matching.OsrmMatcher
+import com.roadconquest.app.matching.FallbackRoadMatcher
+import com.roadconquest.app.matching.RoadMatcher
 import com.roadconquest.app.map.FogGrid
 import com.roadconquest.app.progression.ProgressionManager
 import com.roadconquest.app.util.LocationProviders
@@ -43,7 +45,7 @@ class TrackingService : Service(), LocationListener {
     private lateinit var repository: TrackingRepository
     private lateinit var progressionRepository: ProgressionRepository
     private lateinit var verifiedDriving: VerifiedDriving
-    private val matcher = OsrmMatcher(BuildConfig.OSRM_API_URL)
+    private val matcher: RoadMatcher = FallbackRoadMatcher.configured()
     private val matchingExecutor = ScheduledThreadPoolExecutor(1).apply {
         // Stop-time finalization should not keep the process alive for obsolete retry
         // timers scheduled minutes into the future. Already queued immediate work still runs.

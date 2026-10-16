@@ -148,6 +148,12 @@ class SettingsActivity : Activity() {
         }
 
         findViewById<Button>(R.id.privacyPolicyButton).setOnClickListener { openAccountPage("/privacy") }
+        findViewById<Switch>(R.id.crashReportingSwitch).apply {
+            isChecked = com.roadconquest.app.diagnostics.CrashReporting.enabled(this@SettingsActivity)
+            setOnCheckedChangeListener { _, checked ->
+                com.roadconquest.app.diagnostics.CrashReporting.setEnabled(this@SettingsActivity, checked)
+            }
+        }
 
         findViewById<Button>(R.id.githubButton).setOnClickListener {
             val url = getString(R.string.github_repository_url)
@@ -158,7 +164,7 @@ class SettingsActivity : Activity() {
         }
 
         findViewById<Button>(R.id.terrainCreditsButton).setOnClickListener {
-            val credits = listOf("licenses/RoadConquest-AGPL-3.0.txt", "map-credits.txt", "satellite-credits.txt").joinToString("\n\n") { asset ->
+            val credits = listOf("licenses/RoadConquest-AGPL-3.0.txt", "map-credits.txt", "satellite-credits.txt", "service-credits.txt").joinToString("\n\n") { asset ->
                 assets.open(asset).bufferedReader().use { it.readText() }
             }
             AlertDialog.Builder(this).setTitle("Licenses and map credits").setMessage(credits)

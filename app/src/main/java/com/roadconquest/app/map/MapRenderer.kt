@@ -69,6 +69,10 @@ class MapRenderer(
     val hasCentered: Boolean get() = centeredOnce
     private var mapMode = Prefs.mapMode(context)
     private var styleGeneration = 0
+    private var baseProvider = ""
+    private var initialStyleReady: (() -> Unit)? = null
+    private val retryBaseProvider = Runnable { refreshBaseProvider() }
+    private val providerListener: () -> Unit = { mainHandler.post { refreshBaseProvider() } }
     private var queryRunning = false
     private var queryAgain = false
     private var queryRoadsAgain = false
@@ -175,6 +179,9 @@ class MapRenderer(
     }
 
     fun initialize(onReady: () -> Unit) {
+        initialStyleReady = onReady
+        BaseMapProviders.install()
+        BaseMapProviders.addListener(providerListener)
         map.setMaxZoomPreference(FogBitmapRenderer.MAX_ZOOM)
         map.setMaxPitchPreference(0.0)
         map.uiSettings.setTiltGesturesEnabled(false)
@@ -183,7 +190,7 @@ class MapRenderer(
         map.addOnCameraMoveStartedListener(cameraMoveStartedListener)
         map.addOnCameraMoveListener(cameraMoveListener)
         map.addOnCameraIdleListener(cameraIdleListener)
-        loadStyle(onReady)
+        loadStyle { }
     }
 
     fun setMapMode(mode: MapMode) {
@@ -366,7 +373,19 @@ class MapRenderer(
 
     private fun loadStyle(onReady: () -> Unit) {
         val generation = ++styleGeneration
-        val styleJson = context.assets.open(mapMode.styleAsset).bufferedReader().use { it.readText() }
+        val previousProvider = baseProvider
+        baseProvider = BaseMapProviders.preferred(mapMode)
+        if (previousProvider.isNotBlank() && previousProvider != baseProvider) {
+            val message = when (baseProvider) {
+                "local" -> "Map services unavailable. Your saved progress is still visible."
+                "geoapify-tiles", "openfreemap-streets" -> "Map service unavailable. Using a backup street map."
+                else -> null
+            }
+            message?.let { android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_SHORT).show() }
+        }
+        val styleJson = BaseMapProviders.style(context, mapMode, baseProvider)
+        mainHandler.removeCallbacks(retryBaseProvider)
+        if (baseProvider != "openfreemap") mainHandler.postDelayed(retryBaseProvider, BaseMapProviders.retryInMs())
         map.setStyle(Style.Builder().fromJson(styleJson)) { style ->
             if (destroyed || generation != styleGeneration) return@setStyle
             installPlaceOverlayLayers(style)
@@ -377,7 +396,18 @@ class MapRenderer(
             updateCarLayer()
             refreshViewport()
             scheduleFogRender()
+            initialStyleReady?.let { ready -> initialStyleReady = null; ready() }
             onReady()
+        }
+    }
+
+    private fun refreshBaseProvider() {
+        if (destroyed) return
+        if (!viewportActive) return
+        if (baseProvider != BaseMapProviders.preferred(mapMode)) loadStyle { }
+        else if (baseProvider != "openfreemap") {
+            mainHandler.removeCallbacks(retryBaseProvider)
+            mainHandler.postDelayed(retryBaseProvider, BaseMapProviders.retryInMs())
         }
     }
 
@@ -469,6 +499,7 @@ class MapRenderer(
         resumeFrameListener?.let(mapView::removeOnDidFinishRenderingFrameListener)
         resumeFrameListener = null
         mainHandler.removeCallbacks(renderFog)
+        mainHandler.removeCallbacks(retryBaseProvider)
         mainHandler.removeCallbacks(expirePendingRoutes)
         mainHandler.removeCallbacks(expireLocation)
         fogAgain = false
@@ -480,6 +511,7 @@ class MapRenderer(
         if (destroyed) return
         if (!viewportActive) {
             viewportActive = true
+            refreshBaseProvider()
             updateCarLayer()
             val now = SystemClock.elapsedRealtime()
             liveLocation.current(now)?.let { mainHandler.postDelayed(expireLocation, it.expiresAt - now) }
@@ -1446,6 +1478,7 @@ class MapRenderer(
 
     fun destroy() {
         destroyed = true
+        BaseMapProviders.removeListener(providerListener)
         resumeGeneration++
         map.removeOnCameraMoveStartedListener(cameraMoveStartedListener)
         map.removeOnCameraMoveListener(cameraMoveListener)

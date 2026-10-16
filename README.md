@@ -175,20 +175,14 @@ Keep the signing backup outside the repository and release assets. Each release 
 `versionName` and increasing `versionCode`; two-part and three-part release versions are supported.
 
 Override the account endpoint with the Gradle property
-`ROADCONQUEST_ACCOUNT_API_URL=https://accounts.example.com`. Local matching defaults to the public
-OSRM demo; a compatible controlled matcher can be selected with
-`ROADCONQUEST_OSRM_API_URL=https://roads.example.com`.
+`ROADCONQUEST_ACCOUNT_API_URL=https://accounts.example.com`. Local matching uses the configured
+Geoapify gateway; a permitted controlled OSRM matcher can be preferred with
+`ROADCONQUEST_OSRM_API_URL=https://roads.example.com`. See [service order, fallback behavior and configuration](SERVICE_PROVIDERS.md).
 
-**OSRM provider limits:** The default endpoint is a shared *demo*, not a
-production routing contract. It limits requests to one per second and offers
-no uptime or commercial-use guarantee. Road Conquest now paces requests to the
-demo, respects HTTP 429/503 cooldowns, and preserves unmatched GPS data for
-later retries instead of repeatedly requesting unavailable matching.
-This per-device pacing does **not** reserve any of the demo's global capacity
-for multiple installed phones. For a growing, ad-supported public launch,
-arrange a production-authorized OSRM-compatible hosted matcher and set
-`ROADCONQUEST_OSRM_API_URL`. Other hosted products cannot simply be swapped
-in without checking licensing, map-display restrictions, and response format.
+**OSRM provider limits:** The shared public demo is restricted to noncommercial use and one
+request/second. It is excluded from normal automatic fallback; an explicit noncommercial test
+build can opt in with `ROADCONQUEST_ALLOW_PUBLIC_OSRM_DEMO=true`. Geoapify's shared free allowance
+is capped by the gateway. Unmatched GPS stays saved when no permitted provider is available.
 
 Administrative overlay boundaries are requested only after the user enables an overlay; results are cached and requests are throttled. The APK reads the active provider from `OVERLAY_PROVIDER.txt` on this repository’s `main` branch so the service can be switched or disabled without an app update. Custom builds can point at another remote config with `ROADCONQUEST_PLACE_OVERLAY_CONFIG_URL=https://example.com/overlay-provider.txt`.
 See [server setup](server/README.md) and the [physical-device checklist](ANDROID_TEST_CHECKLIST.md).
@@ -263,7 +257,7 @@ Beta 17 map/tracking optimizations but does not claim ads have zero overhead.
 ## Privacy and map credits
 
 Driving history, explored places, points and purchases stay on the phone. Road matching sends small
-coordinate batches to the selected OSRM service. Town/state/country labels are requested through
+coordinate batches through the Road Conquest gateway to Geoapify or to a configured OSRM service. Town/state/country labels are requested through
 Android's system geocoder only while Road Conquest is foregrounded; the geocoder implementation and
 network behavior are supplied by the device. Pending data remains saved for retry after network or
 matching failures. User-selected ZIP exports contain precise history, road geometry and progression data.
@@ -277,6 +271,8 @@ Street maps use OpenFreeMap, OpenMapTiles and OpenStreetMap contributors. Satell
 Esri World Imagery and its credited providers. Map providers receive requests for the area you view.
 Styles are bundled; tiles, sprites, fonts and imagery require network access or an existing cache.
 Satellite detail varies by area.
+Geoapify street tiles and geoBoundaries country/region datasets provide the documented backups.
+Crashlytics is optional, initializes only after consent in Settings, and does not include Analytics.
 
 Settings → Licenses and map credits contains the app license and provider notices. Third-party
 styles, map data, imagery and dependencies retain their own licenses and service terms. See

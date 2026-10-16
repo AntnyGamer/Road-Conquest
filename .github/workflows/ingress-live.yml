@@ -5,6 +5,8 @@ on:
     paths:
       - .github/workflows/ingress-live.yml
       - server/tools/verify-live-ingress.mjs
+      - server/worker/**
+      - server/src/**
   workflow_dispatch:
 permissions:
   contents: read
