@@ -260,3 +260,14 @@ friend status/order equivalence, unchanged row versions, case-only renames,
 content-type precedence and zero stream reads/SQL on cold oversized requests,
 with schema auto-apply both enabled and disabled. No Android source, Worker,
 schema, service plan, provider quota or credential change is required.
+
+## Minor weekly-friends query reduction (draft PR #96)
+
+- The verified weekly friends ranking now uses `UNION ALL` rather than
+  `UNION` to combine the user with their accepted friends. The existing
+  `friendships` primary key and `user_low < user_high` constraint guarantee
+  that the user cannot be their own friend and every accepted counterpart
+  occurs at most once. Removing the unnecessary de-duplication stage preserves
+  participant counts, score ranks, privacy/eligibility, and the 50-friend cap.
+  The friendship integration test explicitly checks distinct ranking entries.
+  This reduces PostgreSQL ranking work but does not reduce HTTP request count.

@@ -188,7 +188,10 @@ export async function createCompetition(pool, config, dependencies = {}) {
           SELECT date_trunc('week', CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date AS start_date
         ), participants AS (
           SELECT $1::bigint AS id
-          UNION
+          UNION ALL
+          -- The CHECK(user_low < user_high) and PK(user_low,user_high)
+          -- guarantee exactly one distinct counterpart for each friendship.
+          -- Neither a self-edge nor a duplicate friend can enter this result.
           SELECT CASE WHEN f.user_low=$1 THEN f.user_high ELSE f.user_low END
           FROM friendships f WHERE f.accepted AND (f.user_low=$1 OR f.user_high=$1)
         ), scores AS (
