@@ -1002,7 +1002,7 @@ class MapRenderer(
         style.addSource(GeoJsonSource(PENDING_ROUTE_SOURCE_ID, EMPTY_FEATURES))
         pendingRouteSourceIsEmpty = true
         // Pending evidence is raw GPS, not final road geometry. Keep a faint, narrow
-        // provisional trace so the map never appears to have a random hole while OSRM is
+        // provisional trace so the map never appears to have a random hole while the online matcher is
         // resolving the interval. Confirmed traveled roads remain thicker and nearly opaque,
         // and are drawn from road-snapped geometry only.
         val layer = LineLayer(PENDING_ROUTE_LAYER_ID, PENDING_ROUTE_SOURCE_ID).withProperties(
@@ -1564,7 +1564,11 @@ class MapRenderer(
         // off-screen bitmap redraws. Idle renders still happen immediately.
         // Live raw fixes are a short-lived preview, not permanently unlocked roads.
         // Their matching/retry state and GPS history remain in the database.
-        private const val PENDING_ROUTE_MAX_AGE_MS = 120_000L
+        // Online matching is paced to seven minutes. Keep the provisional raw-GPS
+        // trace long enough to bridge normal batching and an occasional retry,
+        // without letting permanently unmatched history clutter the entire map.
+        // Display only; never changes matching requests or confirmed-road rewards.
+        private const val PENDING_ROUTE_MAX_AGE_MS = 15 * 60_000L
         private const val FOG_RENDER_INTERVAL_MS = 120L
         private const val FOG_MOVING_COVERAGE_MARGIN_FRACTION = 0.05
         private const val STARTING_LOCATION_ZOOM = 15.0
