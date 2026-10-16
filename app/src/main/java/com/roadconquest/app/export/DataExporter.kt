@@ -64,6 +64,16 @@ object DataExporter {
         snapshots.filter { it.name.startsWith(SNAPSHOT_PREFIX) }.forEach { it.delete() }
     }
 
+    /** Write each CSV with the same buffered flush and ZIP entry boundaries as before. */
+    private inline fun writeCsvEntry(zip: ZipOutputStream, filename: String, write: (java.io.BufferedWriter) -> Unit) {
+        zip.putNextEntry(ZipEntry(filename))
+        zip.writer(Charsets.UTF_8).buffered().let { writer ->
+            write(writer)
+            writer.flush()
+        }
+        zip.closeEntry()
+    }
+
     private fun writeMetadata(
         context: Context,
         summary: DataSummary,
@@ -115,8 +125,7 @@ object DataExporter {
         var count = 0L
         var firstTime: Long? = null
         var lastTime: Long? = null
-        zip.putNextEntry(ZipEntry("track_points.csv"))
-        zip.writer(Charsets.UTF_8).buffered().let { writer ->
+        writeCsvEntry(zip, "track_points.csv") { writer ->
             writer.write("id,latitude,longitude,accuracy_m,speed_mps,bearing_deg,timestamp_utc,matched,next_match_attempt_utc,distance_m\n")
             database.query(
                 "track_points",
@@ -152,16 +161,13 @@ object DataExporter {
                     writer.write("\n")
                 }
             }
-            writer.flush()
         }
-        zip.closeEntry()
         return DataSummary(count, 0, firstTime, lastTime)
     }
 
     /** Offline GPS evidence is included in explicit user exports, never network requests. */
     private fun writeSkippedDrivingFixes(database: SQLiteDatabase, zip: ZipOutputStream) {
-        zip.putNextEntry(ZipEntry("skipped_driving_fixes.csv"))
-        zip.writer(Charsets.UTF_8).buffered().let { writer ->
+        writeCsvEntry(zip, "skipped_driving_fixes.csv") { writer ->
             writer.write("id,latitude,longitude,accuracy_m,speed_mps,bearing_deg,timestamp_utc\n")
             database.query(
                 "skipped_driving_fixes",
@@ -178,15 +184,12 @@ object DataExporter {
                     writer.write("\n")
                 }
             }
-            writer.flush()
         }
-        zip.closeEntry()
     }
 
     private fun writeExploredPlaces(database: SQLiteDatabase, zip: ZipOutputStream): Long {
         var count = 0L
-        zip.putNextEntry(ZipEntry("explored_places.csv"))
-        zip.writer(Charsets.UTF_8).buffered().let { writer ->
+        writeCsvEntry(zip, "explored_places.csv") { writer ->
             writer.write("latitude,longitude\n")
             database.query("explored_places", arrayOf("latitude", "longitude"),
                 null, null, null, null, "cell_x,cell_y").use { cursor ->
@@ -195,16 +198,13 @@ object DataExporter {
                     count++
                 }
             }
-            writer.flush()
         }
-        zip.closeEntry()
         return count
     }
 
     private fun writeExploredGrid(database: SQLiteDatabase, zip: ZipOutputStream): Long {
         var count = 0L
-        zip.putNextEntry(ZipEntry("explored_grid.csv"))
-        zip.writer(Charsets.UTF_8).buffered().let { writer ->
+        writeCsvEntry(zip, "explored_grid.csv") { writer ->
             writer.write("row,column,latitude,longitude,first_unlocked_utc\n")
             database.query("explored_grid", arrayOf("grid_row", "grid_col", "latitude", "longitude", "first_unlocked_at"),
                 null, null, null, null, "grid_row,grid_col").use { cursor ->
@@ -215,16 +215,13 @@ object DataExporter {
                     count++
                 }
             }
-            writer.flush()
         }
-        zip.closeEntry()
         return count
     }
 
     private fun writeRoadVisits(database: SQLiteDatabase, zip: ZipOutputStream): Long {
         var count = 0L
-        zip.putNextEntry(ZipEntry("road_visits.csv"))
-        zip.writer(Charsets.UTF_8).buffered().let { writer ->
+        writeCsvEntry(zip, "road_visits.csv") { writer ->
             writer.write("segment_id,started_at_utc,ended_at_utc\n")
             database.query(
                 "road_visits",
@@ -243,9 +240,7 @@ object DataExporter {
                     writer.write("\n")
                 }
             }
-            writer.flush()
         }
-        zip.closeEntry()
         return count
     }
 
@@ -262,8 +257,7 @@ object DataExporter {
     )
 
     private fun writeProgression(database: SQLiteDatabase, zip: ZipOutputStream): ProgressionExportSummary {
-        zip.putNextEntry(ZipEntry("visited_places.csv"))
-        zip.writer(Charsets.UTF_8).buffered().let { writer ->
+        writeCsvEntry(zip, "visited_places.csv") { writer ->
             writer.write("kind,place_key,display_name,parent_name,country_name,first_visited_utc,latitude,longitude\n")
             database.query(
                 "visited_places",
@@ -282,9 +276,7 @@ object DataExporter {
                     writer.write("\n")
                 }
             }
-            writer.flush()
         }
-        zip.closeEntry()
 
         // The zero-point starter places remain in visited_places.csv for overlays/history, but
         // discovery totals match the app: only places that actually earned a place reward count.
@@ -304,8 +296,7 @@ object DataExporter {
         val countries = rewardedCounts["COUNTRY"] ?: 0L
 
         var pending = 0L
-        zip.putNextEntry(ZipEntry("place_candidates.csv"))
-        zip.writer(Charsets.UTF_8).buffered().let { writer ->
+        writeCsvEntry(zip, "place_candidates.csv") { writer ->
             writer.write("cell_x,cell_y,latitude,longitude,first_seen_utc,attempts,next_attempt_utc\n")
             database.query(
                 "place_candidates",
@@ -326,13 +317,10 @@ object DataExporter {
                     writer.write("\n")
                 }
             }
-            writer.flush()
         }
-        zip.closeEntry()
 
         var earned = 0L
-        zip.putNextEntry(ZipEntry("progression_rewards.csv"))
-        zip.writer(Charsets.UTF_8).buffered().let { writer ->
+        writeCsvEntry(zip, "progression_rewards.csv") { writer ->
             writer.write("reward_key,points,awarded_at_utc\n")
             database.query(
                 "progression_rewards",
@@ -350,13 +338,10 @@ object DataExporter {
                     )
                 }
             }
-            writer.flush()
         }
-        zip.closeEntry()
 
         var spent = 0L
-        zip.putNextEntry(ZipEntry("progression_purchases.csv"))
-        zip.writer(Charsets.UTF_8).buffered().let { writer ->
+        writeCsvEntry(zip, "progression_purchases.csv") { writer ->
             writer.write("item_id,points_spent,purchased_at_utc\n")
             database.query(
                 "progression_purchases",
@@ -374,14 +359,11 @@ object DataExporter {
                     )
                 }
             }
-            writer.flush()
         }
-        zip.closeEntry()
 
         var ads = 0L
         var lowestBattery: Int? = null
-        zip.putNextEntry(ZipEntry("progression_counters.csv"))
-        zip.writer(Charsets.UTF_8).buffered().let { writer ->
+        writeCsvEntry(zip, "progression_counters.csv") { writer ->
             writer.write("counter_key,value\n")
             database.query(
                 "progression_counters",
@@ -396,9 +378,7 @@ object DataExporter {
                     writer.write(CsvUtil.escape(key) + "," + value + "\n")
                 }
             }
-            writer.flush()
         }
-        zip.closeEntry()
 
         return ProgressionExportSummary(
             earned = earned,
@@ -415,8 +395,7 @@ object DataExporter {
 
     private fun writeRoads(database: SQLiteDatabase, zip: ZipOutputStream): Long {
         var count = 0L
-        zip.putNextEntry(ZipEntry("roads.csv"))
-        zip.writer(Charsets.UTF_8).buffered().let { writer ->
+        writeCsvEntry(zip, "roads.csv") { writer ->
             writer.write("segment_id,road_group_id,name,first_unlocked_utc,last_driven_utc,times_driven,times_driven_exact,coordinates_json\n")
             database.query(
                 "roads",
@@ -441,9 +420,7 @@ object DataExporter {
                     writer.write("\n")
                 }
             }
-            writer.flush()
         }
-        zip.closeEntry()
         return count
     }
 
