@@ -145,15 +145,17 @@ class ProgressionRepository(context: Context) {
         }
     }
 
+    private fun validCandidateFix(location: Location): Boolean =
+        !location.isMock && location.latitude.isFinite() && location.longitude.isFinite() &&
+            location.latitude in -85.0..85.0 && location.longitude in -180.0..180.0
+
     /**
      * Save a sparse reverse-geocoding candidate locally. Background tracking never has to make
      * a geocoder/network request; candidates are resolved later while the app is foregrounded.
      */
     fun recordPlaceCandidate(location: Location): Boolean = synchronized(dbHelper.historyLock) {
         if (!isCurrentHistory()) return@synchronized false
-        if (location.isMock || !location.latitude.isFinite() || !location.longitude.isFinite() ||
-            location.latitude !in -85.0..85.0 || location.longitude !in -180.0..180.0
-        ) return@synchronized false
+        if (!validCandidateFix(location)) return@synchronized false
         val db = dbHelper.writableDatabase
         // Keep discoveries observed while the exact zero-point baseline is still resolving.
         // pendingPlaceCandidates() gates them behind the baseline, so they cannot earn points
@@ -271,9 +273,7 @@ class ProgressionRepository(context: Context) {
      */
     fun recordBaselineCandidate(location: Location): Boolean = synchronized(dbHelper.historyLock) {
         if (!isCurrentHistory()) return@synchronized false
-        if (location.isMock || !location.latitude.isFinite() || !location.longitude.isFinite() ||
-            location.latitude !in -85.0..85.0 || location.longitude !in -180.0..180.0
-        ) return@synchronized false
+        if (!validCandidateFix(location)) return@synchronized false
         val db = dbHelper.writableDatabase
         if (db.rawQuery("SELECT 1 FROM visited_places LIMIT 1", null).use { it.moveToFirst() }) {
             return@synchronized false
