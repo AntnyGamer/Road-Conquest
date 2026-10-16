@@ -1706,52 +1706,42 @@ class TrackingRepository(context: Context) {
 
     private fun roadSegmentId(db: SQLiteDatabase, name: String, coordinates: JSONArray): String {
         val primary = stableRoadSegmentId(name, coordinates)
-        val storedGeometry = db.query(
-            "roads",
-            arrayOf("geometry_json"),
-            "segment_id = ?",
-            arrayOf(primary),
-            null,
-            null,
-            null
-        ).use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
         val incomingKey = canonicalGeometryKey(coordinates)
         val normalizedName = name.trim().lowercase(Locale.US).ifBlank { "unnamed road" }
-        if (storedGeometry == null) {
-            // A geometry collision can outlive the primary row after later cleanup.
-            // Reuse its deterministic alternate ID instead of recreating identical geometry
-            // under the now-free primary ID.
-            db.query(
-                "roads",
-                arrayOf("segment_id", "name", "geometry_json"),
-                "segment_id LIKE 'g%'",
-                null,
-                null,
-                null,
-                null
-            ).use { cursor ->
-                while (cursor.moveToNext()) {
-                    val existingName = cursor.getString(1).trim().lowercase(Locale.US)
-                        .ifBlank { "unnamed road" }
-                    if (existingName != normalizedName) continue
-                    val existingKey = runCatching {
-                        canonicalGeometryKey(JSONArray(cursor.getString(2)))
-                    }.getOrNull()
-                    if (existingKey == incomingKey) return cursor.getString(0)
-                }
-            }
-            return primary
+        fun alternateId(): String {
+            val digest = MessageDigest.getInstance("SHA-256")
+                .digest("$normalizedName|$incomingKey".toByteArray(Charsets.UTF_8))
+            return "g" + String(CharArray(31) { i ->
+                val byte = digest[i / 2].toInt() and 0xff
+                "0123456789abcdef"[if (i % 2 == 0) byte ushr 4 else byte and 0x0f]
+            })
         }
 
-        val storedKey = runCatching { canonicalGeometryKey(JSONArray(storedGeometry)) }.getOrNull()
-        if (storedKey == incomingKey) return primary
+        val storedGeometry = db.query(
+            "roads", arrayOf("geometry_json"), "segment_id = ?", arrayOf(primary),
+            null, null, null
+        ).use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
+        if (storedGeometry != null) {
+            val storedKey = runCatching { canonicalGeometryKey(JSONArray(storedGeometry)) }.getOrNull()
+            return if (storedKey == incomingKey) primary else alternateId()
+        }
 
-        val digest = MessageDigest.getInstance("SHA-256")
-            .digest("$normalizedName|$incomingKey".toByteArray(Charsets.UTF_8))
-        return "g" + String(CharArray(31) { i ->
-            val byte = digest[i / 2].toInt() and 0xff
-            "0123456789abcdef"[if (i % 2 == 0) byte ushr 4 else byte and 0x0f]
-        })
+        // A collision's alternate ID survives deletion of the original primary row.
+        // It is deterministic, so look up that ID directly instead of scanning and
+        // decoding every alternate geometry whenever a new road is inserted.
+        val alternate = alternateId()
+        val existingAlternate = db.query(
+            "roads", arrayOf("name", "geometry_json"), "segment_id = ?", arrayOf(alternate),
+            null, null, null
+        ).use { cursor ->
+            if (!cursor.moveToFirst()) null
+            else cursor.getString(0) to cursor.getString(1)
+        }
+        if (existingAlternate != null &&
+            existingAlternate.first.trim().lowercase(Locale.US).ifBlank { "unnamed road" } == normalizedName &&
+            runCatching { canonicalGeometryKey(JSONArray(existingAlternate.second)) }.getOrNull() == incomingKey
+        ) return alternate
+        return primary
     }
 
     private fun canonicalGeometryKey(coordinates: JSONArray): String {
