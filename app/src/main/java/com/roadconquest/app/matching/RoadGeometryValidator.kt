@@ -4,6 +4,7 @@ import com.roadconquest.app.data.MatchedRoad
 import com.roadconquest.app.data.RoadGrouping
 import com.roadconquest.app.data.TrackPoint
 import org.json.JSONArray
+import org.json.JSONException
 import org.json.JSONObject
 import java.util.Locale
 import kotlin.math.atan2
@@ -89,6 +90,12 @@ class RoadGeometryValidator {
                         val legRoads = try {
                             parseLeg(legs.getJSONObject(l), trace[l], trace[l + 1], points, confidences[m])
                         } catch (_: IllegalArgumentException) {
+                            rejectedLeg = true
+                            emptyList()
+                        } catch (_: JSONException) {
+                            // A malformed sibling step is no more evidence than a
+                            // disconnected one. Preserve already validated legs and
+                            // leave only the untrusted interval pending for retry.
                             rejectedLeg = true
                             emptyList()
                         }

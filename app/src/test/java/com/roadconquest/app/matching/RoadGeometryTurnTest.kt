@@ -369,6 +369,26 @@ class RoadGeometryTurnTest {
         ))
     }
 
+    @Test fun malformedProviderStepPreservesValidatedSiblingWithoutMarkingBrokenLeg() {
+        val malformed = JSONObject().put("steps", JSONArray().put("not a road step"))
+        val result = requireNotNull(RoadGeometryValidator().parse(
+            response(listOf(trace(0, 0, a), trace(0, 1, b), trace(0, 2, c)),
+                matching(leg("Approach", a, b), malformed)),
+            points(a, b, c)
+        ))
+        assertEquals(listOf("Approach"), result.roads.map { it.name })
+        assertEquals(setOf(1L, 2L), result.matchedPointConfidences.keys)
+        assertFalse(3L in result.matchedPointConfidences)
+        assertTrue(result.roads.none { it.geometryJson.contains("not a road step") })
+
+        // When the malformed provider leg is the only leg, keep the original
+        // failure path/backoff; never invent a road to avoid a visible gap.
+        assertNull(RoadGeometryValidator().parse(
+            response(listOf(trace(0, 0, a), trace(0, 1, b)), matching(malformed)),
+            points(a, b)
+        ))
+    }
+
     @Test fun oneBadLegKeepsOnlyThatIntervalPendingAndPreservesValidSiblingGeometry() {
         val far = coord(-73.99, 40.01)
         val result = requireNotNull(
