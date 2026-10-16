@@ -21,7 +21,9 @@ data class MatchResult(
 
 /** Independent geometric plausibility checks shared by all current and future matchers. */
 class RoadGeometryValidator {
-    internal fun parse(json: String, points: List<TrackPoint>): MatchResult? {
+    internal fun parse(
+        json: String, points: List<TrackPoint>, additionallyBlockedBridgeEndIds: Set<Long> = emptySet()
+    ): MatchResult? {
         val root = JSONObject(json)
         if (root.optString("code") != "Ok") return null
         val matchings = root.optJSONArray("matchings") ?: return null
@@ -56,7 +58,10 @@ class RoadGeometryValidator {
 
         val roads = mutableListOf<MatchedRoad>()
         val resolved = mutableMapOf<Long, Double>()
-        val blockedBridgeEndIds = HashSet<Long>().apply { addAll(invalidPointIds) }
+        val blockedBridgeEndIds = HashSet<Long>().apply {
+            addAll(invalidPointIds)
+            addAll(additionallyBlockedBridgeEndIds)
+        }
         var rejectedLeg = false
         for (m in traces.indices) {
             val trace = traces[m]
