@@ -220,21 +220,18 @@ export async function createCompetition(pool, config, dependencies = {}) {
       // Public callers keep exactly the existing query and response. A verified
       // authenticated caller gets its total as one additional scalar projection
       // in the same indexed rankings query, without a second PostgreSQL round trip.
-      const publicSql = `WITH leaders AS (
+      // One ranking definition for both public and signed-in responses.
+      const leadersCte = `WITH leaders AS (
            SELECT u.username_display AS username,u.username_key,s.cells
            FROM cell_scores s JOIN users u ON u.id=s.user_id
            WHERE s.dataset=$1 AND s.cells>0 AND u.leaderboard_visible AND u.leaderboard_eligible
            ORDER BY s.cells DESC,u.username_key ASC LIMIT 50
-         )
+         )`;
+      const publicSql = `${leadersCte}
          SELECT username,cells,RANK() OVER (ORDER BY cells DESC) AS rank
          FROM leaders ORDER BY cells DESC,username_key ASC`;
       const withMine = authenticatedUserId != null;
-      const sql = withMine ? `WITH leaders AS (
-           SELECT u.username_display AS username,u.username_key,s.cells
-           FROM cell_scores s JOIN users u ON u.id=s.user_id
-           WHERE s.dataset=$1 AND s.cells>0 AND u.leaderboard_visible AND u.leaderboard_eligible
-           ORDER BY s.cells DESC,u.username_key ASC LIMIT 50
-         ), ranked AS (
+      const sql = withMine ? `${leadersCte}, ranked AS (
            SELECT username,username_key,cells,RANK() OVER (ORDER BY cells DESC) AS rank
            FROM leaders
          )
