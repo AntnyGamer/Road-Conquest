@@ -313,6 +313,24 @@ class RoadGeometryTurnTest {
         ), invalid), points(c, d)))
     }
 
+    @Test fun malformedTracepointInvalidatesOnlyItsOwnMatching() {
+        val response = JSONObject(response(listOf(
+            trace(0, 0, a), trace(0, 1, b),
+            trace(1, 0, c), trace(1, 1, d)
+        ), matching(leg("Valid approach", a, b)), matching(leg("Untrusted exit", c, d))))
+        response.getJSONArray("tracepoints").getJSONObject(3).put("location", "invalid")
+        val result = requireNotNull(RoadGeometryValidator().parse(response.toString(), points(a, b, c, d)))
+        assertEquals(listOf("Valid approach"), result.roads.map { it.name })
+        assertEquals(setOf(1L, 2L), result.matchedPointConfidences.keys)
+
+        // Missing ambiguity metadata must not let the remaining fix in that group
+        // masquerade as a valid route (nor earn an invented connector).
+        response.getJSONArray("tracepoints").getJSONObject(3)
+            .put("location", d).remove("alternatives_count")
+        val noCredit = requireNotNull(RoadGeometryValidator().parse(response.toString(), points(a, b, c, d)))
+        assertEquals(setOf(1L, 2L), noCredit.matchedPointConfidences.keys)
+    }
+
     @Test fun confidentRouteKeepsAnInternalAlternativeWhenBothSidesProvideContext() {
         val result = requireNotNull(RoadGeometryValidator().parse(response(listOf(
             trace(0, 0, a), trace(0, 1, b), trace(0, 2, c, 2),
