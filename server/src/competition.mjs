@@ -210,10 +210,14 @@ export async function createCompetition(pool, config, dependencies = {}) {
     async leaderboard(metric = "cells") {
       if (metric !== "cells") throw new EvidenceError("Choose cells.", 400);
       const result = await pool.query(
-        `SELECT u.username_display AS username,s.cells,RANK() OVER (ORDER BY s.cells DESC) AS rank
-         FROM cell_scores s JOIN users u ON u.id=s.user_id
-         WHERE s.dataset=$1 AND s.cells>0 AND u.leaderboard_visible AND u.leaderboard_eligible
-         ORDER BY s.cells DESC,u.username_key ASC LIMIT 50`, [config.dataset]
+        `WITH leaders AS (
+           SELECT u.username_display AS username,u.username_key,s.cells
+           FROM cell_scores s JOIN users u ON u.id=s.user_id
+           WHERE s.dataset=$1 AND s.cells>0 AND u.leaderboard_visible AND u.leaderboard_eligible
+           ORDER BY s.cells DESC,u.username_key ASC LIMIT 50
+         )
+         SELECT username,cells,RANK() OVER (ORDER BY cells DESC) AS rank
+         FROM leaders ORDER BY cells DESC,username_key ASC`, [config.dataset]
       );
       return { verified: true, scoring_policy: 3, metric, dataset: config.dataset,
         entries: result.rows.map(r => ({ username: r.username, rank: Number(r.rank), cells: Number(r.cells) })) };

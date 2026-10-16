@@ -1,0 +1,34 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const execute = promisify(execFile);
+for (const applySchema of ['0', '1']) test(`cold liveness and public pages need no database, including schema setting ${applySchema}`, async () => {
+  const environment = { ...process.env, DATABASE_URL: 'postgresql://unused@127.0.0.1:1/unavailable',
+    PASSWORD_PEPPER: 'synthetic-offline-function-test-pepper', NODE_ENV: 'production',
+    REQUIRE_HTTPS: '1', TRUST_PROXY: '1', APPLY_SCHEMA_ON_STARTUP: applySchema, LEADERBOARDS_ENABLED: '0' };
+  delete environment.FCM_SERVICE_ACCOUNT_JSON;
+  delete environment.PLAY_SERVICE_ACCOUNT_JSON;
+  const moduleUrl = new URL('../dist/index.mjs', import.meta.url).href;
+  const { stdout } = await execute(process.execPath, ['--input-type=module', '-e', `
+    import assert from 'node:assert/strict';
+    const {default:api,pool}=await import(${JSON.stringify(moduleUrl)});
+    let queries=0;
+    const query=pool.query.bind(pool);
+    pool.query=(...args)=>{queries++;return query(...args);};
+    try {
+      for (const [path,status] of [['/health/live',200],['/privacy',200],['/delete-account',200],
+        ['/v1/competition',200],['/missing',404],['/v1/me',401],['/v1/verified/batch',404]]) {
+        const response=await api.fetch(new Request('https://offline.example'+path));
+        assert.equal(response.status,status,path);
+        await response.text();
+      }
+      const head=await api.fetch(new Request('https://offline.example/health/live',{method:'HEAD'}));
+      assert.equal(head.status,200);assert.equal(await head.text(),'');
+      assert.equal(queries,0);assert.equal(pool.totalCount,0);
+      console.log(JSON.stringify({publicRequests:8,queries,connections:pool.totalCount}));
+    } finally {await pool.end();}
+  `], { env: environment, timeout: 15000 });
+  assert.deepEqual(JSON.parse(stdout.trim()), { publicRequests: 8, queries: 0, connections: 0 });
+});

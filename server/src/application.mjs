@@ -14,7 +14,7 @@ import {
 import { competitionConfig, createCompetition } from "./competition.mjs";
 import { createFriends } from "./friends.mjs";
 import { createNotifications, createFcmSender } from "./notifications.mjs";
-import { cleanupExpiredState } from "./maintenance.mjs";
+import { createRequestMaintenance } from "./maintenance.mjs";
 
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -84,10 +84,12 @@ const pool = new Pool(databaseConfig(DATABASE_URL, process.env.DATABASE_SSL === 
 // the function; pg removes that client and creates a connection for the next request.
 pool.on("error", () => console.error("Idle database connection closed."));
 
-if (process.env.APPLY_SCHEMA_ON_STARTUP !== "0") {
-  const schemaPath = fileURLToPath(new URL("../schema.sql", import.meta.url));
-  await pool.query(await readFile(schemaPath, "utf8"));
-}
+const prepareDatabase = createRequestMaintenance(pool, { initialize: async () => {
+  if (process.env.APPLY_SCHEMA_ON_STARTUP !== "0") {
+    const schemaPath = fileURLToPath(new URL("../schema.sql", import.meta.url));
+    await pool.query(await readFile(schemaPath, "utf8"));
+  }
+} });
 const competition = await createCompetition(pool, competitionConfig(process.env));
 const notifications = createNotifications(pool, { pepper: PEPPER, sender: createFcmSender(process.env.FCM_SERVICE_ACCOUNT_JSON) });
 const friends = createFriends(pool, async target => {
@@ -120,6 +122,7 @@ function opaqueRateKey(bucket, key) {
 }
 
 async function rateLimit(bucket, key, limit, windowMs) {
+  await prepareDatabase();
   const result = await pool.query(
     `INSERT INTO auth_rate_limits(bucket, key_hash, window_started_at, attempts)
      VALUES ($1, $2, CURRENT_TIMESTAMP, 1)
@@ -140,11 +143,6 @@ async function rateLimit(bucket, key, limit, windowMs) {
   // A missing RETURNING row means an already-saturated window: still denied.
   return result.rows[0]?.allowed === true;
 }
-
-// Run once on every process/function start as well as periodically. Serverless runtimes do not
-// guarantee that an unreferenced background timer survives after a request finishes.
-await cleanupExpiredState(pool);
-setInterval(() => { cleanupExpiredState(pool).catch(() => {}); }, 15 * 60 * 1000).unref();
 
 function sendHtml(res, status, body) {
   const headers = {
@@ -210,6 +208,7 @@ function bearerToken(req) {
 async function authenticatedUser(req) {
   const token = bearerToken(req);
   if (!token) return null;
+  await prepareDatabase();
   const result = await pool.query(
     `SELECT u.id, u.username_display, u.leaderboard_visible, s.token_hash AS session_hash
        FROM sessions s
@@ -242,6 +241,7 @@ async function handle(req, res) {
   }
 
   if (req.method === "GET" && url.pathname === "/health") {
+    await prepareDatabase();
     await pool.query("SELECT 1");
     return send(res, 200, { ok: true });
   }
@@ -252,6 +252,9 @@ async function handle(req, res) {
 
   if (req.method === "GET" && url.pathname === "/privacy") return sendHtml(res, 200, PRIVACY_HTML);
   if (req.method === "GET" && url.pathname === "/delete-account") return sendHtml(res, 200, DELETE_ACCOUNT_HTML);
+  if (req.method === "GET" && url.pathname === "/v1/competition") {
+    return send(res, 200, competition?.status() || { available: false });
+  }
 
   const ip = clientIp(req);
   if (url.pathname === "/v1/notifications/device") {
@@ -262,9 +265,6 @@ async function handle(req, res) {
     if (req.method === "POST") return send(res, 200, await notifications.register(user, await readJson(req)));
     if (req.method === "DELETE") return send(res, 200, await notifications.remove(user));
     return send(res, 405, { error: "Method not allowed." });
-  }
-  if (req.method === "GET" && url.pathname === "/v1/competition") {
-    return send(res, 200, competition?.status() || { available: false });
   }
   if (url.pathname === "/v1/friends" || url.pathname === "/v1/friends/weekly") {
     if (!await rateLimit("friends-ip", ip, 120, 60 * 1000)) return send(res, 429, { error: "Try again later." });
@@ -515,6 +515,7 @@ async function handle(req, res) {
   if (req.method === "POST" && url.pathname === "/v1/logout") {
     const token = bearerToken(req);
     if (token) {
+      await prepareDatabase();
       await pool.query("DELETE FROM sessions WHERE token_hash = $1", [hashSessionToken(token)]);
     }
     return send(res, 200, { ok: true });

@@ -11,6 +11,30 @@ const legacyDataset = "a".repeat(64);
 const dataVersion = "2026-10-01T00:00:00Z";
 const config = { dataset, dataVersion, cloudProject: "123456789", checkpointKey: "K".repeat(43) };
 
+test("top fifty ranks preserve ties across the cutoff and exclude hidden or ineligible accounts before limiting", { skip: !connectionString }, async () => {
+  const pool = new pg.Pool({ connectionString });
+  try {
+    await pool.query(await readFile(new URL('../schema.sql', import.meta.url), 'utf8'));
+    await pool.query('TRUNCATE users CASCADE');
+    await pool.query(`INSERT INTO users(username_display,username_key,password_salt,password_hash,leaderboard_visible,leaderboard_eligible)
+      SELECT 'Rank_'||lpad(g::text,3,'0'),'rank_'||lpad(g::text,3,'0'),$1,$2,g>2,g<>3
+      FROM generate_series(1,80) g`, [Buffer.alloc(16),Buffer.alloc(64)]);
+    await pool.query(`INSERT INTO cell_scores(user_id,dataset,cells)
+      SELECT id,$1,CASE WHEN username_key<='rank_010' THEN 300 WHEN username_key<='rank_060' THEN 200 ELSE 100 END FROM users`, [dataset]);
+    const all = (await pool.query(`SELECT u.username_display AS username,u.username_key,s.cells,u.leaderboard_visible,u.leaderboard_eligible
+      FROM users u JOIN cell_scores s ON s.user_id=u.id WHERE s.dataset=$1`, [dataset])).rows;
+    const eligible = all.filter(row => row.leaderboard_visible && row.leaderboard_eligible).sort((a,b) =>
+      Number(b.cells)-Number(a.cells) || a.username_key.localeCompare(b.username_key));
+    const expected = eligible.slice(0,50).map(row => ({ username: row.username, cells: Number(row.cells),
+      rank: 1+eligible.filter(other => Number(other.cells)>Number(row.cells)).length }));
+    const service = await createCompetition(pool,config,{ verify: async () => {} });
+    const actual = (await service.leaderboard()).entries;
+    assert.equal(actual.length,50);
+    assert.equal(actual.at(-1).rank,8);
+    assert.deepEqual(actual,expected);
+  } finally { await pool.end(); }
+});
+
 function fixes() {
   const now = Date.now();
   const cell = cellFor(40, -75);

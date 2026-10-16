@@ -14,6 +14,12 @@ Worker does not support HEAD. These are liveness checks: they do not spend a map
 or query PostgreSQL. The separate account `/health` is a deeper database check;
 avoid frequent external checks that keep Neon compute awake.
 
+Cold liveness requests also open no database connection. Schema initialization
+and the existing transient-data cleanup are deferred to real database-backed
+requests, with concurrent work coalesced and no idle maintenance timer. Expiry
+eligibility checks and deletion cascades remain enforced. The account monitor
+still invokes the Neon Function, so its invocation quota remains relevant.
+
 Free allowance: 50 monitors, five-minute interval. It supports commercial use.
 https://help.uptimerobot.com/en/articles/11604710-who-should-use-uptimerobot-s-free-plan
 
@@ -86,6 +92,9 @@ from the existing server pepper; SHA-256 digests support deduplication. Foreign
 keys remove registrations on session logout/expiry and account deletion. Stale
 registrations expire after 30 days. At most five recent devices per account
 receive an event; refresh occurs on app startup/registration renewal.
+Refreshing an unchanged FID updates its encrypted registration in place and
+keeps the full thirty-day freshness window. Session ownership validation and
+removal of a different previous FID share one SQL statement.
 
 Only newly committed friend requests trigger generic, data-only notifications.
 No usernames, GPS or account credentials are sent to Firebase. Current on-device

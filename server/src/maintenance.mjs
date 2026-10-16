@@ -14,3 +14,25 @@ export async function cleanupExpiredState(pool) {
     "DELETE FROM cell_runs WHERE expires_at < CURRENT_TIMESTAMP - INTERVAL '1 day'"
   ]) await pool.query(sql);
 }
+
+/** Prepare database-backed requests without opening connections or timers while idle. */
+export function createRequestMaintenance(pool, { initialize = async () => {}, now = () => performance.now() } = {}) {
+  let initialized;
+  let pending;
+  let nextCleanup = -Infinity;
+  return async function prepareDatabase() {
+    if (!initialized) {
+      initialized = Promise.resolve().then(initialize).catch(error => {
+        initialized = undefined;
+        throw error;
+      });
+    }
+    await initialized;
+    if (pending) return pending;
+    if (now() < nextCleanup) return;
+    pending = Promise.resolve().then(() => cleanupExpiredState(pool)).then(() => {
+      nextCleanup = now() + 15 * 60 * 1000;
+    }).finally(() => { pending = undefined; });
+    return pending;
+  };
+}

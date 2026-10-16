@@ -2,8 +2,46 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import pg from "pg";
-import { cleanupExpiredState } from "../src/maintenance.mjs";
+import { cleanupExpiredState, createRequestMaintenance } from "../src/maintenance.mjs";
 import { limitedApiDatabase } from "./helpers/limited-api-role.mjs";
+
+test("maintenance shares initialization and cleanup across requests and does no work while idle", async () => {
+  let time = 0, initialized = 0, queries = 0;
+  const prepare = createRequestMaintenance({ query: async () => { queries++; } }, {
+    initialize: async () => { initialized++; }, now: () => time
+  });
+  time = 60 * 60 * 1000;
+  assert.equal(queries, 0);
+  assert.equal(initialized, 0);
+  await Promise.all(Array.from({ length: 100 }, () => prepare()));
+  assert.equal(initialized, 1);
+  assert.equal(queries, 7, "One cleanup, rather than one for every concurrent request");
+  time += 15 * 60 * 1000 - 1;
+  await prepare();
+  assert.equal(queries, 7);
+  time += 1;
+  assert.equal(queries, 7, "Crossing the interval without a request must not wake the database");
+  await Promise.all(Array.from({ length: 100 }, () => prepare()));
+  assert.equal(initialized, 1);
+  assert.equal(queries, 14);
+});
+
+test("a failed database initialization or cleanup can recover on the next real request", async () => {
+  let attempts = 0, queries = 0;
+  const prepare = createRequestMaintenance({ query: async () => {
+    queries++;
+    if (queries === 1) throw new Error("temporary database disconnect");
+  } }, { initialize: async () => {
+    attempts++;
+    if (attempts === 1) throw new Error("temporary initialization failure");
+  } });
+  await assert.rejects(prepare(), /initialization failure/);
+  assert.equal(queries, 0);
+  await assert.rejects(prepare(), /database disconnect/);
+  await prepare();
+  assert.equal(attempts, 2);
+  assert.equal(queries, 8);
+});
 
 test("expiry cleanup and account deletion do not hold opposite table locks", {
   skip: !process.env.DATABASE_URL, timeout: 10000

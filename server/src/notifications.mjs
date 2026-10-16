@@ -68,17 +68,24 @@ export function createNotifications(pool, { pepper, sender }) {
       if (Object.keys(body).sort().join(',') !== 'binding,fid' || typeof body.fid !== 'string' || !FID.test(body.fid) || !BINDING.test(body.binding))
         throw new EvidenceError('Invalid notification registration.', 400);
       if (!sender) throw new EvidenceError('Notifications are unavailable.', 503);
+      const tokenHash = digest(body.fid);
       const db = await pool.connect();
       try {
         await db.query('BEGIN');
         // The foreign key locks session ownership during insertion and cascades on logout.
-        const session = await db.query('SELECT token_hash FROM sessions WHERE token_hash=$1 AND user_id=$2 AND expires_at>CURRENT_TIMESTAMP', [user.session_hash, user.id]);
+        // Validate ownership and remove a different prior FID in one round trip.
+        // An invalid/expired session cannot delete another session's device.
+        const session = await db.query(`WITH active_session AS (
+          SELECT token_hash FROM sessions WHERE token_hash=$1 AND user_id=$2 AND expires_at>CURRENT_TIMESTAMP
+        ), removed AS (
+          DELETE FROM notification_devices WHERE session_hash IN (SELECT token_hash FROM active_session)
+            AND token_hash<>$3
+        ) SELECT token_hash FROM active_session`, [user.session_hash, user.id, tokenHash]);
         if (!session.rowCount) throw new EvidenceError('Authentication required.', 401);
-        await db.query('DELETE FROM notification_devices WHERE session_hash=$1', [user.session_hash]);
         await db.query(`INSERT INTO notification_devices(token_hash,session_hash,encrypted_token,binding)
           VALUES ($1,$2,$3,$4) ON CONFLICT(token_hash) DO UPDATE SET session_hash=EXCLUDED.session_hash,
           encrypted_token=EXCLUDED.encrypted_token,binding=EXCLUDED.binding,updated_at=CURRENT_TIMESTAMP`,
-          [digest(body.fid), user.session_hash, seal(body.fid), body.binding]);
+          [tokenHash, user.session_hash, seal(body.fid), body.binding]);
         await db.query('COMMIT');
       } catch (error) {
         await db.query('ROLLBACK');

@@ -69,3 +69,43 @@ test('notification tokens are encrypted, session-scoped, bounded, revoked and re
     assert.equal((await pool.query('SELECT count(*) FROM notification_devices')).rows[0].count, '0');
   } finally { await pool.end(); }
 });
+
+test('device refresh, FID replacement and ownership transfer keep fresh encrypted session bindings', { skip: !process.env.DATABASE_URL }, async () => {
+  const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    await pool.query(await readFile(new URL('../schema.sql', import.meta.url), 'utf8'));
+    await pool.query('TRUNCATE users CASCADE');
+    const users = (await pool.query(`INSERT INTO users(username_display,username_key,password_salt,password_hash)
+      VALUES ('Refreshone','refreshone',$1,$2),('Refreshtwo','refreshtwo',$1,$2) RETURNING id`, [Buffer.alloc(16), Buffer.alloc(64)])).rows;
+    for (const user of users) {
+      user.session_hash = randomBytes(32);
+      await pool.query("INSERT INTO sessions(token_hash,user_id,expires_at) VALUES($1,$2,CURRENT_TIMESTAMP+INTERVAL '1 day')", [user.session_hash,user.id]);
+    }
+    const sent = [];
+    const service = createNotifications(pool, { pepper: 'refresh-only-test-pepper', sender: async (...args) => { sent.push(args); return 'sent'; } });
+    const first = 'c' + 'x'.repeat(21), second = 'd' + 'y'.repeat(21), binding = randomUUID();
+    await service.register(users[0], { fid: first, binding: randomUUID() });
+    await pool.query("UPDATE notification_devices SET updated_at=CURRENT_TIMESTAMP-INTERVAL '29 days'");
+    await service.register(users[0], { fid: first, binding });
+    assert.equal((await pool.query("SELECT count(*) FROM notification_devices WHERE updated_at>CURRENT_TIMESTAMP-INTERVAL '1 minute' AND binding=$1", [binding])).rows[0].count, '1');
+    await service.friendRequest(users[0].id);
+    assert.deepEqual(sent.pop(), [first,binding]);
+    await service.register(users[0], { fid: second, binding });
+    assert.equal((await pool.query('SELECT count(*) FROM notification_devices')).rows[0].count, '1');
+    await service.friendRequest(users[0].id);
+    assert.deepEqual(sent.pop(), [second,binding]);
+    // A caller cannot use another user's session to remove or replace its device.
+    await assert.rejects(service.register({ ...users[1], session_hash: users[0].session_hash }, { fid: first, binding }), /Authentication/);
+    await service.friendRequest(users[0].id);
+    assert.deepEqual(sent.pop(), [second,binding]);
+    const nextBinding = randomUUID();
+    await service.register(users[1], { fid: second, binding: nextBinding });
+    assert.equal((await pool.query('SELECT count(*) FROM notification_devices')).rows[0].count, '1');
+    await service.friendRequest(users[0].id);
+    assert.equal(sent.length, 0);
+    await service.friendRequest(users[1].id);
+    assert.deepEqual(sent.pop(), [second,nextBinding]);
+    await pool.query('DELETE FROM sessions WHERE token_hash=$1', [users[1].session_hash]);
+    assert.equal((await pool.query('SELECT count(*) FROM notification_devices')).rows[0].count, '0');
+  } finally { await pool.end(); }
+});
