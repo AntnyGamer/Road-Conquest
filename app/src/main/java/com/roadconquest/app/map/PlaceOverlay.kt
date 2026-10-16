@@ -802,14 +802,15 @@ internal object PlaceGeometry {
     private fun ringContains(ring: JSONArray, latitude: Double, longitude: Double): Boolean {
         if (ring.length() < 3) return false
         var inside = false
-        var previous = ring.optJSONArray(ring.length() - 1) ?: return false
+        val last = ring.optJSONArray(ring.length() - 1) ?: return false
+        var x1 = relativeLongitude(last.optDouble(0, Double.NaN), longitude)
+        var y1 = last.optDouble(1, Double.NaN)
+        if (!x1.isFinite() || !y1.isFinite()) return false
         for (i in 0 until ring.length()) {
             val current = ring.optJSONArray(i) ?: return false
-            val y1 = previous.optDouble(1, Double.NaN)
-            val y2 = current.optDouble(1, Double.NaN)
-            val x1 = relativeLongitude(previous.optDouble(0, Double.NaN), longitude)
             val x2 = relativeLongitude(current.optDouble(0, Double.NaN), longitude)
-            if (!x1.isFinite() || !x2.isFinite() || !y1.isFinite() || !y2.isFinite()) return false
+            val y2 = current.optDouble(1, Double.NaN)
+            if (!x2.isFinite() || !y2.isFinite()) return false
             // Exact boundary points count as contained to avoid disappearing towns
             // when a recorded fix lands precisely on a shared boundary.
             val cross = x1 * (y2 - latitude) - x2 * (y1 - latitude)
@@ -823,7 +824,10 @@ internal object PlaceGeometry {
                 val crossingX = x1 + (x2 - x1) * ((latitude - y1) / (y2 - y1))
                 if (crossingX > 0.0) inside = !inside
             }
-            previous = current
+            // The next edge starts at this same vertex. No second JSON lookup
+            // or date-line modulo is needed for its longitude and latitude.
+            x1 = x2
+            y1 = y2
         }
         return inside
     }

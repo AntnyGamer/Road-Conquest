@@ -41,6 +41,11 @@ HTTP 429, 401/403, 5xx, timeouts and connection failures move to an eligible bac
 - The same week-scoped road and town counts now run as two independently optimized SQL scalar subqueries within one SQLite statement per week instead of opening two cursors. Both original filters are unchanged.
 - Up to four earned challenge rewards are inserted with one atomic `INSERT OR IGNORE` statement rather than four individual writes. Existing reward keys, payout amounts, timestamp, idempotence and previous-week grace are preserved. The challenge tests now verify that repeated refreshes do not create extra weekly reward rows.
 
+## Faster point-in-polygon and uncut municipal shapes
+
+- Municipal containment checks now transform each ring vertex's latitude and wrapped longitude once instead of twice (as the end of one edge and the start of the next). The exact cross-product, boundary-inclusion, hole checks and longitude wrapping are unchanged. A new regression test exercises both sides of the International Date Line and on-edge points.
+- Town-overlay partitioning reuses the cached polygon area when a municipality needs no clipping; overlapping municipalities still compute the precise post-clipping area and keep the same rendering priority.
+
 ## Additional municipal polygon sorting improvements
 
 - Town overlays precompute the geometry area and Census layer priority once per candidate, instead of recalculating JTS polygon area and scanning layer-name substrings during every sort comparison. The comparator still sorts by the same (priority, geometric area, key) tuple and clipping semantics are unchanged.

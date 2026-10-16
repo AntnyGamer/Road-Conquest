@@ -81,7 +81,9 @@ internal object TownOverlayPartition {
                     polygonal(GeometryFixer.fix(remaining))
                 }.getOrNull() ?: continue
             }
-            val clippedArea = clipped.area
+            // Unclipped candidates retain the immutable area already calculated
+            // for sorting; only an actual difference needs a new area scan.
+            val clippedArea = if (overlapping.isEmpty()) candidate.area else clipped.area
             if (!clipped.isEmpty && clippedArea > 0.0) {
                 placed += Candidate(candidate.overlay, clipped, candidate.priority, area = clippedArea)
             }

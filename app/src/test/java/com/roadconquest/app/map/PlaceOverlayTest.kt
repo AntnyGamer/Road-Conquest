@@ -504,6 +504,17 @@ class PlaceOverlayTest {
         assertFalse(PlaceGeometry.contains(geometry, 39.85, -74.60))
     }
 
+    @Test fun polygonContainmentKeepsDateLineWrappingAndBoundaryEdges() {
+        val polygon = JSONObject("""{"type":"Polygon","coordinates":[[
+            [179.5,10],[-179.5,10],[-179.5,11],[179.5,11],[179.5,10]
+        ]]}""")
+        assertTrue(PlaceGeometry.contains(polygon, 10.5, 179.9))
+        assertTrue(PlaceGeometry.contains(polygon, 10.5, -179.9))
+        assertTrue(PlaceGeometry.contains(polygon, 10.0, 179.9))
+        assertFalse(PlaceGeometry.contains(polygon, 10.5, 178.0))
+        assertFalse(PlaceGeometry.contains(polygon, 10.5, -178.0))
+    }
+
     @Test fun municipalityBoundaryEdgeIsRecognized() {
         val geometry = JSONObject(
             """{"type":"Polygon","coordinates":[[
