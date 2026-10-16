@@ -64,3 +64,8 @@ Crashlytics can receive real events only from an opted-in new build. The console
 - On-device re-drive recognition requires at least five consecutive, directionally consistent, precise fixes on the same previously saved road, spanning at least 25 m and within 3 m of the stored geometry. Uncertain evidence remains in the existing matching backlog for later remote verification.
 - The Android tracking service enforces at most one remote matching attempt every six minutes, even for forced retries and backlog flushes. This may increase matching latency but prevents burst spending. Service recreation restarts this local pacing window; the Cloudflare Worker still imposes the authoritative fixed daily shared credit cap.
 - Added local evidence slightly increases device storage and write activity; no GPS evidence is uploaded by the new archive. A passing unit suite cannot prove identical accuracy on every real drive; replay comparison is needed before publishing.
+
+### Faster local recognition without more map-matching traffic
+
+- The tracking service now inspects eligible saved roads locally every **30 seconds**, including when the online matcher is on provider cooldown. It does not add web requests.
+- Geoapify matching is independently limited to **one attempt per seven minutes per running service**. This is stricter than the earlier six-minute request limiter and prevents the faster local interval from increasing server usage. Final flushes and retries respect the same online limiter; delayed online confirmation is expected.

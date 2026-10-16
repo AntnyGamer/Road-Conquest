@@ -745,7 +745,7 @@ class TrackingService : Service(), LocationListener {
     }
 
     private fun maybeRunMatching(force: Boolean = false) {
-        if (!ready || matcher.rateLimitRemainingMs() > 0L) return
+        if (!ready) return
         val now = SystemClock.elapsedRealtime()
         val cooldownRemaining = if (lastMatchAttempt == 0L) {
             0L
@@ -847,6 +847,13 @@ class TrackingService : Service(), LocationListener {
                 if (wait > 0L) {
                     // This also covers final flushes and forced backlog retry runs.
                     scheduleBacklogContinuation(wait)
+                    return
+                }
+                val providerCooldown = matcher.rateLimitRemainingMs()
+                if (providerCooldown > 0L) {
+                    // Still accept local visits while the provider is unavailable.
+                    // Do not call the online matcher or burn additional requests.
+                    scheduleBacklogContinuation(providerCooldown)
                     return
                 }
                 lastMatchAttempt = nowElapsed
@@ -1054,10 +1061,12 @@ class TrackingService : Service(), LocationListener {
         private const val MAX_LOCATION_AGE_NANOS = MAX_LOCATION_AGE_MS * 1_000_000L
         private const val MAX_START_ANCHOR_AGE_MS = 10_000L
         private const val BACKGROUND_PLACE_DISCOVERY_INTERVAL_MS = 60_000L
-        // The pending-route overlay remains live while verified matches are batched.
-        private const val MATCH_INTERVAL_MS = 7 * 60_000L
-        // No more than one remote attempt per six minutes while the service is running.
-        private const val MIN_REMOTE_MATCH_INTERVAL_MS = 6 * 60_000L
+        // Check locally saved roads twice per minute; remote API requests are
+        // independently throttled, so local progress does not consume credits.
+        private const val MATCH_INTERVAL_MS = 30_000L
+        // Match new roads online no more frequently than the original seven
+        // minute batching window, including forced retries and final flushes.
+        private const val MIN_REMOTE_MATCH_INTERVAL_MS = 7 * 60_000L
 
         internal fun remainingRemoteMatchingDelayMs(nowElapsed: Long, lastElapsed: Long): Long =
             if (lastElapsed <= 0 || nowElapsed < lastElapsed) 0L

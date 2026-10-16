@@ -82,12 +82,12 @@ class DrivingFilterTest {
         assertFalse(service.skippedFixCarriesGeometry(a, straight, end))
     }
 
-    @Test fun forcedRemoteRetriesRespectTheSameSixMinuteLimit() {
+    @Test fun forcedRemoteRetriesRespectSevenMinuteCap() {
         val time = 1_000_000L
         assertEquals(0L, TrackingService.remainingRemoteMatchingDelayMs(time, 0L))
-        assertEquals(360_000L, TrackingService.remainingRemoteMatchingDelayMs(time, time))
-        assertEquals(240_000L, TrackingService.remainingRemoteMatchingDelayMs(time + 120_000L, time))
-        assertEquals(0L, TrackingService.remainingRemoteMatchingDelayMs(time + 360_000L, time))
+        assertEquals(420_000L, TrackingService.remainingRemoteMatchingDelayMs(time, time))
+        assertEquals(300_000L, TrackingService.remainingRemoteMatchingDelayMs(time + 120_000L, time))
+        assertEquals(0L, TrackingService.remainingRemoteMatchingDelayMs(time + 420_000L, time))
         assertEquals(0L, TrackingService.remainingRemoteMatchingDelayMs(time - 1L, time))
     }
 
