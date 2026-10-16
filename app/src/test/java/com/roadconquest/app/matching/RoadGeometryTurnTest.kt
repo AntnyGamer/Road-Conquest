@@ -331,6 +331,33 @@ class RoadGeometryTurnTest {
         assertEquals(setOf(1L, 2L), noCredit.matchedPointConfidences.keys)
     }
 
+    @Test fun unknownTraceMatchingIndexKeepsOnlyIndependentValidatedRoads() {
+        val separate = response(listOf(
+            trace(0, 0, a), trace(0, 1, b), trace(99, 0, c),
+            trace(1, 0, d), trace(1, 1, e)
+        ), matching(leg("Approach", a, b)), matching(leg("Exit", d, e)))
+        val recovered = requireNotNull(RoadGeometryValidator().parse(separate, points(a, b, c, d, e)))
+        assertEquals(listOf("Approach", "Exit"), recovered.roads.map { it.name })
+        assertEquals(setOf(1L, 2L, 5L), recovered.matchedPointConfidences.keys)
+        assertFalse(3L in recovered.matchedPointConfidences)
+        assertFalse(4L in recovered.matchedPointConfidences)
+
+        // If an unknown tracepoint is INSIDE a matching, do not bridge over it
+        // even when the surrounding metadata supplies two plausible endpoints.
+        val inside = response(listOf(
+            trace(0, 0, a), trace(99, 0, b), trace(0, 1, c),
+            trace(1, 0, d), trace(1, 1, e)
+        ), matching(leg("Untrusted span", a, c)), matching(leg("Exit", d, e)))
+        val withheld = requireNotNull(RoadGeometryValidator().parse(inside, points(a, b, c, d, e)))
+        assertEquals(listOf("Exit"), withheld.roads.map { it.name })
+        assertEquals(setOf(5L), withheld.matchedPointConfidences.keys)
+
+        val entirelyUnknown = response(listOf(
+            trace(99, 0, a), trace(99, 1, b)
+        ), matching(leg("Not evidence", a, b)))
+        assertNull(RoadGeometryValidator().parse(entirelyUnknown, points(a, b)))
+    }
+
     @Test fun confidentRouteKeepsAnInternalAlternativeWhenBothSidesProvideContext() {
         val result = requireNotNull(RoadGeometryValidator().parse(response(listOf(
             trace(0, 0, a), trace(0, 1, b), trace(0, 2, c, 2),
