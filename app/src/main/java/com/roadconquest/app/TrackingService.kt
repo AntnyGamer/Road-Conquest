@@ -26,7 +26,7 @@ import androidx.core.content.ContextCompat
 import com.roadconquest.app.data.TrackingRepository
 import com.roadconquest.app.data.ProgressionRepository
 import com.roadconquest.app.account.VerifiedDriving
-import com.roadconquest.app.matching.OsrmMatcher
+import com.roadconquest.app.matching.RoadGeometryValidator
 import com.roadconquest.app.matching.FallbackRoadMatcher
 import com.roadconquest.app.matching.RoadMatcher
 import com.roadconquest.app.matching.KnownRoadReuse
@@ -845,10 +845,10 @@ class TrackingService : Service(), LocationListener {
                         successfulShortMatches = 0
                     }
                 }
-                val acceptedRoads = result.roads.filter { it.confidence >= OsrmMatcher.MIN_ACCEPTABLE_CONFIDENCE }
+                val acceptedRoads = result.roads.filter { it.confidence >= RoadGeometryValidator.MIN_ACCEPTABLE_CONFIDENCE }
                 val matchedIds = result.matchedPointConfidences.mapNotNull { (id, confidence) ->
                     id.takeIf {
-                        confidence >= OsrmMatcher.MIN_ACCEPTABLE_CONFIDENCE && id in window.markableIds
+                        confidence >= RoadGeometryValidator.MIN_ACCEPTABLE_CONFIDENCE && id in window.markableIds
                     }
                 }
 

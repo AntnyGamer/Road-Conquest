@@ -11,7 +11,7 @@ import java.net.URL
 import java.time.Instant
 import kotlin.math.*
 
-/** Geoapify's contract is different from OSRM. No API key is embedded in Android. */
+/** Geoapify's contract is independent of the network provider. No API key is embedded in Android. */
 class GeoapifyMatcher(
     private val origin: String,
     private val health: ProviderHealth = ProviderHealth.shared
@@ -20,7 +20,7 @@ class GeoapifyMatcher(
     override var unavailable = false
         private set
     private val providerId = "matching:$origin"
-    private val validator = OsrmMatcher("https://validation.invalid")
+    private val validator = RoadGeometryValidator("https://validation.invalid")
     private var cachedRequest: String? = null
     private var cachedBody: String? = null
     private var cachedAt = 0L
@@ -149,7 +149,7 @@ class GeoapifyMatcher(
         // probability. Every matched fix and leg still passes the same snap,
         // continuity, speed, detour and endpoint checks as the original matcher.
         val normalized = JSONObject().put("code", "Ok").put("tracepoints", tracepoints)
-            .put("matchings", JSONArray().put(JSONObject().put("confidence", OsrmMatcher.MIN_ACCEPTABLE_CONFIDENCE).put("legs", normalizedLegs)))
+            .put("matchings", JSONArray().put(JSONObject().put("confidence", RoadGeometryValidator.MIN_ACCEPTABLE_CONFIDENCE).put("legs", normalizedLegs)))
         return validator.parse(normalized.toString(), points)
     }
 

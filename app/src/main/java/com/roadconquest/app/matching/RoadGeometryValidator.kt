@@ -1,18 +1,10 @@
 package com.roadconquest.app.matching
 
-import android.os.SystemClock
 import com.roadconquest.app.data.MatchedRoad
 import com.roadconquest.app.data.RoadGrouping
 import com.roadconquest.app.data.TrackPoint
 import org.json.JSONArray
 import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
-import java.net.URI
-import java.io.ByteArrayOutputStream
-import java.nio.charset.StandardCharsets
-import java.time.ZonedDateTime
-import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -26,234 +18,8 @@ data class MatchResult(
     val matchedPointConfidences: Map<Long, Double>
 )
 
-class OsrmMatcher(
-    private val baseUrl: String = "https://router.project-osrm.org",
-    // FOSSGIS's public demo allows at most one request per second. Keep private
-    // OSRM deployments unthrottled unless they explicitly report a limit.
-    private val minimumRequestIntervalMs: Long =
-        if (baseUrl.trimEnd('/') == "https://router.project-osrm.org") 1_100L else 0L
-) : RoadMatcher {
-    override var unavailable = false
-        private set
-    private var nextRequestAt = 0L
-    @Volatile private var rateLimitedUntil = 0L
-
-    // Matching windows can be revisited while their pending fixes wait for additional
-    // context. OSRM returns the same geometry for identical request parameters, so
-    // keep a few recent successful responses in memory rather than downloading them
-    // again. Reparse against today's points/IDs; never cache failed/ambiguous HTTP
-    // responses or persist location-containing URLs/bodies on disk.
-    private data class CachedResponse(val body: String, val receivedAtMs: Long)
-    private val recentResponses = LinkedHashMap<String, CachedResponse>(4, 0.75f, true)
-
-    /** Only a provider's rate-limit response blocks new matching requests. */
-    override fun rateLimitRemainingMs(): Long =
-        (rateLimitedUntil - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
-
-    override fun match(points: List<TrackPoint>): MatchResult? {
-        unavailable = false
-        if (points.size !in 2..MAX_MATCH_POINTS) return null
-        val coordinates = points.joinToString(";") { "${it.longitude},${it.latitude}" }
-        var previousSecond = Long.MIN_VALUE
-        val timestamps = points.joinToString(";") { point ->
-            val actualSecond = point.timestampMillis / 1000L
-            val normalizedSecond = if (previousSecond == Long.MIN_VALUE) {
-                actualSecond
-            } else {
-                maxOf(actualSecond, previousSecond + 1L)
-            }
-            previousSecond = normalizedSecond
-            normalizedSecond.toString()
-        }
-        val supportedGap = supportedTurnGap(points)
-        // OSRM radiuses are GPS uncertainty, NOT a hard radius around the fix. Keep
-        // the original uncertainty for every point, including turns, so extra nearby
-        // roads cannot become more likely merely to fill an ambiguous corner.
-        val radiuses = points.joinToString(";") { point ->
-            kotlin.math.ceil(
-                point.accuracyMeters.coerceIn(MIN_MATCH_RADIUS_M, MAX_MATCH_RADIUS_M).toDouble()
-            ).toInt().toString()
-        }
-        // Keep a leg per surviving fix so an ambiguous batch tail can be withheld without
-        // persisting its guessed junction spur. Named-road counts do not count these legs.
-        val waypoints = points.indices.joinToString(";")
-        // Course guidance is only sent when successive accepted fixes are far enough apart
-        // relative to their uncertainty. Deriving it from the trace avoids treating the legacy
-        // stored 0° value for "no device bearing" as a real northbound sensor reading.
-        val bearings = buildBearingGuidance(points)
-        // The driving filter already removes bad fixes. Preserve dense accepted samples;
-        // server-side tidy can turn otherwise usable samples into unmatched tracepoints.
-        // Parsing uses each step's full geometry, not the duplicate route overview.
-        // Hints are never consumed by RoadConquest. Suppress both unused response
-        // fields without removing a single GPS fix, step, or matching constraint.
-        val path = "$baseUrl/match/v1/driving/$coordinates" +
-            "?steps=true&geometries=geojson&overview=false&annotations=false&generate_hints=false&tidy=false&gaps=ignore" +
-            "&waypoints=$waypoints&timestamps=$timestamps&radiuses=$radiuses"
-        val first = requestMatch(URI(path + (bearings?.let { "&bearings=$it" } ?: "")).toURL(), points)
-        // Retry a supported, anchored turn without heading constraints first. If the
-        // normal retry cannot recover it, allow a final tightly bounded candidate search
-        // over non-startpoint road edges. Never accept a weaker or contradictory path.
-        val gap = supportedGap ?: return first
-        if (gap.all { index ->
-                (first?.matchedPointConfidences?.get(points[index].id) ?: 0.0) >= MIN_ACCEPTABLE_CONFIDENCE
-            }
-        ) return first
-        fun accepted(result: MatchResult, id: Long) =
-            (result.matchedPointConfidences[id] ?: 0.0) >= MIN_ACCEPTABLE_CONFIDENCE
-        val oldGap = gap.count { index ->
-            first?.let { accepted(it, points[index].id) } == true
-        }
-        fun safelyImproves(result: MatchResult?, requiredGapConfidence: Double): Boolean {
-            if (result == null ||
-                !accepted(result, points[gap.first - 1].id) ||
-                !accepted(result, points[gap.last + 1].id)
-            ) return false
-            val repaired = gap.count { index ->
-                (result.matchedPointConfidences[points[index].id] ?: 0.0) >= requiredGapConfidence
-            }
-            // Never discard an accepted approach/exit or a previously confirmed road
-            // simply because another routing hypothesis fills the hole.
-            return repaired > oldGap &&
-                (first == null || first.matchedPointConfidences.keys.all { id ->
-                    !accepted(first, id) || accepted(result, id)
-                })
-        }
-
-        // Keep the established no-bearing retry unchanged; "gaps=split" only
-        // controls large timestamp gaps and does not repair a short street corner.
-        // Without first-pass heading guidance, an identical second request adds
-        // no evidence and wastes the public match service's limited capacity.
-        val second = if (bearings == null) null else requestMatch(URI(path).toURL(), points)
-        if (safelyImproves(second, MIN_ACCEPTABLE_CONFIDENCE)) return second
-
-        // Only retry with "snapping=any" when OSRM has independently confirmed
-        // both ends, GPS is precise and continuous, and its normal candidate
-        // search left the turn missing. This never widens GPS radiuses or waives
-        // detour/snap/confidence protections in parseLeg().
-        // The very first fix of a later split trace is deliberately left pending
-        // by parse(), despite its exit-road geometry being accepted. Inspect that
-        // accepted geometry and the already-matched saved exit anchor instead of
-        // requiring a confidence entry parse() intentionally withholds.
-        val exitTime = points[gap.last + 1].timestampMillis
-        val confirmedExitRoad = first?.roads?.any { road ->
-            road.confidence >= MIN_ACCEPTABLE_CONFIDENCE &&
-                road.firstTimestamp <= exitTime && road.lastTimestamp >= exitTime
-        } == true
-        if (first == null ||
-            !accepted(first, points[gap.first - 1].id) ||
-            !points[gap.last + 1].matched || !confirmedExitRoad ||
-            (gap.first - 1..gap.last + 1).any { index ->
-                points[index].accuracyMeters !in 0.01f..MAX_LONG_TURN_ACCURACY_M
-            } ||
-            (gap.first - 1 until gap.last + 1).any { index ->
-                val from = points[index]
-                val to = points[index + 1]
-                to.timestampMillis - from.timestampMillis !in 1..MAX_LONG_TURN_SAMPLE_GAP_MS ||
-                    pointDistanceMeters(from, to) > MAX_LONG_TURN_JUMP_M
-            }
-        ) return first
-        val third = requestMatch(URI("$path&snapping=any").toURL(), points)
-        return if (safelyImproves(third, MIN_ALTERNATE_SNAP_CONFIDENCE)) third else first
-    }
-
-    @Synchronized
-    private fun requestMatch(url: URL, points: List<TrackPoint>): MatchResult? {
-        val cacheKey = url.toExternalForm()
-        val cached = recentResponses[cacheKey]
-        if (cached != null) {
-            val age = SystemClock.elapsedRealtime() - cached.receivedAtMs
-            if (age in 0L..RESPONSE_CACHE_TTL_MS) {
-                // Point IDs and already-matched flags may have changed since the
-                // previous window, even when OSRM's URL has not.
-                val result = runCatching { parse(cached.body, points) }.getOrNull()
-                if (result != null) return result
-            }
-            recentResponses.remove(cacheKey)
-        }
-        if (rateLimitRemainingMs() > 0L) { unavailable = true; return null }
-        // Only the shared public demo needs pacing. The matcher runs on a
-        // background executor, so no location callback or UI thread waits.
-        val waitMs = nextRequestAt - SystemClock.elapsedRealtime()
-        if (waitMs > 0L) {
-            try {
-                Thread.sleep(waitMs)
-            } catch (_: InterruptedException) {
-                Thread.currentThread().interrupt()
-                return null
-            }
-        }
-        if (rateLimitRemainingMs() > 0L) return null
-        nextRequestAt = SystemClock.elapsedRealtime() + minimumRequestIntervalMs
-
-        var connection: HttpURLConnection? = null
-        return try {
-            connection = (url.openConnection() as HttpURLConnection).apply {
-                instanceFollowRedirects = false
-                requestMethod = "GET"
-                connectTimeout = 8_000
-                readTimeout = 12_000
-                setRequestProperty("Accept", "application/json")
-                setRequestProperty("User-Agent", "RoadConquest/1.0 (Android road-history app)")
-            }
-            val status = connection.responseCode
-            unavailable = status == 401 || status == 403 || status == 429 || status >= 500 || status in 300..399
-            if (unavailable && status != 429 && status != 503) {
-                rateLimitedUntil = SystemClock.elapsedRealtime() + if (status == 401 || status == 403) 86_400_000L else 30_000L
-            }
-            if (status == 429 || status == 503) {
-                // A rate-limited/unavailable provider must not receive another
-                // immediate request from this batch or the next GPS callback.
-                // The repository already retains unmatched fixes for later
-                // retries, so never invent a locally guessed road instead.
-                // HTTP Retry-After may be a delay in seconds OR an RFC 1123
-                // date. Respect either form to avoid retrying during a provider
-                // outage/rate limit; retain the existing bounded cooldown.
-                val retryAfter = connection.getHeaderField("Retry-After")?.trim()
-                val retryDelayMs = retryAfter?.toLongOrNull()?.let {
-                    it.coerceIn(1L, 3_600L) * 1_000L
-                } ?: retryAfter?.let {
-                    runCatching {
-                        ZonedDateTime.parse(it, DateTimeFormatter.RFC_1123_DATE_TIME)
-                            .toInstant().toEpochMilli() - System.currentTimeMillis()
-                    }.getOrNull()?.coerceIn(0L, 3_600_000L)
-                } ?: 0L
-                val defaultMs = if (status == 429) 60_000L else 30_000L
-                val pauseMs = maxOf(defaultMs, retryDelayMs)
-                rateLimitedUntil = SystemClock.elapsedRealtime() + pauseMs
-                return null
-            }
-            if (status !in 200..299) return null
-            val body = connection.inputStream.use { input ->
-                val output = ByteArrayOutputStream()
-                val buffer = ByteArray(8192)
-                while (true) {
-                    val count = input.read(buffer)
-                    if (count == -1) break
-                    if (output.size() + count > MAX_RESPONSE_BYTES) return null
-                    output.write(buffer, 0, count)
-                }
-                output.toString(StandardCharsets.UTF_8.name())
-            }
-            val result = parse(body, points)
-            // Valid but ambiguous matches can also be repeated with identical
-            // parameters. Reuse them briefly until new GPS context changes the
-            // request, while failures and malformed responses remain uncached.
-            if (result != null && body.length <= MAX_CACHED_RESPONSE_CHARS) {
-                recentResponses[cacheKey] = CachedResponse(body, SystemClock.elapsedRealtime())
-                if (recentResponses.size > MAX_CACHED_RESPONSES) {
-                    recentResponses.entries.iterator().apply { next(); remove() }
-                }
-            }
-            result
-        } catch (error: Exception) {
-            unavailable = true
-            if (error is java.io.IOException) rateLimitedUntil = SystemClock.elapsedRealtime() + 30_000L
-            null
-        } finally {
-            connection?.disconnect()
-        }
-    }
-
+/** Independent geometric plausibility checks shared by all current and future matchers. */
+class RoadGeometryValidator {
     internal fun parse(json: String, points: List<TrackPoint>): MatchResult? {
         val root = JSONObject(json)
         if (root.optString("code") != "Ok") return null
@@ -327,7 +93,7 @@ class OsrmMatcher(
                             emptyList()
                         }
                         if (legRoads.isEmpty()) {
-                            // One locally implausible OSRM leg should stay pending, but must not
+                            // One locally implausible provider leg should stay pending, but must not
                             // turn every valid sibling leg in the batch into a 5-minute failure.
                             // Also remember this exact interval so the seam-repair fallback cannot
                             // immediately synthesize a connector across geometry we just rejected.
@@ -343,7 +109,7 @@ class OsrmMatcher(
                 first = last + 1
             }
         }
-        // A split OSRM trace can leave a tiny missing segment even with confident, consecutive
+        // A split provider trace can leave a tiny missing segment even with confident, consecutive
         // GPS fixes on both sides. Support a tightly bounded cross-road junction seam as well
         // as the existing same-road repair; never fabricate long or rejected connections.
         bridgeConfidentTraceSplits(roads, resolved, points, blockedBridgeEndIds)
@@ -525,7 +291,7 @@ class OsrmMatcher(
                 RoadGrouping.normalizeName(right.name).isEmpty() &&
                 left.confidence >= MIN_UNNAMED_BRIDGE_CONFIDENCE &&
                 right.confidence >= MIN_UNNAMED_BRIDGE_CONFIDENCE
-            // Different named roads also meet at actual intersections. OSRM can split the
+            // Different named roads also meet at actual intersections. provider can split the
             // short crossing between two confident matchings; allow only a very short bridge
             // with GPS position + course evidence and never award a new road for it.
             val crossRoadBridge = !sameMergeIdentity(left, right) && !unnamedBridge &&
@@ -675,7 +441,7 @@ class OsrmMatcher(
             if (change >= SHARP_TURN_DEGREES) return true
             // Some valid junction transitions bend only 25-44 degrees. The
             // independent GPS fixes on both sides still warrant a no-bearing
-            // OSRM retry, but only across a short and accurate sampled gap.
+            // provider retry, but only across a short and accurate sampled gap.
             return change >= MODERATE_TURN_DEGREES &&
                 (first - 1..last + 1).all { index ->
                     points[index].accuracyMeters.isFinite() &&
@@ -736,7 +502,7 @@ class OsrmMatcher(
         val values = points.indices.map { index ->
             val point = points[index]
             // A forward-only course at a junction describes the exit road, not necessarily
-            // the incoming road. Do not forbid OSRM from considering the true turn here.
+            // the incoming road. Do not forbid provider from considering the true turn here.
             if (isSharpTurn(points, index)) return@map ""
             val (from, to) = if (index < points.lastIndex) {
                 point to points[index + 1]
@@ -862,9 +628,9 @@ class OsrmMatcher(
     }
 
     companion object {
-        // The public OSRM demo rejects larger traces with TooBig (verified 2026-10-03).
-        const val MAX_MATCH_POINTS = 10
-        // Strict in-memory cap: at most four compact, successful OSRM responses for
+        // The public provider demo rejects larger traces with TooBig (verified 2026-10-03).
+        const val MAX_MATCH_POINTS = 100
+        // Strict in-memory cap: at most four compact, successful provider responses for
         // one minute. Changed coordinates/times/radii/bearings always bypass cache.
         private const val RESPONSE_CACHE_TTL_MS = 60_000L
         private const val MAX_CACHED_RESPONSES = 4
@@ -875,7 +641,7 @@ class OsrmMatcher(
         internal const val MIN_ACCEPTABLE_CONFIDENCE = 0.45
         private const val MIN_MATCH_RADIUS_M = 10f
         private const val MAX_MATCH_RADIUS_M = 75f
-        // Treat OSRM's radius as candidate discovery, not proof. Tighten permanent
+        // Treat provider's radius as candidate discovery, not proof. Tighten permanent
         // geometry only while the vehicle is moving slowly enough for a nearby-road snap to be
         // especially plausible; normal driving keeps the previous distance allowance. Keep a
         // generous low-speed floor so this protection does not turn ordinary centerline/GNSS
@@ -906,7 +672,7 @@ class OsrmMatcher(
         private const val MIN_BEARING_GUIDANCE_SPEED_MPS = 4f
         private const val MIN_BEARING_EVIDENCE_DISTANCE_M = 8.0
         private const val BEARING_ACCURACY_DISTANCE_FACTOR = 0.75
-        // OSRM interprets this as a symmetric range around the supplied heading. Sixty-five
+        // provider interprets this as a symmetric range around the supplied heading. Sixty-five
         // degrees is broad enough for ordinary curves while still excluding the opposite road.
         private const val BEARING_GUIDANCE_RANGE_DEGREES = 65
         private const val SHARP_TURN_DEGREES = 45.0
