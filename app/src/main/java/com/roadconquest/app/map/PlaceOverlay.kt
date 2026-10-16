@@ -720,18 +720,25 @@ class PlaceOverlayClient(
         private fun ringArea(ring: JSONArray): Double {
             if (ring.length() < 3) return 0.0
             var sum = 0.0
-            for (i in 0 until ring.length()) {
-                val a = ring.optJSONArray(i) ?: continue
-                val b = ring.optJSONArray((i + 1) % ring.length()) ?: continue
-                val lon1 = Math.toRadians(a.optDouble(0, Double.NaN))
-                val lat1 = Math.toRadians(a.optDouble(1, Double.NaN))
-                val lon2 = Math.toRadians(b.optDouble(0, Double.NaN))
-                val lat2 = Math.toRadians(b.optDouble(1, Double.NaN))
-                if (!lon1.isFinite() || !lat1.isFinite() || !lon2.isFinite() || !lat2.isFinite()) continue
-                var delta = lon2 - lon1
-                while (delta > PI) delta -= 2 * PI
-                while (delta < -PI) delta += 2 * PI
-                sum += delta * (2 + sin(lat1) + sin(lat2))
+            // The end of each edge is the start of the next. Decode its
+            // longitude/latitude and sine once, keeping the original edge order.
+            val first = ring.optJSONArray(0)
+            var lon1 = Math.toRadians(first?.optDouble(0, Double.NaN) ?: Double.NaN)
+            var lat1 = Math.toRadians(first?.optDouble(1, Double.NaN) ?: Double.NaN)
+            var sine1 = sin(lat1)
+            for (i in 1..ring.length()) {
+                val next = ring.optJSONArray(if (i == ring.length()) 0 else i)
+                val lon2 = Math.toRadians(next?.optDouble(0, Double.NaN) ?: Double.NaN)
+                val lat2 = Math.toRadians(next?.optDouble(1, Double.NaN) ?: Double.NaN)
+                if (lon1.isFinite() && lat1.isFinite() && lon2.isFinite() && lat2.isFinite()) {
+                    var delta = lon2 - lon1
+                    while (delta > PI) delta -= 2 * PI
+                    while (delta < -PI) delta += 2 * PI
+                    sum += delta * (2 + sine1 + sin(lat2))
+                }
+                lon1 = lon2
+                lat1 = lat2
+                sine1 = sin(lat2)
             }
             return sum * EARTH_RADIUS_M * EARTH_RADIUS_M / 2.0
         }

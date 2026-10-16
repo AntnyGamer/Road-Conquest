@@ -490,6 +490,26 @@ class PlaceOverlayTest {
         assertNull(PlaceOverlayClient.parseResponse(place, body))
     }
 
+    @Test fun polygonAreaIsIndependentOfRingDirectionAndSubtractsHoles() {
+        val outer = org.json.JSONArray("""[[-75,39],[-74,39],[-74,40],[-75,40]]""")
+        val inner = org.json.JSONArray("""[[-74.75,39.25],[-74.25,39.25],[-74.25,39.75],[-74.75,39.75]]""")
+        fun shape(outerRing: org.json.JSONArray, innerRing: org.json.JSONArray?) =
+            JSONObject().put("type", "Polygon")
+                .put("coordinates", org.json.JSONArray().put(outerRing).apply {
+                    if (innerRing != null) put(innerRing)
+                })
+        fun reversed(ring: org.json.JSONArray) = org.json.JSONArray().apply {
+            for (i in ring.length() - 1 downTo 0) put(ring.getJSONArray(i))
+        }
+        val whole = PlaceOverlayClient.areaSquareKilometers(shape(outer, null))
+        val withHole = PlaceOverlayClient.areaSquareKilometers(shape(outer, inner))
+        assertTrue(whole > withHole)
+        assertTrue(withHole > 0.0)
+        assertEquals(whole, PlaceOverlayClient.areaSquareKilometers(shape(reversed(outer), null)), 0.000001)
+        assertEquals(withHole,
+            PlaceOverlayClient.areaSquareKilometers(shape(reversed(outer), reversed(inner))), 0.000001)
+    }
+
     @Test fun polygonContainmentHandlesHolesAndDisjointMunicipalities() {
         val geometry = JSONObject(
             """{"type":"MultiPolygon","coordinates":[

@@ -41,6 +41,11 @@ HTTP 429, 401/403, 5xx, timeouts and connection failures move to an eligible bac
 - The same week-scoped road and town counts now run as two independently optimized SQL scalar subqueries within one SQLite statement per week instead of opening two cursors. Both original filters are unchanged.
 - Up to four earned challenge rewards are inserted with one atomic `INSERT OR IGNORE` statement rather than four individual writes. Existing reward keys, payout amounts, timestamp, idempotence and previous-week grace are preserved. The challenge tests now verify that repeated refreshes do not create extra weekly reward rows.
 
+## Polygon-area and Census distance calculation improvements
+
+- The spherical GeoJSON area estimator now decodes each shared ring vertex, converts it to radians and computes its latitude sine once instead of twice per adjacent edge. The original edge accumulation order and area/hole formula remain unchanged; a test verifies reversal invariance and hole subtraction.
+- The official Census municipality proximity fallback reuses one latitude cosine and each shared projected ring vertex instead of redoing trigonometry and JSON reads on both ends of every edge. Exact point-containment, snap thresholds and provider requests remain unchanged.
+
 ## Faster point-in-polygon and uncut municipal shapes
 
 - Municipal containment checks now transform each ring vertex's latitude and wrapped longitude once instead of twice (as the end of one edge and the start of the next). The exact cross-product, boundary-inclusion, hole checks and longitude wrapping are unchanged. A new regression test exercises both sides of the International Date Line and on-edge points.
