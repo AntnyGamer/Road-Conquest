@@ -723,6 +723,15 @@ class TrackingRepositoryTest {
         assertNull(repository.findRoadNear(40.01, -74.0005, 30.0))
     }
 
+    @Test fun ambiguousParallelSavedRoadsCannotResolveGpsLocally() {
+        repository.upsertRoads(listOf(
+            MatchedRoad("Original", "[[-74,40],[-73.999,40]]", 1_000_000L, 1_010_000L, 0.99),
+            MatchedRoad("Parallel", "[[-74,40.00006],[-73.999,40.00006]]",
+                1_000_000L, 1_010_000L, 0.99)
+        ))
+        assertNull(repository.findUnambiguousPreviouslyDrivenRoadNear(40.0, -73.9995))
+    }
+
     @Test fun preciseRepeatDriveIsMatchedOnDeviceWithoutUnlockingNewRoads() {
         repository.upsertRoads(listOf(MatchedRoad(
             "Previously driven", "[[-74,40],[-73.999,40]]", 1_000_000L, 1_010_000L, 0.99)))

@@ -18,7 +18,7 @@ internal object KnownRoadReuse {
         if (points.size < 3 || markableIds.isEmpty() || repository.getSummary().roadSegmentCount == 0L)
             return emptyList()
         return identify(points, markableIds) { fix ->
-            repository.findRoadNear(fix.latitude, fix.longitude, 3.0)?.segmentId
+            repository.findUnambiguousPreviouslyDrivenRoadNear(fix.latitude, fix.longitude)?.segmentId
         }
     }
 

@@ -1514,6 +1514,40 @@ class TrackingRepository(context: Context) {
         timesDrivenExact = getInt(10) != 0
     )
 
+    /**
+     * Fail closed when another saved road is nearby. An ambiguous junction or
+     * parallel road must be verified online rather than credited as a local re-drive.
+     */
+    @Synchronized
+    fun findUnambiguousPreviouslyDrivenRoadNear(
+        latitude: Double, longitude: Double,
+        snapRadiusMeters: Double = 3.0, exclusionRadiusMeters: Double = 12.0
+    ): RoadRecord? {
+        if (!latitude.isFinite() || !longitude.isFinite() ||
+            latitude !in -90.0..90.0 || longitude !in -180.0..180.0 ||
+            snapRadiusMeters <= 0.0 || exclusionRadiusMeters <= snapRadiusMeters
+        ) return null
+        val latitudePad = exclusionRadiusMeters / METERS_PER_DEGREE
+        val longitudePad = (exclusionRadiusMeters /
+            (METERS_PER_DEGREE * cos(Math.toRadians(latitude)).coerceAtLeast(0.01))).coerceAtMost(180.0)
+        fun wrap(value: Double) = ((value + 180.0) % 360.0 + 360.0) % 360.0 - 180.0
+        val roads = getRoadsInBounds(
+            (latitude + latitudePad).coerceAtMost(90.0),
+            wrap(longitude + longitudePad),
+            (latitude - latitudePad).coerceAtLeast(-90.0),
+            wrap(longitude - longitudePad),
+            Int.MAX_VALUE
+        )
+        var single: RoadRecord? = null
+        for (road in roads) {
+            val distance = distanceToRoadMeters(latitude, longitude, road.geometryJson)
+            if (distance > exclusionRadiusMeters) continue
+            if (single != null) return null
+            single = road.takeIf { distance <= snapRadiusMeters }
+        }
+        return single
+    }
+
     @Synchronized
     fun findRoadNear(latitude: Double, longitude: Double, radiusMeters: Double): RoadRecord? {
         if (!latitude.isFinite() || !longitude.isFinite() || radiusMeters <= 0.0) return null
