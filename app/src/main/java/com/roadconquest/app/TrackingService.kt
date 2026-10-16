@@ -104,6 +104,8 @@ class TrackingService : Service(), LocationListener {
     private var successfulShortMatches = 0
     private var lastObserved: Location? = null
     private var lastAccepted: Location? = null
+    // Accepted fixes omitted from network matching, also retained privately on disk.
+    private val skippedSinceRetained = ArrayList<Location>(4)
     private var lastExplored: Location? = null
     // Avoid repeatedly hitting SQLite for the same 50 m fog cell during one service session.
     // The concurrent set also prevents duplicate queued writes before storageExecutor catches up.
@@ -343,6 +345,7 @@ class TrackingService : Service(), LocationListener {
 
         if (lastAccepted?.let { elapsedMillis(it, location) > MAX_MOTION_SAMPLE_AGE_MS } == true) {
             lastAccepted = null
+            skippedSinceRetained.clear()
         }
         if (!isUsableDrivingLocation(location, previous, elapsedFromPrevious, distanceFromPrevious)) return
 
@@ -359,13 +362,21 @@ class TrackingService : Service(), LocationListener {
         // Keep the live car, fog and verification stream at the original GPS rate.
         // Only omit redundant high-quality straight-line *stored* fixes; retain every
         // uncertain fix and directional change so junctions can still be matched.
-        val skipStraightFix = lastAccepted?.let { !shouldPersistDrivingSample(it, accepted) } == true
+        val anchor = lastAccepted
+        val importantSkipped = if (anchor != null) skippedSinceRetained.filter {
+            skippedFixCarriesGeometry(anchor, it, accepted)
+        } else emptyList()
+        // Restore genuine bends before the route can be approximated by a straight chord.
+        val skipStraightFix = importantSkipped.isEmpty() &&
+            skippedSinceRetained.size < 4 &&
+            anchor?.let { !shouldPersistDrivingSample(it, accepted) } == true
         val placeCandidate = if (!accepted.isMock && accepted.hasAccuracy() &&
             accepted.accuracy in 0.01f..25f &&
             (lastPlaceCandidate?.distanceTo(accepted) ?: Float.POSITIVE_INFINITY) >= PLACE_CANDIDATE_MIN_DISTANCE_M
         ) Location(accepted) else null
         if (placeCandidate != null) lastPlaceCandidate = placeCandidate
         if (skipStraightFix) {
+            skippedSinceRetained.add(Location(accepted))
             // Save the *original* accepted evidence in a separate local table.
             // It does not enter the matching queue and never costs an API request.
             storageExecutor.execute {
@@ -384,14 +395,17 @@ class TrackingService : Service(), LocationListener {
             }
             return
         }
+        skippedSinceRetained.clear()
         lastAccepted = accepted
         storageExecutor.execute {
             try {
-                if (startAnchor == null) {
-                    repository.insertLocation(accepted)
-                } else {
-                    repository.insertLocations(listOf(startAnchor, accepted))
+                val fixes = buildList {
+                    if (startAnchor != null) add(startAnchor)
+                    addAll(importantSkipped)
+                    add(accepted)
                 }
+                if (fixes.size == 1) repository.insertLocation(accepted)
+                else repository.insertLocations(fixes)
                 if (placeCandidate != null && ::progressionRepository.isInitialized) {
                     try {
                         if (progressionRepository.recordPlaceCandidate(placeCandidate)) {
@@ -647,6 +661,22 @@ class TrackingService : Service(), LocationListener {
         ) return true
         val delta = kotlin.math.abs(((current.bearing - previousSaved.bearing + 540f) % 360f) - 180f)
         return !delta.isFinite() || delta >= MIN_RETAINED_BEND_DEGREES
+    }
+
+    /** Reintroduce compressed samples whose path strays from the straight-line chord. */
+    internal fun skippedFixCarriesGeometry(anchor: Location, skipped: Location, end: Location): Boolean {
+        if (anchor.time >= skipped.time || skipped.time >= end.time) return true
+        fun longitudeDelta(from: Double, to: Double) =
+            ((to - from + 540.0) % 360.0) - 180.0
+        val cosLat = kotlin.math.cos(Math.toRadians((anchor.latitude + end.latitude) / 2.0))
+        val sx = Math.toRadians(longitudeDelta(anchor.longitude, skipped.longitude)) * cosLat * 6_371_008.8
+        val sy = Math.toRadians(skipped.latitude - anchor.latitude) * 6_371_008.8
+        val ex = Math.toRadians(longitudeDelta(anchor.longitude, end.longitude)) * cosLat * 6_371_008.8
+        val ey = Math.toRadians(end.latitude - anchor.latitude) * 6_371_008.8
+        val lengthSquared = ex * ex + ey * ey
+        if (!lengthSquared.isFinite() || lengthSquared < 1.0) return true
+        val t = ((sx * ex + sy * ey) / lengthSquared).coerceIn(0.0, 1.0)
+        return kotlin.math.hypot(sx - ex * t, sy - ey * t) > 3.0
     }
 
     private fun isFreshLocation(location: Location): Boolean {

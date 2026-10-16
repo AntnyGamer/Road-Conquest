@@ -72,6 +72,16 @@ class DrivingFilterTest {
         assertTrue(service.shouldPersistDrivingSample(a, straight.apply { accuracy = 5f; removeBearing() }))
     }
 
+    @Test fun missedSCurveApexIsRecoveredForNormalMatching() {
+        val service = TrackingService()
+        val a = point(40.0, 10, 8f).apply { bearing = 90f }
+        val bend = point(40.00008, 13, 8f).apply { longitude = -73.9999; bearing = 94f }
+        val end = point(40.0, 16, 8f).apply { longitude = -73.9998; bearing = 92f }
+        assertTrue(service.skippedFixCarriesGeometry(a, bend, end))
+        val straight = point(40.0, 13, 8f).apply { longitude = -73.9999; bearing = 94f }
+        assertFalse(service.skippedFixCarriesGeometry(a, straight, end))
+    }
+
     @Test fun forcedRemoteRetriesRespectTheSameSixMinuteLimit() {
         val time = 1_000_000L
         assertEquals(0L, TrackingService.remainingRemoteMatchingDelayMs(time, 0L))
