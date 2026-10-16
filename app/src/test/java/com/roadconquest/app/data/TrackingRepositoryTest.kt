@@ -727,7 +727,14 @@ class TrackingRepositoryTest {
         repository.upsertRoads(listOf(MatchedRoad(
             "Previously driven", "[[-74,40],[-73.999,40]]", 1_000_000L, 1_010_000L, 0.99)))
         val ids = (0 until 6).map { index ->
-            point(2_000_000L + index * 6_000L, 40.0, -74.0 + index * 0.0001, 8f)
+            repository.insertLocation(Location("gps").apply {
+                latitude = 40.0
+                longitude = -74.0 + index * 0.0001
+                accuracy = 3f
+                speed = 8f
+                bearing = 90f
+                time = 2_000_000L + index * 6_000L
+            })
         }
         val window = repository.loadMatchingWindow(100)
         val reused = com.roadconquest.app.matching.KnownRoadReuse.find(
