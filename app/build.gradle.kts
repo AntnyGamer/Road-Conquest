@@ -9,14 +9,10 @@ plugins {
 val accountApiUrl = providers.gradleProperty("ROADCONQUEST_ACCOUNT_API_URL").getOrElse(
     "https://roadconquest-api.22abongiovanni.workers.dev"
 )
-val osrmApiUrl = providers.gradleProperty("ROADCONQUEST_OSRM_API_URL").getOrElse(
-    "https://router.project-osrm.org"
-)
 val mapGatewayUrl = providers.gradleProperty("ROADCONQUEST_MAP_GATEWAY_URL").getOrElse(
     "https://roadconquest-maps.22abongiovanni.workers.dev"
 )
-val allowPublicOsrmDemo = providers.gradleProperty("ROADCONQUEST_ALLOW_PUBLIC_OSRM_DEMO").getOrElse("false").toBooleanStrict()
-for (endpoint in listOf(mapGatewayUrl, osrmApiUrl).filter { it.isNotBlank() }) {
+for (endpoint in listOf(mapGatewayUrl).filter { it.isNotBlank() }) {
     val uri = URI(endpoint)
     require(uri.scheme == "https" && uri.host != null && uri.userInfo == null && uri.query == null && uri.fragment == null) {
         "Map service origins must use HTTPS without embedded credentials, query or fragment."
@@ -42,12 +38,9 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         testInstrumentationRunnerArguments["timeout_msec"] = "120000"
         val escapedAccountApiUrl = accountApiUrl.replace("\\", "\\\\").replace("\"", "\\\"")
-        val escapedOsrmApiUrl = osrmApiUrl.replace("\\", "\\\\").replace("\"", "\\\"")
         val escapedPlaceOverlayConfigUrl = placeOverlayConfigUrl.replace("\\", "\\\\").replace("\"", "\\\"")
         buildConfigField("String", "ACCOUNT_API_URL", "\"$escapedAccountApiUrl\"")
-        buildConfigField("String", "OSRM_API_URL", "\"$escapedOsrmApiUrl\"")
         buildConfigField("String", "MAP_GATEWAY_URL", "\"${mapGatewayUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
-        buildConfigField("boolean", "ALLOW_PUBLIC_OSRM_DEMO", allowPublicOsrmDemo.toString())
         buildConfigField("String", "PLACE_OVERLAY_CONFIG_URL", "\"$escapedPlaceOverlayConfigUrl\"")
         buildConfigField("boolean", "LEADERBOARDS_VISIBLE", leaderboardsVisible.toString())
     }

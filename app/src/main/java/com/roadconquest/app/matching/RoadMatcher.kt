@@ -27,10 +27,6 @@ class FallbackRoadMatcher(private val providers: List<RoadMatcher>) : RoadMatche
 
     companion object {
         fun configured(): FallbackRoadMatcher = FallbackRoadMatcher(buildList {
-            val osrm = BuildConfig.OSRM_API_URL.trimEnd('/')
-            if (osrm.isNotBlank() && (osrm != "https://router.project-osrm.org" || BuildConfig.ALLOW_PUBLIC_OSRM_DEMO)) {
-                add(OsrmMatcher(osrm))
-            }
             if (BuildConfig.MAP_GATEWAY_URL.isNotBlank()) add(GeoapifyMatcher(BuildConfig.MAP_GATEWAY_URL))
         })
     }
