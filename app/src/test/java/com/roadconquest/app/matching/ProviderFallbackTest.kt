@@ -305,7 +305,7 @@ class ProviderFallbackTest {
         assertEquals(setOf(1L, 2L), salvaged.matchedPointConfidences.keys)
     }
 
-    @Test fun namedPrimaryRoadsCountButMotorwayLinkRampsDoNot() {
+    @Test fun namedPrimaryAndServiceOtherRoadsCountButMotorwayLinkRampsDoNot() {
         fun asClass(roadClass: String): MatchResult {
             val sample = JSONObject(example)
             val steps = sample.getJSONArray("features").getJSONObject(0).getJSONObject("properties")
@@ -314,6 +314,7 @@ class ProviderFallbackTest {
             return requireNotNull(GeoapifyMatcher("https://maps.example").parse(sample.toString(), points))
         }
         assertTrue(asClass("primary").roads.all { it.countTowardsRoads })
+        assertTrue(asClass("service_other").roads.all { it.countTowardsRoads })
         assertTrue(asClass("motorway_link").roads.none { it.countTowardsRoads })
     }
 
