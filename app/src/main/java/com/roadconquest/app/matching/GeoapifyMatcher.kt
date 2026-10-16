@@ -181,6 +181,7 @@ class GeoapifyMatcher(
         }
         val matchings = JSONArray()
         val tracepoints = JSONArray().apply { repeat(points.size) { put(JSONObject.NULL) } }
+        val blockedBridgeEndIds = HashSet<Long>()
         var index = 0
         while (index < points.size) {
             if (locations[index] == null) { index++; continue }
@@ -207,6 +208,7 @@ class GeoapifyMatcher(
                 val toStep = waypointSteps[i + 1]
                 if (damagedSteps && (fromStep > toStep ||
                     (fromStep..toStep).any { !stepValid[it] })) {
+                    blockedBridgeEndIds += points[i + 1].id
                     flushBlock(i)
                     blockStart = i + 1
                     continue
@@ -237,6 +239,7 @@ class GeoapifyMatcher(
                 }
                 if (pieces.length() == 0 ||
                     (damagedSteps && covered < positions[i + 1] - 0.000001)) {
+                    blockedBridgeEndIds += points[i + 1].id
                     flushBlock(i)
                     blockStart = i + 1
                     continue
@@ -249,7 +252,7 @@ class GeoapifyMatcher(
             else MatchResult(emptyList(), emptyMap())
         val normalized = JSONObject().put("code", "Ok").put("tracepoints", tracepoints)
             .put("matchings", matchings)
-        return validator.parse(normalized.toString(), points)
+        return validator.parse(normalized.toString(), points, blockedBridgeEndIds)
     }
 
     private fun position(line: JSONArray, point: JSONArray, start: Int, end: Int): Double? {
