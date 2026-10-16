@@ -153,6 +153,7 @@ class GeoapifyMatcher(
             stepCountable[i] = step.optString("road_class") in COUNTABLE_ROAD_CLASSES
             stepValid[i] = true
         }
+        val damagedSteps = stepValid.any { !it }
         val waypoints = suppliedWaypoints ?: props.getJSONArray("waypoints")
         if (waypoints.length() != points.size) return null
         val positions = DoubleArray(points.size)
@@ -204,7 +205,8 @@ class GeoapifyMatcher(
                 val pieces = JSONArray()
                 val fromStep = waypointSteps[i]
                 val toStep = waypointSteps[i + 1]
-                if (fromStep > toStep || (fromStep..toStep).any { !stepValid[it] }) {
+                if (damagedSteps && (fromStep > toStep ||
+                    (fromStep..toStep).any { !stepValid[it] })) {
                     flushBlock(i)
                     blockStart = i + 1
                     continue
@@ -233,7 +235,8 @@ class GeoapifyMatcher(
                         .put("geometry", JSONObject().put("type", "LineString").put("coordinates", coordinates))
                         .put("maneuver", JSONObject().put("type", if (stepCountable[s]) "turn" else "ramp")))
                 }
-                if (pieces.length() == 0 || covered < positions[i + 1] - 0.000001) {
+                if (pieces.length() == 0 ||
+                    (damagedSteps && covered < positions[i + 1] - 0.000001)) {
                     flushBlock(i)
                     blockStart = i + 1
                     continue
@@ -242,7 +245,7 @@ class GeoapifyMatcher(
             }
             flushBlock(index - 1)
         }
-        if (matchings.length() == 0) return if (stepValid.any { !it }) null
+        if (matchings.length() == 0) return if (damagedSteps) null
             else MatchResult(emptyList(), emptyMap())
         val normalized = JSONObject().put("code", "Ok").put("tracepoints", tracepoints)
             .put("matchings", matchings)
