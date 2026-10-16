@@ -1,6 +1,7 @@
 package com.roadconquest.app
 
 import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.app.AlertDialog
@@ -424,11 +425,16 @@ class TripHistoryActivity : Activity() {
                 pendingGpxTrip = trip
                 redactGpxEnds = choice == 0
                 val name = "roadconquest-trip-${trip.startedAt}.gpx"
-                startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-                    addCategory(Intent.CATEGORY_OPENABLE)
-                    type = "application/gpx+xml"
-                    putExtra(Intent.EXTRA_TITLE, name)
-                }, GPX_DOCUMENT_REQUEST)
+                try {
+                    startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                        type = "application/gpx+xml"
+                        putExtra(Intent.EXTRA_TITLE, name)
+                    }, GPX_DOCUMENT_REQUEST)
+                } catch (_: ActivityNotFoundException) {
+                    pendingGpxTrip = null
+                    Toast.makeText(this, "Android's file picker is unavailable on this device.", Toast.LENGTH_LONG).show()
+                }
             }
             .setNegativeButton("Cancel", null).show()
     }
