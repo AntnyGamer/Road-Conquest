@@ -50,16 +50,17 @@ export function createFcmSender(raw, fetcher = fetch, now = Date.now) {
 
 export function createNotifications(pool, { pepper, sender, deliveryLimit }) {
   const key = createHmac('sha256', pepper).update('roadconquest-fcm-token-encryption-v1').digest();
+  const aad = aad;
   const digest = token => createHash('sha256').update(token).digest();
   const seal = token => {
     const iv = randomBytes(12);
     const cipher = createCipheriv('aes-256-gcm', key, iv);
-    cipher.setAAD(Buffer.from('roadconquest-fcm-token-v1'));
+    cipher.setAAD(aad);
     return Buffer.concat([iv, cipher.update(token.padEnd(100, '\0'), 'utf8'), cipher.final(), cipher.getAuthTag()]);
   };
   const open = bytes => {
     const cipher = createDecipheriv('aes-256-gcm', key, bytes.subarray(0, 12));
-    cipher.setAAD(Buffer.from('roadconquest-fcm-token-v1'));
+    cipher.setAAD(aad);
     cipher.setAuthTag(bytes.subarray(-16));
     return Buffer.concat([cipher.update(bytes.subarray(12, -16)), cipher.final()]).toString('utf8').replace(/\0+$/, '');
   };
