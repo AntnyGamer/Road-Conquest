@@ -42,7 +42,7 @@ internal object KnownRoadReuse {
             val segment = nearby[i] ?: continue
             val window = (i - 2)..(i + 2)
             if (window.any { nearby[it] != segment }) continue
-            if (window.dropLast(1).any { !continuous(points[it], points[it + 1]) ||
+            if ((i - 2 until i + 2).any { !continuous(points[it], points[it + 1]) ||
                     !headingAgreesWithTravel(points[it], points[it + 1]) }) continue
             val first = points[i - 2]
             val last = points[i + 2]
