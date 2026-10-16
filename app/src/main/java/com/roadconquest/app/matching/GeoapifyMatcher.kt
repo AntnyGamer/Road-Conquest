@@ -190,16 +190,26 @@ class GeoapifyMatcher(
     }
 
     private fun position(line: JSONArray, point: JSONArray, start: Int, end: Int): Double? {
+        // A zero-length provider step can still locate a genuine waypoint right
+        // on a junction. It establishes a POSITION, never invented road geometry.
+        if (start == end) {
+            return start.toDouble().takeIf { meters(point, line.getJSONArray(start)) < 3.0 }
+        }
         var best: Double? = null; var distance = 3.0
         val longitude = point.getDouble(0)
         val latitude = point.getDouble(1)
         val scale = cos(Math.toRadians(latitude))
         for (i in start until end) {
             val a = line.getJSONArray(i); val b = line.getJSONArray(i + 1)
-            val dx = (b.getDouble(0) - a.getDouble(0)) * scale; val dy = b.getDouble(1) - a.getDouble(1)
+            // Work in the SHORT wrapped longitude interval. Otherwise a genuine
+            // segment crossing +/-180 degrees looks nearly 360 degrees long and
+            // loses its waypoint even though the provider supplied valid geometry.
+            val dx = shortLongitudeDelta(b.getDouble(0) - a.getDouble(0)) * scale
+            val dy = b.getDouble(1) - a.getDouble(1)
             val length = dx * dx + dy * dy
             if (length <= 0) continue
-            val t = (((longitude - a.getDouble(0)) * scale * dx + (latitude - a.getDouble(1)) * dy) / length).coerceIn(0.0, 1.0)
+            val fromA = shortLongitudeDelta(longitude - a.getDouble(0)) * scale
+            val t = ((fromA * dx + (latitude - a.getDouble(1)) * dy) / length).coerceIn(0.0, 1.0)
             val error = meters(point, at(line, i + t))
             if (error < distance) { distance = error; best = i + t }
         }
@@ -209,8 +219,19 @@ class GeoapifyMatcher(
         val index = floor(position).toInt().coerceAtMost(line.length() - 2)
         val t = position - index
         val a = line.getJSONArray(index); val b = line.getJSONArray(index + 1)
-        return JSONArray().put(a.getDouble(0) + (b.getDouble(0) - a.getDouble(0)) * t)
-            .put(a.getDouble(1) + (b.getDouble(1) - a.getDouble(1)) * t)
+        val startLongitude = a.getDouble(0)
+        val delta = shortLongitudeDelta(b.getDouble(0) - startLongitude)
+        val longitude = startLongitude + delta * t
+        return JSONArray().put(when {
+            longitude > 180.0 -> longitude - 360.0
+            longitude < -180.0 -> longitude + 360.0
+            else -> longitude
+        }).put(a.getDouble(1) + (b.getDouble(1) - a.getDouble(1)) * t)
+    }
+    private fun shortLongitudeDelta(delta: Double): Double = when {
+        delta > 180.0 -> delta - 360.0
+        delta < -180.0 -> delta + 360.0
+        else -> delta
     }
     private fun valid(p: JSONArray) = p.length() == 2 && p.optDouble(0).isFinite() && p.optDouble(1).isFinite() &&
         abs(p.optDouble(0)) <= 180 && abs(p.optDouble(1)) <= 90

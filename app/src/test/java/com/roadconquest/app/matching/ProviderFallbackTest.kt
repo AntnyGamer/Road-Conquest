@@ -97,6 +97,83 @@ class ProviderFallbackTest {
         assertEquals(setOf(1L, 2L), result.matchedPointConfidences.keys)
     }
 
+    /** A normalized response with full matched evidence, constructed without a provider call. */
+    private fun fixtureLine(
+        line: JSONArray, steps: JSONArray, snapped: List<JSONArray>, stepIndices: List<Int>,
+        timestamps: List<Long>
+    ): Pair<String, List<TrackPoint>> {
+        val points = snapped.mapIndexed { i, p ->
+            TrackPoint(i + 1L, p.getDouble(1), p.getDouble(0), 3f, 8f, 0f, timestamps[i], false)
+        }
+        val waypoints = JSONArray()
+        for (i in points.indices) {
+            waypoints.put(JSONObject()
+                .put("original_index", i).put("original_location", snapped[i])
+                .put("location", snapped[i]).put("match_type", "matched")
+                .put("leg_index", 0).put("step_index", stepIndices[i]))
+        }
+        val root = JSONObject().put("type", "FeatureCollection").put("features", JSONArray().put(
+            JSONObject().put("geometry", JSONObject().put("type", "MultiLineString")
+                .put("coordinates", JSONArray().put(line)))
+                .put("properties", JSONObject().put("mode", "drive")
+                    .put("legs", JSONArray().put(JSONObject().put("steps", steps)))
+                    .put("waypoints", waypoints))
+        ))
+        return root.toString() to points
+    }
+
+    @Test fun dateLineRoadUsesShortWrappedProjectionWithoutMissingMatchedSegments() {
+        val a = org.json.JSONArray().put(179.999).put(0.0)
+        val b = org.json.JSONArray().put(-179.999).put(0.0)
+        val snapped = listOf(org.json.JSONArray().put(179.9994).put(0.0),
+            org.json.JSONArray().put(-179.9994).put(0.0))
+        val steps = JSONArray().put(JSONObject().put("from_index", 0).put("to_index", 1)
+            .put("name", "Date Line Road").put("road_class", "residential"))
+        val (json, samples) = fixtureLine(JSONArray().put(a).put(b), steps, snapped, listOf(0, 0),
+            listOf(1_000_000L, 1_015_000L))
+        val result = requireNotNull(GeoapifyMatcher("https://maps.example").parse(json, samples))
+        assertEquals(setOf(1L, 2L), result.matchedPointConfidences.keys)
+        assertTrue(result.roads.isNotEmpty())
+        // Short real crossing, never a fabricated 40,000-km detour through Greenwich.
+        val geometry = JSONArray(result.roads.first().coordinatesJson)
+        assertTrue(geometry.length() >= 2)
+        assertTrue((0 until geometry.length()).all { i ->
+            kotlin.math.abs(geometry.getJSONArray(i).getDouble(0)) > 179.99
+        })
+    }
+
+    @Test fun zeroLengthJunctionStepDoesNotDiscardValidApproachAndExit() {
+        val coords = JSONArray().put(JSONArray().put(0.0).put(0.0))
+            .put(JSONArray().put(0.001).put(0.0))
+            .put(JSONArray().put(0.001).put(0.001))
+        val steps = JSONArray()
+            .put(JSONObject().put("from_index", 0).put("to_index", 1)
+                .put("name", "Approach").put("road_class", "residential"))
+            .put(JSONObject().put("from_index", 1).put("to_index", 1)
+                .put("name", "Junction").put("road_class", "residential"))
+            .put(JSONObject().put("from_index", 1).put("to_index", 2)
+                .put("name", "Exit").put("road_class", "residential"))
+        val snapped = listOf(JSONArray().put(0.0002).put(0.0),
+            JSONArray().put(0.001).put(0.0),
+            JSONArray().put(0.001).put(0.0008))
+        val (json, samples) = fixtureLine(coords, steps, snapped, listOf(0, 1, 2),
+            listOf(1_000_000L, 1_010_000L, 1_020_000L))
+        val matcher = GeoapifyMatcher("https://maps.example")
+        val result = requireNotNull(matcher.parse(json, samples))
+        assertEquals(setOf(1L, 2L, 3L), result.matchedPointConfidences.keys)
+        assertTrue(result.roads.any { it.name == "Approach" })
+        assertTrue(result.roads.any { it.name == "Exit" })
+
+        // A point more than 3 meters away from that degenerate step is NOT
+        // proof of a junction; it must stay pending rather than draw a false turn.
+        val invalid = JSONObject(json)
+        invalid.getJSONArray("features").getJSONObject(0).getJSONObject("properties")
+            .getJSONArray("waypoints").getJSONObject(1)
+            .put("location", JSONArray().put(0.0011).put(0.0))
+        val rejected = runCatching { matcher.parse(invalid.toString(), samples) }.getOrNull()
+        assertTrue(rejected == null || rejected.matchedPointConfidences.isEmpty())
+    }
+
     @Test fun namedPrimaryRoadsCountButMotorwayLinkRampsDoNot() {
         fun asClass(roadClass: String): MatchResult {
             val sample = JSONObject(example)
