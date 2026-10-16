@@ -147,15 +147,14 @@ class GeoapifyMatcher(
                         meters(coordinates.getJSONArray(it), coordinates.getJSONArray(it + 1))
                     }
                     val roadClass = step.optString("road_class")
-                    // Include main/primary roads and highways, but never count
-                    // link ramps, footways, unknown classes or roundabouts by proximity.
-                    val namedDrivableRoad = step.optString("name").isNotBlank() &&
-                        roadClass in setOf("motorway", "trunk", "primary", "secondary", "tertiary",
-                            "residential", "unclassified", "living_street", "service") &&
-                        !step.optBoolean("roundabout")
+                    // Count geometrically verified drivable roads, including unnamed
+                    // streets and roundabouts; exclude link ramps, footways and unknown classes.
+                    val drivableRoad = roadClass in setOf("motorway", "trunk", "primary",
+                        "secondary", "tertiary", "residential", "unclassified",
+                        "living_street", "service")
                     pieces.put(JSONObject().put("name", step.optString("name")).put("distance", distance)
                         .put("geometry", JSONObject().put("type", "LineString").put("coordinates", coordinates))
-                        .put("maneuver", JSONObject().put("type", if (namedDrivableRoad) "turn" else "ramp")))
+                        .put("maneuver", JSONObject().put("type", if (drivableRoad) "turn" else "ramp")))
                 }
                 if (pieces.length() == 0) { complete = false; break }
                 normalizedLegs.put(JSONObject().put("steps", pieces))

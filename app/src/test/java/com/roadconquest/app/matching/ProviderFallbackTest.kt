@@ -109,6 +109,16 @@ class ProviderFallbackTest {
         assertTrue(asClass("motorway_link").roads.none { it.countTowardsRoads })
     }
 
+    @Test fun verifiedUnnamedDrivingRoadsAlsoEarnRoadCredit() {
+        val root = JSONObject(example)
+        val steps = root.getJSONArray("features").getJSONObject(0).getJSONObject("properties")
+            .getJSONArray("legs").getJSONObject(0).getJSONArray("steps")
+        for (i in 0 until steps.length()) steps.getJSONObject(i).put("name", "")
+        val result = requireNotNull(GeoapifyMatcher("https://maps.example").parse(root.toString(), points))
+        assertTrue(result.roads.isNotEmpty())
+        assertTrue(result.roads.all { it.countTowardsRoads })
+    }
+
     @Test fun interpolatedFixOrChangedOriginalCannotEarnCredit() {
         for (field in listOf("match_type", "original_index", "leg_index")) {
             val root = JSONObject(example)
