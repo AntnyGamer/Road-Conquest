@@ -566,6 +566,28 @@ class TrackingRepositoryTest {
         assertEquals(1L, repository.getSummary().roadsUnlockedCount)
     }
 
+    @Test fun collisionAlternateIdSurvivesPrimaryRemovalWithoutDuplicateRoad() {
+        val first = "[[-74,40],[-73.9995,40.0005],[-74.001,40]]"
+        val second = "[[-74,40],[-74.0005,39.9995],[-74.001,40]]"
+        repository.upsertRoads(listOf(
+            MatchedRoad("Loop Road", first, 100, 200, 1.0),
+            MatchedRoad("Loop Road", second, 300, 400, 1.0)
+        ))
+        val before = repository.getRoadsInBounds(41.0, -73.0, 39.0, -75.0)
+        assertEquals(2, before.size)
+        val alternate = before.single { it.segmentId.startsWith("g") }
+        val primary = before.single { !it.segmentId.startsWith("g") }
+        repository.writableDatabase().execSQL(
+            "DELETE FROM roads WHERE segment_id = ?", arrayOf(primary.segmentId)
+        )
+        repository.upsertRoads(listOf(MatchedRoad("Loop Road", second, 500, 600, 1.0)))
+        val after = repository.getRoadsInBounds(41.0, -73.0, 39.0, -75.0)
+        assertEquals(1, after.size)
+        assertEquals(alternate.segmentId, after.single().segmentId)
+        assertEquals(300L, after.single().firstUnlockedAt)
+        assertEquals(600L, after.single().lastDrivenAt)
+    }
+
     @Test fun overlappingMatcherRetryDoesNotInflateTimesDriven() {
         val geometry = "[[-74,40],[-74.001,40]]"
         repository.upsertRoads(listOf(MatchedRoad("Main St", geometry, 100, 200, 1.0)))
