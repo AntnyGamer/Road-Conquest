@@ -3,14 +3,18 @@ package com.roadconquest.app.map
 import android.content.Context
 import android.net.Uri
 import android.os.SystemClock
+import android.util.AtomicFile
 import com.roadconquest.app.BuildConfig
 import com.roadconquest.app.data.PlaceDiscovery
 import com.roadconquest.app.data.PlaceKind
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
 import java.io.Reader
+import java.util.zip.GZIPInputStream
+import java.util.zip.GZIPOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
@@ -69,15 +73,102 @@ object PlaceOverlayCache {
     private const val HEX_DIGITS = "0123456789abcdef"
     private val generation = AtomicLong()
     private val mutationLock = Any()
+    private const val CACHE_BUDGET_BYTES = 128L * 1024L * 1024L
+    private const val CACHE_BUDGET_FILES = 6_000
+    private const val MAX_DECODED_CACHE_CHARS = 16 * 1024 * 1024
+    private var initialTrimDone = false
+
+    // Boundary caches are regenerable; visited places, achievements and earned
+    // rewards remain in SQLite. Keep recent polygons available offline while
+    // preventing an unlimited accumulation of remote administrative GeoJSON.
+    private fun trimCache(context: Context, keep: File? = null,
+                          maxBytes: Long = CACHE_BUDGET_BYTES,
+                          maxFiles: Int = CACHE_BUDGET_FILES) {
+        val files = listOf(DIRECTORY, TOWN_DIRECTORY, US_OFFICIAL_DIRECTORY)
+            .flatMap { name ->
+                File(context.applicationContext.filesDir, name).listFiles().orEmpty()
+                    .filter { it.isFile && it.name.endsWith(".json") }
+            }
+        var bytes = files.sumOf { it.length() }
+        var count = files.size
+        if (bytes <= maxBytes && count <= maxFiles) return
+        // The oldest cached outlines go first. The destination currently being
+        // written stays readable, even if it alone exceeds the cache budget.
+        for (candidate in files.sortedWith(compareBy<File> { it.lastModified() }.thenBy { it.name })) {
+            if (bytes <= maxBytes && count <= maxFiles) break
+            if (candidate == keep) continue
+            val length = candidate.length()
+            if (candidate.delete()) {
+                bytes -= length
+                count--
+            }
+        }
+    }
+
+    internal fun trimForTest(context: Context, maxBytes: Long, maxFiles: Int) =
+        synchronized(mutationLock) { trimCache(context, maxBytes = maxBytes, maxFiles = maxFiles) }
+
+    private fun initialTrim(context: Context) {
+        if (!initialTrimDone) {
+            trimCache(context)
+            initialTrimDone = true
+        }
+    }
+
+    private fun writeCacheFile(target: File, json: JSONObject): Boolean {
+        val bytes = json.toString().toByteArray(Charsets.UTF_8)
+        val buffer = ByteArrayOutputStream()
+        GZIPOutputStream(buffer).use { it.write(bytes) }
+        val file = AtomicFile(target)
+        var stream: java.io.FileOutputStream? = null
+        return try {
+            stream = file.startWrite()
+            stream.write(buffer.toByteArray())
+            file.finishWrite(stream)
+            true
+        } catch (_: Exception) {
+            if (stream != null) file.failWrite(stream)
+            false
+        }
+    }
+
+    private fun readCacheJson(target: File): JSONObject {
+        AtomicFile(target).openRead().use { raw ->
+            val input = raw.buffered()
+            input.mark(2)
+            val gzip = input.read() == 0x1f && input.read() == 0x8b
+            input.reset()
+            val decoded = if (gzip) GZIPInputStream(input) else input
+            decoded.bufferedReader().use { reader ->
+                val buffer = CharArray(8192)
+                val json = StringBuilder()
+                while (true) {
+                    val read = reader.read(buffer)
+                    if (read < 0) break
+                    if (json.length + read > MAX_DECODED_CACHE_CHARS) {
+                        throw IOException("Boundary cache exceeds decoded size limit")
+                    }
+                    json.append(buffer, 0, read)
+                }
+                return JSONObject(json.toString())
+            }
+        }
+    }
 
     fun generation(): Long = generation.get()
 
     fun read(context: Context, place: PlaceDiscovery): PlaceOverlayCacheResult =
-        synchronized(mutationLock) { readCacheFile(file(context, place), place) }
+        synchronized(mutationLock) {
+            initialTrim(context)
+            readCacheFile(file(context, place), place)
+        }
 
     /** Census municipalities for all 50 states are cached separately from OSM. */
     fun readOfficialUs(context: Context, place: PlaceDiscovery): PlaceOverlayCacheResult =
-        synchronized(mutationLock) { readCacheFile(officialUsFile(context, place), place) }
+        synchronized(mutationLock) {
+            initialTrim(context)
+            readCacheFile(officialUsFile(context, place), place)
+        }
 
     fun writeOfficialUs(
         context: Context, place: PlaceDiscovery, data: PlaceOverlayData?,
@@ -101,7 +192,9 @@ object PlaceOverlayCache {
                 .put("area_sq_km", data.areaSquareKilometers)
                 .put("geometry", JSONObject(data.geometryJson))
         }
-        runCatching { target.writeText(json.toString()) }.isSuccess
+        val written = writeCacheFile(target, json)
+        if (written) trimCache(context, keep = target)
+        written
     }
 
     private fun officialUsFile(context: Context, place: PlaceDiscovery): File {
@@ -112,9 +205,16 @@ object PlaceOverlayCache {
     private fun readCacheFile(
         file: File, place: PlaceDiscovery, verifiedOnly: Boolean = false
     ): PlaceOverlayCacheResult {
-        if (!file.isFile) return PlaceOverlayCacheResult(false, null)
+        if (!file.isFile && !File(file.path + ".bak").isFile) {
+            return PlaceOverlayCacheResult(false, null)
+        }
         return runCatching {
-            val json = JSONObject(file.readText())
+            val json = readCacheJson(file)
+            // Metadata and geometry are stable, but an actively used polygon
+            // should survive eviction over one not opened for several hours.
+            if (System.currentTimeMillis() - file.lastModified() > 4L * 60L * 60L * 1000L) {
+                file.setLastModified(System.currentTimeMillis())
+            }
             if (!json.optBoolean("found", false)) {
                 val fetchedAt = json.optLong("fetched_at", 0L)
                 if (fetchedAt <= 0L || System.currentTimeMillis() - fetchedAt > NEGATIVE_CACHE_MS) {
@@ -138,7 +238,7 @@ object PlaceOverlayCache {
                 )
             }
         }.getOrElse {
-            file.delete()
+            AtomicFile(file).delete()
             PlaceOverlayCacheResult(false, null)
         }
     }
@@ -182,11 +282,14 @@ object PlaceOverlayCache {
                 .put("area_sq_km", data.areaSquareKilometers)
                 .put("geometry", JSONObject(data.geometryJson))
         }
-        runCatching { target.writeText(json.toString()) }.isSuccess
+        val written = writeCacheFile(target, json)
+        if (written) trimCache(context, keep = target)
+        written
     }
 
     fun clear(context: Context) = synchronized(mutationLock) {
         generation.incrementAndGet()
+        initialTrimDone = false
         File(context.applicationContext.filesDir, DIRECTORY).deleteRecursively()
         File(context.applicationContext.filesDir, TOWN_DIRECTORY).deleteRecursively()
         File(context.applicationContext.filesDir, US_OFFICIAL_DIRECTORY).deleteRecursively()
