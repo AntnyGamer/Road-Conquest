@@ -10,9 +10,10 @@ object CrashReporting {
     fun enabled(context: Context) = context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
         .getBoolean("crash_reports", false)
     fun initialize(context: Context) {
-        if (!enabled(context)) return
+        if (!enabled(context) && FirebaseApp.getApps(context).isEmpty()) return
         if (FirebaseApp.getApps(context).isEmpty() && FirebaseApp.initializeApp(context) == null) return
-        apply(true)
+        com.google.firebase.messaging.FirebaseMessaging.getInstance().isAutoInitEnabled = false
+        apply(enabled(context))
     }
     fun setEnabled(context: Context, enabled: Boolean) {
         context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE).edit().putBoolean("crash_reports", enabled).apply()

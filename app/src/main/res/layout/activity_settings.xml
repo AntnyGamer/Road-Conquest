@@ -374,6 +374,22 @@
                 android:textSize="13sp" />
 
             <Switch
+                android:id="@+id/friendNotificationsSwitch"
+                android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp"
+                android:text="Friend request notifications" android:textColor="?attr/rcTextPrimary" />
+            <TextView
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="Optional. Requires sign-in and shares a Firebase Installation ID with Road Conquest and Google Firebase. No routes or account credentials are sent to Firebase."
+                android:textColor="?attr/rcTextSecondary" android:textSize="13sp" />
+            <Switch
+                android:id="@+id/weeklyRemindersSwitch"
+                android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp"
+                android:text="Weekly challenge reminders" android:textColor="?attr/rcTextPrimary" />
+            <TextView
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="Optional reminder around Monday at 6 PM on this phone. Android may delay it to save battery."
+                android:textColor="?attr/rcTextSecondary" android:textSize="13sp" />
+            <Switch
                 android:id="@+id/crashReportingSwitch"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

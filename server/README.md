@@ -1,5 +1,8 @@
 # Road Conquest account service
 
+Optional free monitoring, provider controls and friend notifications are described
+in [FREE_SERVICES.md](../FREE_SERVICES.md), including deployment and migration steps.
+
 This service backs Road Conquest accounts and the leaderboard-privacy preference. Release builds
 and debug builds default to the existing Road Conquest Cloudflare Worker HTTPS endpoint. Automated tests override
 the endpoint to avoid production accounts. Override either build with a Gradle property:

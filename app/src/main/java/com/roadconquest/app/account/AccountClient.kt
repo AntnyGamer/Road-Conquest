@@ -48,6 +48,12 @@ object AccountClient {
     fun logout(token: String) {
         request("/v1/logout", "POST", JSONObject(), token)
     }
+    fun registerNotificationDevice(token: String, deviceToken: String, binding: String) {
+        request("/v1/notifications/device", "POST", JSONObject().put("fid", deviceToken).put("binding", binding), token)
+    }
+    fun removeNotificationDevice(token: String) {
+        request("/v1/notifications/device", "DELETE", null, token)
+    }
 
     fun changeUsername(token: String, username: String, password: String): Account {
         val body = request("/v1/username", "PUT",

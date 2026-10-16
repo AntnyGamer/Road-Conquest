@@ -20,3 +20,9 @@ boundaries do not establish municipality visits or verified competitive credit.
 Optional crash diagnostics: Firebase Crashlytics, Google.
 https://firebase.google.com/support/privacy
 Crash reporting is off until enabled in Settings. Google Analytics is not included.
+
+Optional friend notifications: Firebase Cloud Messaging, Google.
+https://firebase.google.com/support/privacy
+Notifications are off until enabled in Settings. Weekly reminders run locally.
+Provider availability switches: Cloudflare Workers KV.
+Service uptime checks: UptimeRobot (no player data).

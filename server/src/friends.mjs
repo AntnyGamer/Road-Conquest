@@ -1,7 +1,7 @@
 import { normalizeUsername } from "./security.mjs";
 import { EvidenceError } from "./scoring.mjs";
 
-export function createFriends(pool) {
+export function createFriends(pool, notifyRequest = async () => {}) {
   return {
     async list(user) {
       const result = await pool.query(
@@ -17,6 +17,7 @@ export function createFriends(pool) {
       const normalized = normalizeUsername(username);
       if (!normalized || !["request", "accept", "remove"].includes(action)) throw new EvidenceError("Invalid friend action.", 400);
       const db = await pool.connect();
+      let notificationTarget;
       try {
         await db.query("BEGIN");
         // Resolve the target and lock both participants in one database round
@@ -40,6 +41,7 @@ export function createFriends(pool) {
             );
             if (counts.rows.some(r => Number(r.count) >= 50)) throw new EvidenceError("Friend/request limit reached.", 409);
             await db.query("INSERT INTO friendships(user_low,user_high,requested_by) VALUES ($1,$2,$3)", [...pair, user.id]);
+            notificationTarget = target.id;
           }
         } else if (action === "accept") {
           const updated = await db.query(
@@ -50,9 +52,11 @@ export function createFriends(pool) {
           await db.query("DELETE FROM friendships WHERE user_low = $1 AND user_high = $2", pair);
         }
         await db.query("COMMIT");
-        return { ok: true };
       } catch (error) { await db.query("ROLLBACK"); throw error; }
       finally { db.release(); }
+      // Best effort, after commit and connection release. Push failures must not undo consent.
+      if (notificationTarget) await notifyRequest(notificationTarget).catch(() => {});
+      return { ok: true };
     }
   };
 }

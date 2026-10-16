@@ -1,3 +1,4 @@
+import { serviceSwitches } from './config.mjs';
 const STYLES = new Set(['osm-liberty', 'positron', 'dark-matter']);
 const DAY = 86_400_000;
 const json = (body, status = 200, extra = {}) => Response.json(body, {
@@ -70,8 +71,12 @@ function validWaypoints(body) {
 export function createMapsGateway(fetchUpstream = fetch) {
   return { async fetch(request, env) {
     const url = new URL(request.url);
-    if (url.pathname === '/health' && request.method === 'GET') return json({ ok: true,
-      configured: Boolean(env.GEOAPIFY_API_KEY), locationiqConfigured: Boolean(env.LOCATIONIQ_API_KEY) });
+    if (url.pathname === '/health' && ['GET', 'HEAD'].includes(request.method)) {
+      const response = json({ ok: true, configured: Boolean(env.GEOAPIFY_API_KEY), locationiqConfigured: Boolean(env.LOCATIONIQ_API_KEY) });
+      return request.method === 'HEAD' ? new Response(null, { headers: response.headers }) : response;
+    }
+    if (url.pathname === '/v1/config' && request.method === 'GET') return json({ version: 1,
+      providers: await serviceSwitches(env) }, 200, { 'Cache-Control': 'public, max-age=300', 'X-Content-Type-Options': 'nosniff' });
     if (!env.MAP_BUDGET) return json({ error: 'Map service is not configured' }, 503);
     const locationiq = url.pathname === '/v1/locationiq/mapmatching';
     const secret = locationiq ? env.LOCATIONIQ_API_KEY : env.GEOAPIFY_API_KEY;
@@ -116,6 +121,10 @@ export function createMapsGateway(fetchUpstream = fetch) {
       const [, style, z, x, y] = tile;
       if (+z > 19 || +x >= 2 ** +z || +y >= 2 ** +z) return json({ error: 'Invalid tile' }, 400);
       target = new URL(`https://maps.geoapify.com/v1/tile/${style}/${z}/${x}/${y}.png`);
+    }
+    const switches = await serviceSwitches(env);
+    if (!switches[locationiq ? 'locationiq-matching' : payload ? 'geoapify-matching' : 'geoapify-tiles']) {
+      return json({ error: 'Provider temporarily disabled' }, 503, { 'Retry-After': '300' });
     }
     // Geoapify charges one credit per 100 matched waypoints and a quarter
     // credit per raster tile. Represent both in integer quarter-credit units.

@@ -64,6 +64,13 @@ test("serverless accounts enforce authentication, privacy, limits and TLS with r
     assert.equal((await call("/v1/leaderboard?metric=invalid")).status, 400);
     assert.equal((await call("/v1/verified/batch", "POST", { miles: 999999 }, login.body.token)).status, 404);
     assert.equal((await call("/v1/friends")).status, 401);
+    assert.equal((await call("/health/live")).status, 200);
+    const headHealth = await api.fetch(new Request("https://accounts.example/health/live", { method: "HEAD" }));
+    assert.equal(headHealth.status, 200);
+    assert.equal(await headHealth.text(), "");
+    assert.equal((await call("/v1/notifications/device", "POST", {})).status, 401);
+    assert.equal((await call("/v1/notifications/device", "POST", {}, login.body.token)).status, 400);
+    assert.equal((await call("/v1/notifications/device", "DELETE", undefined, login.body.token)).status, 200);
     assert.deepEqual((await call("/v1/friends", "GET", undefined, login.body.token)).body, { friends: [] });
     assert.deepEqual((await call("/v1/friends?include=weekly", "GET", undefined, login.body.token)).body,
       { friends: [], weekly: { available: false, entries: [] } });

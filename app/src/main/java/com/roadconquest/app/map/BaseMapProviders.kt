@@ -3,6 +3,7 @@ package com.roadconquest.app.map
 import android.content.Context
 import com.roadconquest.app.BuildConfig
 import com.roadconquest.app.services.ProviderHealth
+import com.roadconquest.app.services.ServiceConfig
 import okhttp3.OkHttpClient
 import org.json.JSONArray
 import org.json.JSONObject
@@ -19,6 +20,7 @@ object BaseMapProviders {
     @Synchronized fun install() {
         if (installed) return
         installed = true
+        ServiceConfig.addListener { listeners.forEach { it() } }
         HttpRequestUtil.setOkHttpClient(OkHttpClient.Builder()
             .connectTimeout(8, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS)
             .followRedirects(false).followSslRedirects(false)
@@ -31,6 +33,7 @@ object BaseMapProviders {
                         request.url.host == java.net.URI(BuildConfig.MAP_GATEWAY_URL).host) "geoapify-tiles" else null
                 }
                 try {
+                    if (provider != null && !ServiceConfig.enabled(provider)) throw IOException("Map provider temporarily disabled")
                     val response = chain.proceed(request)
                     if (provider != null && (response.code in listOf(401, 403, 429) || response.code >= 500 || response.code in 300..399)) {
                         health.failed(provider, response.code, response.header("Retry-After"))
@@ -48,10 +51,11 @@ object BaseMapProviders {
     }
     fun addListener(listener: () -> Unit) { listeners.add(listener) }
     fun removeListener(listener: () -> Unit) { listeners.remove(listener) }
+    private fun available(provider: String) = ServiceConfig.enabled(provider) && health.remaining(provider) == 0L
     fun preferred(mode: MapMode): String = when {
-        health.remaining("openfreemap") == 0L && mode == MapMode.TERRAIN && health.remaining("esri-imagery") > 0 -> "openfreemap-streets"
-        health.remaining("openfreemap") == 0L -> "openfreemap"
-        BuildConfig.MAP_GATEWAY_URL.isNotBlank() && health.remaining("geoapify-tiles") == 0L -> "geoapify-tiles"
+        available("openfreemap") && mode == MapMode.TERRAIN && !available("esri-imagery") -> "openfreemap-streets"
+        available("openfreemap") -> "openfreemap"
+        BuildConfig.MAP_GATEWAY_URL.isNotBlank() && available("geoapify-tiles") -> "geoapify-tiles"
         else -> "local"
     }
     fun retryInMs(): Long = listOf("openfreemap", "geoapify-tiles", "esri-imagery").map { health.remaining(it) }

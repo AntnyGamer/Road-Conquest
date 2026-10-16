@@ -13,6 +13,7 @@ import com.roadconquest.app.util.Prefs
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED && intent.action != Intent.ACTION_MY_PACKAGE_REPLACED) return
+        com.roadconquest.app.notifications.WeeklyReminderReceiver.schedule(context)
         if (Prefs.isDeviceDataDeletionPending(context) || Prefs.isTrackingPaused(context) ||
             Prefs.isManualOnly(context) || !Prefs.hasEverStarted(context)
         ) return

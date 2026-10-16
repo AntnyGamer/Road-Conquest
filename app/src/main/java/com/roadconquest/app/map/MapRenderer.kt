@@ -181,6 +181,7 @@ class MapRenderer(
     fun initialize(onReady: () -> Unit) {
         initialStyleReady = onReady
         BaseMapProviders.install()
+        com.roadconquest.app.services.ServiceConfig.refresh(context)
         BaseMapProviders.addListener(providerListener)
         map.setMaxZoomPreference(FogBitmapRenderer.MAX_ZOOM)
         map.setMaxPitchPreference(0.0)

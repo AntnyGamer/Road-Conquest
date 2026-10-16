@@ -13,6 +13,7 @@ import {
 } from "./security.mjs";
 import { competitionConfig, createCompetition } from "./competition.mjs";
 import { createFriends } from "./friends.mjs";
+import { createNotifications, createFcmSender } from "./notifications.mjs";
 import { cleanupExpiredState } from "./maintenance.mjs";
 
 const { Pool } = pg;
@@ -33,7 +34,9 @@ const PRIVACY_HTML = `<!doctype html>
 <p>Road Conquest collects precise location data to record driven roads and reveal visited places, including in the background when automatic tracking is enabled and the app is closed or not in use. It also uses location to display your live map position. Precise driving history, explored places, points, purchases, and cosmetics are stored on your device unless you export them.</p>
 <h2>Data sent to services</h2>
 <p>Road matching for new roads sends bounded GPS coordinate batches, timestamps and accuracy through Road Conquest's Cloudflare map proxy to Geoapify, or to LocationIQ when Geoapify is unavailable or its allowance is exhausted. See <a href="https://locationiq.com/privacy">LocationIQ's privacy policy</a>. Repeat drives on previously saved roads may be recognized on-device without a network request. The map proxy processes matching coordinates transiently and does not retain GPS traces. It stores daily request totals and daily keyed client-address fingerprints to enforce separate free allowances; those fingerprints are deleted when a later day's requests are processed. OpenFreeMap and Esri provide map display data; Geoapify supplies backup street-map tiles. Map providers receive requests for areas you view. While the app is in the foreground, Android's system geocoder may process saved coordinates for place names, and U.S. Census TIGERweb receives individual saved GPS coordinates to verify the exact municipality visited. Outside the U.S., place names may be sent to the configured OpenStreetMap boundary service. Country and region overlays can fall back to public geoBoundaries datasets, selected by country code without sending GPS coordinates to geoBoundaries. Enabling place overlays downloads and locally caches public boundaries for discovered places.</p>
-<p>Optional Firebase Crashlytics diagnostics are off by default and initialize only after you enable Share crash reports in Settings. When enabled, Google receives crash stack traces, app/device and operating-system information, diagnostic events and installation identifiers. Road Conquest does not attach saved routes, GPS history, usernames, passwords or session tokens, and does not include Google Analytics. Turning reporting off stops automatic reports and requests deletion of unsent reports on the device. See <a href="https://firebase.google.com/support/privacy">Firebase privacy information</a> for Google's handling of reports already sent.</p>
+<p>Optional Firebase Crashlytics reporting is off by default and enabled only after you enable Share crash reports in Settings. When enabled, Google receives crash stack traces, app/device and operating-system information, diagnostic events and installation identifiers. Road Conquest does not attach saved routes, GPS history, usernames, passwords or session tokens, and does not include Google Analytics. Turning reporting off stops automatic reports and requests deletion of unsent reports on the device. See <a href="https://firebase.google.com/support/privacy">Firebase privacy information</a> for Google's handling of reports already sent.</p>
+<p>Friend-request notifications are separately optional and off by default. Enabling them initializes Firebase Cloud Messaging and shares a Firebase Installation ID with Google and the Road Conquest account service. The server encrypts the token and binds it to the current login session; logout, account deletion or disabling notifications removes that session's registration. Device registrations expire after 30 days without refresh. Google receives only a generic friend-request event and a random device binding, without usernames, passwords, Road Conquest session tokens or GPS. The phone checks current consent and account binding before showing a notification. Firebase may process device, app and installation information to deliver messages; enabling notifications does not enable crash reports. Weekly challenge reminders are independently optional and scheduled locally without Firebase or a cloud account.</p>
+<p>The app downloads public provider availability switches from Cloudflare. These switches contain no personal data and cannot change road-verification rules or service URLs. UptimeRobot checks public service health endpoints and alerts the developer to outages; these monitoring requests contain no player account or driving data.</p>
 <p>Optional Road Conquest accounts send your username and password over HTTPS for signup/login; passwords are salted and scrypt-hashed on the server and are not stored in plaintext. Android stores an encrypted session token. If you explicitly enable verified scoring, live non-mock GPS evidence and Google Play Integrity evidence are sent to the Road Conquest account service to verify visits to the app's exploration cells and award leaderboard credit. Ordinary local driving history is not uploaded for leaderboard scoring.</p>
 <h2>Advertising and rewards</h2>
 <p>Road Conquest uses Google AdMob for banner ads on the Garage, Achievements, Leaderboards, and Settings screens, and optional rewarded ads in the Garage. The Google Mobile Ads SDK can collect and share IP addresses (which may estimate general location), device or account identifiers such as the advertising ID and app-set ID, app and ad interactions, and diagnostics for advertising, analytics, and fraud prevention. Google encrypts these transmissions in transit. Road Conquest does not pass recorded routes, GPS coordinates, or Road Conquest account credentials to its ad requests.</p>
@@ -86,7 +89,10 @@ if (process.env.APPLY_SCHEMA_ON_STARTUP !== "0") {
   await pool.query(await readFile(schemaPath, "utf8"));
 }
 const competition = await createCompetition(pool, competitionConfig(process.env));
-const friends = createFriends(pool);
+const notifications = createNotifications(pool, { pepper: PEPPER, sender: createFcmSender(process.env.FCM_SERVICE_ACCOUNT_JSON) });
+const friends = createFriends(pool, async target => {
+  if (notifications.configured && await rateLimit("push-delivery", String(target), 3, 5 * 60 * 1000)) await notifications.friendRequest(target);
+});
 
 // Invalid usernames still take one full scrypt verification, just like bad passwords
 // for real users. Random dummy hashes cannot accidentally authenticate and do not
@@ -155,7 +161,7 @@ function sendHtml(res, status, body) {
   res.end(body);
 }
 
-function send(res, status, body) {
+function send(res, status, body, head = false) {
   const data = JSON.stringify(body);
   const headers = {
     "Content-Type": "application/json; charset=utf-8",
@@ -168,7 +174,7 @@ function send(res, status, body) {
     headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains";
   }
   res.writeHead(status, headers);
-  res.end(data);
+  res.end(head ? undefined : data);
 }
 
 async function readJson(req) {
@@ -205,7 +211,7 @@ async function authenticatedUser(req) {
   const token = bearerToken(req);
   if (!token) return null;
   const result = await pool.query(
-    `SELECT u.id, u.username_display, u.leaderboard_visible
+    `SELECT u.id, u.username_display, u.leaderboard_visible, s.token_hash AS session_hash
        FROM sessions s
        JOIN users u ON u.id = s.user_id
       WHERE s.token_hash = $1 AND s.expires_at > CURRENT_TIMESTAMP`,
@@ -231,6 +237,9 @@ async function createSession(userId, db = pool) {
 
 async function handle(req, res) {
   const url = new URL(req.url || "/", "http://localhost");
+  if (["GET", "HEAD"].includes(req.method) && url.pathname === "/health/live") {
+    return send(res, 200, { ok: true }, req.method === "HEAD"); // No database query.
+  }
 
   if (req.method === "GET" && url.pathname === "/health") {
     await pool.query("SELECT 1");
@@ -245,6 +254,15 @@ async function handle(req, res) {
   if (req.method === "GET" && url.pathname === "/delete-account") return sendHtml(res, 200, DELETE_ACCOUNT_HTML);
 
   const ip = clientIp(req);
+  if (url.pathname === "/v1/notifications/device") {
+    if (!await rateLimit("push-ip", ip, 60, 60 * 1000)) return send(res, 429, { error: "Try again later." });
+    const user = await authenticatedUser(req);
+    if (!user) return send(res, 401, { error: "Authentication required." });
+    if (!await rateLimit("push-user", String(user.id), 20, 60 * 1000)) return send(res, 429, { error: "Try again later." });
+    if (req.method === "POST") return send(res, 200, await notifications.register(user, await readJson(req)));
+    if (req.method === "DELETE") return send(res, 200, await notifications.remove(user));
+    return send(res, 405, { error: "Method not allowed." });
+  }
   if (req.method === "GET" && url.pathname === "/v1/competition") {
     return send(res, 200, competition?.status() || { available: false });
   }

@@ -11,7 +11,9 @@ Services are ranked within the work they can perform. Tiles cannot replace road 
 | U.S. municipalities / rewards | Existing official Census TIGERweb checks and verified caches | Saved candidates retry later. Generic region datasets do not replace municipal verification. |
 | Place names | Android's system geocoder | Existing official U.S. point lookup. Unverified worldwide town names do not earn town credit. |
 | Account API / database | Existing Cloudflare account Worker and Neon Function / PostgreSQL | No database failover or account migration. The separately verified ingress is available for a later approved internal build. |
-| Optional crash diagnostics | Firebase Crashlytics | Off by default. No Google Analytics dependency. SDK initialization happens only after opt-in; revocation stops collection and deletes unsent reports. |
+| Optional crash diagnostics | Firebase Crashlytics | Reporting is off by default. Firebase initializes only with separate crash or notification opt-in; notification opt-in never enables crash collection. No Analytics dependency; revocation stops reports and deletes unsent reports. |
+| Optional friend alerts | Firebase Cloud Messaging | Off by default, current FID registration and HTTP v1 delivery; independent local weekly reminders. See [free services](FREE_SERVICES.md). |
+| Service controls and monitoring | Cloudflare Workers KV; UptimeRobot | Public provider switches, existing hard quota caps, five-minute checks and owner email alerts; [service status](https://stats.uptimerobot.com/ZT185qP4jc). See [free services](FREE_SERVICES.md). |
 
 ## Configuration
 

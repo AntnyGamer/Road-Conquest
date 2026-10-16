@@ -5,6 +5,7 @@ export async function cleanupExpiredState(pool) {
   // can deadlock with account deletion's foreign-key cascades in another order.
   // Keep the existing expiry thresholds and reuse the pool's idle connection.
   for (const sql of [
+    "DELETE FROM notification_devices WHERE updated_at < CURRENT_TIMESTAMP - INTERVAL '30 days'",
     "DELETE FROM sessions WHERE expires_at <= CURRENT_TIMESTAMP",
     "DELETE FROM auth_rate_limits WHERE window_started_at < CURRENT_TIMESTAMP - INTERVAL '2 hours'",
     "DELETE FROM competition_receipts WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '1 day'",
