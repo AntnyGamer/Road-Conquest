@@ -223,6 +223,7 @@ class SettingsActivity : Activity() {
                     DataExporter.writeZip(this, repository, output)
                 } ?: error("Could not open export destination")
             }
+            var cleanupFailed = false
             if (result.isSuccess) {
                 // A valid ZIP remains available even if the user reset progress
                 // while exporting. Serialize only the backup-date update with
@@ -236,9 +237,11 @@ class SettingsActivity : Activity() {
                     }
                 }
             } else {
-                // ACTION_CREATE_DOCUMENT creates a new file before ZIP writing.
-                // If streaming fails, avoid leaving a corrupt backup behind.
-                runCatching { contentResolver.delete(uri, null, null) }
+                // ACTION_CREATE_DOCUMENT creates the destination before writing.
+                // Some SAF providers reject deletion; never silently imply that
+                // a partial backup was removed if its cleanup did not succeed.
+                cleanupFailed = !runCatching { contentResolver.delete(uri, null, null) > 0 }
+                    .getOrDefault(false)
             }
             runOnUiThread {
                 if (isDestroyed) return@runOnUiThread
@@ -248,7 +251,10 @@ class SettingsActivity : Activity() {
                         refreshSummary()
                     },
                     onFailure = { error ->
-                        Toast.makeText(this, "Export failed: ${error.message}", Toast.LENGTH_LONG).show()
+                        val message = if (cleanupFailed) {
+                            "Export failed. An incomplete backup may remain; delete it manually in Files."
+                        } else "Export failed: ${error.message}"
+                        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
                     }
                 )
             }
