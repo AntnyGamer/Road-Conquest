@@ -109,6 +109,6 @@ test('durable reservations persist across instances and enforce global and clien
   // Old whole-credit records remain debited after a mid-day upgrade.
   const day = new Date().toISOString().slice(0, 10);
   db.prepare('INSERT INTO usage(day,bucket,used) VALUES(?,?,?)').run(day, 'all', 1);
-  assert.equal((await reserve(restarted2, 'd', 20, 20, 1)).status, 429);
+  assert.equal((await reserve(restarted2, 'd', 16, 16, 1)).status, 429);
   db.close();
 });

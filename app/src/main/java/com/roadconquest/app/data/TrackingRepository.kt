@@ -315,7 +315,7 @@ class TrackingRepository(context: Context) {
         // The public OSRM demo accepts only ten points: use eight fixes and one genuine
         // context fix on either side, but ONLY when revisiting an old unresolved island.
         // Ordinary live batches retain three context slots and their existing behavior.
-        val wideRetry = retryGapStartId != null && maxPoints >= 10
+        val wideRetry = retryGapStartId != null && maxPoints in 10..16
         val anchorSlots = minOf(if (wideRetry) 2 else if (maxPoints >= 6) 3 else 2, maxPoints - 1)
         val pending = ArrayList<TrackPoint>(maxPoints - anchorSlots)
         val pendingSelection = buildString {
