@@ -20,6 +20,7 @@ class TrackingRepositoryTest {
         val context: Context = RuntimeEnvironment.getApplication()
         repository = TrackingRepository(context)
         repository.readableDatabase().execSQL("DELETE FROM track_points")
+        repository.readableDatabase().execSQL("DELETE FROM skipped_driving_fixes")
         repository.readableDatabase().execSQL("DELETE FROM road_visits")
         repository.readableDatabase().execSQL("DELETE FROM roads")
     }
@@ -687,6 +688,28 @@ class TrackingRepositoryTest {
             arrayOf(road.segmentId, 1_080_000L, 1_095_000L))
         point(1_045_000L, lat = 40.004, lon = -74.003)
         assertEquals(2, repository.estimatedRoadVisitCount(road))
+    }
+
+    @Test fun compressedGpsIsRetainedLocallyAndRestoresMeasuredTripDistance() {
+        fun fix(lat: Double, lon: Double, time: Long) = Location("gps").apply {
+            latitude = lat; longitude = lon; accuracy = 3f; speed = 8f; bearing = 90f
+            this.time = time
+        }
+        val a = fix(40.0, -74.0, 1_000_000L)
+        val bend = fix(40.00010, -73.9999, 1_003_000L)
+        val b = fix(40.0, -73.9998, 1_006_000L)
+        repository.insertLocation(a)
+        repository.recordSkippedDrivingFix(bend)
+        repository.insertLocation(b)
+        val db = repository.readableDatabase()
+        assertEquals(1L, db.rawQuery("SELECT COUNT(*) FROM skipped_driving_fixes", null).use {
+            it.moveToFirst(); it.getLong(0)
+        })
+        assertEquals(2L, repository.getSummary().trackPointCount)
+        val expected = TravelDistance.between(a.latitude, a.longitude, a.time, bend.latitude, bend.longitude, bend.time) +
+            TravelDistance.between(bend.latitude, bend.longitude, bend.time, b.latitude, b.longitude, b.time)
+        assertEquals(expected, repository.getSummary().distanceMeters, 0.5)
+        assertTrue(expected > TravelDistance.between(a.latitude, a.longitude, a.time, b.latitude, b.longitude, b.time) + 5.0)
     }
 
     @Test fun roadHitTestingReturnsOnlyNearbySavedRoads() {

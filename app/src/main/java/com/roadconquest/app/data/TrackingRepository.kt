@@ -262,10 +262,42 @@ class TrackingRepository(context: Context) {
         delta: TrackInsertDelta
     ): Long {
         val timestamp = location.time.takeIf { it > 0L } ?: System.currentTimeMillis()
-        val distance = if (previous.present) TravelDistance.between(
+        // Restore the actual path length from locally kept intervening fixes.
+        // These are never included in online matching or billed API requests.
+        var distance = if (previous.present) TravelDistance.between(
             previous.latitude, previous.longitude, previous.timestamp,
             location.latitude, location.longitude, timestamp
         ) else 0.0
+        if (previous.present && timestamp - previous.timestamp in 1..30_000L) {
+            var prevLat = previous.latitude
+            var prevLon = previous.longitude
+            var prevTime = previous.timestamp
+            var retained = false
+            var sum = 0.0
+            db.query(
+                "skipped_driving_fixes",
+                arrayOf("latitude", "longitude", "timestamp_ms"),
+                "timestamp_ms > ? AND timestamp_ms < ?",
+                arrayOf(previous.timestamp.toString(), timestamp.toString()),
+                null, null, "timestamp_ms ASC, id ASC"
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    val lat = cursor.getDouble(0)
+                    val lon = cursor.getDouble(1)
+                    val time = cursor.getLong(2)
+                    sum += TravelDistance.between(prevLat, prevLon, prevTime, lat, lon, time)
+                    prevLat = lat
+                    prevLon = lon
+                    prevTime = time
+                    retained = true
+                }
+            }
+            if (retained) {
+                distance = sum + TravelDistance.between(
+                    prevLat, prevLon, prevTime, location.latitude, location.longitude, timestamp
+                )
+            }
+        }
         val values = ContentValues().apply {
             put("latitude", location.latitude)
             put("longitude", location.longitude)

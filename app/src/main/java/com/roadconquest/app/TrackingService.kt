@@ -366,18 +366,20 @@ class TrackingService : Service(), LocationListener {
         ) Location(accepted) else null
         if (placeCandidate != null) lastPlaceCandidate = placeCandidate
         if (skipStraightFix) {
-            // Town crossings are driven by the original live GPS fixes, not the
-            // compressed network-matching track. Never drop a crossing candidate.
-            if (placeCandidate != null && ::progressionRepository.isInitialized) {
-                storageExecutor.execute {
-                    try {
-                        if (progressionRepository.recordPlaceCandidate(placeCandidate)) {
-                            sendUiBroadcast(ACTION_PLACE_CANDIDATE_UPDATED)
-                            scheduleBackgroundPlaceDiscovery()
-                        }
-                    } catch (error: Exception) {
-                        Log.e("RoadConquest", "Could not queue place discovery", error)
+            // Save the *original* accepted evidence in a separate local table.
+            // It does not enter the matching queue and never costs an API request.
+            storageExecutor.execute {
+                try {
+                    repository.recordSkippedDrivingFix(accepted)
+                    if (placeCandidate != null && ::progressionRepository.isInitialized &&
+                        progressionRepository.recordPlaceCandidate(placeCandidate)
+                    ) {
+                        sendUiBroadcast(ACTION_PLACE_CANDIDATE_UPDATED)
+                        scheduleBackgroundPlaceDiscovery()
                     }
+                } catch (error: Exception) {
+                    Log.e("RoadConquest", "Could not preserve a compressed-out driving fix", error)
+                    stopSelf()
                 }
             }
             return
