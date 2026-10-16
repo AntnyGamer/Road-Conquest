@@ -2,6 +2,8 @@ Additional services
 
 Road matching and backup street-map tiles: Geoapify (https://www.geoapify.com/).
 Map data: OpenStreetMap contributors (https://www.openstreetmap.org/copyright).
+Backup Geoapify map tiles also use OpenMapTiles (https://openmaptiles.org/).
+The backup map visibly credits Powered by Geoapify, OpenStreetMap contributors, and OpenMapTiles.
 Geoapify use is limited to the configured free allowance. No automatic paid upgrade.
 
 Backup country and first-level region display boundaries: geoBoundaries gbOpen,
