@@ -82,9 +82,10 @@ object DataImporter {
             }
             ZipFile(zipPath).use { zip ->
                 val entries = zip.entries().toList()
+                val names = entries.mapTo(HashSet(entries.size)) { it.name }
                 require(entries.none { it.isDirectory || it.size < 0 } &&
                     entries.count { it.name == "metadata.json" } == 1 &&
-                    entries.map { it.name }.toSet().size == entries.size) {
+                    names.size == entries.size) {
                     "Not a complete Road Conquest backup"
                 }
                 var total = 0L
@@ -98,7 +99,12 @@ object DataImporter {
                         val bounded = object : FilterInputStream(raw) {
                             override fun read(): Int {
                                 val byte = super.read()
-                                if (byte >= 0) account(byteArrayOf(byte.toByte()), 0, 1)
+                                if (byte >= 0) {
+                                    size++; total++
+                                    require(size <= limit && total <= MAX_BYTES) { "Expanded backup exceeds 512 MB" }
+                                    check(!Thread.currentThread().isInterrupted) { "Import cancelled" }
+                                    crc.update(byte)
+                                }
                                 return byte
                             }
                             override fun read(b: ByteArray, off: Int, len: Int): Int {
@@ -125,7 +131,7 @@ object DataImporter {
                 val schema = metadata.getInt("schema_version")
                 val backupTables = if (schema >= 12) tables else legacyTables
                 val expected = backupTables.map { "$it.csv" }.toSet() + "metadata.json"
-                require(entries.size == expected.size && entries.map { it.name }.toSet() == expected) {
+                require(entries.size == expected.size && names == expected) {
                     "Not a complete Road Conquest backup"
                 }
                 val exportedAt = Instant.parse(metadata.getString("exported_at")).toEpochMilli()

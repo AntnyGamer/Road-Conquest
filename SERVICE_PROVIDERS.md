@@ -27,6 +27,11 @@ Geoapify provides no externally reported confidence probability or explicit ramp
 
 HTTP 429, 401/403, 5xx, timeouts and connection failures move to an eligible backup. Retry-After seconds and HTTP dates are respected, up to a day. Providers return in priority order when their cooldown expires. A provider's exhausted budget is never bypassed by changing keys, accounts or forwarding headers.
 
+## Backup import memory and bookkeeping
+
+- ZIP import now retains one set of entry names and reuses it for both duplicate-name and exact expected-file checks.
+- The single-byte streaming ZIP integrity path directly updates `CRC32` with that byte instead of allocating a temporary one-byte array each time. Byte-count caps, global zip-bomb guard, cancellation checks, CRC validation and accepted file layouts remain unchanged.
+
 ## Avoid duplicate cached boundary decompression
 
 - A normal background overlay refresh of an already verified town now checks the cached verification bit in its first gzip read, rather than decompressing and parsing the complete polygon twice. Valid negative-result protection and strict verified-candidate requirements are preserved. Existing cache regression tests exercise both behaviors.
