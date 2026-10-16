@@ -14,10 +14,11 @@ import java.util.Locale
 /** gbOpen is a display backup for countries/regions, never a municipal reward authority. */
 class GeoBoundariesClient(private val loadJson: (String, Int) -> JSONObject = ::readJson) {
     private val datasets = LinkedHashMap<String, Pair<Long, JSONObject>>()
+    private val isoTwoLetters = Regex("[A-Z]{2}")
     @Synchronized fun fetch(place: PlaceDiscovery, requireContainment: Boolean): PlaceOverlayData? {
         if (place.kind == PlaceKind.TOWN || ProviderHealth.shared.remaining("geoboundaries") > 0) return null
         val country = place.key.substringBefore('|').uppercase(Locale.ROOT)
-        if (!country.matches(Regex("[A-Z]{2}"))) return null
+        if (!country.matches(isoTwoLetters)) return null
         val iso3 = runCatching { Locale.Builder().setRegion(country).build().isO3Country }.getOrNull() ?: return null
         val level = if (place.kind == PlaceKind.COUNTRY) "ADM0" else "ADM1"
         val key = "$iso3/$level"

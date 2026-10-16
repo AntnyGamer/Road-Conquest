@@ -15,7 +15,7 @@ data class KnownRoadVisit(
 
 internal object KnownRoadReuse {
     fun find(repository: TrackingRepository, points: List<TrackPoint>, markableIds: Set<Long>): List<KnownRoadVisit> {
-        if (points.size < 3 || markableIds.isEmpty() || repository.getSummary().roadSegmentCount == 0L)
+        if (points.size < 5 || markableIds.isEmpty() || repository.getSummary().roadSegmentCount == 0L)
             return emptyList()
         return identify(points, markableIds) { fix ->
             repository.findUnambiguousPreviouslyDrivenRoadNear(fix.latitude, fix.longitude)?.segmentId

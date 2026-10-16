@@ -185,13 +185,15 @@ class GeoapifyMatcher(
 
     private fun position(line: JSONArray, point: JSONArray, start: Int, end: Int): Double? {
         var best: Double? = null; var distance = 3.0
-        val scale = cos(Math.toRadians(point.getDouble(1)))
+        val longitude = point.getDouble(0)
+        val latitude = point.getDouble(1)
+        val scale = cos(Math.toRadians(latitude))
         for (i in start until end) {
             val a = line.getJSONArray(i); val b = line.getJSONArray(i + 1)
             val dx = (b.getDouble(0) - a.getDouble(0)) * scale; val dy = b.getDouble(1) - a.getDouble(1)
             val length = dx * dx + dy * dy
             if (length <= 0) continue
-            val t = (((point.getDouble(0) - a.getDouble(0)) * scale * dx + (point.getDouble(1) - a.getDouble(1)) * dy) / length).coerceIn(0.0, 1.0)
+            val t = (((longitude - a.getDouble(0)) * scale * dx + (latitude - a.getDouble(1)) * dy) / length).coerceIn(0.0, 1.0)
             val error = meters(point, at(line, i + t))
             if (error < distance) { distance = error; best = i + t }
         }

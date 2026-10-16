@@ -20,7 +20,13 @@ export class MapBudget {
     const day = new Date().toISOString().slice(0, 10);
     // No await between reads and writes: reservations cannot interleave.
     this.sql.exec('DELETE FROM usage WHERE day < ?', day);
-    const used = key => [...this.sql.exec('SELECT used FROM usage WHERE day = ? AND bucket = ?', day, key)][0]?.used || 0;
+    // Read the same five budget counters in one SQL statement. Quota decisions,
+    // pre-upgrade accounting and persistent write ordering stay unchanged.
+    const counters = new Map([...this.sql.exec(
+      'SELECT bucket,used FROM usage WHERE day = ? AND bucket IN (?,?,?,?,?)',
+      day, 'all', 'units:all', bucket, 'units:' + bucket, 'next-slot'
+    )].map(row => [row.bucket, row.used]));
+    const used = key => counters.get(key) || 0;
     // Pre-upgrade counters are in whole credits. Count those reservations conservatively
     // alongside quarter-credit units, so a mid-day deployment cannot reset the budget.
     if (used('all') * 4 + used('units:all') + costUnits > limit ||

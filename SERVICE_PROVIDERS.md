@@ -27,6 +27,11 @@ Geoapify provides no externally reported confidence probability or explicit ramp
 
 HTTP 429, 401/403, 5xx, timeouts and connection failures move to an eligible backup. Retry-After seconds and HTTP dates are respected, up to a day. Providers return in priority order when their cooldown expires. A provider's exhausted budget is never bypassed by changing keys, accounts or forwarding headers.
 
+## Further no-regression optimizations
+
+- Cloudflare's Durable Object now reads all five daily budget counters in one SQLite SELECT rather than five separate queries per request. Accounting, free-plan caps, pacing and write ordering are preserved, including old whole-credit reservations. The server regression test verifies that allowed and rejected reservations each need only one read.
+- The already strict five-fix local re-drive check skips repository summary access for shorter traces. Geoapify's segment projection reuses waypoint coordinates rather than repeatedly decoding the same JSON fields. The geoBoundaries ISO-country validation reuses its compiled regex; neither changes acceptance criteria or network usage.
+
 ## Gateway deployment and spending protection
 
 The map Worker enables Cloudflare's native Worker response cache. Identical public Geoapify tile URLs served from that cache bypass Worker execution, Durable Object reservations and provider requests, without caching individual driving traces. Only successful public tile responses advertise a one-day cache lifetime; matching, health and error responses remain `no-store`. Geoapify permits storing/reusing raster tiles. Caching is an optimization rather than a guaranteed hit rate; the existing shared credit caps still apply to cache misses.
