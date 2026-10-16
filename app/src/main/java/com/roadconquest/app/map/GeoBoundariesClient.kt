@@ -60,7 +60,8 @@ class GeoBoundariesClient(private val loadJson: (String, Int) -> JSONObject = ::
                 val name = feature.getJSONObject("properties").optString("shapeName").trim()
                 if (place.kind != PlaceKind.COUNTRY && !name.equals(expectedName, ignoreCase = true)) continue
                 val candidate = feature.optJSONObject("geometry") ?: continue
-                if (candidate.optString("type") !in setOf("Polygon", "MultiPolygon") ||
+                val type = candidate.optString("type")
+                if ((type != "Polygon" && type != "MultiPolygon") ||
                     (containment && !PlaceGeometry.contains(candidate, place.latitude, place.longitude))
                 ) continue
                 if (geometry != null) return null // Still reject ambiguous multiple matches.

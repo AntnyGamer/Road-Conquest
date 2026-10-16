@@ -40,21 +40,26 @@ internal object TownOverlayPartition {
     fun renderOfficialUs(data: List<PlaceOverlayData>): Result = render(data, officialUs = true)
 
     private fun render(data: List<PlaceOverlayData>, officialUs: Boolean): Result {
-        data class Candidate(val overlay: PlaceOverlayData, val geometry: Geometry,
-                             val bounds: org.locationtech.jts.geom.Envelope = geometry.envelopeInternal)
+        data class Candidate(
+            val overlay: PlaceOverlayData,
+            val geometry: Geometry,
+            val priority: Int,
+            val bounds: org.locationtech.jts.geom.Envelope = geometry.envelopeInternal,
+            val area: Double = geometry.area
+        )
+        fun priority(key: String): Int = if (!officialUs) 0 else when {
+            "|census-4-" in key -> 0
+            "|census-3-" in key -> 1
+            "|census-1-" in key -> 2
+            else -> 3
+        }
         val candidates = data.distinctBy(PlaceOverlayData::key).mapNotNull { overlay ->
             val geometry = runCatching {
                 polygonal(GeometryFixer.fix(decode(JSONObject(overlay.geometryJson))))
             }.getOrNull()
-            geometry?.takeUnless { it.isEmpty }?.let { Candidate(overlay, it) }
-        }.sortedWith(compareBy<Candidate> {
-            if (!officialUs) 0 else when {
-                "|census-4-" in it.overlay.key -> 0
-                "|census-3-" in it.overlay.key -> 1
-                "|census-1-" in it.overlay.key -> 2
-                else -> 3
-            }
-        }.thenBy { it.geometry.area }.thenBy { it.overlay.key })
+            geometry?.takeUnless { it.isEmpty }?.let { Candidate(overlay, it, priority(overlay.key)) }
+        }.sortedWith(compareBy<Candidate> { it.priority }
+            .thenBy { it.area }.thenBy { it.overlay.key })
 
         val placed = ArrayList<Candidate>(candidates.size)
         for (candidate in candidates) {
@@ -76,8 +81,9 @@ internal object TownOverlayPartition {
                     polygonal(GeometryFixer.fix(remaining))
                 }.getOrNull() ?: continue
             }
-            if (!clipped.isEmpty && clipped.area > 0.0) {
-                placed += Candidate(candidate.overlay, clipped)
+            val clippedArea = clipped.area
+            if (!clipped.isEmpty && clippedArea > 0.0) {
+                placed += Candidate(candidate.overlay, clipped, candidate.priority, area = clippedArea)
             }
         }
 

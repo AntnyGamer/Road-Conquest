@@ -27,6 +27,11 @@ Geoapify provides no externally reported confidence probability or explicit ramp
 
 HTTP 429, 401/403, 5xx, timeouts and connection failures move to an eligible backup. Retry-After seconds and HTTP dates are respected, up to a day. Providers return in priority order when their cooldown expires. A provider's exhausted budget is never bypassed by changing keys, accounts or forwarding headers.
 
+## Additional municipal polygon sorting improvements
+
+- Town overlays precompute the geometry area and Census layer priority once per candidate, instead of recalculating JTS polygon area and scanning layer-name substrings during every sort comparison. The comparator still sorts by the same (priority, geometric area, key) tuple and clipping semantics are unchanged.
+- Polygon-type guards in official Census and geoBoundaries response parsers now directly compare the two supported type strings, avoiding a temporary set allocation for every candidate feature. No polygon acceptance rules or network requests change.
+
 ## Additional no-regression map hot-path optimizations
 
 - Road grouping now projects each intermediate coordinate on a saved polyline once rather than projecting the same vertex twice for successive segment comparisons. Snap tolerances, geodesic projection, connected-road grouping and visit crediting are unchanged.
