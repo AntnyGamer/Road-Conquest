@@ -73,6 +73,20 @@ class PlaceOverlayTest {
         }
     }
 
+    @Test fun providerRetryAfterAcceptsSecondsAndHttpDatesWithoutUnboundedDelay() {
+        val now = java.time.Instant.parse("2026-10-15T12:00:00Z").toEpochMilli()
+        assertEquals(60_000L, PlaceOverlayClient.retryAfterMillis("60", now))
+        assertEquals(900_000L, PlaceOverlayClient.retryAfterMillis("99999", now))
+        assertEquals(120_000L, PlaceOverlayClient.retryAfterMillis(
+            "Thu, 15 Oct 2026 12:02:00 GMT", now
+        ))
+        assertEquals(0L, PlaceOverlayClient.retryAfterMillis(
+            "Thu, 15 Oct 2026 11:59:00 GMT", now
+        ))
+        assertEquals(0L, PlaceOverlayClient.retryAfterMillis("invalid", now))
+        assertEquals(0L, PlaceOverlayClient.retryAfterMillis(null, now))
+    }
+
     @Test fun verificationFlagIsReadWithTheCachedMunicipalPolygon() {
         val context = RuntimeEnvironment.getApplication()
         val place = PlaceDiscovery(
