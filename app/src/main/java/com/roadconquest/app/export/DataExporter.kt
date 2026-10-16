@@ -77,7 +77,7 @@ object DataExporter {
             .put("app", "Road Conquest")
             .put("app_version", BuildConfig.VERSION_NAME)
             .put("app_version_code", BuildConfig.VERSION_CODE)
-            .put("schema_version", 11)
+            .put("schema_version", 12)
             .put("explored_place_count", exploredCount)
             .put("explored_mile_grid_count", gridCount)
             .put("road_visit_count", roadVisitCount)
