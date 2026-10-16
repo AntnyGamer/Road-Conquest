@@ -36,7 +36,13 @@ class WeeklyChallengesTest {
         assertEquals(listOf(25L, 25L, 3L, 3L), week.challenges.map { it.progress })
         assertTrue(week.challenges.all { it.rewarded })
         assertEquals(before + 700, repository.snapshot().balance)
+        val db = AppDatabase.get(context).readableDatabase
+        fun weeklyRewardRows(): Long = db.rawQuery(
+            "SELECT COUNT(*) FROM progression_rewards WHERE reward_key LIKE 'weekly:%'", null
+        ).use { assertTrue(it.moveToFirst()); it.getLong(0) }
+        assertEquals(4L, weeklyRewardRows())
         WeeklyChallenges.status(context, monday + 200)
+        assertEquals(4L, weeklyRewardRows())
         assertEquals(before + 700, repository.snapshot().balance)
         assertEquals(listOf(0L, 0L, 0L, 0L), WeeklyChallenges.status(context, week.endsAt).challenges.map { it.progress })
     }

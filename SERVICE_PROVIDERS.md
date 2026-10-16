@@ -27,6 +27,11 @@ Geoapify provides no externally reported confidence probability or explicit ramp
 
 HTTP 429, 401/403, 5xx, timeouts and connection failures move to an eligible backup. Retry-After seconds and HTTP dates are respected, up to a day. Providers return in priority order when their cooldown expires. A provider's exhausted budget is never bypassed by changing keys, accounts or forwarding headers.
 
+## Weekly challenge SQLite batching
+
+- The same week-scoped road and town counts now run as two independently optimized SQL scalar subqueries within one SQLite statement per week instead of opening two cursors. Both original filters are unchanged.
+- Up to four earned challenge rewards are inserted with one atomic `INSERT OR IGNORE` statement rather than four individual writes. Existing reward keys, payout amounts, timestamp, idempotence and previous-week grace are preserved. The challenge tests now verify that repeated refreshes do not create extra weekly reward rows.
+
 ## Additional municipal polygon sorting improvements
 
 - Town overlays precompute the geometry area and Census layer priority once per candidate, instead of recalculating JTS polygon area and scanning layer-name substrings during every sort comparison. The comparator still sorts by the same (priority, geometric area, key) tuple and clipping semantics are unchanged.

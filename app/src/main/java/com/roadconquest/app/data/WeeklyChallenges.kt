@@ -1,8 +1,6 @@
 package com.roadconquest.app.data
 
-import android.content.ContentValues
 import android.content.Context
-import android.database.sqlite.SQLiteDatabase
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.ZoneOffset
@@ -45,22 +43,26 @@ object WeeklyChallenges {
                     val weekEnd = week + 7 * 86_400_000L
                     // Reuse the last-driven/group indexes and inspect this week's
                     // candidates rather than regrouping every historical road.
-                    val roads = db.rawQuery(
-                        """SELECT COUNT(DISTINCT CASE WHEN r.road_group_id = '' THEN r.segment_id ELSE r.road_group_id END)
-                          FROM roads r WHERE r.last_driven_at >= ? AND r.first_unlocked_at >= ?
-                          AND r.first_unlocked_at < ? AND r.first_unlocked_at <= ?
-                          AND r.road_group_id NOT LIKE 'x2|%'
-                          AND (r.road_group_id = '' OR NOT EXISTS (SELECT 1 FROM roads old
-                            WHERE old.road_group_id = r.road_group_id AND old.first_unlocked_at < ?))""",
-                        arrayOf(week.toString(), week.toString(), weekEnd.toString(), now.toString(), week.toString())
-                    ).use { it.moveToFirst(); it.getLong(0) }
-                    val towns = db.rawQuery(
-                        """SELECT COUNT(*) FROM visited_places v WHERE kind = 'TOWN'
-                          AND first_visited_at >= ? AND first_visited_at < ? AND first_visited_at <= ?
-                          AND EXISTS (SELECT 1 FROM progression_rewards r
-                            WHERE r.reward_key = 'place:town:' || v.place_key)""",
-                        arrayOf(week.toString(), weekEnd.toString(), now.toString())
-                    ).use { it.moveToFirst(); it.getLong(0) }
+                    // Keep the same independently indexed count predicates but
+                    // retrieve both values in one cursor/query per evaluated week.
+                    val (roads, towns) = db.rawQuery(
+                        """SELECT
+                          (SELECT COUNT(DISTINCT CASE WHEN r.road_group_id = '' THEN r.segment_id ELSE r.road_group_id END)
+                            FROM roads r WHERE r.last_driven_at >= ? AND r.first_unlocked_at >= ?
+                            AND r.first_unlocked_at < ? AND r.first_unlocked_at <= ?
+                            AND r.road_group_id NOT LIKE 'x2|%'
+                            AND (r.road_group_id = '' OR NOT EXISTS (SELECT 1 FROM roads old
+                              WHERE old.road_group_id = r.road_group_id AND old.first_unlocked_at < ?))),
+                          (SELECT COUNT(*) FROM visited_places v WHERE kind = 'TOWN'
+                            AND first_visited_at >= ? AND first_visited_at < ? AND first_visited_at <= ?
+                            AND EXISTS (SELECT 1 FROM progression_rewards r
+                              WHERE r.reward_key = 'place:town:' || v.place_key))""",
+                        arrayOf(week.toString(), week.toString(), weekEnd.toString(), now.toString(),
+                            week.toString(), week.toString(), weekEnd.toString(), now.toString())
+                    ).use { cursor ->
+                        check(cursor.moveToFirst())
+                        cursor.getLong(0) to cursor.getLong(1)
+                    }
                     // Preserve every challenge ID and payout. Batch the ownership
                     // lookup: one indexed SQLite query per week instead of one per goal.
                     val challenges = listOf(
@@ -70,12 +72,23 @@ object WeeklyChallenges {
                         WeeklyChallenge("towns", "Explore 3 new towns", towns, 3, 300, false)
                     )
                     val keys = challenges.map { "weekly:$week:${it.id}" }
-                    challenges.forEachIndexed { index, challenge ->
-                        if (challenge.progress >= challenge.target) {
-                            db.insertWithOnConflict("progression_rewards", null, ContentValues().apply {
-                                put("reward_key", keys[index]); put("points", challenge.reward); put("awarded_at", now)
-                            }, SQLiteDatabase.CONFLICT_IGNORE)
+                    // Insert every newly qualified reward in one atomic SQL
+                    // statement. IGNORE still prevents a second payout per key.
+                    val earned = challenges.indices.filter {
+                        challenges[it].progress >= challenges[it].target
+                    }
+                    if (earned.isNotEmpty()) {
+                        val values = ArrayList<Any>(earned.size * 3)
+                        earned.forEach { index ->
+                            values.add(keys[index])
+                            values.add(challenges[index].reward)
+                            values.add(now)
                         }
+                        db.execSQL(
+                            "INSERT OR IGNORE INTO progression_rewards(reward_key,points,awarded_at) VALUES " +
+                                List(earned.size) { "(?,?,?)" }.joinToString(","),
+                            values.toTypedArray()
+                        )
                     }
                     val rewarded = HashSet<String>(challenges.size)
                     db.rawQuery(
