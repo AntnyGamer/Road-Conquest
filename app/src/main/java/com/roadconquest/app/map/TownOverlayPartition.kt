@@ -40,7 +40,8 @@ internal object TownOverlayPartition {
     fun renderOfficialUs(data: List<PlaceOverlayData>): Result = render(data, officialUs = true)
 
     private fun render(data: List<PlaceOverlayData>, officialUs: Boolean): Result {
-        data class Candidate(val overlay: PlaceOverlayData, val geometry: Geometry)
+        data class Candidate(val overlay: PlaceOverlayData, val geometry: Geometry,
+                             val bounds: org.locationtech.jts.geom.Envelope = geometry.envelopeInternal)
         val candidates = data.distinctBy(PlaceOverlayData::key).mapNotNull { overlay ->
             val geometry = runCatching {
                 polygonal(GeometryFixer.fix(decode(JSONObject(overlay.geometryJson))))
@@ -57,12 +58,11 @@ internal object TownOverlayPartition {
 
         val placed = ArrayList<Candidate>(candidates.size)
         for (candidate in candidates) {
-            // JTS constructs an Envelope for each getter call. The candidate
-            // bounds are invariant throughout this comparison loop.
-            val candidateBounds = candidate.geometry.envelopeInternal
-            val overlapping = placed.asSequence().map(Candidate::geometry)
-                .filter { it.envelopeInternal.intersects(candidateBounds) }
-                .toList()
+            // Each candidate's immutable geometry envelope is computed once.
+            // Reuse it across every later candidate's overlap checks.
+            val overlapping = placed.asSequence().filter {
+                it.bounds.intersects(candidate.bounds)
+            }.map(Candidate::geometry).toList()
             // Each candidate was already fixed and reduced to polygons above.
             // With no geometric overlap, re-running the costly topology fixer
             // cannot change the visible result and needlessly reconstructs it.
@@ -156,18 +156,22 @@ internal object TownOverlayPartition {
     }
 
     private fun readRing(json: JSONArray): LinearRing {
-        val coords = ArrayList<Coordinate>(json.length() + 1)
-        for (index in 0 until json.length()) {
+        val coords = Array(json.length()) { index ->
             val point = json.getJSONArray(index)
             val longitude = point.getDouble(0)
             val latitude = point.getDouble(1)
             require(longitude.isFinite() && latitude.isFinite() &&
                 longitude in -180.0..180.0 && latitude in -90.0..90.0)
-            coords += Coordinate(longitude, latitude)
+            Coordinate(longitude, latitude)
         }
         require(coords.size >= 3)
-        if (!coords.first().equals2D(coords.last())) coords += Coordinate(coords.first())
-        return factory.createLinearRing(coords.toTypedArray())
+        // Most provider rings are already closed: pass the array directly to JTS
+        // instead of allocating an ArrayList and converting it back to an array.
+        val ring = if (coords.first().equals2D(coords.last())) coords
+            else Array(coords.size + 1) { index ->
+                if (index < coords.size) coords[index] else Coordinate(coords.first())
+            }
+        return factory.createLinearRing(ring)
     }
 
     private fun polygonal(source: Geometry): Geometry {

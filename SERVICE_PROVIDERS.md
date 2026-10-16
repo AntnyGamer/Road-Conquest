@@ -27,6 +27,12 @@ Geoapify provides no externally reported confidence probability or explicit ramp
 
 HTTP 429, 401/403, 5xx, timeouts and connection failures move to an eligible backup. Retry-After seconds and HTTP dates are respected, up to a day. Providers return in priority order when their cooldown expires. A provider's exhausted budget is never bypassed by changing keys, accounts or forwarding headers.
 
+## Trip replay and town-boundary rendering optimizations
+
+- Trip replay now creates `SavedTripPoint` objects only for samples actually displayed and the true endpoint, rather than for every raw GPS fix read from SQLite. It retains timestamp gap detection even across dropped samples, the original sampling stride and equality/deduplication behavior.
+- Town-overlap partitioning caches each immutable JTS polygon's bounding envelope once per render. Every overlap, ordering and clipping test still uses the exact same geometry.
+- Town polygon rings already supplied closed are decoded directly into JTS coordinate arrays, avoiding an extra mutable list and array conversion. Unclosed rings are still closed identically; a regression test compares both representations.
+
 ## Additional allocation and boundary-cache optimizations
 
 - Cached administrative boundary polygons now stream gzip bytes straight into the existing atomic on-disk cache file, instead of keeping multiple copies of the full JSON and compressed data in heap memory. The gzip format, atomic rollback, decoded-size limit, historical plain-JSON compatibility and cache eviction semantics are unchanged. A large-polygon cache round-trip test was added.

@@ -93,6 +93,17 @@ class TownOverlayPartitionTest {
         assertEquals(1, fillsAt(result, 39.85, -75.12))
     }
 
+    @Test fun unclosedPolygonRingsStillCloseAndRenderIdentically() {
+        val open = """{"type":"Polygon","coordinates":[[
+            [0,0],[4,0],[4,4],[0,4]
+        ]]}"""
+        val closed = square(0.0, 0.0, 4.0, 4.0)
+        val openResult = TownOverlayPartition.render(listOf(town("Open", "open", 16.0, open)))
+        val closedResult = TownOverlayPartition.render(listOf(town("Open", "open", 16.0, closed)))
+        assertEquals(closedResult.fills, openResult.fills)
+        assertEquals(closedResult.outlines, openResult.outlines)
+    }
+
     @Test fun disjointPolygonsAndTrueInteriorHolesRemainCorrect() {
         val shape = """{"type":"MultiPolygon","coordinates":[
             [[[0,0],[4,0],[4,4],[0,4],[0,0]],

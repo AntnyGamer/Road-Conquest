@@ -227,7 +227,8 @@ class TripHistoryRepository(context: Context) {
             // Preserve the exact terminal fix without bridging an unrecorded gap
             // in fixes skipped by the downsampler.
             if (position > 0L && !lastWasSelected) {
-                selected += SavedTripPoint(lastLatitude, lastLongitude, lastTimestamp, gapSinceSample)
+                val endpoint = SavedTripPoint(lastLatitude, lastLongitude, lastTimestamp, gapSinceSample)
+                if (selected.lastOrNull() != endpoint) selected += endpoint
             }
             if (generation == helper.historyGeneration) selected else emptyList()
         }
