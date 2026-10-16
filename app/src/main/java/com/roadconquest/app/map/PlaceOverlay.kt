@@ -77,6 +77,8 @@ object PlaceOverlayCache {
     private const val CACHE_BUDGET_FILES = 6_000
     private const val MAX_DECODED_CACHE_CHARS = 16 * 1024 * 1024
     private var initialTrimDone = false
+    private var cacheBytes = 0L
+    private var cacheFiles = 0
 
     // Boundary caches are regenerable; visited places, achievements and earned
     // rewards remain in SQLite. Keep recent polygons available offline while
@@ -91,7 +93,11 @@ object PlaceOverlayCache {
             }
         var bytes = files.sumOf { it.length() }
         var count = files.size
-        if (bytes <= maxBytes && count <= maxFiles) return
+        if (bytes <= maxBytes && count <= maxFiles) {
+            cacheBytes = bytes
+            cacheFiles = count
+            return
+        }
         // The oldest cached outlines go first. The destination currently being
         // written stays readable, even if it alone exceeds the cache budget.
         for (candidate in files.sortedWith(compareBy<File> { it.lastModified() }.thenBy { it.name })) {
@@ -103,6 +109,8 @@ object PlaceOverlayCache {
                 count--
             }
         }
+        cacheBytes = bytes
+        cacheFiles = count
     }
 
     internal fun trimForTest(context: Context, maxBytes: Long, maxFiles: Int) =
@@ -115,7 +123,10 @@ object PlaceOverlayCache {
         }
     }
 
-    private fun writeCacheFile(target: File, json: JSONObject): Boolean {
+    private fun writeCacheFile(context: Context, target: File, json: JSONObject): Boolean {
+        initialTrim(context)
+        val existed = target.isFile
+        val oldBytes = if (existed) target.length() else 0L
         val bytes = json.toString().toByteArray(Charsets.UTF_8)
         val buffer = ByteArrayOutputStream()
         GZIPOutputStream(buffer).use { it.write(bytes) }
@@ -125,10 +136,26 @@ object PlaceOverlayCache {
             stream = file.startWrite()
             stream.write(buffer.toByteArray())
             file.finishWrite(stream)
+            cacheBytes += target.length() - oldBytes
+            if (!existed) cacheFiles++
+            // Counting writes avoids walking thousands of cached files after
+            // every new town; full disk scans happen only at start or near cap.
+            if (cacheBytes > CACHE_BUDGET_BYTES || cacheFiles > CACHE_BUDGET_FILES) {
+                trimCache(context, keep = target)
+            }
             true
         } catch (_: Exception) {
             if (stream != null) file.failWrite(stream)
             false
+        }
+    }
+
+    private fun forgetCacheFile(file: File) {
+        val bytes = if (file.isFile) file.length() else 0L
+        AtomicFile(file).delete()
+        if (bytes > 0L && initialTrimDone) {
+            cacheBytes = (cacheBytes - bytes).coerceAtLeast(0L)
+            cacheFiles = (cacheFiles - 1).coerceAtLeast(0)
         }
     }
 
@@ -192,9 +219,7 @@ object PlaceOverlayCache {
                 .put("area_sq_km", data.areaSquareKilometers)
                 .put("geometry", JSONObject(data.geometryJson))
         }
-        val written = writeCacheFile(target, json)
-        if (written) trimCache(context, keep = target)
-        written
+        writeCacheFile(context, target, json)
     }
 
     private fun officialUsFile(context: Context, place: PlaceDiscovery): File {
@@ -218,7 +243,7 @@ object PlaceOverlayCache {
             if (!json.optBoolean("found", false)) {
                 val fetchedAt = json.optLong("fetched_at", 0L)
                 if (fetchedAt <= 0L || System.currentTimeMillis() - fetchedAt > NEGATIVE_CACHE_MS) {
-                    file.delete()
+                    forgetCacheFile(file)
                     PlaceOverlayCacheResult(false, null)
                 } else PlaceOverlayCacheResult(true, null)
             } else {
@@ -238,7 +263,7 @@ object PlaceOverlayCache {
                 )
             }
         }.getOrElse {
-            AtomicFile(file).delete()
+            forgetCacheFile(file)
             PlaceOverlayCacheResult(false, null)
         }
     }
@@ -282,14 +307,14 @@ object PlaceOverlayCache {
                 .put("area_sq_km", data.areaSquareKilometers)
                 .put("geometry", JSONObject(data.geometryJson))
         }
-        val written = writeCacheFile(target, json)
-        if (written) trimCache(context, keep = target)
-        written
+        writeCacheFile(context, target, json)
     }
 
     fun clear(context: Context) = synchronized(mutationLock) {
         generation.incrementAndGet()
         initialTrimDone = false
+        cacheBytes = 0L
+        cacheFiles = 0
         File(context.applicationContext.filesDir, DIRECTORY).deleteRecursively()
         File(context.applicationContext.filesDir, TOWN_DIRECTORY).deleteRecursively()
         File(context.applicationContext.filesDir, US_OFFICIAL_DIRECTORY).deleteRecursively()
