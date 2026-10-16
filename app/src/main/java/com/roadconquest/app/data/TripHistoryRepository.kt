@@ -196,9 +196,12 @@ class TripHistoryRepository(context: Context) {
             val stride = ceil(trip.pointCount.toDouble() / maxPoints).toInt().coerceAtLeast(1)
             val selected = ArrayList<SavedTripPoint>(minOf(maxPoints, trip.pointCount))
             var position = 0L
-            var last: SavedTripPoint? = null
             var previousTime: Long? = null
             var gapSinceSample = false
+            var lastLatitude = 0.0
+            var lastLongitude = 0.0
+            var lastTimestamp = 0L
+            var lastWasSelected = false
             db.rawQuery(
                 "SELECT latitude, longitude, timestamp_ms FROM track_points " +
                     "WHERE id BETWEEN ? AND ? ORDER BY id ASC", bounds
@@ -206,23 +209,25 @@ class TripHistoryRepository(context: Context) {
                 while (cursor.moveToNext()) {
                     val time = cursor.getLong(2)
                     previousTime?.let { if (time <= it || time - it > 30_000L) gapSinceSample = true }
-                    val point = SavedTripPoint(cursor.getDouble(0), cursor.getDouble(1), time, gapSinceSample)
-                    if (position % stride == 0L && selected.size < maxPoints - 1) {
-                        selected += point
+                    lastLatitude = cursor.getDouble(0)
+                    lastLongitude = cursor.getDouble(1)
+                    lastTimestamp = time
+                    lastWasSelected = position % stride == 0L && selected.size < maxPoints - 1
+                    // An entire drive can contain thousands of raw fixes, but replay
+                    // uses only the downsampled fixes and final endpoint. Allocate
+                    // route-point objects only when one will actually be displayed.
+                    if (lastWasSelected) {
+                        selected += SavedTripPoint(lastLatitude, lastLongitude, time, gapSinceSample)
                         gapSinceSample = false
                     }
-                    last = point
                     previousTime = time
                     position++
                 }
             }
-            // The terminal fix is always kept even if it falls between strides.
-            // Carry any gap found in skipped fixes into its break flag so replay
-            // never draws a straight line across an unrecorded stretch.
-            last?.let {
-                if (selected.lastOrNull() != it) {
-                    selected += it.copy(breakBefore = it.breakBefore || gapSinceSample)
-                }
+            // Preserve the exact terminal fix without bridging an unrecorded gap
+            // in fixes skipped by the downsampler.
+            if (position > 0L && !lastWasSelected) {
+                selected += SavedTripPoint(lastLatitude, lastLongitude, lastTimestamp, gapSinceSample)
             }
             if (generation == helper.historyGeneration) selected else emptyList()
         }
