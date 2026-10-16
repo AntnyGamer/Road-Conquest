@@ -111,7 +111,7 @@ export async function createCompetition(pool, config, dependencies = {}) {
         await eligible(db, user, true);
         const concurrentReceipt = await receipt(db, user, body, hash);
         if (concurrentReceipt) { await db.query("COMMIT"); return concurrentReceipt; }
-        const runs = await db.query("SELECT * FROM cell_runs WHERE user_id = $1 FOR UPDATE", [user.id]);
+        const runs = await db.query("SELECT id,nonce,sequence,dataset,expires_at,created_at FROM cell_runs WHERE user_id = $1 FOR UPDATE", [user.id]);
         const run = runs.rows[0];
         if (!run || run.id !== body.run || run.nonce !== body.nonce || run.sequence !== body.sequence ||
             run.dataset !== config.dataset || run.expires_at.getTime() <= Date.now() ||
@@ -133,30 +133,36 @@ export async function createCompetition(pool, config, dependencies = {}) {
         );
         const scope = `3:${user.id}:${config.dataset}`;
         verifyContinuity(old.rows[0].last_verified_fix, body.fixes[0], body.run, scope, config.checkpointKey);
-        const newCells = await db.query(
-          `INSERT INTO competition_cells(user_id,dataset,grid_row,grid_col)
+        const inserted = await db.query(
+          `WITH added AS (INSERT INTO competition_cells(user_id,dataset,grid_row,grid_col)
            SELECT $1,$2,* FROM unnest($3::integer[],$4::integer[])
-           ON CONFLICT DO NOTHING RETURNING grid_row`,
+           ON CONFLICT DO NOTHING RETURNING 1)
+           SELECT COUNT(*)::integer AS count FROM added HAVING COUNT(*)>0`,
           [user.id, config.dataset, cells.map(c => c.row), cells.map(c => c.column)]
         );
-        // RETURNING gives us the newly committed total without another SELECT.
-        // The same update still persists the continuity checkpoint for zero-credit batches.
-        const updatedScore = await db.query(
-          "UPDATE cell_scores SET cells = cells + $1, last_verified_fix = $2 WHERE user_id = $3 AND dataset = $4 RETURNING cells",
-          [newCells.rowCount, JSON.stringify(sealCheckpoint(body.fixes.at(-1), body.run, scope, config.checkpointKey)), user.id, config.dataset]
-        );
+        const newCells = inserted.rows[0]?.count || 0;
         // Batches spanning Monday midnight belong to the week of their final fix.
         // The timestamp is already freshness-checked and bound by Play Integrity.
         const week = new Date(body.fixes.at(-1).time);
         week.setUTCHours(0, 0, 0, 0);
         week.setUTCDate(week.getUTCDate() - (week.getUTCDay() + 6) % 7);
-        if (newCells.rowCount) await db.query(
-          `INSERT INTO cell_weeks(user_id,dataset,week_start,new_cells) VALUES ($1,$2,$3,$4)
-           ON CONFLICT (user_id,dataset,week_start) DO UPDATE
-           SET new_cells = cell_weeks.new_cells + EXCLUDED.new_cells`,
-          [user.id, config.dataset, week.toISOString().slice(0, 10), newCells.rowCount]
+        // Persist the checkpoint/total and this week's nonzero increment in one
+        // statement. Zero-credit batches still advance continuity without a
+        // weekly write. Both writes remain inside the same user-locked transaction.
+        const updateTotal = `UPDATE cell_scores SET cells=cells+$1,last_verified_fix=$2
+          WHERE user_id=$3 AND dataset=$4 RETURNING cells`;
+        const scoreArgs = [newCells, JSON.stringify(sealCheckpoint(body.fixes.at(-1), body.run, scope, config.checkpointKey)),
+          user.id, config.dataset];
+        const updatedScore = await db.query(newCells ?
+          `WITH updated AS (${updateTotal}), recorded_week AS (
+            INSERT INTO cell_weeks(user_id,dataset,week_start,new_cells)
+            SELECT $3,$4,$5,$1 FROM updated
+            ON CONFLICT (user_id,dataset,week_start) DO UPDATE
+            SET new_cells=cell_weeks.new_cells+EXCLUDED.new_cells
+          ) SELECT cells FROM updated` : updateTotal,
+          newCells ? [...scoreArgs, week.toISOString().slice(0, 10)] : scoreArgs
         );
-        const result = { sequence: body.sequence + 1, credited_cells: newCells.rowCount, accepted_cells: cells,
+        const result = { sequence: body.sequence + 1, credited_cells: newCells, accepted_cells: cells,
           verified: true, scoring_policy: 3, dataset: config.dataset, cells: Number(updatedScore.rows[0].cells) };
         // The retry receipt is stored only when the locked drive sequence advances.
         await db.query(

@@ -205,18 +205,25 @@ function bearerToken(req) {
   return TOKEN_RE.test(token) ? token : null;
 }
 
-async function authenticatedUser(req) {
+async function authenticatedUser(req, profile = false) {
   const token = bearerToken(req);
   if (!token) return null;
   await prepareDatabase();
+  const sessionHash = hashSessionToken(token);
+  // Most routes need only account identity. The non-deferrable session foreign
+  // key already guarantees its user exists; logout/deletion still revoke the
+  // session immediately. Only /me needs a joined profile. The hash is already
+  // known locally, so do not send the same 32 bytes back from PostgreSQL.
   const result = await pool.query(
-    `SELECT u.id, u.username_display, u.leaderboard_visible, s.token_hash AS session_hash
+    profile ? `SELECT u.id, u.username_display, u.leaderboard_visible
        FROM sessions s
        JOIN users u ON u.id = s.user_id
-      WHERE s.token_hash = $1 AND s.expires_at > CURRENT_TIMESTAMP`,
-    [hashSessionToken(token)]
+      WHERE s.token_hash = $1 AND s.expires_at > CURRENT_TIMESTAMP`
+    : `SELECT user_id AS id FROM sessions
+       WHERE token_hash = $1 AND expires_at > CURRENT_TIMESTAMP`,
+    [sessionHash]
   );
-  return result.rows[0] || null;
+  return result.rows[0] ? { ...result.rows[0], session_hash: sessionHash } : null;
 }
 
 async function createSession(userId, db = pool) {
@@ -412,7 +419,7 @@ async function handle(req, res) {
   }
 
   if (req.method === "GET" && url.pathname === "/v1/me") {
-    const user = await authenticatedUser(req);
+    const user = await authenticatedUser(req, true);
     if (!user) return send(res, 401, { error: "Authentication required." });
     return send(res, 200, {
       username: user.username_display,

@@ -34,15 +34,23 @@ export function createFriends(pool, notifyRequest = async () => {}) {
         if (locked.rowCount !== 2) throw new EvidenceError("Account unavailable.", 409);
         const pair = locked.rows.map(row => row.id);
         if (action === "request") {
-          const existing = await db.query("SELECT 1 FROM friendships WHERE user_low = $1 AND user_high = $2", pair);
-          if (!existing.rowCount) {
-            const counts = await db.query(
-              "SELECT id, (SELECT COUNT(*) FROM friendships f WHERE f.user_low = u.id OR f.user_high = u.id) AS count FROM users u WHERE id = ANY($1::bigint[])", [pair]
-            );
-            if (counts.rows.some(r => Number(r.count) >= 50)) throw new EvidenceError("Friend/request limit reached.", 409);
-            await db.query("INSERT INTO friendships(user_low,user_high,requested_by) VALUES ($1,$2,$3)", [...pair, user.id]);
-            notificationTarget = target.id;
-          }
+          // Both user locks remain held. Existing requests are idempotent even
+          // at the cap, and only a new relationship checks each participant's
+          // full accepted + pending count. A single snapshot/check/insert saves
+          // two round trips without relaxing the cap or reciprocal consent.
+          const decision = await db.query(`WITH existing AS (
+            SELECT 1 FROM friendships WHERE user_low=$1 AND user_high=$2
+          ), inserted AS (
+            INSERT INTO friendships(user_low,user_high,requested_by)
+            SELECT $1,$2,$3 WHERE NOT EXISTS (SELECT 1 FROM existing)
+              AND (SELECT COUNT(*) FROM friendships WHERE user_low=$1 OR user_high=$1) < 50
+              AND (SELECT COUNT(*) FROM friendships WHERE user_low=$2 OR user_high=$2) < 50
+            RETURNING 1
+          ) SELECT EXISTS(SELECT 1 FROM existing) AS existed,
+              EXISTS(SELECT 1 FROM inserted) AS inserted`, [...pair, user.id]);
+          const { existed, inserted } = decision.rows[0];
+          if (!existed && !inserted) throw new EvidenceError("Friend/request limit reached.", 409);
+          if (inserted) notificationTarget = target.id;
         } else if (action === "accept") {
           const updated = await db.query(
             "UPDATE friendships SET accepted = TRUE WHERE user_low = $1 AND user_high = $2 AND requested_by <> $3 RETURNING user_low", [...pair, user.id]

@@ -71,3 +71,67 @@ Cloudflare's native Worker cache is already enabled for public map responses;
 matching/errors remain `no-store`. No duplicate cache or stale ranking cache is
 introduced. Google/Geoapify/LocationIQ limits and the remaining Nominatim/country-
 population issues in the capacity review are separate from these optimizations.
+
+## Deeper query review
+
+A second pass compares with `a334910` and removes more repeated database work:
+
+- Authentication for routes other than `/v1/me` selects only the session's user
+  ID. The immediate foreign key and account-deletion cascade enforce the same
+  ownership relationship. `/v1/me` still joins the current profile. Both paths
+  enforce expiry on every request, and reuse the already-computed session hash
+  locally instead of returning it from PostgreSQL. No identity/consent cache.
+- New friend requests check existence, both fifty-relationship caps and insert
+  in one statement, while holding both user locks in the same stable order.
+  Existing/reciprocal requests remain idempotent at the cap, acceptance still
+  requires consent, and only a newly inserted request triggers notification.
+- Verified batches select explicit challenge columns, return one count of newly
+  inserted cells instead of a row per cell, and combine nonzero total/checkpoint
+  and weekly updates. A zero-credit batch returns no inserted-cell row and uses
+  the existing direct total/checkpoint update without touching weekly storage.
+  The user lock, Integrity checks, continuity checks and receipt transaction stay
+  intact. The week is still derived from the final fix in UTC. Competition is
+  still disabled by default; this change does not enable it.
+
+| Second-pass measurement | Before | After |
+|---|---:|---:|
+| Identity-only auth, PostgreSQL response bytes/query | 266 | 73 |
+| Profile auth, PostgreSQL response bytes/query | 266 | 165 |
+| Warm identity lookup, shared-buffer hits | 6 | 3 |
+| New friend request transaction, SQL statements | 6 | 4 |
+| 500 friend transactions, PostgreSQL response bytes | 199,179 | 142,286 |
+| New-credit verified batch, SQL statements | 13 | 12 |
+| 200 starts + 200 new + 200 zero-credit + 200 exact retries, statements | 5,600 | 5,400 |
+| Same mixed verified work, median response bytes over three rounds | 641,134 | 617,524 |
+
+The auth queries returned about 73%/38% fewer bytes; friend transactions used 33%
+fewer statements and about 29% fewer response bytes. Mixed verified work saved
+about 3.6% of statements and 3.7% of response bytes. These are path-specific
+results, not whole-app savings or an increase in external provider allowances.
+Friend counts exclude HTTP authentication/throttling and notification delivery.
+Verified counts include transaction boundaries and mocked Integrity verification.
+
+Bytes were measured at established local PostgreSQL TCP streams, including result
+metadata and command tags, excluding TLS, HTTP and connection handshakes. Fixtures
+used the same 10,000-account synthetic database; calls were interleaved before/
+after, with three mutation rounds, and the pool stayed at five. Desktop timing
+varies: the final standalone run's median 500-friend duration fell 176.84 to
+148.35 ms, while one scoring round was slightly slower. We claim reduced query
+and transfer work, not a guaranteed production latency percentage.
+
+All **64 server tests passed**, including concurrent cap enforcement, exactly one
+notification for repeated requests, expiry/logout/account-deletion on both auth
+paths, and a forced weekly-write failure that rolls back cells, totals,
+checkpoint, drive sequence and receipt together before a successful exact retry.
+
+The wider review also inspected matching retries/known-road reuse, provider
+cooldowns and budgets, Cloudflare/KV caching, boundary/population caches,
+notification refresh/delivery, account/session cleanup and OAuth token reuse.
+Longer notification refresh intervals, stale account/ranking caches, bigger map
+batches/allowances, new indexes and data-source replacements were not required
+for these changes: each changes behavior, quotas or write/storage costs. Existing
+cache and coalescing mechanisms were retained.
+
+The combined writes use PostgreSQL's documented [data-modifying CTE semantics](https://www.postgresql.org/docs/current/queries-with.html#QUERIES-WITH-MODIFYING):
+`RETURNING` communicates inserted/updated results within the statement. Unrelated
+expiry-table cleanup remains separate to preserve its existing lock ordering.
