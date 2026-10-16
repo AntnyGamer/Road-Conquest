@@ -45,9 +45,10 @@ export class MapBudget {
     // keep each provider's reservations and pacing independent.
     const slot = Math.max(Date.now(), used('next-slot'));
     if (slot - Date.now() > 10_000) return json({ error: 'Map service busy' }, 503, { 'Retry-After': '10' });
-    for (const key of ['units:all', 'units:' + bucket]) this.sql.exec(
-      'INSERT INTO usage(day,bucket,used) VALUES(?,?,?) ON CONFLICT(day,bucket) DO UPDATE SET used = used + excluded.used',
-      day, key, costUnits);
+    // Increment shared and client usage atomically in one SQLite statement.
+    this.sql.exec(
+      'INSERT INTO usage(day,bucket,used) VALUES(?,?,?),(?,?,?) ON CONFLICT(day,bucket) DO UPDATE SET used = used + excluded.used',
+      day, 'units:all', costUnits, day, 'units:' + bucket, costUnits);
     this.sql.exec('INSERT INTO usage(day,bucket,used) VALUES(?,?,?) ON CONFLICT(day,bucket) DO UPDATE SET used = excluded.used', day, 'next-slot', slot + spacingMs);
     return json({ allowed: true, waitMs: Math.max(0, slot - Date.now()) });
   }
