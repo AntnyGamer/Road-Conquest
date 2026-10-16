@@ -23,6 +23,6 @@ Crash reporting is off until enabled in Settings. Google Analytics is not includ
 
 Optional friend notifications: Firebase Cloud Messaging, Google.
 https://firebase.google.com/support/privacy
-Notifications are off until enabled in Settings. Weekly reminders run locally.
+Friend alerts and weekly reminders are on by default; turn either off in Settings. Android notification permission is required; friend alerts also require sign-in. Weekly reminders run locally. Existing opt-outs are preserved.
 Provider availability switches: Cloudflare Workers KV.
 Service uptime checks: UptimeRobot (no player data).

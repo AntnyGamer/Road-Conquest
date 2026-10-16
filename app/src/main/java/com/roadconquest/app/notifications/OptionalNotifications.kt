@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.google.firebase.FirebaseApp
@@ -28,44 +29,70 @@ object OptionalNotifications {
     private fun sessionDigest(token: String) = java.security.MessageDigest.getInstance("SHA-256")
         .digest(token.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
     @Volatile private var deletion: com.google.android.gms.tasks.Task<Void>? = null
+    private var lastRegistrationBinding: String? = null
+    private var lastRegistrationAt = 0L
     private fun prefs(context: Context) = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-    fun friendsEnabled(context: Context) = prefs(context).getBoolean("friends", false)
-    fun weeklyEnabled(context: Context) = prefs(context).getBoolean("weekly", false)
+    fun friendsEnabled(context: Context) = prefs(context).getBoolean("friends", true)
+    fun weeklyEnabled(context: Context) = prefs(context).getBoolean("weekly", true)
     fun permission(context: Context) = Build.VERSION.SDK_INT < 33 ||
         ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
     fun initialize(context: Context) {
         WeeklyReminderReceiver.schedule(context)
-        if (!friendsEnabled(context) || AccountStore.load(context) == null || !permission(context)) return
+        if (!friendsEnabled(context) || !permission(context)) return
+        val session = AccountStore.load(context) ?: return
         deletion?.takeUnless { it.isComplete }?.let { pending ->
             pending.addOnCompleteListener { initialize(context.applicationContext) }
             return
         }
+        val binding = prepareBinding(context, session.token) ?: return
+        if (AccountStore.load(context)?.token != session.token) return
         if (FirebaseApp.getApps(context).isEmpty() && FirebaseApp.initializeApp(context) == null) return
         CrashReporting.initialize(context) // Separate crash consent remains authoritative.
+        synchronized(displayLock) {
+            if (!friendsEnabled(context) || !permission(context) || prefs(context).getString("binding", null) != binding) return
+            val now = SystemClock.elapsedRealtime()
+            if (lastRegistrationBinding == binding && now - lastRegistrationAt < 5 * 60_000L) return
+            lastRegistrationBinding = binding
+            lastRegistrationAt = now
+        }
         FirebaseMessaging.getInstance().apply {
-            // Explicit startup registration keeps SDK auto-init off across consent changes.
+            // Explicit registration follows the saved setting, sign-in and Android permission.
             isAutoInitEnabled = false
-            register() // onRegistered delivers the current FID after registration succeeds.
+            register().addOnFailureListener {
+                synchronized(displayLock) {
+                    if (lastRegistrationBinding == binding) lastRegistrationBinding = null
+                }
+            } // onRegistered delivers the current FID after registration succeeds.
+        }
+    }
+    /** A new login gets a new binding without changing the user's saved notification choice. */
+    internal fun prepareBinding(context: Context, sessionToken: String): String? = synchronized(displayLock) {
+        if (!friendsEnabled(context) || !permission(context)) return@synchronized null
+        val settings = prefs(context)
+        val digest = sessionDigest(sessionToken)
+        val current = settings.getString("binding", null)
+        if (current != null && settings.getString("session_binding", null) == digest) return@synchronized current
+        UUID.randomUUID().toString().also { binding ->
+            settings.edit().putString("binding", binding).putString("session_binding", digest).commit()
+            context.getSystemService(NotificationManager::class.java).cancel(9101)
         }
     }
     fun setFriendsEnabled(context: Context, enabled: Boolean) {
-        val session = AccountStore.load(context)
-        val allow = enabled && session != null && permission(context)
-        prefs(context).edit().putBoolean("friends", allow).remove("binding").commit()
-        if (allow) {
-            prefs(context).edit().putString("binding", UUID.randomUUID().toString())
-                .putString("session_binding", sessionDigest(session!!.token)).commit()
+        prefs(context).edit().putBoolean("friends", enabled).commit()
+        if (enabled) {
             initialize(context)
         } else {
             disableLocal(context)
+            val session = AccountStore.load(context)
             if (session != null) executor.execute { runCatching { AccountClient.removeNotificationDevice(session.token) } }
         }
     }
     /** Called before discarding an account session, including corrupt/expired credentials. */
     fun disableLocal(context: Context) {
         synchronized(displayLock) {
-            prefs(context).edit().putBoolean("friends", false).remove("binding").remove("session_binding").commit()
+            prefs(context).edit().remove("binding").remove("session_binding").commit()
+            lastRegistrationBinding = null
             context.getSystemService(NotificationManager::class.java).cancel(9101)
         }
         if (FirebaseApp.getApps(context).isNotEmpty()) {
@@ -74,7 +101,7 @@ object OptionalNotifications {
     }
     fun setWeeklyEnabled(context: Context, enabled: Boolean) {
         synchronized(displayLock) {
-            prefs(context).edit().putBoolean("weekly", enabled && permission(context)).commit()
+            prefs(context).edit().putBoolean("weekly", enabled).commit()
             if (!enabled) context.getSystemService(NotificationManager::class.java).cancel(9102)
         }
         WeeklyReminderReceiver.schedule(context)

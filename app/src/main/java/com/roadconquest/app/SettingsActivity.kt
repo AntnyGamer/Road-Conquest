@@ -42,7 +42,6 @@ import java.util.concurrent.Executors
 import android.util.Log
 
 class SettingsActivity : Activity() {
-    private var pendingNotificationChoice: Boolean? = null
     private fun setupOptionalNotifications() {
         val options = com.roadconquest.app.notifications.OptionalNotifications
         fun bind(id: Int, friends: Boolean) {
@@ -50,17 +49,14 @@ class SettingsActivity : Activity() {
                 setOnCheckedChangeListener(null)
                 isChecked = if (friends) options.friendsEnabled(this@SettingsActivity) else options.weeklyEnabled(this@SettingsActivity)
                 setOnCheckedChangeListener { _, checked ->
+                    if (friends) options.setFriendsEnabled(this@SettingsActivity, checked) else options.setWeeklyEnabled(this@SettingsActivity, checked)
                     if (checked && friends && AccountStore.load(this@SettingsActivity) == null) {
-                        Toast.makeText(this@SettingsActivity, "Sign in before enabling friend notifications.", Toast.LENGTH_LONG).show()
-                        setupOptionalNotifications()
-                    } else if (checked && !options.permission(this@SettingsActivity) && Build.VERSION.SDK_INT >= 33) {
-                        pendingNotificationChoice = friends
-                        setupOptionalNotifications()
-                        requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 9103)
-                    } else {
-                        if (friends) options.setFriendsEnabled(this@SettingsActivity, checked) else options.setWeeklyEnabled(this@SettingsActivity, checked)
-                        setupOptionalNotifications()
+                        Toast.makeText(this@SettingsActivity, "Friend notifications will start after you sign in and allow notifications.", Toast.LENGTH_LONG).show()
                     }
+                    if (checked && !options.permission(this@SettingsActivity) && Build.VERSION.SDK_INT >= 33) {
+                        requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 9103)
+                    }
+                    setupOptionalNotifications()
                 }
             }
         }
@@ -70,13 +66,7 @@ class SettingsActivity : Activity() {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode != 9103) return
-        pendingNotificationChoice?.let { friends ->
-            if (com.roadconquest.app.notifications.OptionalNotifications.permission(this)) {
-                if (friends) com.roadconquest.app.notifications.OptionalNotifications.setFriendsEnabled(this, true)
-                else com.roadconquest.app.notifications.OptionalNotifications.setWeeklyEnabled(this, true)
-            }
-        }
-        pendingNotificationChoice = null
+        com.roadconquest.app.notifications.OptionalNotifications.initialize(this)
         setupOptionalNotifications()
     }
     private lateinit var ads: ScreenAds
@@ -232,6 +222,7 @@ class SettingsActivity : Activity() {
     override fun onResume() {
         super.onResume()
         ads.onResume()
+        com.roadconquest.app.notifications.OptionalNotifications.initialize(this)
         setupOptionalNotifications()
         if (appliedGoldUi != Prefs.isGoldUiEnabled(this)) {
             recreate()

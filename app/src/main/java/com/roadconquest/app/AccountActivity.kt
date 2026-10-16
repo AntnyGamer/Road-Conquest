@@ -147,6 +147,7 @@ class AccountActivity : Activity() {
                             account.leaderboardVisible
                         )
                         AccountStore.save(this, session)
+                        com.roadconquest.app.notifications.OptionalNotifications.initialize(this)
                         passwordInput.text.clear()
                         confirmPasswordInput.text.clear()
                         statusText.text = "Signed in."

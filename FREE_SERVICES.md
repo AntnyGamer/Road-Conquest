@@ -50,15 +50,17 @@ https://developers.cloudflare.com/kv/platform/pricing/
 
 ## Optional notifications
 
-Settings has separate friend-request and weekly-reminder switches, both off by
-default. Android notification permission and an account are required for friend
+Settings has separate friend-request and weekly-reminder switches, both on by
+default for new and existing users without a saved choice. Explicit opt-outs stay
+off, including across logout and sign-in. Android notification permission and an account are required for friend
 pushes; weekly reminders need only notification permission. Weekly reminders use
 an inexact local Monday 18:00 alarm, rescheduled after reboot/app update, with no
 exact-alarm permission or background location work.
 
-Firebase initialization requires friend-notification consent or existing independent
-Crashlytics consent. Messaging auto-init remains false; startup explicitly calls
-`register()` only after notification consent. The app uses the current
+Firebase initialization requires friend notifications to be enabled with sign-in
+and Android notification permission, or existing independent Crashlytics consent.
+Messaging auto-init remains false; startup, sign-in and permission changes explicitly
+call `register()` when eligible, coalescing repeated foreground registration for five minutes. The app uses the current
 `onRegistered` callback and HTTP v1 `fid` targeting instead of deprecated tokens. Firebase's
 automatic init provider stays removed. Enabling notifications does not enable
 Crashlytics reporting. No Firebase Analytics dependency is included.
@@ -87,7 +89,7 @@ receive an event; refresh occurs on app startup/registration renewal.
 
 Only newly committed friend requests trigger generic, data-only notifications.
 No usernames, GPS or account credentials are sent to Firebase. Current on-device
-consent, login and random binding gate display, including messages queued before
+notification setting, permission, login and random binding gate display, including messages queued before
 logout. Disabling notifications/delete-device-data revokes registration best
 effort and immediately blocks local display. A persisted server rate limit caps
 delivery attempts at three per recipient per five minutes. Push delivery is

@@ -337,6 +337,7 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        com.roadconquest.app.notifications.OptionalNotifications.initialize(this)
         if (!repository.isHistoryCurrent()) {
             recreatingForAppearance = true
             recreate()
@@ -547,6 +548,7 @@ class MainActivity : Activity() {
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        com.roadconquest.app.notifications.OptionalNotifications.initialize(this)
         when (requestCode) {
             REQUEST_BASIC_PERMISSIONS -> {
                 if (hasLocationPermission()) {
