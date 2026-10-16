@@ -28,6 +28,7 @@ class DataExporterTest {
         val repository = TrackingRepository(context)
         ProgressionRepository(context).clearProgression()
         repository.readableDatabase().execSQL("DELETE FROM track_points")
+        repository.readableDatabase().execSQL("DELETE FROM skipped_driving_fixes")
         repository.readableDatabase().execSQL("DELETE FROM roads")
         repository.readableDatabase().execSQL("DELETE FROM explored_places")
         repository.readableDatabase().execSQL("DELETE FROM explored_grid")
@@ -40,6 +41,10 @@ class DataExporterTest {
         repository.insertLocation(Location("gps").apply {
             latitude = 40.0; longitude = -74.0; accuracy = 5f; time = 1_000_000
         })
+        repository.recordSkippedDrivingFix(Location("gps").apply {
+            latitude = 40.0001; longitude = -74.0; accuracy = 3f
+            time = 1_003_000
+        })
         repository.upsertRoads(listOf(MatchedRoad("=1+1", "[[-74,40],[-74.001,40]]", 100, 200, 1.0)))
         val output = ByteArrayOutputStream()
         DataExporter.writeZip(context, repository, output)
@@ -51,7 +56,7 @@ class DataExporterTest {
             }
         }
         assertEquals(setOf(
-            "metadata.json", "track_points.csv", "roads.csv", "road_visits.csv", "explored_places.csv", "explored_grid.csv",
+            "metadata.json", "track_points.csv", "skipped_driving_fixes.csv", "roads.csv", "road_visits.csv", "explored_places.csv", "explored_grid.csv",
             "visited_places.csv", "place_candidates.csv", "progression_rewards.csv",
             "progression_purchases.csv", "progression_counters.csv"
         ), entries.keys)
@@ -73,6 +78,7 @@ class DataExporterTest {
         assertEquals(1L, metadata.getLong("roads_unlocked_count"))
         assertTrue(entries.getValue("track_points.csv").lineSequence().first().endsWith(",distance_m"))
         assertEquals(2, entries.getValue("track_points.csv").lineSequence().filter { it.isNotEmpty() }.count())
+        assertEquals(2, entries.getValue("skipped_driving_fixes.csv").lineSequence().filter { it.isNotEmpty() }.count())
         assertTrue(entries.getValue("roads.csv").contains(",'=1+1,"))
         assertTrue(entries.getValue("roads.csv").lineSequence().first().contains("road_group_id"))
         assertTrue(entries.getValue("roads.csv").lineSequence().first().contains("times_driven"))
