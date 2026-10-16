@@ -20,7 +20,7 @@ class GeoapifyMatcher(
         const val MAX_MATCH_POINTS = 200
         private val COUNTABLE_ROAD_CLASSES = setOf(
             "motorway", "trunk", "primary", "secondary", "tertiary",
-            "residential", "unclassified", "living_street", "service"
+            "residential", "unclassified", "living_street", "service", "service_other"
         )
     }
     override var unavailable = false
