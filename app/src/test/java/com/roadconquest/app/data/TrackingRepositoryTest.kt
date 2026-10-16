@@ -748,6 +748,19 @@ class TrackingRepositoryTest {
         assertTrue(expected > TravelDistance.between(a.latitude, a.longitude, a.time, b.latitude, b.longitude, b.time) + 5.0)
     }
 
+    @Test fun curvedRoadGroupingPreservesConnectedAndDisconnectedDecisions() {
+        fun road(id: String, vertices: String) = RoadGrouping.Road(
+            segmentId = id, name = "Example Road", geometryJson = vertices,
+            minLatitude = 39.9999, maxLatitude = 40.0002,
+            minLongitude = -74.001, maxLongitude = -73.997
+        )
+        val original = road("a", "[[-74.001,40.0],[-74.0005,40.0001],[-74.0,40.0]]")
+        val connected = road("b", "[[-73.99999,40.0],[-73.9995,40.0001]]")
+        val disconnected = road("c", "[[-73.997,40.0002],[-73.9965,40.0002]]")
+        assertTrue(RoadGrouping.connected(original, connected))
+        assertFalse(RoadGrouping.connected(original, disconnected))
+    }
+
     @Test fun roadHitTestingReturnsOnlyNearbySavedRoads() {
         repository.upsertRoads(listOf(
             MatchedRoad("Tap Me", "[[-74.001,40],[-74.000,40]]", 100, 200, 1.0)

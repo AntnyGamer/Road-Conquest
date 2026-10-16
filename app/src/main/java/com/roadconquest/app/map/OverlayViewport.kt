@@ -24,7 +24,7 @@ internal data class OverlayViewport(
         internal fun padded(
             west: Double, east: Double, south: Double, north: Double
         ): OverlayViewport? {
-            if (!listOf(west, east, south, north).all(Double::isFinite) ||
+            if (!west.isFinite() || !east.isFinite() || !south.isFinite() || !north.isFinite() ||
                 west > east || south > north || east - west > 180.0 ||
                 north - south > 120.0
             ) return null
@@ -66,7 +66,7 @@ internal data class OverlayViewport(
                 }
             }
             walk(coordinates, 0)
-            if (!listOf(west, east, south, north).all(Double::isFinite) ||
+            if (!west.isFinite() || !east.isFinite() || !south.isFinite() || !north.isFinite() ||
                 west < -180.0 || east > 180.0 || south < -90.0 || north > 90.0
             ) null else OverlayViewport(west, east, south, north)
         }.getOrNull()

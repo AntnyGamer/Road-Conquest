@@ -27,6 +27,13 @@ Geoapify provides no externally reported confidence probability or explicit ramp
 
 HTTP 429, 401/403, 5xx, timeouts and connection failures move to an eligible backup. Retry-After seconds and HTTP dates are respected, up to a day. Providers return in priority order when their cooldown expires. A provider's exhausted budget is never bypassed by changing keys, accounts or forwarding headers.
 
+## Additional no-regression map hot-path optimizations
+
+- Road grouping now projects each intermediate coordinate on a saved polyline once rather than projecting the same vertex twice for successive segment comparisons. Snap tolerances, geodesic projection, connected-road grouping and visit crediting are unchanged.
+- Fog-grid projection computes its geographic raster center once per batch of unlocked mile tiles, rather than once per cell. This keeps map/world-wrap coordinates identical.
+- Viewport sanity checks avoid temporary `List<Double>` allocations for four constant bounds, retaining identical finite/validity logic.
+- The existing fog-grid and viewport regression tests still exercise these paths; an additional curved-road grouping test protects positive and negative grouping decisions.
+
 ## Trip replay and town-boundary rendering optimizations
 
 - Trip replay now creates `SavedTripPoint` objects only for samples actually displayed and the true endpoint, rather than for every raw GPS fix read from SQLite. It retains timestamp gap detection even across dropped samples, the original sampling stride and equality/deduplication behavior.

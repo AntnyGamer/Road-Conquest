@@ -157,18 +157,22 @@ internal object RoadGrouping {
             EARTH_RADIUS_M * Math.toRadians(otherLatitude - latitude)
 
         var best = Double.POSITIVE_INFINITY
-        var index = 0
-        while (index + 3 < coordinates.size) {
-            val ax = x(coordinates[index + 1])
-            val ay = y(coordinates[index])
-            val bx = x(coordinates[index + 3])
-            val by = y(coordinates[index + 2])
+        // Neighboring polyline segments share a vertex. Project it once rather
+        // than repeating wrap, radians and trigonometry for each adjoining edge.
+        var ax = x(coordinates[1])
+        var ay = y(coordinates[0])
+        var index = 2
+        while (index + 1 < coordinates.size) {
+            val bx = x(coordinates[index + 1])
+            val by = y(coordinates[index])
             val dx = bx - ax
             val dy = by - ay
             val lengthSquared = dx * dx + dy * dy
             val t = if (lengthSquared == 0.0) 0.0
                 else (-(ax * dx + ay * dy) / lengthSquared).coerceIn(0.0, 1.0)
             best = min(best, hypot(ax + t * dx, ay + t * dy))
+            ax = bx
+            ay = by
             index += 2
         }
         return best
