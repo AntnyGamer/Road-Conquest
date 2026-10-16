@@ -34,24 +34,38 @@ class RoadGeometryValidator {
         val tracepoints = root.optJSONArray("tracepoints") ?: return null
         if (tracepoints.length() != points.size) return null
         val traces = Array(matchings.length()) { mutableListOf<Trace>() }
+        val invalidMatchings = BooleanArray(matchings.length())
+        val invalidPointIds = HashSet<Long>()
         for (i in points.indices) {
             val tracepoint = tracepoints.optJSONObject(i) ?: continue
             val matchingIndex = tracepoint.optInt("matchings_index", -1)
+            // An unknown group cannot be safely attributed to an independent route.
+            if (matchingIndex !in traces.indices) return null
             val waypoint = tracepoint.optInt("waypoint_index", -1)
             val alternatives = tracepoint.optInt("alternatives_count", -1)
-            val location = tracepoint.optJSONArray("location") ?: return null
-            if (matchingIndex !in traces.indices || waypoint < 0 || alternatives < 0 ||
-                !validCoordinate(location)
-            ) return null
+            val location = tracepoint.optJSONArray("location")
+            if (waypoint < 0 || alternatives < 0 ||
+                location == null || !validCoordinate(location)
+            ) {
+                invalidMatchings[matchingIndex] = true
+                invalidPointIds += points[i].id
+                continue
+            }
             traces[matchingIndex] += Trace(i, waypoint, alternatives, location)
         }
 
         val roads = mutableListOf<MatchedRoad>()
         val resolved = mutableMapOf<Long, Double>()
-        val blockedBridgeEndIds = HashSet<Long>()
+        val blockedBridgeEndIds = HashSet<Long>().apply { addAll(invalidPointIds) }
         var rejectedLeg = false
         for (m in traces.indices) {
             val trace = traces[m]
+            if (invalidMatchings[m]) {
+                // Never skip a malformed fix and join the two sides of its matching.
+                rejectedLeg = true
+                trace.forEach { blockedBridgeEndIds += points[it.input].id }
+                continue
+            }
             if (trace.size < 2) continue
             val legs = matchings.optJSONObject(m)?.optJSONArray("legs")
             // A malformed matching must never be credited. When the provider
