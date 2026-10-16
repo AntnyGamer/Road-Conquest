@@ -242,7 +242,8 @@ class GeoapifyMatcher(
             }
             flushBlock(index - 1)
         }
-        if (matchings.length() == 0) return MatchResult(emptyList(), emptyMap())
+        if (matchings.length() == 0) return if (stepValid.any { !it }) null
+            else MatchResult(emptyList(), emptyMap())
         val normalized = JSONObject().put("code", "Ok").put("tracepoints", tracepoints)
             .put("matchings", matchings)
         return validator.parse(normalized.toString(), points)
