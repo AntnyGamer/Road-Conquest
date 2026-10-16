@@ -29,6 +29,7 @@ import com.roadconquest.app.account.VerifiedDriving
 import com.roadconquest.app.matching.OsrmMatcher
 import com.roadconquest.app.matching.FallbackRoadMatcher
 import com.roadconquest.app.matching.RoadMatcher
+import com.roadconquest.app.matching.KnownRoadReuse
 import com.roadconquest.app.map.FogGrid
 import com.roadconquest.app.progression.ProgressionManager
 import com.roadconquest.app.util.LocationProviders
@@ -797,6 +798,18 @@ class TrackingService : Service(), LocationListener {
                     return@repeat
                 }
 
+                // Repeated drives on previously verified road segments are resolved
+                // entirely on-device. Never use proximity to award a NEW road.
+                val locallyCovered = KnownRoadReuse.find(repository, points, window.markableIds)
+                if (locallyCovered.isNotEmpty()) {
+                    val resolvedLocally = repository.completeKnownRoadVisits(locallyCovered)
+                    if (resolvedLocally > 0) {
+                        sendUiBroadcast(ACTION_ROADS_UPDATED)
+                        sendUiBroadcast(ACTION_STATS_UPDATED)
+                        if (batchIndex + 1 == MAX_MATCH_BATCHES_PER_RUN) scheduleBacklogContinuation()
+                        return@repeat
+                    }
+                }
                 lastMatchAttempt = SystemClock.elapsedRealtime()
                 val result = matcher.match(points)
                 if (result == null) {
