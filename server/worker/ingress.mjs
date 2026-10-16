@@ -1,3 +1,5 @@
+import { createHmacSigner } from './hmac.mjs';
+
 /**
  * Road Conquest's optional Cloudflare Workers ingress for its Neon account API.
  *
@@ -38,13 +40,8 @@ function trustedEdgeIp(request) {
     (ip.includes(":") || ip.includes(".")) ? ip : null;
 }
 
-async function signedClientIdentity(method, pathAndQuery, ip, timestamp, key) {
-  const encoder = new TextEncoder();
-  const cryptoKey = await crypto.subtle.importKey(
-    "raw", encoder.encode(key), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
-  );
-  const payload = encoder.encode([method, pathAndQuery, ip, String(timestamp)].join("\n"));
-  const digest = new Uint8Array(await crypto.subtle.sign("HMAC", cryptoKey, payload));
+async function signedClientIdentity(method, pathAndQuery, ip, timestamp, key, sign) {
+  const digest = await sign(key, [method, pathAndQuery, ip, String(timestamp)].join("\n"));
   return Array.from(digest, byte => byte.toString(16).padStart(2, "0")).join("");
 }
 
@@ -57,6 +54,7 @@ function unavailable() {
 
 /** Dependency injection permits exact request/signature tests without any live service. */
 export function createAccountIngress(upstreamFetch = fetch, now = () => Date.now()) {
+  const sign = createHmacSigner();
   return async function handle(request, env) {
     const origin = configuredOrigin(env?.API_ORIGIN);
     const key = env?.RATE_LIMIT_IP_SIGNATURE_KEY;
@@ -87,7 +85,7 @@ export function createAccountIngress(upstreamFetch = fetch, now = () => Date.now
     if (ip) {
       const timestamp = String(now());
       const signature = await signedClientIdentity(
-        request.method, incoming.pathname + incoming.search, ip, timestamp, key
+        request.method, incoming.pathname + incoming.search, ip, timestamp, key, sign
       );
       forwarded.headers.set("X-RoadConquest-Client-IP", ip);
       forwarded.headers.set("X-RoadConquest-Client-Timestamp", timestamp);

@@ -1,5 +1,6 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, sign } from 'node:crypto';
 import { EvidenceError } from './scoring.mjs';
+import { RATE_LIMIT_SQL } from './rate-limits.mjs';
 
 const PROJECT = 'roadconquest-9f0eb';
 const FID = /^[A-Za-z0-9_-]{22}$/;
@@ -47,7 +48,7 @@ export function createFcmSender(raw, fetcher = fetch, now = Date.now) {
   };
 }
 
-export function createNotifications(pool, { pepper, sender }) {
+export function createNotifications(pool, { pepper, sender, deliveryLimit }) {
   const key = createHmac('sha256', pepper).update('roadconquest-fcm-token-encryption-v1').digest();
   const digest = token => createHash('sha256').update(token).digest();
   const seal = token => {
@@ -80,7 +81,7 @@ export function createNotifications(pool, { pepper, sender }) {
         ), removed AS (
           DELETE FROM notification_devices WHERE session_hash IN (SELECT token_hash FROM active_session)
             AND token_hash<>$3
-        ) SELECT token_hash FROM active_session`, [user.session_hash, user.id, tokenHash]);
+        ) SELECT 1 FROM active_session`, [user.session_hash, user.id, tokenHash]);
         if (!session.rowCount) throw new EvidenceError('Authentication required.', 401);
         await db.query(`INSERT INTO notification_devices(token_hash,session_hash,encrypted_token,binding)
           VALUES ($1,$2,$3,$4) ON CONFLICT(token_hash) DO UPDATE SET session_hash=EXCLUDED.session_hash,
@@ -101,12 +102,20 @@ export function createNotifications(pool, { pepper, sender }) {
     },
     async friendRequest(userId) {
       if (!sender) return;
-      const { rows } = await pool.query(`SELECT d.token_hash,d.encrypted_token,d.binding FROM notification_devices d
-        JOIN sessions s ON s.token_hash=d.session_hash WHERE s.user_id=$1 AND s.expires_at>CURRENT_TIMESTAMP
-        AND d.updated_at>CURRENT_TIMESTAMP-INTERVAL '30 days' ORDER BY d.updated_at DESC LIMIT 5`, [userId]);
+      const permit = deliveryLimit?.(userId);
+      // Preserve the same per-recipient reservation even if it has no devices;
+      // a denied permit sends no registrations to the Function. Read only the
+      // ciphertext and binding: the token hash can be derived if Google rejects it.
+      const { rows } = await pool.query(`${permit ? `WITH permit AS (${RATE_LIMIT_SQL})` : ''}
+        SELECT d.encrypted_token,d.binding FROM notification_devices d
+        JOIN sessions s ON s.token_hash=d.session_hash WHERE s.user_id=${permit ? '$5' : '$1'}
+        AND s.expires_at>CURRENT_TIMESTAMP AND d.updated_at>CURRENT_TIMESTAMP-INTERVAL '30 days'
+        ${permit ? 'AND EXISTS(SELECT 1 FROM permit WHERE allowed)' : ''}
+        ORDER BY d.updated_at DESC LIMIT 5`, permit ? [...permit,userId] : [userId]);
       await Promise.allSettled(rows.map(async row => {
-        const result = await sender(open(row.encrypted_token), row.binding);
-        if (result === 'unregistered') await pool.query('DELETE FROM notification_devices WHERE token_hash=$1 AND encrypted_token=$2', [row.token_hash, row.encrypted_token]);
+        const token = open(row.encrypted_token);
+        const result = await sender(token, row.binding);
+        if (result === 'unregistered') await pool.query('DELETE FROM notification_devices WHERE token_hash=$1 AND encrypted_token=$2', [digest(token), row.encrypted_token]);
       }));
     }
   };

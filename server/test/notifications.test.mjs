@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { generateKeyPairSync, randomBytes, randomUUID } from 'node:crypto';
+import { createHash, generateKeyPairSync, randomBytes, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import pg from 'pg';
 import { createFcmSender, createNotifications } from '../src/notifications.mjs';
@@ -108,4 +108,63 @@ test('device refresh, FID replacement and ownership transfer keep fresh encrypte
     await pool.query('DELETE FROM sessions WHERE token_hash=$1', [users[1].session_hash]);
     assert.equal((await pool.query('SELECT count(*) FROM notification_devices')).rows[0].count, '0');
   } finally { await pool.end(); }
+});
+
+test('push delivery keeps event/device caps, expiry and no-device accounting in one query', {skip:!process.env.DATABASE_URL},async()=>{
+  const pool=new pg.Pool({connectionString:process.env.DATABASE_URL});
+  try{
+    await pool.query(await readFile(new URL('../schema.sql',import.meta.url),'utf8'));
+    await pool.query('TRUNCATE users,auth_rate_limits CASCADE');
+    const users=(await pool.query(`INSERT INTO users(username_display,username_key,password_salt,password_hash)
+      VALUES ('Gated','gated',$1,$2),('Empty','empty',$1,$2) RETURNING id`,[Buffer.alloc(16),Buffer.alloc(64)])).rows;
+    const digest=id=>createHash('sha256').update(String(id)).digest();
+    let queries=0;const sent=[];
+    const tracked={connect:pool.connect.bind(pool),query:(...args)=>{queries++;return pool.query(...args);}};
+    const service=createNotifications(tracked,{pepper:'gated-delivery-test-pepper',sender:async(token)=>{sent.push(token);return 'sent';},
+      deliveryLimit:id=>['push-delivery',digest(id),300000,3]});
+    const fids=[];
+    for(let i=0;i<8;i++){
+      const user={id:users[0].id,session_hash:randomBytes(32)},fid=randomBytes(16).toString('base64url');fids.push(fid);
+      await pool.query("INSERT INTO sessions(token_hash,user_id,expires_at) VALUES ($1,$2,CURRENT_TIMESTAMP+INTERVAL '1 day')",[user.session_hash,user.id]);
+      await service.register(user,{fid,binding:randomUUID()});
+      if(i===6)await pool.query("UPDATE sessions SET created_at=CURRENT_TIMESTAMP-INTERVAL '2 days',expires_at=CURRENT_TIMESTAMP-INTERVAL '1 day' WHERE token_hash=$1",[user.session_hash]);
+      if(i===7)await pool.query("UPDATE notification_devices SET updated_at=CURRENT_TIMESTAMP-INTERVAL '31 days' WHERE session_hash=$1",[user.session_hash]);
+    }
+    queries=0;
+    for(let i=0;i<5;i++)await service.friendRequest(users[0].id);
+    assert.equal(queries,5);assert.equal(sent.length,15); // Three events, at most five devices each.
+    assert.equal(sent.some(fid=>fids.slice(6).includes(fid)),false);
+    assert.equal((await pool.query("SELECT attempts FROM auth_rate_limits WHERE key_hash=$1",[digest(users[0].id)])).rows[0].attempts,4);
+    await service.friendRequest(users[1].id);
+    assert.equal((await pool.query("SELECT attempts FROM auth_rate_limits WHERE key_hash=$1",[digest(users[1].id)])).rows[0].attempts,1);
+    assert.equal(sent.length,15); // No-device events still consume their existing reservation.
+    await pool.query("UPDATE auth_rate_limits SET window_started_at=CURRENT_TIMESTAMP-INTERVAL '6 minutes'");
+    await service.friendRequest(users[0].id);assert.equal(sent.length,20);
+    // Removing consent or a session prevents that binding from being selected.
+    await pool.query('DELETE FROM notification_devices');
+    await service.friendRequest(users[0].id);assert.equal(sent.length,20);
+  }finally{await pool.end();}
+});
+
+test('an invalid-token reply cannot delete a registration refreshed while delivery was in flight',{skip:!process.env.DATABASE_URL},async()=>{
+  const pool=new pg.Pool({connectionString:process.env.DATABASE_URL});
+  try{
+    await pool.query(await readFile(new URL('../schema.sql',import.meta.url),'utf8'));
+    await pool.query('TRUNCATE users CASCADE');
+    const user=(await pool.query(`INSERT INTO users(username_display,username_key,password_salt,password_hash)
+      VALUES ('Racing','racing',$1,$2) RETURNING id`,[Buffer.alloc(16),Buffer.alloc(64)])).rows[0];
+    user.session_hash=randomBytes(32);
+    await pool.query("INSERT INTO sessions(token_hash,user_id,expires_at) VALUES ($1,$2,CURRENT_TIMESTAMP+INTERVAL '1 day')",[user.session_hash,user.id]);
+    const fid=randomBytes(16).toString('base64url'),binding=randomUUID();let refreshed=false;
+    const service=createNotifications(pool,{pepper:'race-only-pepper',sender:async(token)=>{
+      assert.equal(token,fid);
+      if(!refreshed){refreshed=true;await service.register(user,{fid,binding});}
+      return 'unregistered';
+    }});
+    await service.register(user,{fid,binding:randomUUID()});
+    await service.friendRequest(user.id);
+    assert.equal((await pool.query('SELECT binding FROM notification_devices')).rows[0].binding,binding);
+    await service.friendRequest(user.id);
+    assert.equal((await pool.query('SELECT COUNT(*) FROM notification_devices')).rows[0].count,'0');
+  }finally{await pool.end();}
 });

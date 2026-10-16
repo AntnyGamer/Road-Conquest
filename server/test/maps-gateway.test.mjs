@@ -52,6 +52,9 @@ test('malformed, oversized and untrusted-provenance requests never reach provide
   const worker = createMapsGateway(() => { throw new Error('must not call'); });
   assert.equal((await worker.fetch(request('/v1/mapmatching', {}, { ...body, waypoints: Array(201).fill(body.waypoints[0]) }), env())).status, 400);
   assert.equal((await worker.fetch(request('/v1/mapmatching', {}, { ...body, extra: 'x'.repeat(33000) }), env())).status, 413);
+  for(const point of [null,{},false]) {
+    assert.equal((await worker.fetch(request('/v1/mapmatching',{}, {mode:'drive',waypoints:[point,point]}),env())).status,400);
+  }
   assert.equal((await worker.fetch(request('/v1/mapmatching', { 'CF-Worker': 'untrusted.example' }), env())).status, 403);
   assert.equal((await worker.fetch(request('/v1/mapmatching', { 'CF-Connecting-IP': '2a06:98c0:3600::103' }), env())).status, 403);
   assert.equal((await worker.fetch(new Request('https://maps.example/anything'), env())).status, 404);

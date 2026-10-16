@@ -1,4 +1,5 @@
 import { serviceSwitches } from './config.mjs';
+import { createHmacSigner } from '../worker/hmac.mjs';
 const STYLES = new Set(['osm-liberty', 'positron', 'dark-matter']);
 const DAY = 86_400_000;
 const json = (body, status = 200, extra = {}) => Response.json(body, {
@@ -59,16 +60,22 @@ export class MapBudget {
   }
 }
 
-function validWaypoints(body) {
-  return body?.mode === 'drive' && Array.isArray(body.waypoints) && body.waypoints.length >= 2 &&
-    body.waypoints.length <= 200 && body.waypoints.every(p =>
-      Array.isArray(p.location) && p.location.length === 2 && p.location.every(Number.isFinite) &&
-      Math.abs(p.location[0]) <= 180 && Math.abs(p.location[1]) <= 90 &&
-      typeof p.timestamp === 'string' && Number.isFinite(Date.parse(p.timestamp)) &&
-      (p.bearing === undefined || Number.isFinite(p.bearing) && p.bearing >= 0 && p.bearing < 360));
+function waypointSeconds(body) {
+  if (body?.mode !== 'drive' || !Array.isArray(body.waypoints) || body.waypoints.length < 2 || body.waypoints.length > 200) return null;
+  const seconds = [];
+  for (const p of body.waypoints) {
+    if (!Array.isArray(p?.location) || p.location.length !== 2 || !p.location.every(Number.isFinite) ||
+        Math.abs(p.location[0]) > 180 || Math.abs(p.location[1]) > 90 || typeof p.timestamp !== 'string' ||
+        (p.bearing !== undefined && (!Number.isFinite(p.bearing) || p.bearing < 0 || p.bearing >= 360))) return null;
+    const time = Date.parse(p.timestamp);
+    if (!Number.isFinite(time)) return null;
+    seconds.push(Math.floor(time / 1000));
+  }
+  return seconds;
 }
 
 export function createMapsGateway(fetchUpstream = fetch) {
+  const sign = createHmacSigner(2); // Geoapify + LocationIQ; bounded across rotations.
   return { async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname === '/health' && ['GET', 'HEAD'].includes(request.method)) {
@@ -99,10 +106,11 @@ export function createMapsGateway(fetchUpstream = fetch) {
       }
       raw += decoder.decode();
       try { payload = JSON.parse(raw); } catch { return json({ error: 'Invalid JSON' }, 400); }
-      if (!validWaypoints(payload)) return json({ error: 'Invalid driving trace' }, 400);
+      const seconds = waypointSeconds(payload);
+      if (!seconds) return json({ error: 'Invalid driving trace' }, 400);
       if (locationiq && (payload.waypoints.length > 25 || payload.waypoints.some((p, index, all) =>
         !Number.isFinite(p.accuracyMeters) || p.accuracyMeters <= 0 || p.accuracyMeters > 1000 ||
-        (index > 0 && Math.floor(Date.parse(p.timestamp) / 1000) <= Math.floor(Date.parse(all[index - 1].timestamp) / 1000))))) {
+        (index > 0 && seconds[index] <= seconds[index - 1])))) {
         return json({ error: 'Invalid fallback driving trace' }, 400);
       }
       // Forward only the documented contract, never caller-selected URLs or options.
@@ -111,7 +119,7 @@ export function createMapsGateway(fetchUpstream = fetch) {
       if (locationiq) {
         target = new URL('https://us1.locationiq.com/v1/matching/driving/' + payload.waypoints.map(p => p.location.join(',')).join(';'));
         for (const [name, value] of Object.entries({ steps: 'true', geometries: 'geojson', overview: 'false',
-          timestamps: payload.waypoints.map(p => Math.floor(Date.parse(p.timestamp) / 1000)).join(';'),
+          timestamps: seconds.join(';'),
           radiuses: payload.waypoints.map(p => Math.max(3, Math.min(35, p.accuracyMeters))).join(';'),
           gaps: 'split', tidy: 'false', generate_hints: 'false' })) target.searchParams.set(name, value);
       } else target = new URL('https://api.geoapify.com/v1/mapmatching');
@@ -131,10 +139,8 @@ export function createMapsGateway(fetchUpstream = fetch) {
     const costUnits = locationiq ? 1 : payload ? 4 * Math.ceil(payload.waypoints.length / 100) : 1;
     const ip = request.headers.get('CF-Connecting-IP');
     if (!ip || request.headers.has('CF-Worker') || ip === '2a06:98c0:3600::103') return json({ error: 'Direct client required' }, 403);
-    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret),
-      { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-    const bytes = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(new Date().toISOString().slice(0, 10) + '\n' + ip));
-    const bucket = [...new Uint8Array(bytes)].map(x => x.toString(16).padStart(2, '0')).join('');
+    const bytes = await sign(secret, new Date().toISOString().slice(0, 10) + '\n' + ip);
+    const bucket = [...bytes].map(x => x.toString(16).padStart(2, '0')).join('');
     try {
       const budget = env.MAP_BUDGET.get(env.MAP_BUDGET.idFromName(locationiq ? 'locationiq-free-allowance' : 'geoapify-free-allowance'));
       const limit = locationiq

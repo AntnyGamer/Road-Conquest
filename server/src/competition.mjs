@@ -70,8 +70,7 @@ export async function createCompetition(pool, config, dependencies = {}) {
          SELECT u.id,$2,$3,$4 FROM users u
          WHERE u.id=$1 AND u.leaderboard_eligible = TRUE
          ON CONFLICT (user_id) DO UPDATE SET id = EXCLUDED.id, nonce = EXCLUDED.nonce, dataset = EXCLUDED.dataset,
-           sequence = 0, created_at = CURRENT_TIMESTAMP, expires_at = CURRENT_TIMESTAMP + INTERVAL '3 minutes'
-         RETURNING user_id`,
+           sequence = 0, created_at = CURRENT_TIMESTAMP, expires_at = CURRENT_TIMESTAMP + INTERVAL '3 minutes'`,
         [user.id, id, nonce, config.dataset]
       );
       if (!started.rowCount) throw new EvidenceError("Account is not eligible for verified competition.", 403);

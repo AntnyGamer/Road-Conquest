@@ -1,0 +1,25 @@
+// The single-budget reservation remains shared by ordinary routes and push
+// delivery. Only trusted, static SQL aliases/parameter offsets are used here.
+// Saturated windows stop at limit+1 without rewriting unchanged rows; expired
+// windows reset exactly as before. No quota, bucket or keyed identity changes.
+function reservation(offset = 0, previous = null) {
+  const [bucket, key, window, limit] = [1, 2, 3, 4].map(n => `$${n + offset}`);
+  return `INSERT INTO auth_rate_limits(bucket,key_hash,window_started_at,attempts)
+    ${previous ? `SELECT ${bucket},${key},CURRENT_TIMESTAMP,1 FROM ${previous} WHERE allowed`
+    : `VALUES (${bucket},${key},CURRENT_TIMESTAMP,1)`}
+    ON CONFLICT (bucket,key_hash) DO UPDATE SET
+      window_started_at=CASE WHEN auth_rate_limits.window_started_at<=CURRENT_TIMESTAMP-(${window}::bigint*INTERVAL '1 millisecond')
+        THEN CURRENT_TIMESTAMP ELSE auth_rate_limits.window_started_at END,
+      attempts=CASE WHEN auth_rate_limits.window_started_at<=CURRENT_TIMESTAMP-(${window}::bigint*INTERVAL '1 millisecond')
+        THEN 1 ELSE LEAST(auth_rate_limits.attempts+1,${limit}+1) END
+    WHERE auth_rate_limits.window_started_at<=CURRENT_TIMESTAMP-(${window}::bigint*INTERVAL '1 millisecond')
+      OR auth_rate_limits.attempts<=${limit}
+    RETURNING attempts<=${limit} AS allowed`;
+}
+
+export const RATE_LIMIT_SQL = reservation();
+// A denied/saturated IP produces no username reservation, preserving short
+// circuit accounting. The two distinct bucket rows retain the same lock order.
+export const LOGIN_LIMIT_SQL = `WITH ip_limit AS (${reservation()}),
+  user_limit AS (${reservation(4, 'ip_limit')})
+  SELECT COALESCE((SELECT allowed FROM user_limit),FALSE) AS allowed`;

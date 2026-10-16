@@ -26,3 +26,16 @@ test('disabled providers never reserve quota or fetch upstream, and health suppo
   assert.equal(config.headers.get('Cache-Control'), 'public, max-age=300');
   assert.equal((await config.json()).providers['geoapify-matching'], false);
 });
+
+test('synchronous KV failures preserve switches and recover after the existing cache timeout',async()=>{
+  let mode='disabled',reads=0;
+  const env={SERVICE_CONFIG:{get:()=>{reads++;if(mode==='fail')throw new Error('KV unavailable');
+    return Promise.resolve(JSON.stringify({version:1,providers:{'geoapify-matching':mode==='enabled'}}));}}};
+  assert.equal((await serviceSwitches(env,1000))['geoapify-matching'],false);
+  mode='fail';
+  assert.equal((await serviceSwitches(env,62000))['geoapify-matching'],false);
+  mode='enabled';
+  const values=await Promise.all(Array.from({length:100},()=>serviceSwitches(env,123000)));
+  assert.equal(reads,3);
+  assert.equal(values.every(v=>v['geoapify-matching']),true);
+});

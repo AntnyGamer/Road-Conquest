@@ -135,3 +135,75 @@ cache and coalescing mechanisms were retained.
 The combined writes use PostgreSQL's documented [data-modifying CTE semantics](https://www.postgresql.org/docs/current/queries-with.html#QUERIES-WITH-MODIFYING):
 `RETURNING` communicates inserted/updated results within the statement. Unrelated
 expiry-table cleanup remains separate to preserve its existing lock ordering.
+
+## Wider service review
+
+A third pass compares with `102650a` and adds seven related improvements:
+
+1. Login IP and username reservations use one SQL statement. The username
+   reservation depends on an allowed IP reservation; denied IPs do not spend the
+   username budget. Limits, independent resets and saturated-row write avoidance
+   remain unchanged. Password verification and session lookup are not cached.
+2. Push-event reservation and eligible-device selection share one statement.
+   Events still consume the same recipient budget even with no registered device;
+   at most three events/five minutes and five fresh session-bound devices/event
+   are selected. This remains best effort; on-device opt-out/account binding
+   checks stay authoritative for display.
+3. Remove unused result data from profile queries, session/challenge creation,
+   friend acceptance and registration validation. Command row counts still check
+   successful writes. Push selection returns no redundant token hash; invalid-
+   token deletion derives the same SHA-256 hash from the authenticated decrypted
+   FID and still compares the original ciphertext to protect a concurrent refresh.
+4. Maps/optional ingress reuse non-extractable HMAC CryptoKeys. Caches retain at
+   most two/one secret entries per handler, share concurrent imports, evict on
+   rotation and retry failed imports. Every request is freshly signed; no IP,
+   timestamp, GPS, signature or account response is cached. The original account
+   Worker is preserved.
+5. Validate/parse each map timestamp once and reuse the same epoch seconds for
+   fallback ordering and the LocationIQ URL. Accuracy, bounds, ordering, payload,
+   quota, pacing and NoMatch rules do not change.
+6. Clear provider-switch pending state in a Promise finalizer. A synchronous KV
+   failure can no longer pin a resolved old promise indefinitely; last-known
+   values, the existing timeout and concurrent-read coalescing are preserved.
+7. Null/malformed waypoint entries return HTTP 400 before any quota reservation
+   or upstream request, rather than escaping validation with an exception.
+
+| Third-pass local measurement | Before | After |
+|---|---:|---:|
+| 500 allowed paired login reservations, statements | 1,000 | 500 |
+| Same reservations, PostgreSQL response bytes | 77,000 | 37,500 |
+| 500 push events with one device each, statements | 1,000 | 500 |
+| Same events, PostgreSQL response bytes | 291,000 | 203,000 |
+| 500 registration refreshes, PostgreSQL response bytes | 107,500 | 74,000 |
+| 200 profile lookups, PostgreSQL response bytes | 33,000 | 27,200 |
+| 200 session inserts, PostgreSQL response bytes | 15,600 | 7,400 |
+| 200 drive starts, PostgreSQL response bytes | 16,000 | 7,400 |
+| 2,000 map requests, signing-key imports | 2,000 | 2 |
+| 1,000 optional ingress requests, signing-key imports | 1,000 | 1 |
+| Timestamp parses/25-point LocationIQ request | 98 | 25 |
+
+Login/push numbers refer to these database stages, not whole API traffic. An
+ordinary successful login goes from four SQL statements to three. Registration
+still uses four statements but returns about 31% fewer bytes. Profile responses
+save another 18% versus the preceding lean-query change. Session/drive-start
+results save about 53%/54% while preserving command counts. Friend acceptance is
+covered by functional tests but is not separately timed here.
+
+Database mutations were interleaved over three rounds on isolated synthetic
+PostgreSQL. Byte counts include the local server protocol, excluding TLS/HTTP and
+handshakes. Map/ingress requests used local budget/upstream stubs: the same 2,000
+budget reservations and 2,000 upstream calls occurred in each map variant. No
+provider credits, real pushes or production load test were used. Import counts
+assume one warm handler and stable secrets; cold isolates still import keys.
+Node desktop timing is not Cloudflare CPU or a production latency guarantee.
+
+All **71 server tests passed**, zero failures/skips. Added tests cover concurrent
+login caps/short-circuit/reset/saturated writes, push budgets and device expiry,
+invalid-token replies racing refreshed registrations, independent signatures
+across concurrent callers/rotation/import failure, null waypoints and recovery
+after a synchronous KV failure. Both Worker bundles passed Wrangler dry runs.
+
+App request scheduling, known-road reuse, provider cooldowns, boundary caches,
+ads, Firebase consent and weekly reminder scheduling were reviewed without
+changing their behavior. No Android source update, schema migration, paid plan,
+weaker hashing, cached authorization or increased provider allowance is added.

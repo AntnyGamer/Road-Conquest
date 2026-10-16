@@ -15,6 +15,7 @@ import { competitionConfig, createCompetition } from "./competition.mjs";
 import { createFriends } from "./friends.mjs";
 import { createNotifications, createFcmSender } from "./notifications.mjs";
 import { createRequestMaintenance } from "./maintenance.mjs";
+import { RATE_LIMIT_SQL, LOGIN_LIMIT_SQL } from "./rate-limits.mjs";
 
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -91,9 +92,13 @@ const prepareDatabase = createRequestMaintenance(pool, { initialize: async () =>
   }
 } });
 const competition = await createCompetition(pool, competitionConfig(process.env));
-const notifications = createNotifications(pool, { pepper: PEPPER, sender: createFcmSender(process.env.FCM_SERVICE_ACCOUNT_JSON) });
+const notifications = createNotifications(pool, { pepper: PEPPER, sender: createFcmSender(process.env.FCM_SERVICE_ACCOUNT_JSON),
+  deliveryLimit: target => ["push-delivery", opaqueRateKey("push-delivery", String(target)), 5 * 60 * 1000, 3] });
 const friends = createFriends(pool, async target => {
-  if (notifications.configured && await rateLimit("push-delivery", String(target), 3, 5 * 60 * 1000)) await notifications.friendRequest(target);
+  if (notifications.configured) {
+    await prepareDatabase();
+    await notifications.friendRequest(target);
+  }
 });
 
 // Invalid usernames still take one full scrypt verification, just like bad passwords
@@ -124,20 +129,7 @@ function opaqueRateKey(bucket, key) {
 async function rateLimit(bucket, key, limit, windowMs) {
   await prepareDatabase();
   const result = await pool.query(
-    `INSERT INTO auth_rate_limits(bucket, key_hash, window_started_at, attempts)
-     VALUES ($1, $2, CURRENT_TIMESTAMP, 1)
-     ON CONFLICT (bucket, key_hash) DO UPDATE SET
-       window_started_at = CASE
-         WHEN auth_rate_limits.window_started_at <= CURRENT_TIMESTAMP - ($3::bigint * INTERVAL '1 millisecond')
-         THEN CURRENT_TIMESTAMP ELSE auth_rate_limits.window_started_at END,
-       attempts = CASE
-         WHEN auth_rate_limits.window_started_at <= CURRENT_TIMESTAMP - ($3::bigint * INTERVAL '1 millisecond')
-         THEN 1 ELSE LEAST(auth_rate_limits.attempts + 1, $4 + 1) END
-     -- Once the count is already at limit+1, another blocked attempt should
-     -- not rewrite the identical row. Expired windows must still reset.
-     WHERE auth_rate_limits.window_started_at <= CURRENT_TIMESTAMP - ($3::bigint * INTERVAL '1 millisecond')
-        OR auth_rate_limits.attempts <= $4
-     RETURNING attempts <= $4 AS allowed`,
+    RATE_LIMIT_SQL,
     [bucket, opaqueRateKey(bucket, key), windowMs, limit]
   );
   // A missing RETURNING row means an already-saturated window: still denied.
@@ -215,7 +207,7 @@ async function authenticatedUser(req, profile = false) {
   // session immediately. Only /me needs a joined profile. The hash is already
   // known locally, so do not send the same 32 bytes back from PostgreSQL.
   const result = await pool.query(
-    profile ? `SELECT u.id, u.username_display, u.leaderboard_visible
+    profile ? `SELECT u.username_display, u.leaderboard_visible
        FROM sessions s
        JOIN users u ON u.id = s.user_id
       WHERE s.token_hash = $1 AND s.expires_at > CURRENT_TIMESTAMP`
@@ -232,8 +224,7 @@ async function createSession(userId, db = pool) {
     const result = await db.query(
       `INSERT INTO sessions(token_hash, user_id, expires_at)
        VALUES ($1, $2, CURRENT_TIMESTAMP + ($3 * INTERVAL '1 day'))
-       ON CONFLICT (token_hash) DO NOTHING
-       RETURNING 1`,
+       ON CONFLICT (token_hash) DO NOTHING`,
       [tokenHash, userId, SESSION_DAYS]
     );
     if (result.rowCount === 1) return token;
@@ -393,8 +384,12 @@ async function handle(req, res) {
     const password = typeof body.password === "string" && Array.from(body.password).length <= 128 ? body.password : "";
     const key = username?.key || "invalid";
 
-    if (!await rateLimit("login-ip", ip, 20, 15 * 60 * 1000) ||
-        !await rateLimit("login-user", key, 8, 15 * 60 * 1000)) {
+    await prepareDatabase();
+    const loginPermit = await pool.query(LOGIN_LIMIT_SQL, [
+      "login-ip", opaqueRateKey("login-ip", ip), 15 * 60 * 1000, 20,
+      "login-user", opaqueRateKey("login-user", key), 15 * 60 * 1000, 8
+    ]);
+    if (loginPermit.rows[0]?.allowed !== true) {
       return send(res, 429, { error: "Too many attempts. Try again later." });
     }
 

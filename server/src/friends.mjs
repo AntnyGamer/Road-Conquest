@@ -53,7 +53,7 @@ export function createFriends(pool, notifyRequest = async () => {}) {
           if (inserted) notificationTarget = target.id;
         } else if (action === "accept") {
           const updated = await db.query(
-            "UPDATE friendships SET accepted = TRUE WHERE user_low = $1 AND user_high = $2 AND requested_by <> $3 RETURNING user_low", [...pair, user.id]
+            "UPDATE friendships SET accepted = TRUE WHERE user_low = $1 AND user_high = $2 AND requested_by <> $3", [...pair, user.id]
           );
           if (!updated.rowCount) throw new EvidenceError("No incoming request to accept.", 409);
         } else {
