@@ -16,6 +16,8 @@ if (mode === "audit") {
     signupAllowancesIndependent: a.signupQuotaVerified && b.signupQuotaVerified,
     loginAllowancesIndependent: a.loginQuotaVerified && b.loginQuotaVerified,
     spoofedHeadersBlocked: a.spoofedHeadersBlocked && b.spoofedHeadersBlocked,
+    reservedEdgeHeaderRejected: a.reservedEdgeHeaderRejected && b.reservedEdgeHeaderRejected,
+    existingWorkerCompatible: a.existingWorkerLoginVerified && b.existingWorkerLoginVerified,
     temporaryAccountsDeleted: true, clients: [a, b] };
   await writeFile("live-ingress-results.json", JSON.stringify(evidence, null, 2));
   console.log(JSON.stringify(evidence));
@@ -39,7 +41,7 @@ function check(condition, label) {
 }
 function spoofedHeaders() {
   return { "X-Forwarded-For": "192.0.2.250", "X-Real-IP": "192.0.2.251",
-    "CF-Connecting-IP": "192.0.2.252", "X-RoadConquest-Client-IP": "192.0.2.253",
+    "X-RoadConquest-Client-IP": "192.0.2.253",
     "X-RoadConquest-Client-Timestamp": String(Date.now()), "X-RoadConquest-Client-Signature": "f".repeat(64) };
 }
 async function call(path, { method = "GET", body, auth = token, headers = {}, base = origin } = {}) {
@@ -50,7 +52,7 @@ async function call(path, { method = "GET", body, auth = token, headers = {}, ba
   const response = await fetch(base + path, { method, headers: requestHeaders,
     body: body === undefined ? undefined : JSON.stringify(body), redirect: "manual",
     signal: AbortSignal.timeout(30000) });
-  check(response.headers.get("Cache-Control") === "no-store", "API response must not be cached");
+  check(response.headers.get("Cache-Control") === "no-store", `API response must not be cached (${method} ${path}, status ${response.status})`);
   check(response.url.startsWith("https://") && !response.redirected, "HTTPS without followed redirects required");
   check(response.headers.get("Content-Type")?.includes("application/json"), "API response must be JSON");
   return { status: response.status, body: await response.json() };
@@ -62,6 +64,16 @@ try {
   const ip = (await trace.text()).match(/^ip=(.+)$/m)?.[1]?.trim();
   check(Boolean(ip), "External client address was unavailable");
   result.clientIpHash = createHash("sha256").update(ip).digest("hex");
+
+  // Cloudflare rejects forged reserved edge headers before the Worker runs.
+  // Keep that edge check separate from application-header sanitization below.
+  const reservedHeader = await fetch(origin + "/health", {
+    headers: { "CF-Connecting-IP": "192.0.2.252" }, redirect: "manual", signal: AbortSignal.timeout(30000)
+  });
+  await reservedHeader.body?.cancel();
+  check(reservedHeader.status === 403, "Cloudflare did not reject the forged reserved edge header");
+  check(reservedHeader.headers.get("Cache-Control")?.includes("no-store"), "Reserved-header rejection was cacheable");
+  result.reservedEdgeHeaderRejected = true;
 
   const signup = await call("/v1/signup", { method: "POST", body: { username, password }, auth: null });
   check(signup.status === 201 && typeof signup.body.token === "string", "Temporary signup failed");
@@ -94,6 +106,7 @@ try {
   // must agree with the new ingress after the approved coordinated key rotation.
   const login = await call("/v1/login", { method: "POST", body: { username, password }, base: existing, auth: null });
   check(login.status === 200 && typeof login.body.token === "string", "Existing Worker login failed after key rotation");
+  result.existingWorkerLoginVerified = true;
   token = login.body.token;
   check((await call("/v1/me")).status === 200, "Cross-ingress session failed");
   check((await call("/v1/account", { method: "DELETE", body: { password } })).status === 200,
