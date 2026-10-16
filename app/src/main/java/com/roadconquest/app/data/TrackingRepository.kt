@@ -1539,10 +1539,13 @@ class TrackingRepository(context: Context) {
             Int.MAX_VALUE
         )
         var single: RoadRecord? = null
+        var nearbyCount = 0
         for (road in roads) {
             val distance = distanceToRoadMeters(latitude, longitude, road.geometryJson)
             if (distance > exclusionRadiusMeters) continue
-            if (single != null) return null
+            // Count even candidates outside the tight snap radius. They still make
+            // the claimed road identity ambiguous at a junction/parallel street.
+            if (++nearbyCount > 1) return null
             single = road.takeIf { distance <= snapRadiusMeters }
         }
         return single
