@@ -759,6 +759,18 @@ class TrackingRepositoryTest {
         assertNull(repository.findRoadNear(40.01, -74.0005, 30.0))
     }
 
+    @Test fun localRoadDistanceHandlesValidAndInvalidIntermediateVertices() {
+        repository.upsertRoads(listOf(
+            MatchedRoad("Sparse", "[[-74,40],[-73.9999,40],null,[-73.9998,40],[-73.9997,40]]",
+                1_000_000L, 1_010_000L, 0.99)
+        ))
+        // Invalid vertices must not bridge disconnected segments or produce
+        // a false near-road match.
+        assertNull(repository.findUnambiguousPreviouslyDrivenRoadNear(40.0, -73.99985))
+        assertNotNull(repository.findUnambiguousPreviouslyDrivenRoadNear(40.0, -73.99995))
+        assertNotNull(repository.findUnambiguousPreviouslyDrivenRoadNear(40.0, -73.99975))
+    }
+
     @Test fun ambiguousParallelSavedRoadsCannotResolveGpsLocally() {
         repository.upsertRoads(listOf(
             MatchedRoad("Original", "[[-74,40],[-73.999,40]]", 1_000_000L, 1_010_000L, 0.99),

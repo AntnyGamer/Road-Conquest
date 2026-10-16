@@ -1632,20 +1632,24 @@ class TrackingRepository(context: Context) {
         fun y(lat: Double) = EARTH_RADIUS_M * Math.toRadians(lat - latitude)
 
         var best = Double.POSITIVE_INFINITY
-        for (i in 1 until coordinates.length()) {
-            val a = coordinates.optJSONArray(i - 1) ?: continue
-            val b = coordinates.optJSONArray(i) ?: continue
-            val ax = x(a.optDouble(0, Double.NaN))
-            val ay = y(a.optDouble(1, Double.NaN))
-            val bx = x(b.optDouble(0, Double.NaN))
-            val by = y(b.optDouble(1, Double.NaN))
-            if (!ax.isFinite() || !ay.isFinite() || !bx.isFinite() || !by.isFinite()) continue
-            val dx = bx - ax
-            val dy = by - ay
-            val lengthSquared = dx * dx + dy * dy
-            val t = if (lengthSquared == 0.0) 0.0
-                else (-(ax * dx + ay * dy) / lengthSquared).coerceIn(0.0, 1.0)
-            best = min(best, hypot(ax + t * dx, ay + t * dy))
+        // Adjacent segments share a vertex. Project each one once rather than
+        // repeating trigonometry for both ends of every segment on each GPS fix.
+        var ax = Double.NaN
+        var ay = Double.NaN
+        for (i in 0 until coordinates.length()) {
+            val point = coordinates.optJSONArray(i)
+            val bx = if (point != null) x(point.optDouble(0, Double.NaN)) else Double.NaN
+            val by = if (point != null) y(point.optDouble(1, Double.NaN)) else Double.NaN
+            if (i > 0 && ax.isFinite() && ay.isFinite() && bx.isFinite() && by.isFinite()) {
+                val dx = bx - ax
+                val dy = by - ay
+                val lengthSquared = dx * dx + dy * dy
+                val t = if (lengthSquared == 0.0) 0.0
+                    else (-(ax * dx + ay * dy) / lengthSquared).coerceIn(0.0, 1.0)
+                best = min(best, hypot(ax + t * dx, ay + t * dy))
+            }
+            ax = bx
+            ay = by
         }
         return best
     }

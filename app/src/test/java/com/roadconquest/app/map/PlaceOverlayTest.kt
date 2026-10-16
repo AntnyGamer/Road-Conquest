@@ -199,6 +199,26 @@ class PlaceOverlayTest {
         }
     }
 
+    @Test fun geoBoundariesParserRequiresExactlyOneGeometricallyValidMatch() {
+        val place = PlaceDiscovery(PlaceKind.STATE, "gb|abc|test", "Example Region",
+            visitedAt = 1L, latitude = 40.0, longitude = -74.0)
+        val polygon = JSONObject().put("type", "Polygon").put("coordinates",
+            org.json.JSONArray().put(org.json.JSONArray()
+                .put(org.json.JSONArray().put(-75.0).put(39.0))
+                .put(org.json.JSONArray().put(-73.0).put(39.0))
+                .put(org.json.JSONArray().put(-73.0).put(41.0))
+                .put(org.json.JSONArray().put(-75.0).put(41.0))
+                .put(org.json.JSONArray().put(-75.0).put(39.0))))
+        fun feature(name: String) = JSONObject().put("properties",
+            JSONObject().put("shapeName", name)).put("geometry", polygon)
+        val features = org.json.JSONArray().put(feature("Not This Region"))
+            .put(feature("Example Region"))
+        val body = JSONObject().put("type", "FeatureCollection").put("features", features)
+        assertNotNull(GeoBoundariesClient.parse(place, body, true))
+        features.put(feature("Example Region"))
+        assertNull(GeoBoundariesClient.parse(place, body, true))
+    }
+
     @Test fun largeBoundaryCacheStreamsGzipAndRoundTripsAllCoordinates() {
         val context = org.robolectric.RuntimeEnvironment.getApplication()
         val place = PlaceDiscovery(

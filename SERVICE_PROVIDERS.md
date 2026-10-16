@@ -31,6 +31,7 @@ HTTP 429, 401/403, 5xx, timeouts and connection failures move to an eligible bac
 
 - Cached administrative boundary polygons now stream gzip bytes straight into the existing atomic on-disk cache file, instead of keeping multiple copies of the full JSON and compressed data in heap memory. The gzip format, atomic rollback, decoded-size limit, historical plain-JSON compatibility and cache eviction semantics are unchanged. A large-polygon cache round-trip test was added.
 - geoBoundaries backup parsing scans candidate polygons once and keeps at most one match, instead of constructing an intermediate list of all features and matches. A second valid match is still treated as ambiguous and rejected. This only affects local parsing; request frequency and matching criteria are unchanged.
+- Nearby saved-road distance calculations now project shared polyline vertices only once per vertex, instead of once per adjacent segment. Degenerate/malformed vertices still break segment continuity; no proximity or ambiguity threshold changes.
 
 ## Further no-regression optimizations
 
