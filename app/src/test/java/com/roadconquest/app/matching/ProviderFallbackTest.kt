@@ -67,15 +67,15 @@ class ProviderFallbackTest {
             }
         }
         val matcher = FallbackRoadMatcher(listOf(primary, fallback))
-        val input = List(100) { points.first().copy(id = it + 1L) }
-        assertEquals(100, matcher.maxPoints)
+        val input = List(200) { points.first().copy(id = it + 1L) }
+        assertEquals(200, matcher.maxPoints)
         val result = requireNotNull(matcher.match(input))
         assertEquals(input.take(25), submitted)
         assertEquals((1L..25L).toSet(), result.matchedPointConfidences.keys)
         primary.cooldown = 1000L
         assertEquals(25, matcher.maxPoints)
         primary.cooldown = 0L
-        assertEquals(100, matcher.maxPoints)
+        assertEquals(200, matcher.maxPoints)
     }
     @Test fun realGeoapifyPublicExamplePassesExistingGeometryAndSnapValidation() {
         val result = requireNotNull(GeoapifyMatcher("https://maps.example").parse(example, points))
