@@ -40,7 +40,16 @@ class RoadGeometryValidator {
         val invalidPointIds = HashSet<Long>()
         val unknownGroupInputs = HashSet<Int>()
         for (i in points.indices) {
-            val tracepoint = tracepoints.optJSONObject(i) ?: continue
+            val tracepoint = tracepoints.optJSONObject(i)
+            if (tracepoint == null) {
+                // JSON null means genuinely unmatched. Any other malformed value
+                // is unknown evidence and must not be bridged by a sibling group.
+                if (!tracepoints.isNull(i)) {
+                    unknownGroupInputs += i
+                    invalidPointIds += points[i].id
+                }
+                continue
+            }
             val matchingIndex = tracepoint.optInt("matchings_index", -1)
             // An unknown group is untrusted, but cannot erase unrelated valid groups.
             // Invalidate every matching that spans its original input position below.
