@@ -129,7 +129,37 @@ class GeoapifyMatcher(
         if (props.optString("mode") != "drive" || geometry.optString("type") != "MultiLineString") return null
         val lines = geometry.getJSONArray("coordinates")
         val legs = props.getJSONArray("legs")
-        if (lines.length() != 1 || legs.length() != 1) return null
+        if (lines.length() == 0 || lines.length() != legs.length()) return null
+        if (lines.length() > 1) {
+            // Geoapify indexes step geometry per leg, not across the entire route.
+            // Validate each leg separately. Never infer connections between them.
+            val source = suppliedWaypoints ?: props.getJSONArray("waypoints")
+            if (source.length() != points.size) return null
+            val roads = ArrayList<com.roadconquest.app.data.MatchedRoad>()
+            val resolved = HashMap<Long, Double>()
+            var validLeg = false
+            for (legIndex in 0 until legs.length()) {
+                val leg = legs.optJSONObject(legIndex) ?: continue
+                val coordinates = lines.optJSONArray(legIndex) ?: continue
+                val subset = JSONArray().apply { repeat(points.size) { put(JSONObject.NULL) } }
+                for (pointIndex in points.indices) {
+                    val waypoint = source.optJSONObject(pointIndex) ?: continue
+                    if (waypoint.optString("match_type") != "matched" ||
+                        waypoint.optInt("leg_index", -1) != legIndex) continue
+                    // Keep the original input index and all other provider evidence.
+                    subset.put(pointIndex, JSONObject(waypoint.toString()).put("leg_index", 0))
+                }
+                val part = JSONObject().put("geometry", JSONObject().put("type", "MultiLineString")
+                    .put("coordinates", JSONArray().put(coordinates)))
+                    .put("properties", JSONObject().put("mode", "drive")
+                        .put("legs", JSONArray().put(leg)).put("waypoints", subset))
+                val matched = runCatching { parseFeature(part, points) }.getOrNull() ?: continue
+                validLeg = true
+                roads.addAll(matched.roads)
+                resolved.putAll(matched.matchedPointConfidences)
+            }
+            return if (validLeg) MatchResult(roads, resolved) else null
+        }
         val line = lines.getJSONArray(0)
         if (line.length() !in 2..20_000) return null
         for (i in 0 until line.length()) if (!valid(line.getJSONArray(i))) return null
