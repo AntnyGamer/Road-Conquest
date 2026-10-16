@@ -62,6 +62,8 @@ test("serverless accounts enforce authentication, privacy, limits and TLS with r
     assert.equal((await call("/v1/verified/batch", "POST", { miles: 999999 }, login.body.token)).status, 404);
     assert.equal((await call("/v1/friends")).status, 401);
     assert.deepEqual((await call("/v1/friends", "GET", undefined, login.body.token)).body, { friends: [] });
+    assert.deepEqual((await call("/v1/friends?include=weekly", "GET", undefined, login.body.token)).body,
+      { friends: [], weekly: { available: false, entries: [] } });
     const friend = await call("/v1/signup", "POST", { username: "FriendDriver", password: credentials.password });
     assert.equal(friend.status, 201);
     assert.equal((await call("/v1/friends", "POST", { username: "FriendDriver", action: "request" }, login.body.token)).status, 200);

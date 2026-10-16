@@ -41,6 +41,12 @@ HTTP 429, 401/403, 5xx, timeouts and connection failures move to an eligible bac
 - The same week-scoped road and town counts now run as two independently optimized SQL scalar subqueries within one SQLite statement per week instead of opening two cursors. Both original filters are unchanged.
 - Up to four earned challenge rewards are inserted with one atomic `INSERT OR IGNORE` statement rather than four individual writes. Existing reward keys, payout amounts, timestamp, idempotence and previous-week grace are preserved. The challenge tests now verify that repeated refreshes do not create extra weekly reward rows.
 
+## Reducing authenticated account-server round trips
+
+- When the Challenges screen displays both the friend list and verified weekly standings, it requests `GET /v1/friends?include=weekly`. An updated server returns the same friend data and the existing verified-only weekly response together, eliminating one separate authenticated HTTP request, session lookup and rate-limit reservation per refresh.
+- Legacy `GET /v1/friends` clients and `GET /v1/friends/weekly` remain unchanged. A server that doesn't support bundling omits `weekly` and Android falls back to the original endpoint. A failed weekly query cannot hide friend management, and bundled standings still pass the same scoring-policy verification.
+- Server endpoint tests cover opt-in bundled responses and unchanged ordinary friend responses. This does not alter GPS upload cadence, matching accuracy, scoring or database schema.
+
 ## Combined local GPS continuity and heading check
 
 - Previously verified road revisits now compute east/north displacement once per GPS edge, using it for both distance/speed continuity and heading agreement. The precise five-point eligibility, distance, time-gap, speed and 25° direction limits remain unchanged, and saved-road SQLite lookups still happen only after prequalification. Adds a regression test for speed, heading, time gaps and jumps.

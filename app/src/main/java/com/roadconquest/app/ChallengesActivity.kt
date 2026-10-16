@@ -181,9 +181,18 @@ class ChallengesActivity : Activity() {
                 }
                 return@execute
             }
-            val friendList = runCatching { AccountClient.friends(session.token).getJSONArray("friends") }
+            val listing = runCatching {
+                AccountClient.friends(session.token, includeWeekly = FeatureFlags.LEADERBOARDS_VISIBLE)
+            }
+            val friendList = listing.mapCatching { it.getJSONArray("friends") }
             if (expected != generation) return@execute
-            val standings = if (FeatureFlags.LEADERBOARDS_VISIBLE) runCatching { AccountClient.friendWeek(session.token) } else null
+            val standings = if (FeatureFlags.LEADERBOARDS_VISIBLE) runCatching {
+                // Older account servers omit "weekly"; fall back without hiding
+                // friend management or changing verification policy checks.
+                val bundled = listing.getOrNull()?.optJSONObject("weekly")
+                if (bundled != null) AccountClient.validatedFriendWeek(bundled)
+                else AccountClient.friendWeek(session.token)
+            } else null
             runOnUiThread {
                 if (isDestroyed || expected != generation || AccountStore.load(this)?.token != session.token) return@runOnUiThread
                 invite.text = "Add friend by username"

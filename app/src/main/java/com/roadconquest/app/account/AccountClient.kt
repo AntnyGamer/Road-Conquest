@@ -95,15 +95,18 @@ object AccountClient {
         JSONObject().put("evidence", evidence).put("integrity_token", integrityToken), token
     ).also(::requireVerifiedPolicy)
 
-    fun friends(token: String): JSONObject = request("/v1/friends", "GET", null, token)
+    fun friends(token: String, includeWeekly: Boolean = false): JSONObject = request(
+        if (includeWeekly) "/v1/friends?include=weekly" else "/v1/friends", "GET", null, token
+    )
 
     fun changeFriend(token: String, username: String, action: String): JSONObject = request("/v1/friends", "POST",
         JSONObject().put("username", username).put("action", action), token)
 
-    fun friendWeek(token: String): JSONObject {
-        return request("/v1/friends/weekly?metric=cells", "GET", null, token).also {
-            if (it.optBoolean("available")) requireVerifiedPolicy(it)
-        }
+    fun friendWeek(token: String): JSONObject =
+        validatedFriendWeek(request("/v1/friends/weekly?metric=cells", "GET", null, token))
+
+    internal fun validatedFriendWeek(body: JSONObject): JSONObject = body.also {
+        if (it.optBoolean("available")) requireVerifiedPolicy(it)
     }
 
     internal fun requireVerifiedPolicy(body: JSONObject) {

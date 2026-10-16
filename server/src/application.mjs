@@ -257,7 +257,21 @@ async function handle(req, res) {
       if (metric !== "cells") return send(res, 400, { error: "Choose cells." });
       return send(res, 200, competition ? await competition.friendWeek(user, metric) : { available: false, entries: [] });
     }
-    if (req.method === "GET" && url.pathname === "/v1/friends") return send(res, 200, await friends.list(user));
+    if (req.method === "GET" && url.pathname === "/v1/friends") {
+      const listing = await friends.list(user);
+      // One authenticated HTTP request, rate-limit reservation and session
+      // lookup instead of two when the Challenges screen displays rankings.
+      // Older clients still get the unchanged {friends} response.
+      if (url.searchParams.get("include") === "weekly") {
+        try {
+          listing.weekly = competition ? await competition.friendWeek(user) : { available: false, entries: [] };
+        } catch {
+          // Do not hide friend management if the independent weekly query fails.
+          // Omission allows the client to use its existing weekly-only fallback.
+        }
+      }
+      return send(res, 200, listing);
+    }
     if (req.method === "POST" && url.pathname === "/v1/friends") {
       if (!await rateLimit("friends-write", String(user.id), 30, 60 * 1000)) return send(res, 429, { error: "Try again later." });
       const body = await readJson(req);
