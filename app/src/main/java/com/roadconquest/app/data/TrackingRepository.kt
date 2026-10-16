@@ -714,15 +714,7 @@ class TrackingRepository(context: Context) {
                     put("matched", 1)
                     put("next_match_attempt_ms", 0)
                 }
-                ids.chunked(400).forEach { chunk ->
-                    val placeholders = chunk.joinToString(",") { "?" }
-                    db.update(
-                        "track_points",
-                        values,
-                        "id IN ($placeholders)",
-                        chunk.map(Long::toString).toTypedArray()
-                    )
-                }
+                updateTrackPoints(db, ids, values, unmatchedOnly = false)
                 db.setTransactionSuccessful()
             } finally {
                 db.endTransaction()
@@ -739,19 +731,21 @@ class TrackingRepository(context: Context) {
             db.beginTransaction()
             try {
                 val values = ContentValues().apply { put("next_match_attempt_ms", untilMillis) }
-                ids.chunked(400).forEach { chunk ->
-                    val placeholders = chunk.joinToString(",") { "?" }
-                    db.update(
-                        "track_points",
-                        values,
-                        "matched = 0 AND id IN ($placeholders)",
-                        chunk.map(Long::toString).toTypedArray()
-                    )
-                }
+                updateTrackPoints(db, ids, values, unmatchedOnly = true)
                 db.setTransactionSuccessful()
             } finally {
                 db.endTransaction()
             }
+        }
+    }
+
+    private fun updateTrackPoints(
+        db: SQLiteDatabase, ids: Collection<Long>, values: ContentValues, unmatchedOnly: Boolean
+    ) {
+        ids.chunked(400).forEach { chunk ->
+            val placeholders = chunk.joinToString(",") { "?" }
+            val selection = if (unmatchedOnly) "matched = 0 AND id IN ($placeholders)" else "id IN ($placeholders)"
+            db.update("track_points", values, selection, chunk.map(Long::toString).toTypedArray())
         }
     }
 
