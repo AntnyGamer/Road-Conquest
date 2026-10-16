@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomBytes } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
@@ -115,15 +115,13 @@ function clientIp(req) {
 }
 
 function opaqueRateKey(bucket, key) {
-  if (PEPPER) {
-    return createHmac("sha256", PEPPER)
-      .update("rate-limit\0", "utf8")
-      .update(bucket, "utf8")
-      .update("\0", "utf8")
-      .update(key, "utf8")
-      .digest();
-  }
-  return createHash("sha256").update(bucket, "utf8").update("\0").update(key, "utf8").digest();
+  // Startup requires a strong pepper, so the unkeyed fallback is unreachable.
+  return createHmac("sha256", PEPPER)
+    .update("rate-limit\0", "utf8")
+    .update(bucket, "utf8")
+    .update("\0", "utf8")
+    .update(key, "utf8")
+    .digest();
 }
 
 async function rateLimit(bucket, key, limit, windowMs) {
