@@ -571,6 +571,45 @@ class TrackingRepository(context: Context) {
             arrayOf(nowMillis.toString())
         ).use { if (it.moveToFirst() && !it.isNull(0)) it.getLong(0) else null }
 
+    /**
+     * Atomically record a repeated visit to a saved road and resolve its precise GPS
+     * fixes locally. No road geometries or new unlocked segments are ever created.
+     */
+    @Synchronized
+    fun completeKnownRoadVisits(visits: List<com.roadconquest.app.matching.KnownRoadVisit>): Int =
+        synchronized(dbHelper.historyLock) {
+            if (historyGeneration != dbHelper.historyGeneration || visits.isEmpty()) return@synchronized 0
+            val db = dbHelper.writableDatabase
+            var resolved = 0
+            db.beginTransaction()
+            try {
+                for (visit in visits) {
+                    if (visit.pointIds.isEmpty() || visit.pointIds.size > 100) continue
+                    val exists = db.rawQuery("SELECT 1 FROM roads WHERE segment_id = ? LIMIT 1",
+                        arrayOf(visit.segmentId)).use { it.moveToFirst() }
+                    if (!exists) continue
+                    val ids = visit.pointIds.distinct()
+                    val placeholders = ids.joinToString(",") { "?" }
+                    val count = db.update(
+                        "track_points",
+                        ContentValues().apply { put("matched", 1); put("next_match_attempt_ms", 0) },
+                        "matched = 0 AND id IN ($placeholders)",
+                        ids.map(Long::toString).toTypedArray()
+                    )
+                    check(count == ids.size) { "Local match changed during validation" }
+                    recordRoadVisit(db, visit.segmentId, visit.firstTimestamp, visit.lastTimestamp)
+                    db.execSQL("UPDATE roads SET last_driven_at = MAX(last_driven_at, ?) WHERE segment_id = ?",
+                        arrayOf(visit.lastTimestamp, visit.segmentId))
+                    resolved += count
+                }
+                db.setTransactionSuccessful()
+            } finally {
+                db.endTransaction()
+            }
+            if (resolved > 0) dbHelper.invalidateRoadSummary()
+            resolved
+        }
+
     /** Geometry and point resolution must either both commit or both roll back. */
     @Synchronized
     fun completeMatch(roads: List<MatchedRoad>, ids: List<Long>) {
