@@ -91,7 +91,7 @@ test('single-query session and IP budget preserve expiry, denial and window acco
     assert.equal(queries,3);
     assert.equal((await pool.query("SELECT attempts FROM auth_rate_limits WHERE bucket='friends-ip'")).rows[0].attempts,3);
     await pool.query("UPDATE auth_rate_limits SET window_started_at=CURRENT_TIMESTAMP-INTERVAL '2 minutes'");
-    await pool.query("UPDATE sessions SET expires_at=CURRENT_TIMESTAMP-INTERVAL '1 second' WHERE token_hash=$1",[valid]);
+    await pool.query("UPDATE sessions SET created_at=CURRENT_TIMESTAMP-INTERVAL '2 days', expires_at=CURRENT_TIMESTAMP-INTERVAL '1 day' WHERE token_hash=$1",[valid]);
     const expired=await check(valid);
     assert.equal(expired.allowed,true);assert.equal(expired.id,null);
   } finally { await pool.end(); }
