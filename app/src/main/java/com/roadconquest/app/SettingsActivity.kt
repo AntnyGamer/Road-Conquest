@@ -42,6 +42,33 @@ import java.util.concurrent.Executors
 import android.util.Log
 
 class SettingsActivity : Activity() {
+    private fun setupOptionalNotifications() {
+        val options = com.roadconquest.app.notifications.OptionalNotifications
+        fun bind(id: Int, friends: Boolean) {
+            findViewById<Switch>(id).apply {
+                setOnCheckedChangeListener(null)
+                isChecked = if (friends) options.friendsEnabled(this@SettingsActivity) else options.weeklyEnabled(this@SettingsActivity)
+                setOnCheckedChangeListener { _, checked ->
+                    if (friends) options.setFriendsEnabled(this@SettingsActivity, checked) else options.setWeeklyEnabled(this@SettingsActivity, checked)
+                    if (checked && friends && AccountStore.load(this@SettingsActivity) == null) {
+                        Toast.makeText(this@SettingsActivity, "Friend notifications will start after you sign in and allow notifications.", Toast.LENGTH_LONG).show()
+                    }
+                    if (checked && !options.permission(this@SettingsActivity) && Build.VERSION.SDK_INT >= 33) {
+                        requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 9103)
+                    }
+                    setupOptionalNotifications()
+                }
+            }
+        }
+        bind(R.id.friendNotificationsSwitch, true)
+        bind(R.id.weeklyRemindersSwitch, false)
+    }
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != 9103) return
+        com.roadconquest.app.notifications.OptionalNotifications.initialize(this)
+        setupOptionalNotifications()
+    }
     private lateinit var ads: ScreenAds
     private var enteredForeground = false
     private var recreatingForAppearance = false
@@ -148,6 +175,16 @@ class SettingsActivity : Activity() {
         }
 
         findViewById<Button>(R.id.privacyPolicyButton).setOnClickListener { openAccountPage("/privacy") }
+        findViewById<TextView>(R.id.settingsLocationIqCredit).apply {
+            movementMethod = android.text.method.LinkMovementMethod.getInstance()
+            visibility = if (BuildConfig.MAP_GATEWAY_URL.isBlank()) View.GONE else View.VISIBLE
+        }
+        findViewById<Switch>(R.id.crashReportingSwitch).apply {
+            isChecked = com.roadconquest.app.diagnostics.CrashReporting.enabled(this@SettingsActivity)
+            setOnCheckedChangeListener { _, checked ->
+                com.roadconquest.app.diagnostics.CrashReporting.setEnabled(this@SettingsActivity, checked)
+            }
+        }
 
         findViewById<Button>(R.id.githubButton).setOnClickListener {
             val url = getString(R.string.github_repository_url)
@@ -158,7 +195,7 @@ class SettingsActivity : Activity() {
         }
 
         findViewById<Button>(R.id.terrainCreditsButton).setOnClickListener {
-            val credits = listOf("licenses/RoadConquest-AGPL-3.0.txt", "map-credits.txt", "satellite-credits.txt").joinToString("\n\n") { asset ->
+            val credits = listOf("licenses/RoadConquest-AGPL-3.0.txt", "map-credits.txt", "satellite-credits.txt", "service-credits.txt").joinToString("\n\n") { asset ->
                 assets.open(asset).bufferedReader().use { it.readText() }
             }
             AlertDialog.Builder(this).setTitle("Licenses and map credits").setMessage(credits)
@@ -185,6 +222,8 @@ class SettingsActivity : Activity() {
     override fun onResume() {
         super.onResume()
         ads.onResume()
+        com.roadconquest.app.notifications.OptionalNotifications.initialize(this)
+        setupOptionalNotifications()
         if (appliedGoldUi != Prefs.isGoldUiEnabled(this)) {
             recreate()
             return

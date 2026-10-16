@@ -173,7 +173,8 @@ internal object UnitedStatesMunicipalityAtPoint {
             // County-subdivision statistics do not constitute towns.
             if (layer == 1 && properties.optString("FUNCSTAT") != "A") continue
             val geometry = feature.optJSONObject("geometry") ?: continue
-            if (geometry.optString("type") !in setOf("Polygon", "MultiPolygon") ||
+            val type = geometry.optString("type")
+            if ((type != "Polygon" && type != "MultiPolygon") ||
                 !PlaceGeometry.contains(geometry, seed.latitude, seed.longitude)
             ) continue
             val name = properties.optString("NAME").trim()

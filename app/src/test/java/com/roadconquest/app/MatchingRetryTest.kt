@@ -20,6 +20,19 @@ import java.util.concurrent.TimeUnit
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31, 37], manifest = Config.NONE)
 class MatchingRetryTest {
+    /** Local network fixture isolates retry scheduling from removed provider transport. */
+    private fun fixtureMatcher(server: MockWebServer): com.roadconquest.app.matching.RoadMatcher =
+        object : com.roadconquest.app.matching.RoadMatcher {
+            override val unavailable: Boolean = false
+            override fun rateLimitRemainingMs() = 0L
+            override fun match(points: List<com.roadconquest.app.data.TrackPoint>): com.roadconquest.app.matching.MatchResult? {
+                val connection = server.url("/").toUrl().openConnection() as java.net.HttpURLConnection
+                return try {
+                    com.roadconquest.app.matching.RoadGeometryValidator().parse(
+                        connection.inputStream.bufferedReader().use { it.readText() }, points)
+                } finally { connection.disconnect() }
+            }
+        }
     private fun field(service: TrackingService, name: String) = TrackingService::class.java.getDeclaredField(name).apply { isAccessible = true }
     private fun repository(): TrackingRepository = TrackingRepository(RuntimeEnvironment.getApplication()).apply {
         readableDatabase().execSQL("DELETE FROM track_points")
@@ -64,7 +77,7 @@ class MatchingRetryTest {
                 accuracy = 5f; time = 1_000_000L + index * 3_000L
             }) }
             field(service, "repository").set(service, repo)
-            field(service, "matcher").set(service, com.roadconquest.app.matching.OsrmMatcher(server.url("/").toString().trimEnd('/')))
+            field(service, "matcher").set(service, fixtureMatcher(server))
             field(service, "ready").setBoolean(service, true)
             val executor = field(service, "matchingExecutor").get(service) as ScheduledExecutorService
             val run = TrackingService::class.java.getDeclaredMethod("maybeRunMatching", Boolean::class.javaPrimitiveType)
@@ -113,7 +126,7 @@ class MatchingRetryTest {
             field(service, "repository").set(service, repo)
             field(service, "matcher").set(
                 service,
-                com.roadconquest.app.matching.OsrmMatcher(server.url("/").toString().trimEnd('/'))
+                fixtureMatcher(server)
             )
             org.robolectric.Shadows.shadowOf(manager).setLocationEnabled(false)
             field(service, "locationManager").set(service, manager)
@@ -152,7 +165,7 @@ class MatchingRetryTest {
             field(service, "repository").set(service, repo)
             field(service, "matcher").set(
                 service,
-                com.roadconquest.app.matching.OsrmMatcher(server.url("/").toString().trimEnd('/'))
+                fixtureMatcher(server)
             )
             org.robolectric.Shadows.shadowOf(manager).setLocationEnabled(false)
             field(service, "locationManager").set(service, manager)

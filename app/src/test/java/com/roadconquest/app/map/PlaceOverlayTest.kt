@@ -199,6 +199,51 @@ class PlaceOverlayTest {
         }
     }
 
+    @Test fun geoBoundariesParserRequiresExactlyOneGeometricallyValidMatch() {
+        val place = PlaceDiscovery(PlaceKind.STATE, "gb|abc|test", "Example Region",
+            visitedAt = 1L, latitude = 40.0, longitude = -74.0)
+        val polygon = JSONObject().put("type", "Polygon").put("coordinates",
+            org.json.JSONArray().put(org.json.JSONArray()
+                .put(org.json.JSONArray().put(-75.0).put(39.0))
+                .put(org.json.JSONArray().put(-73.0).put(39.0))
+                .put(org.json.JSONArray().put(-73.0).put(41.0))
+                .put(org.json.JSONArray().put(-75.0).put(41.0))
+                .put(org.json.JSONArray().put(-75.0).put(39.0))))
+        fun feature(name: String) = JSONObject().put("properties",
+            JSONObject().put("shapeName", name)).put("geometry", polygon)
+        val features = org.json.JSONArray().put(feature("Not This Region"))
+            .put(feature("Example Region"))
+        val body = JSONObject().put("type", "FeatureCollection").put("features", features)
+        assertNotNull(GeoBoundariesClient.parse(place, body, true))
+        features.put(feature("Example Region"))
+        assertNull(GeoBoundariesClient.parse(place, body, true))
+    }
+
+    @Test fun largeBoundaryCacheStreamsGzipAndRoundTripsAllCoordinates() {
+        val context = org.robolectric.RuntimeEnvironment.getApplication()
+        val place = PlaceDiscovery(
+            PlaceKind.TOWN, "gb|large-cache-stream-test", "Large Test Town",
+            visitedAt = 1L, latitude = 40.0, longitude = -74.0
+        )
+        val coordinates = org.json.JSONArray()
+        for (i in 0..3_000) coordinates.put(org.json.JSONArray()
+            .put(-74.0 + (i % 17) * 0.00001).put(40.0 + i * 0.000001))
+        val ring = org.json.JSONArray().put(coordinates)
+        val geometry = JSONObject().put("type", "Polygon")
+            .put("coordinates", ring).toString()
+        val outline = PlaceOverlayData(place.key, place.displayName, place.kind,
+            null, 1.0, geometry)
+        PlaceOverlayCache.clear(context)
+        try {
+            assertTrue(PlaceOverlayCache.write(context, place, outline, verifiedForDiscovery = true))
+            val cacheDir = File(context.filesDir, "place-overlays-v5-world-admin")
+            val diskFile = cacheDir.listFiles()!!.single { it.name.endsWith(".json") }
+            assertEquals(0x1f, diskFile.inputStream().use { it.read() })
+            assertEquals(JSONObject(geometry).toString(),
+                PlaceOverlayCache.readVerifiedForDiscovery(context, place)?.geometryJson)
+        } finally { PlaceOverlayCache.clear(context) }
+    }
+
     @Test fun boundaryCacheIsCompressedAndStillReadsPreviousPlainJson() {
         val context = RuntimeEnvironment.getApplication()
         val place = PlaceDiscovery(
@@ -445,6 +490,26 @@ class PlaceOverlayTest {
         assertNull(PlaceOverlayClient.parseResponse(place, body))
     }
 
+    @Test fun polygonAreaIsIndependentOfRingDirectionAndSubtractsHoles() {
+        val outer = org.json.JSONArray("""[[-75,39],[-74,39],[-74,40],[-75,40]]""")
+        val inner = org.json.JSONArray("""[[-74.75,39.25],[-74.25,39.25],[-74.25,39.75],[-74.75,39.75]]""")
+        fun shape(outerRing: org.json.JSONArray, innerRing: org.json.JSONArray?) =
+            JSONObject().put("type", "Polygon")
+                .put("coordinates", org.json.JSONArray().put(outerRing).apply {
+                    if (innerRing != null) put(innerRing)
+                })
+        fun reversed(ring: org.json.JSONArray) = org.json.JSONArray().apply {
+            for (i in ring.length() - 1 downTo 0) put(ring.getJSONArray(i))
+        }
+        val whole = PlaceOverlayClient.areaSquareKilometers(shape(outer, null))
+        val withHole = PlaceOverlayClient.areaSquareKilometers(shape(outer, inner))
+        assertTrue(whole > withHole)
+        assertTrue(withHole > 0.0)
+        assertEquals(whole, PlaceOverlayClient.areaSquareKilometers(shape(reversed(outer), null)), 0.000001)
+        assertEquals(withHole,
+            PlaceOverlayClient.areaSquareKilometers(shape(reversed(outer), reversed(inner))), 0.000001)
+    }
+
     @Test fun polygonContainmentHandlesHolesAndDisjointMunicipalities() {
         val geometry = JSONObject(
             """{"type":"MultiPolygon","coordinates":[
@@ -457,6 +522,17 @@ class PlaceOverlayTest {
         assertFalse(PlaceGeometry.contains(geometry, 39.90, -75.10))
         assertTrue(PlaceGeometry.contains(geometry, 39.85, -74.75))
         assertFalse(PlaceGeometry.contains(geometry, 39.85, -74.60))
+    }
+
+    @Test fun polygonContainmentKeepsDateLineWrappingAndBoundaryEdges() {
+        val polygon = JSONObject("""{"type":"Polygon","coordinates":[[
+            [179.5,10],[-179.5,10],[-179.5,11],[179.5,11],[179.5,10]
+        ]]}""")
+        assertTrue(PlaceGeometry.contains(polygon, 10.5, 179.9))
+        assertTrue(PlaceGeometry.contains(polygon, 10.5, -179.9))
+        assertTrue(PlaceGeometry.contains(polygon, 10.0, 179.9))
+        assertFalse(PlaceGeometry.contains(polygon, 10.5, 178.0))
+        assertFalse(PlaceGeometry.contains(polygon, 10.5, -178.0))
     }
 
     @Test fun municipalityBoundaryEdgeIsRecognized() {

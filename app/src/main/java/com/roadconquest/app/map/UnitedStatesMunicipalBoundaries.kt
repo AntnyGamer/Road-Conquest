@@ -307,21 +307,23 @@ internal object UnitedStatesMunicipalBoundaries {
         if (PlaceGeometry.contains(polygon, latitude, longitude)) return 0.0
         val polygons = polygon.optJSONArray("coordinates") ?: return Double.POSITIVE_INFINITY
         val scale = 111_195.0
+        val latitudeCos = cos(Math.toRadians(latitude))
         var closest = Double.POSITIVE_INFINITY
+        fun x(point: org.json.JSONArray) =
+            (point.optDouble(0, Double.NaN) - longitude) * latitudeCos * scale
+        fun y(point: org.json.JSONArray) =
+            (point.optDouble(1, Double.NaN) - latitude) * scale
         fun ringDistance(rings: org.json.JSONArray) {
             for (r in 0 until rings.length()) {
                 val ring = rings.optJSONArray(r) ?: continue
                 if (ring.length() < 2) continue
-                var previous = ring.optJSONArray(ring.length() - 1) ?: continue
+                val previous = ring.optJSONArray(ring.length() - 1) ?: continue
+                var ax = x(previous)
+                var ay = y(previous)
                 for (i in 0 until ring.length()) {
                     val current = ring.optJSONArray(i) ?: continue
-                    fun x(point: org.json.JSONArray) =
-                        (point.optDouble(0, Double.NaN) - longitude) *
-                            cos(Math.toRadians(latitude)) * scale
-                    fun y(point: org.json.JSONArray) =
-                        (point.optDouble(1, Double.NaN) - latitude) * scale
-                    val ax = x(previous); val ay = y(previous)
-                    val bx = x(current); val by = y(current)
+                    val bx = x(current)
+                    val by = y(current)
                     if (ax.isFinite() && ay.isFinite() && bx.isFinite() && by.isFinite()) {
                         val dx = bx - ax; val dy = by - ay
                         val lengthSquared = dx * dx + dy * dy
@@ -329,7 +331,8 @@ internal object UnitedStatesMunicipalBoundaries {
                             (-(ax * dx + ay * dy) / lengthSquared).coerceIn(0.0, 1.0)
                         closest = minOf(closest, hypot(ax + t * dx, ay + t * dy))
                     }
-                    previous = current
+                    ax = bx
+                    ay = by
                 }
             }
         }

@@ -15,7 +15,7 @@ import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31, 37], manifest = Config.NONE)
-class OsrmTurnTest {
+class RoadGeometryTurnTest {
     private fun coord(lon: Double, lat: Double) = JSONArray().put(lon).put(lat)
     private val a = coord(-74.0, 40.001)
     private val b = coord(-74.0, 40.0002)
@@ -42,24 +42,6 @@ class OsrmTurnTest {
             1_000_000L + index * 3_000L, false)
     }
 
-    @Test fun bearingGuidanceDoesNotForceExitDirectionAtASharpTurn() {
-        val approach = coord(-74.0006, 40.0)
-        val corner = coord(-74.0003, 40.0)
-        val exit = coord(-74.0003, 40.0003)
-        val matcher = OsrmMatcher()
-        val atTurn = requireNotNull(matcher.buildBearingGuidance(points(approach, corner, exit)))
-            .split(';')
-        assertEquals(3, atTurn.size)
-        assertTrue(atTurn[0].isNotEmpty())
-        assertEquals("", atTurn[1])
-        assertTrue(atTurn[2].isNotEmpty())
-
-        val straight = requireNotNull(matcher.buildBearingGuidance(
-            points(approach, corner, coord(-74.0, 40.0))
-        )).split(';')
-        assertTrue(straight.all { it.isNotEmpty() })
-    }
-
     @Test fun ambiguousTurnHeadIsNotSavedAndRetryFillsTheJunctionFromBothSides() {
         val repo = TrackingRepository(RuntimeEnvironment.getApplication())
         repo.readableDatabase().execSQL("DELETE FROM track_points")
@@ -70,7 +52,7 @@ class OsrmTurnTest {
                 accuracy = 5f; speed = 5f; time = 1_000_000L + i * 3_000L
             })
         }
-        val matcher = OsrmMatcher()
+        val matcher = RoadGeometryValidator()
         val first = requireNotNull(matcher.parse(response(listOf(
             trace(0, 0, a), trace(0, 1, b), trace(1, 0, wrongSide, 2),
             trace(1, 1, d), trace(1, 2, e)
@@ -109,7 +91,7 @@ class OsrmTurnTest {
     }
 
     @Test fun ambiguousTailCannotUnlockTheRoadBeyondAnOrdinaryTurn() {
-        val result = requireNotNull(OsrmMatcher().parse(response(listOf(
+        val result = requireNotNull(RoadGeometryValidator().parse(response(listOf(
             trace(0, 0, a), trace(0, 1, b), trace(0, 2, wrongSide, 1)
         ), matching(leg("Approach", a, b), leg("Wrong exit", b, junction, wrongSide))), points(a, b, c)))
         assertEquals(setOf(1L, 2L), result.matchedPointConfidences.keys)
@@ -123,7 +105,7 @@ class OsrmTurnTest {
         val p2 = coord(-74.0, 40.00010)
         val p3 = coord(-74.0, 40.00000)
         val result = requireNotNull(
-            OsrmMatcher().parse(
+            RoadGeometryValidator().parse(
                 response(
                     listOf(
                         trace(0, 0, p0), trace(0, 1, p1),
@@ -155,7 +137,7 @@ class OsrmTurnTest {
         val exit = coord(-74.00002, 40.00017)
         val snappedBefore = coord(-74.000255, 40.000055)
         val snappedAfter = coord(-74.000000, 39.99998)
-        val result = requireNotNull(OsrmMatcher().parse(response(listOf(
+        val result = requireNotNull(RoadGeometryValidator().parse(response(listOf(
             trace(0, 0, entry), trace(0, 1, snappedBefore),
             trace(1, 0, snappedAfter), trace(1, 1, exit)
         ), matching(leg("Approach Road", entry, snappedBefore)),
@@ -189,7 +171,7 @@ class OsrmTurnTest {
         val snappedBefore = coord(-74.000255, 40.000055)
         val snappedAfter = coord(-74.000000, 39.99998)
         fun parse(firstConfidence: Double, rawAfter: JSONArray = after) =
-            requireNotNull(OsrmMatcher().parse(response(listOf(
+            requireNotNull(RoadGeometryValidator().parse(response(listOf(
                 trace(0, 0, entry), trace(0, 1, snappedBefore),
                 trace(1, 0, snappedAfter), trace(1, 1, exit)
             ), matchingWithConfidence(firstConfidence, leg("Approach Road", entry, snappedBefore)),
@@ -212,7 +194,7 @@ class OsrmTurnTest {
         val p1 = coord(-74.0, 40.00020)
         val p2 = coord(-74.0, 40.00010)
         val p3 = coord(-74.0, 40.00000)
-        val result = requireNotNull(OsrmMatcher().parse(response(listOf(
+        val result = requireNotNull(RoadGeometryValidator().parse(response(listOf(
             trace(0, 0, p0), trace(0, 1, p1), trace(1, 0, p2), trace(1, 1, p3)
         ), matching(leg("Unnamed road", p0, p1)),
             matching(leg("Unnamed road", p2, p3))), points(p0, p1, p2, p3)))
@@ -229,7 +211,7 @@ class OsrmTurnTest {
         val p1 = coord(-74.0, 40.00020)
         val p2 = coord(-73.99990, 40.00020)
         val p3 = coord(-73.99990, 40.00030)
-        val result = requireNotNull(OsrmMatcher().parse(response(listOf(
+        val result = requireNotNull(RoadGeometryValidator().parse(response(listOf(
             trace(0, 0, p0), trace(0, 1, p1), trace(1, 0, p2), trace(1, 1, p3)
         ), matching(leg("Unnamed road", p0, p1)),
             matching(leg("Unnamed road", p2, p3))), points(p0, p1, p2, p3)))
@@ -242,7 +224,7 @@ class OsrmTurnTest {
         val p1 = coord(-74.0, 40.00020)
         val p2 = coord(-74.0, 40.00010)
         val p3 = coord(-74.0, 40.00000)
-        val result = requireNotNull(OsrmMatcher().parse(response(listOf(
+        val result = requireNotNull(RoadGeometryValidator().parse(response(listOf(
             trace(0, 0, p0), trace(0, 1, p1), trace(1, 0, p2), trace(1, 1, p3)
         ), matchingWithConfidence(0.6, leg("Unnamed road", p0, p1)),
             matchingWithConfidence(0.6, leg("Unnamed road", p2, p3))),
@@ -255,7 +237,7 @@ class OsrmTurnTest {
         val p0 = coord(-74.0, 40.00030)
         val p1 = coord(-74.0, 40.00020)
         val p3 = coord(-74.0, 40.00010)
-        val result = requireNotNull(OsrmMatcher().parse(response(listOf(
+        val result = requireNotNull(RoadGeometryValidator().parse(response(listOf(
             trace(0, 0, p0), trace(0, 1, p1), trace(1, 0, p1), trace(1, 1, p3)
         ), matching(leg("Main Road", p0, p1)),
             matching(leg("Main Road", p1, p3))), points(p0, p1, p1, p3)))
@@ -269,7 +251,7 @@ class OsrmTurnTest {
         val p3 = coord(-74.0, 39.99990)
         val rawBefore = coord(-74.0, 40.00031)
         val rawAfter = coord(-74.0, 40.00009)
-        val result = requireNotNull(OsrmMatcher().parse(response(listOf(
+        val result = requireNotNull(RoadGeometryValidator().parse(response(listOf(
             trace(0, 0, p0), trace(0, 1, junctionPoint),
             trace(1, 0, junctionPoint), trace(1, 1, p3)
         ), matching(leg("Main Road", p0, junctionPoint)),
@@ -281,7 +263,7 @@ class OsrmTurnTest {
     }
 
     @Test fun splitTraceStartKeepsTheMissingIncomingIntervalPending() {
-        val result = requireNotNull(OsrmMatcher().parse(response(listOf(
+        val result = requireNotNull(RoadGeometryValidator().parse(response(listOf(
             trace(0, 0, a), trace(0, 1, b), trace(1, 0, d), trace(1, 1, e)
         ), matching(leg("Approach", a, b)), matching(leg("Exit", d, e))), points(a, b, d, e)))
         assertEquals(setOf(1L, 2L, 4L), result.matchedPointConfidences.keys)
@@ -289,7 +271,7 @@ class OsrmTurnTest {
     }
 
     @Test fun entirelyAmbiguousResponseIsPartialAndSavesNothing() {
-        val result = requireNotNull(OsrmMatcher().parse(response(listOf(
+        val result = requireNotNull(RoadGeometryValidator().parse(response(listOf(
             trace(0, 0, a, 1), trace(0, 1, b, 1)
         ), matching(leg("Approach", a, b))), points(a, b)))
         assertTrue(result.roads.isEmpty())
@@ -300,20 +282,20 @@ class OsrmTurnTest {
         val badLeg = leg("Approach", a, b)
         badLeg.getJSONArray("steps").put(leg("Exit", d, e).getJSONArray("steps").getJSONObject(0))
         assertNull(
-            OsrmMatcher().parse(response(listOf(trace(0, 0, a), trace(0, 1, e)), matching(badLeg)), points(a, e))
+            RoadGeometryValidator().parse(response(listOf(trace(0, 0, a), trace(0, 1, e)), matching(badLeg)), points(a, e))
         )
     }
 
     @Test fun missingAmbiguityOrShiftedWaypointIndexCannotResolveFixes() {
         val valid = JSONObject(response(listOf(trace(0, 0, a), trace(0, 1, b)), matching(leg("Approach", a, b))))
         valid.getJSONArray("tracepoints").getJSONObject(1).remove("alternatives_count")
-        assertNull(OsrmMatcher().parse(valid.toString(), points(a, b)))
+        assertNull(RoadGeometryValidator().parse(valid.toString(), points(a, b)))
         valid.getJSONArray("tracepoints").getJSONObject(1).put("alternatives_count", 0).put("waypoint_index", 0)
-        assertNull(OsrmMatcher().parse(valid.toString(), points(a, b)))
+        assertNull(RoadGeometryValidator().parse(valid.toString(), points(a, b)))
     }
 
     @Test fun confidentRouteKeepsAnInternalAlternativeWhenBothSidesProvideContext() {
-        val result = requireNotNull(OsrmMatcher().parse(response(listOf(
+        val result = requireNotNull(RoadGeometryValidator().parse(response(listOf(
             trace(0, 0, a), trace(0, 1, b), trace(0, 2, c, 2),
             trace(0, 3, d), trace(0, 4, e)
         ), matching(
@@ -329,7 +311,7 @@ class OsrmTurnTest {
     }
 
     @Test fun contextualInternalAlternativeDoesNotRetryForeverAtAcceptedConfidence() {
-        val result = requireNotNull(OsrmMatcher().parse(response(listOf(
+        val result = requireNotNull(RoadGeometryValidator().parse(response(listOf(
             trace(0, 0, a), trace(0, 1, b), trace(0, 2, c, 2),
             trace(0, 3, d), trace(0, 4, e)
         ), matchingWithConfidence(
@@ -345,7 +327,7 @@ class OsrmTurnTest {
     }
 
     @Test fun contextualInternalAlternativeStillWaitsBelowAcceptedConfidence() {
-        val result = requireNotNull(OsrmMatcher().parse(response(listOf(
+        val result = requireNotNull(RoadGeometryValidator().parse(response(listOf(
             trace(0, 0, a), trace(0, 1, b), trace(0, 2, c, 2),
             trace(0, 3, d), trace(0, 4, e)
         ), matchingWithConfidence(
@@ -362,13 +344,13 @@ class OsrmTurnTest {
     @Test fun unsupportedDetourCannotTurnARecordedStraightDriveIntoAnInventedRoad() {
         val far = coord(-73.99, 40.01)
         assertNull(
-            OsrmMatcher().parse(response(listOf(trace(0, 0, a), trace(0, 1, b)),
+            RoadGeometryValidator().parse(response(listOf(trace(0, 0, a), trace(0, 1, b)),
                 matching(leg("Detour", a, far, b))), points(a, b))
         )
     }
 
     @Test fun missingLegStepsPreservesValidSiblingWithoutUnlockingTheMissingInterval() {
-        val result = requireNotNull(OsrmMatcher().parse(
+        val result = requireNotNull(RoadGeometryValidator().parse(
             response(
                 listOf(trace(0, 0, a), trace(0, 1, b), trace(0, 2, c)),
                 matching(leg("Approach", a, b), JSONObject())
@@ -381,7 +363,7 @@ class OsrmTurnTest {
     }
 
     @Test fun missingStepsOnTheOnlyLegLeavesTheWholeTracePending() {
-        assertNull(OsrmMatcher().parse(
+        assertNull(RoadGeometryValidator().parse(
             response(listOf(trace(0, 0, a), trace(0, 1, b)), matching(JSONObject())),
             points(a, b)
         ))
@@ -390,7 +372,7 @@ class OsrmTurnTest {
     @Test fun oneBadLegKeepsOnlyThatIntervalPendingAndPreservesValidSiblingGeometry() {
         val far = coord(-73.99, 40.01)
         val result = requireNotNull(
-            OsrmMatcher().parse(
+            RoadGeometryValidator().parse(
                 response(
                     listOf(trace(0, 0, a), trace(0, 1, b), trace(0, 2, c)),
                     matching(
@@ -415,7 +397,7 @@ class OsrmTurnTest {
         val far = coord(-73.99, 40.01)
 
         val result = requireNotNull(
-            OsrmMatcher().parse(
+            RoadGeometryValidator().parse(
                 response(
                     listOf(
                         trace(0, 0, p0), trace(0, 1, p1),
@@ -446,7 +428,7 @@ class OsrmTurnTest {
         val p3 = coord(-73.99890, 40.00010)
 
         val result = requireNotNull(
-            OsrmMatcher().parse(
+            RoadGeometryValidator().parse(
                 response(
                     listOf(
                         trace(0, 0, p0), trace(0, 1, p1),
@@ -473,7 +455,7 @@ class OsrmTurnTest {
         )
 
         val result = requireNotNull(
-            OsrmMatcher().parse(
+            RoadGeometryValidator().parse(
                 response(
                     listOf(trace(0, 0, snappedStart), trace(0, 1, snappedEnd)),
                     matching(leg("Main Road", snappedStart, snappedEnd))
@@ -498,7 +480,7 @@ class OsrmTurnTest {
         )
 
         val result = requireNotNull(
-            OsrmMatcher().parse(
+            RoadGeometryValidator().parse(
                 response(
                     listOf(trace(0, 0, snappedStart), trace(0, 1, snappedEnd)),
                     matching(leg("Main Road", snappedStart, snappedEnd))
@@ -524,7 +506,7 @@ class OsrmTurnTest {
         )
 
         assertNull(
-            OsrmMatcher().parse(
+            RoadGeometryValidator().parse(
                 response(
                     listOf(trace(0, 0, parallelStart), trace(0, 1, parallelEnd)),
                     matching(leg("Nearby Parallel Road", parallelStart, parallelEnd))
@@ -545,7 +527,7 @@ class OsrmTurnTest {
         )
 
         val result = requireNotNull(
-            OsrmMatcher().parse(
+            RoadGeometryValidator().parse(
                 response(
                     listOf(trace(0, 0, snappedStart), trace(0, 1, snappedEnd)),
                     matching(leg("Main Road", snappedStart, snappedEnd))
@@ -569,7 +551,7 @@ class OsrmTurnTest {
         )
 
         assertNull(
-            OsrmMatcher().parse(
+            RoadGeometryValidator().parse(
                 response(
                     listOf(trace(0, 0, parallelStart), trace(0, 1, parallelEnd)),
                     matching(leg("Nearby Parallel Road", parallelStart, parallelEnd))
@@ -592,7 +574,7 @@ class OsrmTurnTest {
         )
 
         assertNull(
-            OsrmMatcher().parse(
+            RoadGeometryValidator().parse(
                 response(
                     listOf(trace(0, 0, parallelStart), trace(0, 1, parallelEnd)),
                     matching(leg("Nearby Parallel Road", parallelStart, parallelEnd))
@@ -613,7 +595,7 @@ class OsrmTurnTest {
         )
 
         val result = requireNotNull(
-            OsrmMatcher().parse(
+            RoadGeometryValidator().parse(
                 response(
                     listOf(trace(0, 0, parallelStart), trace(0, 1, parallelEnd)),
                     matching(leg("Main Road", parallelStart, parallelEnd))
@@ -627,7 +609,7 @@ class OsrmTurnTest {
 
     @Test fun shortIntersectionEdgesRemainInTheDrawnRoute() {
         val tiny = coord(-74.0, 40.0000001)
-        val result = requireNotNull(OsrmMatcher().parse(response(listOf(
+        val result = requireNotNull(RoadGeometryValidator().parse(response(listOf(
             trace(0, 0, b), trace(0, 1, d)
         ), matching(leg("Turn", b, tiny, junction, d))), points(b, d)))
         assertEquals(1, result.roads.size)
@@ -642,7 +624,7 @@ class OsrmTurnTest {
         val west = coord(179.999, 0.0)
         val east = coord(-179.999, 0.0)
         val result = requireNotNull(
-            OsrmMatcher().parse(
+            RoadGeometryValidator().parse(
                 response(
                     listOf(trace(0, 0, west), trace(0, 1, east)),
                     matching(leg("Date Line Road", west, east))

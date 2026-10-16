@@ -1,0 +1,36 @@
+{
+	"name": "roadconquest-maps",
+	"main": "./worker.mjs",
+	"compatibility_date": "2026-10-15",
+	"workers_dev": true,
+	"preview_urls": false,
+	"cache": {
+		"enabled": true
+	},
+	"vars": {
+		"DAILY_CREDIT_CAP": "2400",
+		"LOCATIONIQ_DAILY_REQUEST_CAP": "4000"
+	},
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "MAP_BUDGET",
+				"class_name": "MapBudget"
+			}
+		]
+	},
+	"migrations": [
+		{
+			"tag": "v1",
+			"new_sqlite_classes": [
+				"MapBudget"
+			]
+		}
+	],
+	"kv_namespaces": [
+		{
+			"binding": "SERVICE_CONFIG",
+			"id": "a4ea569ea8f14218b798926eca40cadc"
+		}
+	]
+}

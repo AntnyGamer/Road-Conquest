@@ -11,6 +11,30 @@ const legacyDataset = "a".repeat(64);
 const dataVersion = "2026-10-01T00:00:00Z";
 const config = { dataset, dataVersion, cloudProject: "123456789", checkpointKey: "K".repeat(43) };
 
+test("top fifty ranks preserve ties across the cutoff and exclude hidden or ineligible accounts before limiting", { skip: !connectionString }, async () => {
+  const pool = new pg.Pool({ connectionString });
+  try {
+    await pool.query(await readFile(new URL('../schema.sql', import.meta.url), 'utf8'));
+    await pool.query('TRUNCATE users CASCADE');
+    await pool.query(`INSERT INTO users(username_display,username_key,password_salt,password_hash,leaderboard_visible,leaderboard_eligible)
+      SELECT 'Rank_'||lpad(g::text,3,'0'),'rank_'||lpad(g::text,3,'0'),$1,$2,g>2,g<>3
+      FROM generate_series(1,80) g`, [Buffer.alloc(16),Buffer.alloc(64)]);
+    await pool.query(`INSERT INTO cell_scores(user_id,dataset,cells)
+      SELECT id,$1,CASE WHEN username_key<='rank_010' THEN 300 WHEN username_key<='rank_060' THEN 200 ELSE 100 END FROM users`, [dataset]);
+    const all = (await pool.query(`SELECT u.username_display AS username,u.username_key,s.cells,u.leaderboard_visible,u.leaderboard_eligible
+      FROM users u JOIN cell_scores s ON s.user_id=u.id WHERE s.dataset=$1`, [dataset])).rows;
+    const eligible = all.filter(row => row.leaderboard_visible && row.leaderboard_eligible).sort((a,b) =>
+      Number(b.cells)-Number(a.cells) || a.username_key.localeCompare(b.username_key));
+    const expected = eligible.slice(0,50).map(row => ({ username: row.username, cells: Number(row.cells),
+      rank: 1+eligible.filter(other => Number(other.cells)>Number(row.cells)).length }));
+    const service = await createCompetition(pool,config,{ verify: async () => {} });
+    const actual = (await service.leaderboard()).entries;
+    assert.equal(actual.length,50);
+    assert.equal(actual.at(-1).rank,8);
+    assert.deepEqual(actual,expected);
+  } finally { await pool.end(); }
+});
+
 function fixes() {
   const now = Date.now();
   const cell = cellFor(40, -75);
@@ -21,6 +45,35 @@ function fixes() {
     { lat, lon: lon + 0.0005, accuracy: 3, speed: 10, time: now, elapsed: 15000, mock: false }
   ];
 }
+
+test("a weekly write failure rolls back new cells, totals, checkpoint, sequence and receipt together", { skip: !connectionString }, async () => {
+  const pool = new pg.Pool({ connectionString });
+  try {
+    await pool.query(await readFile(new URL('../schema.sql', import.meta.url), 'utf8'));
+    await pool.query('TRUNCATE users CASCADE');
+    const user = (await pool.query(`INSERT INTO users(username_display,username_key,password_salt,password_hash)
+      VALUES ('Rollback','rollback',$1,$2) RETURNING id`, [Buffer.alloc(16),Buffer.alloc(64)])).rows[0];
+    await pool.query('INSERT INTO cell_scores(user_id,dataset) VALUES ($1,$2)', [user.id,dataset]);
+    // Force the weekly increment to fail after the other writes have begun.
+    await pool.query(`INSERT INTO cell_weeks(user_id,dataset,week_start,new_cells)
+      VALUES ($1,$2,date_trunc('week',CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date,9223372036854775807)`, [user.id,dataset]);
+    const service = await createCompetition(pool,config,{ verify: async () => {} });
+    const run = await service.begin(user);
+    const evidence = JSON.stringify({ ...run,fixes:fixes() });
+    await assert.rejects(service.submit(user,evidence,'test'), error => error.code==='22003');
+    assert.deepEqual((await pool.query('SELECT cells,last_verified_fix FROM cell_scores WHERE user_id=$1', [user.id])).rows[0],
+      { cells:'0',last_verified_fix:null });
+    for (const table of ['competition_cells','cell_receipts']) {
+      assert.equal((await pool.query(`SELECT COUNT(*) FROM ${table} WHERE user_id=$1`, [user.id])).rows[0].count,'0');
+    }
+    assert.equal((await pool.query('SELECT sequence FROM cell_runs WHERE user_id=$1', [user.id])).rows[0].sequence,0);
+    await pool.query('DELETE FROM cell_weeks WHERE user_id=$1', [user.id]);
+    const recovered = await service.submit(user,evidence,'test');
+    assert.equal(recovered.credited_cells,1);
+    assert.deepEqual(await service.submit(user,evidence,'test'),recovered);
+    assert.equal((await pool.query('SELECT new_cells FROM cell_weeks WHERE user_id=$1', [user.id])).rows[0].new_cells,'1');
+  } finally { await pool.end(); }
+});
 
 test("real PostgreSQL protects simultaneous scoring, retries, derived cells, privacy, ties and account boundaries", { skip: !connectionString }, async () => {
   const pool = new pg.Pool({ connectionString });

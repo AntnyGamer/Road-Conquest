@@ -152,6 +152,15 @@ test("signup/login/privacy/logout are server-enforced and duplicate usernames ar
     const meAfter = await json(baseUrl, "/v1/me", "GET", undefined, login.payload.token);
     assert.equal(meAfter.payload.leaderboard_visible, true);
 
+    const bundledFriends = await json(baseUrl, "/v1/friends?include=weekly", "GET", undefined, login.payload.token);
+    assert.equal(bundledFriends.status, 200);
+    assert.deepEqual(bundledFriends.payload,
+      { friends: [], weekly: { available: false, entries: [] } });
+    assert.deepEqual((await json(baseUrl, "/v1/friends", "GET", undefined, login.payload.token)).payload,
+      { friends: [] });
+    const combinedRanking = await json(baseUrl, "/v1/leaderboard?metric=cells&mine=1", "GET", undefined, login.payload.token);
+    assert.equal(combinedRanking.status, 200);
+    assert.deepEqual(combinedRanking.payload, { metric: "cells", dataset: null, entries: [], verification_available: false });
     const leaderboard = await json(baseUrl, "/v1/leaderboard", "GET");
     assert.equal(leaderboard.status, 200);
     assert.deepEqual(leaderboard.payload, { metric: "cells", dataset: null, entries: [], verification_available: false });
@@ -169,6 +178,16 @@ test("signup/login/privacy/logout are server-enforced and duplicate usernames ar
     assert.equal(logout.status, 200);
     const afterLogout = await json(baseUrl, "/v1/me", "GET", undefined, login.payload.token);
     assert.equal(afterLogout.status, 401);
+    assert.equal((await json(baseUrl, "/v1/friends", "GET", undefined, login.payload.token)).status,401);
+
+    const expiredToken = 'E'.repeat(43);
+    await pool.query(`INSERT INTO sessions(token_hash,user_id,created_at,expires_at)
+      SELECT $1,id,CURRENT_TIMESTAMP-INTERVAL '2 days',CURRENT_TIMESTAMP-INTERVAL '1 day'
+      FROM users WHERE username_key='driverone'`, [hashSessionToken(expiredToken)]);
+    // Both the profile join and lean identity lookup enforce current expiry.
+    assert.equal((await json(baseUrl, "/v1/me", "GET", undefined, expiredToken)).status,401);
+    assert.equal((await json(baseUrl, "/v1/friends", "GET", undefined, expiredToken)).status,401);
+    assert.equal((await json(baseUrl, "/v1/privacy", "PUT", { leaderboard_visible: false }, expiredToken)).status,401);
 
     assert.equal((await json(baseUrl, "/v1/username", "PUT", { username: "Renamed", password })).status, 401);
     assert.equal((await json(baseUrl, "/v1/account", "DELETE", { password })).status, 401);
@@ -213,6 +232,7 @@ test("signup/login/privacy/logout are server-enforced and duplicate usernames ar
     assert.equal((await json(baseUrl, "/v1/account", "DELETE", { password }, originalToken)).status, 200);
     for (const token of [originalToken, newLogin.payload.token]) {
       assert.equal((await json(baseUrl, "/v1/me", "GET", undefined, token)).status, 401);
+      assert.equal((await json(baseUrl, "/v1/friends", "GET", undefined, token)).status, 401);
     }
     for (const table of ["sessions", "competition_scores", "competition_roads", "competition_runs", "competition_receipts", "cell_scores", "competition_cells", "cell_runs", "cell_receipts", "cell_weeks"]) {
       assert.equal((await pool.query(`SELECT count(*) FROM ${table} WHERE user_id = $1`, [owner])).rows[0].count, "0");

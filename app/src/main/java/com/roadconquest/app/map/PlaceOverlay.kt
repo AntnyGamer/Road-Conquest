@@ -9,7 +9,6 @@ import com.roadconquest.app.data.PlaceDiscovery
 import com.roadconquest.app.data.PlaceKind
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
 import java.io.Reader
@@ -127,14 +126,18 @@ object PlaceOverlayCache {
         initialTrim(context)
         val existed = target.isFile
         val oldBytes = if (existed) target.length() else 0L
-        val bytes = json.toString().toByteArray(Charsets.UTF_8)
-        val buffer = ByteArrayOutputStream()
-        GZIPOutputStream(buffer).use { it.write(bytes) }
         val file = AtomicFile(target)
         var stream: java.io.FileOutputStream? = null
         return try {
             stream = file.startWrite()
-            stream.write(buffer.toByteArray())
+            // Stream gzip into the existing crash-safe AtomicFile rather than
+            // allocating separate full JSON, compressed and copied byte arrays.
+            // finish() writes the gzip trailer without closing AtomicFile's stream.
+            val gzip = GZIPOutputStream(stream)
+            val writer = gzip.bufferedWriter(Charsets.UTF_8)
+            writer.write(json.toString())
+            writer.flush()
+            gzip.finish()
             file.finishWrite(stream)
             cacheBytes += target.length() - oldBytes
             if (!existed) cacheFiles++
@@ -285,13 +288,16 @@ object PlaceOverlayCache {
     ): Boolean = synchronized(mutationLock) {
         if (expectedGeneration != null && generation.get() != expectedGeneration) return@synchronized false
         val target = file(context, place)
-        val cached = readCacheFile(target, place)
-        // Preserve an already-verified town polygon against a stale generic
-        // overlay refresh, and never replace a valid polygon with a miss.
-        if (cached.data != null && (data == null ||
-                place.kind == PlaceKind.TOWN && !verifiedForDiscovery &&
-                readCacheFile(target, place, verifiedOnly = true).data != null)
-        ) return@synchronized true
+        // A generic refresh must not replace a verified town polygon. Ask
+        // the cache reader to enforce that in its single decode; previously the
+        // large gzip polygon was decompressed and parsed twice on this path.
+        val preserveVerifiedTown = data != null && place.kind == PlaceKind.TOWN &&
+            !verifiedForDiscovery
+        val cached = readCacheFile(target, place, verifiedOnly = preserveVerifiedTown)
+        // A negative response must also preserve any existing valid polygon.
+        if (cached.data != null && (data == null || preserveVerifiedTown)) {
+            return@synchronized true
+        }
         val directory = target.parentFile ?: return@synchronized false
         if (!directory.exists() && !directory.mkdirs()) return@synchronized false
         val json = JSONObject()
@@ -340,9 +346,18 @@ class PlaceOverlayClient(
     private val configUrl: String = BuildConfig.PLACE_OVERLAY_CONFIG_URL
 ) {
     private var resolvedEndpoint: String? = null
+    private val boundaryBackup = GeoBoundariesClient()
 
     fun fetch(place: PlaceDiscovery, requireContainment: Boolean = true): PlaceOverlayData? {
         val base = resolveEndpoint()
+        return try {
+            fetchPrimary(base, place, requireContainment) ?: boundaryBackup.fetch(place, requireContainment)
+        } catch (error: IOException) {
+            boundaryBackup.fetch(place, requireContainment) ?: throw error
+        }
+    }
+
+    private fun fetchPrimary(base: String, place: PlaceDiscovery, requireContainment: Boolean): PlaceOverlayData? {
         throttle(base)
         val threshold = when (place.kind) {
             PlaceKind.COUNTRY -> "0.02"
@@ -705,18 +720,25 @@ class PlaceOverlayClient(
         private fun ringArea(ring: JSONArray): Double {
             if (ring.length() < 3) return 0.0
             var sum = 0.0
-            for (i in 0 until ring.length()) {
-                val a = ring.optJSONArray(i) ?: continue
-                val b = ring.optJSONArray((i + 1) % ring.length()) ?: continue
-                val lon1 = Math.toRadians(a.optDouble(0, Double.NaN))
-                val lat1 = Math.toRadians(a.optDouble(1, Double.NaN))
-                val lon2 = Math.toRadians(b.optDouble(0, Double.NaN))
-                val lat2 = Math.toRadians(b.optDouble(1, Double.NaN))
-                if (!lon1.isFinite() || !lat1.isFinite() || !lon2.isFinite() || !lat2.isFinite()) continue
-                var delta = lon2 - lon1
-                while (delta > PI) delta -= 2 * PI
-                while (delta < -PI) delta += 2 * PI
-                sum += delta * (2 + sin(lat1) + sin(lat2))
+            // The end of each edge is the start of the next. Decode its
+            // longitude/latitude and sine once, keeping the original edge order.
+            val first = ring.optJSONArray(0)
+            var lon1 = Math.toRadians(first?.optDouble(0, Double.NaN) ?: Double.NaN)
+            var lat1 = Math.toRadians(first?.optDouble(1, Double.NaN) ?: Double.NaN)
+            var sine1 = sin(lat1)
+            for (i in 1..ring.length()) {
+                val next = ring.optJSONArray(if (i == ring.length()) 0 else i)
+                val lon2 = Math.toRadians(next?.optDouble(0, Double.NaN) ?: Double.NaN)
+                val lat2 = Math.toRadians(next?.optDouble(1, Double.NaN) ?: Double.NaN)
+                if (lon1.isFinite() && lat1.isFinite() && lon2.isFinite() && lat2.isFinite()) {
+                    var delta = lon2 - lon1
+                    while (delta > PI) delta -= 2 * PI
+                    while (delta < -PI) delta += 2 * PI
+                    sum += delta * (2 + sine1 + sin(lat2))
+                }
+                lon1 = lon2
+                lat1 = lat2
+                sine1 = sin(lat2)
             }
             return sum * EARTH_RADIUS_M * EARTH_RADIUS_M / 2.0
         }
@@ -787,14 +809,15 @@ internal object PlaceGeometry {
     private fun ringContains(ring: JSONArray, latitude: Double, longitude: Double): Boolean {
         if (ring.length() < 3) return false
         var inside = false
-        var previous = ring.optJSONArray(ring.length() - 1) ?: return false
+        val last = ring.optJSONArray(ring.length() - 1) ?: return false
+        var x1 = relativeLongitude(last.optDouble(0, Double.NaN), longitude)
+        var y1 = last.optDouble(1, Double.NaN)
+        if (!x1.isFinite() || !y1.isFinite()) return false
         for (i in 0 until ring.length()) {
             val current = ring.optJSONArray(i) ?: return false
-            val y1 = previous.optDouble(1, Double.NaN)
-            val y2 = current.optDouble(1, Double.NaN)
-            val x1 = relativeLongitude(previous.optDouble(0, Double.NaN), longitude)
             val x2 = relativeLongitude(current.optDouble(0, Double.NaN), longitude)
-            if (!x1.isFinite() || !x2.isFinite() || !y1.isFinite() || !y2.isFinite()) return false
+            val y2 = current.optDouble(1, Double.NaN)
+            if (!x2.isFinite() || !y2.isFinite()) return false
             // Exact boundary points count as contained to avoid disappearing towns
             // when a recorded fix lands precisely on a shared boundary.
             val cross = x1 * (y2 - latitude) - x2 * (y1 - latitude)
@@ -808,7 +831,10 @@ internal object PlaceGeometry {
                 val crossingX = x1 + (x2 - x1) * ((latitude - y1) / (y2 - y1))
                 if (crossingX > 0.0) inside = !inside
             }
-            previous = current
+            // The next edge starts at this same vertex. No second JSON lookup
+            // or date-line modulo is needed for its longitude and latitude.
+            x1 = x2
+            y1 = y2
         }
         return inside
     }

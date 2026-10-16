@@ -1,4 +1,5 @@
 <resources>
+    <string name="locationiq_credit"><a href="https://locationiq.com">Search by LocationIQ.com</a></string>
     <string name="app_name">Road Conquest</string>
     <string name="enable">Enable</string>
     <string name="disable">Disable</string>

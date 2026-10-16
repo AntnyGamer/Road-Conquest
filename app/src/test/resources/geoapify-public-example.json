@@ -1,0 +1,196 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "distance": 87,
+        "time": 12,
+        "legs": [
+          {
+            "time": 12,
+            "distance": 87,
+            "steps": [
+              {
+                "osm_way_id": 150185120,
+                "speed": 30,
+                "speed_limit": 30,
+                "surface": "paved_smooth",
+                "lane_count": 1,
+                "road_class": "unclassified",
+                "from_index": 0,
+                "to_index": 2,
+                "name": "Morisse",
+                "toll": false,
+                "tunnel": false,
+                "bridge": false,
+                "roundabout": false,
+                "traversability": "both",
+                "time": 4,
+                "distance": 31,
+                "begin_bearing": 17,
+                "end_bearing": 16
+              },
+              {
+                "osm_way_id": 150185120,
+                "speed": 30,
+                "speed_limit": 30,
+                "surface": "paved_smooth",
+                "lane_count": 1,
+                "road_class": "unclassified",
+                "from_index": 2,
+                "to_index": 3,
+                "name": "Morisse",
+                "toll": false,
+                "tunnel": false,
+                "bridge": false,
+                "roundabout": false,
+                "traversability": "both",
+                "time": 3,
+                "distance": 24,
+                "begin_bearing": 14,
+                "end_bearing": 14
+              },
+              {
+                "osm_way_id": 150185120,
+                "speed": 30,
+                "speed_limit": 30,
+                "surface": "paved_smooth",
+                "lane_count": 1,
+                "road_class": "unclassified",
+                "from_index": 3,
+                "to_index": 4,
+                "name": "Morisse",
+                "toll": false,
+                "tunnel": false,
+                "bridge": false,
+                "roundabout": false,
+                "traversability": "both",
+                "time": 2,
+                "distance": 15,
+                "begin_bearing": 17,
+                "end_bearing": 17
+              },
+              {
+                "osm_way_id": 150185120,
+                "speed": 30,
+                "speed_limit": 30,
+                "surface": "paved_smooth",
+                "lane_count": 1,
+                "road_class": "unclassified",
+                "from_index": 4,
+                "to_index": 6,
+                "name": "Morisse",
+                "toll": false,
+                "tunnel": false,
+                "bridge": false,
+                "roundabout": false,
+                "traversability": "both",
+                "time": 2,
+                "distance": 13,
+                "begin_bearing": 18,
+                "end_bearing": 18
+              },
+              {
+                "osm_way_id": 498012707,
+                "speed": 40,
+                "speed_limit": 100,
+                "surface": "paved_smooth",
+                "lane_count": 1,
+                "road_class": "unclassified",
+                "from_index": 6,
+                "to_index": 8,
+                "name": "Morisse",
+                "toll": false,
+                "tunnel": false,
+                "bridge": false,
+                "roundabout": false,
+                "traversability": "both",
+                "time": 1,
+                "distance": 4,
+                "begin_bearing": 19,
+                "end_bearing": 19
+              }
+            ]
+          }
+        ],
+        "mode": "drive",
+        "waypoints": [
+          {
+            "original_index": 0,
+            "location": [
+              10.694689,
+              47.56703
+            ],
+            "original_location": [
+              10.694703,
+              47.567028
+            ],
+            "match_type": "matched",
+            "match_distance": 1.022797,
+            "leg_index": 0,
+            "step_index": 0
+          },
+          {
+            "original_index": 1,
+            "location": [
+              10.695019,
+              47.567789
+            ],
+            "original_location": [
+              10.6950319,
+              47.567783
+            ],
+            "match_type": "matched",
+            "match_distance": 1.234974,
+            "leg_index": 0,
+            "step_index": 4
+          }
+        ]
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              10.69469,
+              47.567031
+            ],
+            [
+              10.694792,
+              47.567251
+            ],
+            [
+              10.694809,
+              47.567302
+            ],
+            [
+              10.694887,
+              47.567512
+            ],
+            [
+              10.694947,
+              47.567644
+            ],
+            [
+              10.694994,
+              47.56774
+            ],
+            [
+              10.695002,
+              47.567757
+            ],
+            [
+              10.695019,
+              47.567789
+            ],
+            [
+              10.695019,
+              47.56779
+            ]
+          ]
+        ]
+      }
+    }
+  ]
+}

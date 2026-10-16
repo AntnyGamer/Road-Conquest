@@ -49,13 +49,14 @@ internal class FogGeoRaster private constructor(
     fun projectGridCorners(corners: DoubleArray): DoubleArray {
         require(corners.size % 8 == 0)
         val result = DoubleArray(corners.size)
+        val rasterCenterX = centerX
         for (i in corners.indices step 8) {
             // Wrap the square as a unit. Wrapping each edge independently can
             // put -180 degrees at the right of a world raster and its eastern
             // neighbor at the left, erasing a strip almost one world wide.
             val westX = RADIUS * Math.toRadians(corners[i + 1])
             val eastX = RADIUS * Math.toRadians(corners[i + 3])
-            val offset = floor((centerX - (westX + eastX) * 0.5) / WORLD_METERS + 0.5) * WORLD_METERS
+            val offset = floor((rasterCenterX - (westX + eastX) * 0.5) / WORLD_METERS + 0.5) * WORLD_METERS
             val west = (westX + offset - westMeters) / metersPerPixel
             val east = (eastX + offset - westMeters) / metersPerPixel
             val north = projectedLatitude(corners[i])

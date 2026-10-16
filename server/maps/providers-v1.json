@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "providers": {
+    "openfreemap": true,
+    "esri-imagery": true,
+    "geoapify-tiles": true,
+    "geoapify-matching": true,
+    "locationiq-matching": true
+  }
+}

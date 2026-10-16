@@ -48,6 +48,12 @@ object AccountClient {
     fun logout(token: String) {
         request("/v1/logout", "POST", JSONObject(), token)
     }
+    fun registerNotificationDevice(token: String, deviceToken: String, binding: String) {
+        request("/v1/notifications/device", "POST", JSONObject().put("fid", deviceToken).put("binding", binding), token)
+    }
+    fun removeNotificationDevice(token: String) {
+        request("/v1/notifications/device", "DELETE", null, token)
+    }
 
     fun changeUsername(token: String, username: String, password: String): Account {
         val body = request("/v1/username", "PUT",
@@ -79,8 +85,12 @@ object AccountClient {
         if (it.optBoolean("available")) requireVerifiedPolicy(it)
     }
 
-    fun leaderboard(): JSONObject {
-        return request("/v1/leaderboard?metric=cells", "GET", null, null).also {
+    fun leaderboard(token: String? = null): JSONObject {
+        val includeMine = !token.isNullOrBlank()
+        return request(
+            if (includeMine) "/v1/leaderboard?metric=cells&mine=1"
+            else "/v1/leaderboard?metric=cells", "GET", null, token
+        ).also {
             if (it.optBoolean("verification_available", true)) requireVerifiedPolicy(it)
             else if (it.getJSONArray("entries").length() != 0) throw ApiException("Unverified scores cannot enter a leaderboard.")
         }
@@ -95,15 +105,18 @@ object AccountClient {
         JSONObject().put("evidence", evidence).put("integrity_token", integrityToken), token
     ).also(::requireVerifiedPolicy)
 
-    fun friends(token: String): JSONObject = request("/v1/friends", "GET", null, token)
+    fun friends(token: String, includeWeekly: Boolean = false): JSONObject = request(
+        if (includeWeekly) "/v1/friends?include=weekly" else "/v1/friends", "GET", null, token
+    )
 
     fun changeFriend(token: String, username: String, action: String): JSONObject = request("/v1/friends", "POST",
         JSONObject().put("username", username).put("action", action), token)
 
-    fun friendWeek(token: String): JSONObject {
-        return request("/v1/friends/weekly?metric=cells", "GET", null, token).also {
-            if (it.optBoolean("available")) requireVerifiedPolicy(it)
-        }
+    fun friendWeek(token: String): JSONObject =
+        validatedFriendWeek(request("/v1/friends/weekly?metric=cells", "GET", null, token))
+
+    internal fun validatedFriendWeek(body: JSONObject): JSONObject = body.also {
+        if (it.optBoolean("available")) requireVerifiedPolicy(it)
     }
 
     internal fun requireVerifiedPolicy(body: JSONObject) {

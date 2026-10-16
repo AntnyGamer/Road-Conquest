@@ -182,5 +182,15 @@
                 android:layout_weight="1"
                 android:text="Goals" />
         </LinearLayout>
+        <TextView
+            android:id="@+id/locationIqCredit"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
+            android:gravity="center"
+            android:text="@string/locationiq_credit"
+            android:textColor="?attr/rcTextSecondary"
+            android:textColorLink="?attr/rcAccent"
+            android:textSize="12sp" />
     </LinearLayout>
 </FrameLayout>

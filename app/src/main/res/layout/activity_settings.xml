@@ -373,6 +373,35 @@
                 android:textColor="?attr/rcTextSecondary"
                 android:textSize="13sp" />
 
+            <Switch
+                android:id="@+id/friendNotificationsSwitch"
+                android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp"
+                android:text="Friend request notifications" android:textColor="?attr/rcTextPrimary" />
+            <TextView
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="On by default; you can turn it off. Requires sign-in and Android notification permission. Shares a Firebase Installation ID with Road Conquest and Google Firebase. No routes or account credentials are sent to Firebase."
+                android:textColor="?attr/rcTextSecondary" android:textSize="13sp" />
+            <Switch
+                android:id="@+id/weeklyRemindersSwitch"
+                android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp"
+                android:text="Weekly challenge reminders" android:textColor="?attr/rcTextPrimary" />
+            <TextView
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="On by default; you can turn it off. Requires Android notification permission. Reminds you around Monday at 6 PM on this phone. Android may delay it to save battery."
+                android:textColor="?attr/rcTextSecondary" android:textSize="13sp" />
+            <Switch
+                android:id="@+id/crashReportingSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:text="Share crash reports with Firebase"
+                android:textColor="?attr/rcTextPrimary" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Optional diagnostics include crash details and device information. Your saved routes and account details are not attached."
+                android:textColor="?attr/rcTextSecondary"
+                android:textSize="13sp" />
             <Button
                 android:id="@+id/privacyPolicyButton"
                 style="@style/RoadConquest.SettingsAction"
@@ -441,7 +470,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="3dp"
-                android:text="Map and overlay data: OpenStreetMap contributors via OpenFreeMap/OpenMapTiles and Nominatim. Road matching: OSRM."
+                android:text="Map and overlay data: OpenStreetMap contributors via OpenFreeMap/OpenMapTiles and Nominatim. Road matching: Geoapify and LocationIQ."
                 android:textColor="?attr/rcTextSecondary"
                 android:textSize="11sp" />
 
@@ -461,6 +490,16 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
                 android:text="Licenses and map credits" />
+
+            <TextView
+                android:id="@+id/settingsLocationIqCredit"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:gravity="center_vertical"
+                android:text="@string/locationiq_credit"
+                android:textColorLink="?attr/rcAccent"
+                android:textSize="14sp" />
 
             <Button
                 android:id="@+id/githubButton"

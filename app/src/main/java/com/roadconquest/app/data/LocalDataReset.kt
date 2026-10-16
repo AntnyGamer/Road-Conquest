@@ -28,6 +28,8 @@ object LocalDataReset {
         var cleared = false
         try {
             TrackingRepository(app).clearHistory()
+            com.roadconquest.app.diagnostics.CrashReporting.clear(app)
+            com.roadconquest.app.notifications.OptionalNotifications.clear(app)
             ProgressionManager.resetLocalProgression(app)
             com.roadconquest.app.map.PlacePopulationLookup.clearCache(app)
             DataExporter.clearTemporarySnapshots(app)

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import { createAccountIngress } from "../worker/ingress.mjs";
+import { createFetchHandler } from "../src/fetch-adapter.mjs";
 
 const secret = "test-signed-ingress-secret-longer-than-32-characters";
 const env = {
@@ -135,4 +136,95 @@ test("misconfigured upstream and HTTP never forward credentials", async () => {
   }
   assert.equal((await proxy(new Request("http://roadconquest.workers.dev/v1/me"), env)).status, 400);
   assert.equal(requests, 0);
+});
+
+test("strips all caller identity and proxy header variants while preserving API headers", async () => {
+  let outgoing;
+  const proxy = createAccountIngress(async request => {
+    outgoing = request;
+    return new Response("{}");
+  }, () => now);
+  const untrusted = {
+    "Forwarded": "for=192.0.2.4;host=attacker.example;proto=http",
+    "X-Forwarded-Host": "attacker.example",
+    "X-Forwarded-Proto": "http",
+    "X-Forwarded-Port": "80",
+    "X-Forwarded-Custom": "untrusted",
+    "True-Client-IP": "192.0.2.4",
+    "CF-Connecting-IPv6": "2001:db8::99",
+    "CF-Pseudo-IPv4": "240.0.0.4",
+    "X-RoadConquest-Client-Extra": "untrusted"
+  };
+  await proxy(new Request("https://roadconquest.workers.dev/v1/me", {
+    headers: { ...untrusted, "CF-Connecting-IP": "203.0.113.31", Authorization: "Bearer sample" }
+  }), env);
+  for (const name of Object.keys(untrusted)) assert.equal(outgoing.headers.get(name), null, name);
+  assert.equal(outgoing.headers.get("Authorization"), "Bearer sample");
+  assert.equal(outgoing.headers.get("X-RoadConquest-Client-IP"), "203.0.113.31");
+});
+
+test("upstream Worker requests never promote mutable IPs or the shared placeholder to trusted identities", async () => {
+  const outgoing = [];
+  const proxy = createAccountIngress(async request => {
+    outgoing.push(request);
+    return new Response("{}");
+  }, () => now);
+  for (const headers of [
+    { "CF-Worker": "upstream.example", "CF-Connecting-IP": "203.0.113.31" },
+    { "CF-Worker": "", "CF-Connecting-IP": "203.0.113.32" },
+    { "CF-Connecting-IP": "2a06:98c0:3600::103" }
+  ]) {
+    await proxy(new Request("https://roadconquest.workers.dev/v1/signup", {
+      headers: { ...headers, "X-Real-IP": "192.0.2.99", "X-RoadConquest-Client-IP": "192.0.2.98" }
+    }), env);
+  }
+  for (const request of outgoing) {
+    for (const name of ["CF-Worker", "CF-Connecting-IP", "X-Real-IP", "X-RoadConquest-Client-IP",
+      "X-RoadConquest-Client-Timestamp", "X-RoadConquest-Client-Signature"]) {
+      assert.equal(request.headers.get(name), null, name);
+    }
+  }
+});
+
+test("Worker signatures interoperate with the actual Neon verifier for simulated IPv4 and IPv6 clients", async () => {
+  const identities = [];
+  const backend = createFetchHandler((request, response) => {
+    identities.push(request.socket.remoteAddress);
+    assert.equal(request.url, "/v1/login?source=ingress-test&encoded=%2F");
+    response.writeHead(401, { "Content-Type": "application/json" });
+    response.end('{"error":"Invalid credentials"}');
+  }, { rateLimitIpSignatureKey: secret });
+  const proxy = createAccountIngress(backend);
+  for (const headers of [
+    { "CF-Connecting-IP": "203.0.113.31" },
+    { "CF-Connecting-IP": "2001:db8::31" },
+    { "CF-Worker": "upstream.example", "CF-Connecting-IP": "192.0.2.99" },
+    { "X-Forwarded-For": "192.0.2.98", "X-RoadConquest-Client-IP": "192.0.2.97" }
+  ]) {
+    const response = await proxy(new Request(
+      "https://roadconquest.workers.dev/v1/login?source=ingress-test&encoded=%2F",
+      { method: "POST", headers, body: "{}" }
+    ), env);
+    assert.equal(response.status, 401);
+    assert.equal(response.headers.get("Cache-Control"), "no-store");
+    assert.deepEqual(await response.json(), { error: "Invalid credentials" });
+  }
+  assert.deepEqual(identities, ["203.0.113.31", "2001:db8::31", "function-anonymous", "function-anonymous"]);
+});
+
+test("upstream redirects are returned without forwarding credentials to their target", async () => {
+  let calls = 0;
+  const proxy = createAccountIngress(async request => {
+    calls++;
+    assert.equal(request.redirect, "manual");
+    assert.equal(new URL(request.url).origin, "https://roadconquest.neon.tech");
+    return new Response(null, { status: 307, headers: { Location: "https://untrusted.example/" } });
+  });
+  const response = await proxy(new Request("https://roadconquest.workers.dev/v1/me", {
+    headers: { Authorization: "Bearer sample" }
+  }), env);
+  assert.equal(calls, 1);
+  assert.equal(response.status, 307);
+  assert.equal(response.headers.get("Location"), "https://untrusted.example/");
+  assert.equal(response.headers.get("Cache-Control"), "no-store");
 });

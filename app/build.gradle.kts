@@ -1,13 +1,23 @@
+import java.net.URI
+
 plugins {
     id("com.android.application")
+    id("com.google.firebase.crashlytics")
+    id("com.google.gms.google-services")
 }
 
 val accountApiUrl = providers.gradleProperty("ROADCONQUEST_ACCOUNT_API_URL").getOrElse(
     "https://roadconquest-api.22abongiovanni.workers.dev"
 )
-val osrmApiUrl = providers.gradleProperty("ROADCONQUEST_OSRM_API_URL").getOrElse(
-    "https://router.project-osrm.org"
+val mapGatewayUrl = providers.gradleProperty("ROADCONQUEST_MAP_GATEWAY_URL").getOrElse(
+    "https://roadconquest-maps.22abongiovanni.workers.dev"
 )
+for (endpoint in listOf(mapGatewayUrl).filter { it.isNotBlank() }) {
+    val uri = URI(endpoint)
+    require(uri.scheme == "https" && uri.host != null && uri.userInfo == null && uri.query == null && uri.fragment == null) {
+        "Map service origins must use HTTPS without embedded credentials, query or fragment."
+    }
+}
 val placeOverlayConfigUrl = providers.gradleProperty("ROADCONQUEST_PLACE_OVERLAY_CONFIG_URL").getOrElse(
     "https://raw.githubusercontent.com/AntnyGamer/RoadConquest-Beta/main/OVERLAY_PROVIDER.txt"
 )
@@ -28,10 +38,9 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         testInstrumentationRunnerArguments["timeout_msec"] = "120000"
         val escapedAccountApiUrl = accountApiUrl.replace("\\", "\\\\").replace("\"", "\\\"")
-        val escapedOsrmApiUrl = osrmApiUrl.replace("\\", "\\\\").replace("\"", "\\\"")
         val escapedPlaceOverlayConfigUrl = placeOverlayConfigUrl.replace("\\", "\\\\").replace("\"", "\\\"")
         buildConfigField("String", "ACCOUNT_API_URL", "\"$escapedAccountApiUrl\"")
-        buildConfigField("String", "OSRM_API_URL", "\"$escapedOsrmApiUrl\"")
+        buildConfigField("String", "MAP_GATEWAY_URL", "\"${mapGatewayUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
         buildConfigField("String", "PLACE_OVERLAY_CONFIG_URL", "\"$escapedPlaceOverlayConfigUrl\"")
         buildConfigField("boolean", "LEADERBOARDS_VISIBLE", leaderboardsVisible.toString())
     }
@@ -85,6 +94,10 @@ tasks.withType<Test>().configureEach {
 }
 
 dependencies {
+    implementation(platform("com.google.firebase:firebase-bom:35.0.1"))
+    implementation("com.google.firebase:firebase-crashlytics")
+    implementation("com.google.firebase:firebase-messaging")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.android.billingclient:billing:9.1.0")
     implementation("com.google.android.gms:play-services-ads:25.5.0")
     implementation("com.google.android.ump:user-messaging-platform:4.0.0")

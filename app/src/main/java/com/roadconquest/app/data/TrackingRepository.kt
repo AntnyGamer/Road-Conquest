@@ -146,6 +146,48 @@ class TrackingRepository(context: Context) {
         }
     }
 
+    /**
+     * Recover the final compressed point when Android killed tracking without onDestroy.
+     * Every skipped fix already survived in SQLite; this promotes only the missing
+     * endpoint into the matching queue and restores its intervening mileage once.
+     */
+    @Synchronized
+    fun recoverTrailingSkippedDrivingFix(): Boolean = synchronized(dbHelper.historyLock) {
+        if (historyGeneration != dbHelper.historyGeneration) return@synchronized false
+        val db = dbHelper.writableDatabase
+        val endpoint = db.rawQuery(
+            """SELECT latitude, longitude, accuracy_m, speed_mps, bearing_deg, timestamp_ms
+               FROM skipped_driving_fixes
+               WHERE timestamp_ms > COALESCE((SELECT MAX(timestamp_ms) FROM track_points), 0)
+               ORDER BY timestamp_ms DESC, id DESC LIMIT 1""", null
+        ).use { cursor ->
+            if (!cursor.moveToFirst()) null else Location("gps").apply {
+                latitude = cursor.getDouble(0); longitude = cursor.getDouble(1)
+                accuracy = cursor.getFloat(2); speed = cursor.getFloat(3)
+                bearing = cursor.getFloat(4); time = cursor.getLong(5)
+            }
+        } ?: return@synchronized false
+        insertLocation(endpoint)
+        true
+    }
+
+    /** Preserve accepted driving evidence omitted from the compressed online matching queue. */
+    @Synchronized
+    fun recordSkippedDrivingFix(location: Location) {
+        synchronized(dbHelper.historyLock) {
+            if (historyGeneration != dbHelper.historyGeneration) return
+            val values = ContentValues().apply {
+                put("latitude", location.latitude)
+                put("longitude", location.longitude)
+                put("accuracy_m", location.accuracy)
+                put("speed_mps", LocationProviders.reliableMeasuredSpeed(location))
+                put("bearing_deg", if (location.hasBearing() && location.bearing.isFinite()) location.bearing else 0f)
+                put("timestamp_ms", location.time.takeIf { it > 0L } ?: System.currentTimeMillis())
+            }
+            dbHelper.writableDatabase.insertOrThrow("skipped_driving_fixes", null, values)
+        }
+    }
+
     @Synchronized
     fun insertLocation(location: Location): Long {
         synchronized(dbHelper.historyLock) {
@@ -245,10 +287,42 @@ class TrackingRepository(context: Context) {
         delta: TrackInsertDelta
     ): Long {
         val timestamp = location.time.takeIf { it > 0L } ?: System.currentTimeMillis()
-        val distance = if (previous.present) TravelDistance.between(
+        // Restore the actual path length from locally kept intervening fixes.
+        // These are never included in online matching or billed API requests.
+        var distance = if (previous.present) TravelDistance.between(
             previous.latitude, previous.longitude, previous.timestamp,
             location.latitude, location.longitude, timestamp
         ) else 0.0
+        if (previous.present && timestamp - previous.timestamp in 1..30_000L) {
+            var prevLat = previous.latitude
+            var prevLon = previous.longitude
+            var prevTime = previous.timestamp
+            var retained = false
+            var sum = 0.0
+            db.query(
+                "skipped_driving_fixes",
+                arrayOf("latitude", "longitude", "timestamp_ms"),
+                "timestamp_ms > ? AND timestamp_ms < ?",
+                arrayOf(previous.timestamp.toString(), timestamp.toString()),
+                null, null, "timestamp_ms ASC, id ASC"
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    val lat = cursor.getDouble(0)
+                    val lon = cursor.getDouble(1)
+                    val time = cursor.getLong(2)
+                    sum += TravelDistance.between(prevLat, prevLon, prevTime, lat, lon, time)
+                    prevLat = lat
+                    prevLon = lon
+                    prevTime = time
+                    retained = true
+                }
+            }
+            if (retained) {
+                distance = sum + TravelDistance.between(
+                    prevLat, prevLon, prevTime, location.latitude, location.longitude, timestamp
+                )
+            }
+        }
         val values = ContentValues().apply {
             put("latitude", location.latitude)
             put("longitude", location.longitude)
@@ -315,7 +389,7 @@ class TrackingRepository(context: Context) {
         // The public OSRM demo accepts only ten points: use eight fixes and one genuine
         // context fix on either side, but ONLY when revisiting an old unresolved island.
         // Ordinary live batches retain three context slots and their existing behavior.
-        val wideRetry = retryGapStartId != null && maxPoints >= 10
+        val wideRetry = retryGapStartId != null && maxPoints in 10..16
         val anchorSlots = minOf(if (wideRetry) 2 else if (maxPoints >= 6) 3 else 2, maxPoints - 1)
         val pending = ArrayList<TrackPoint>(maxPoints - anchorSlots)
         val pendingSelection = buildString {
@@ -570,6 +644,45 @@ class TrackingRepository(context: Context) {
             "SELECT MIN(next_match_attempt_ms) FROM track_points WHERE matched = 0 AND next_match_attempt_ms > ?",
             arrayOf(nowMillis.toString())
         ).use { if (it.moveToFirst() && !it.isNull(0)) it.getLong(0) else null }
+
+    /**
+     * Atomically record a repeated visit to a saved road and resolve its precise GPS
+     * fixes locally. No road geometries or new unlocked segments are ever created.
+     */
+    @Synchronized
+    fun completeKnownRoadVisits(visits: List<com.roadconquest.app.matching.KnownRoadVisit>): Int =
+        synchronized(dbHelper.historyLock) {
+            if (historyGeneration != dbHelper.historyGeneration || visits.isEmpty()) return@synchronized 0
+            val db = dbHelper.writableDatabase
+            var resolved = 0
+            db.beginTransaction()
+            try {
+                for (visit in visits) {
+                    if (visit.pointIds.isEmpty() || visit.pointIds.size > 100) continue
+                    val exists = db.rawQuery("SELECT 1 FROM roads WHERE segment_id = ? LIMIT 1",
+                        arrayOf(visit.segmentId)).use { it.moveToFirst() }
+                    if (!exists) continue
+                    val ids = visit.pointIds.distinct()
+                    val placeholders = ids.joinToString(",") { "?" }
+                    val count = db.update(
+                        "track_points",
+                        ContentValues().apply { put("matched", 1); put("next_match_attempt_ms", 0) },
+                        "matched = 0 AND id IN ($placeholders)",
+                        ids.map(Long::toString).toTypedArray()
+                    )
+                    check(count == ids.size) { "Local match changed during validation" }
+                    recordRoadVisit(db, visit.segmentId, visit.firstTimestamp, visit.lastTimestamp)
+                    db.execSQL("UPDATE roads SET last_driven_at = MAX(last_driven_at, ?) WHERE segment_id = ?",
+                        arrayOf(visit.lastTimestamp, visit.segmentId))
+                    resolved += count
+                }
+                db.setTransactionSuccessful()
+            } finally {
+                db.endTransaction()
+            }
+            if (resolved > 0) dbHelper.invalidateRoadSummary()
+            resolved
+        }
 
     /** Geometry and point resolution must either both commit or both roll back. */
     @Synchronized
@@ -1337,7 +1450,7 @@ class TrackingRepository(context: Context) {
             destination.beginTransaction()
             try {
                 for (table in listOf(
-                    "track_points", "roads", "road_visits", "explored_places", "explored_grid",
+                    "track_points", "skipped_driving_fixes", "roads", "road_visits", "explored_places", "explored_grid",
                     "visited_places", "place_candidates", "progression_rewards",
                     "progression_purchases", "progression_counters"
                 )) {
@@ -1375,6 +1488,7 @@ class TrackingRepository(context: Context) {
             db.beginTransaction()
             try {
                 db.delete("track_points", null, null)
+                db.delete("skipped_driving_fixes", null, null)
                 db.delete("road_visits", null, null)
                 db.delete("roads", null, null)
                 db.delete("explored_places", null, null)
@@ -1424,6 +1538,43 @@ class TrackingRepository(context: Context) {
         timesDriven = getInt(9),
         timesDrivenExact = getInt(10) != 0
     )
+
+    /**
+     * Fail closed when another saved road is nearby. An ambiguous junction or
+     * parallel road must be verified online rather than credited as a local re-drive.
+     */
+    @Synchronized
+    fun findUnambiguousPreviouslyDrivenRoadNear(
+        latitude: Double, longitude: Double,
+        snapRadiusMeters: Double = 3.0, exclusionRadiusMeters: Double = 12.0
+    ): RoadRecord? {
+        if (!latitude.isFinite() || !longitude.isFinite() ||
+            latitude !in -90.0..90.0 || longitude !in -180.0..180.0 ||
+            snapRadiusMeters <= 0.0 || exclusionRadiusMeters <= snapRadiusMeters
+        ) return null
+        val latitudePad = exclusionRadiusMeters / METERS_PER_DEGREE
+        val longitudePad = (exclusionRadiusMeters /
+            (METERS_PER_DEGREE * cos(Math.toRadians(latitude)).coerceAtLeast(0.01))).coerceAtMost(180.0)
+        fun wrap(value: Double) = ((value + 180.0) % 360.0 + 360.0) % 360.0 - 180.0
+        val roads = getRoadsInBounds(
+            (latitude + latitudePad).coerceAtMost(90.0),
+            wrap(longitude + longitudePad),
+            (latitude - latitudePad).coerceAtLeast(-90.0),
+            wrap(longitude - longitudePad),
+            Int.MAX_VALUE
+        )
+        var single: RoadRecord? = null
+        var nearbyCount = 0
+        for (road in roads) {
+            val distance = distanceToRoadMeters(latitude, longitude, road.geometryJson)
+            if (distance > exclusionRadiusMeters) continue
+            // Count even candidates outside the tight snap radius. They still make
+            // the claimed road identity ambiguous at a junction/parallel street.
+            if (++nearbyCount > 1) return null
+            single = road.takeIf { distance <= snapRadiusMeters }
+        }
+        return single
+    }
 
     @Synchronized
     fun findRoadNear(latitude: Double, longitude: Double, radiusMeters: Double): RoadRecord? {
@@ -1481,20 +1632,24 @@ class TrackingRepository(context: Context) {
         fun y(lat: Double) = EARTH_RADIUS_M * Math.toRadians(lat - latitude)
 
         var best = Double.POSITIVE_INFINITY
-        for (i in 1 until coordinates.length()) {
-            val a = coordinates.optJSONArray(i - 1) ?: continue
-            val b = coordinates.optJSONArray(i) ?: continue
-            val ax = x(a.optDouble(0, Double.NaN))
-            val ay = y(a.optDouble(1, Double.NaN))
-            val bx = x(b.optDouble(0, Double.NaN))
-            val by = y(b.optDouble(1, Double.NaN))
-            if (!ax.isFinite() || !ay.isFinite() || !bx.isFinite() || !by.isFinite()) continue
-            val dx = bx - ax
-            val dy = by - ay
-            val lengthSquared = dx * dx + dy * dy
-            val t = if (lengthSquared == 0.0) 0.0
-                else (-(ax * dx + ay * dy) / lengthSquared).coerceIn(0.0, 1.0)
-            best = min(best, hypot(ax + t * dx, ay + t * dy))
+        // Adjacent segments share a vertex. Project each one once rather than
+        // repeating trigonometry for both ends of every segment on each GPS fix.
+        var ax = Double.NaN
+        var ay = Double.NaN
+        for (i in 0 until coordinates.length()) {
+            val point = coordinates.optJSONArray(i)
+            val bx = if (point != null) x(point.optDouble(0, Double.NaN)) else Double.NaN
+            val by = if (point != null) y(point.optDouble(1, Double.NaN)) else Double.NaN
+            if (i > 0 && ax.isFinite() && ay.isFinite() && bx.isFinite() && by.isFinite()) {
+                val dx = bx - ax
+                val dy = by - ay
+                val lengthSquared = dx * dx + dy * dy
+                val t = if (lengthSquared == 0.0) 0.0
+                    else (-(ax * dx + ay * dy) / lengthSquared).coerceIn(0.0, 1.0)
+                best = min(best, hypot(ax + t * dx, ay + t * dy))
+            }
+            ax = bx
+            ay = by
         }
         return best
     }

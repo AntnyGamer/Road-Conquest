@@ -5,6 +5,61 @@ import { readFile } from "node:fs/promises";
 import { createFriends } from "../src/friends.mjs";
 import { createCompetition } from "../src/competition.mjs";
 
+test("friend status compaction preserves accepted priority, both ID orientations and username order",{skip:!process.env.DATABASE_URL},async()=>{
+  const pool=new pg.Pool({connectionString:process.env.DATABASE_URL});
+  try{
+    await pool.query(await readFile(new URL('../schema.sql',import.meta.url),'utf8'));
+    await pool.query('TRUNCATE users CASCADE');
+    const users=(await pool.query(`INSERT INTO users(username_display,username_key,password_salt,password_hash)
+      SELECT 'Status_'||g,'status_'||g,$1,$2 FROM generate_series(0,5) g ORDER BY g RETURNING id`,[Buffer.alloc(16),Buffer.alloc(64)])).rows;
+    const owner=users[2];
+    for(const [low,high,by,accepted] of [[0,2,0,false],[1,2,2,false],[2,3,2,true],[2,4,4,true]]){
+      await pool.query('INSERT INTO friendships(user_low,user_high,requested_by,accepted) VALUES ($1,$2,$3,$4)',
+        [users[low].id,users[high].id,users[by].id,accepted]);
+    }
+    const service=createFriends(pool);
+    assert.deepEqual((await service.list(owner)).friends,[{username:'Status_3',status:'accepted'},
+      {username:'Status_4',status:'accepted'},{username:'Status_0',status:'incoming'},{username:'Status_1',status:'outgoing'}]);
+    assert.deepEqual(await service.list(users[5]),{friends:[]});
+  }finally{await pool.end();}
+});
+
+test("concurrent requests preserve both users' fifty-relationship cap and notify only once", { skip: !process.env.DATABASE_URL }, async () => {
+  const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    await pool.query(await readFile(new URL('../schema.sql', import.meta.url), 'utf8'));
+    await pool.query('TRUNCATE users CASCADE');
+    const users = (await pool.query(`INSERT INTO users(username_display,username_key,password_salt,password_hash)
+      SELECT 'Cap_'||lpad(g::text,3,'0'),'cap_'||lpad(g::text,3,'0'),$1,$2
+      FROM generate_series(0,52) g ORDER BY g RETURNING id,username_display`, [Buffer.alloc(16),Buffer.alloc(64)])).rows;
+    const owner = users[0];
+    await pool.query(`INSERT INTO friendships(user_low,user_high,requested_by,accepted)
+      SELECT $1,id,$1,id%2=0 FROM users WHERE id=ANY($2::bigint[])`, [owner.id,users.slice(1,50).map(u=>u.id)]);
+    const pushed = [];
+    const service = createFriends(pool, async target => { pushed.push(String(target)); });
+    const contenders = users.slice(50,52);
+    const result = await Promise.allSettled(contenders.map(target => service.change(owner,target.username_display,'request')));
+    assert.equal(result.filter(r=>r.status==='fulfilled').length,1);
+    assert.equal(result.find(r=>r.status==='rejected').reason.status,409);
+    assert.equal((await service.list(owner)).friends.length,50);
+    assert.equal(pushed.length,1);
+    const winner = contenders[result.findIndex(r=>r.status==='fulfilled')];
+    await service.change(owner,winner.username_display,'request');
+    await service.change(winner,owner.username_display,'request');
+    assert.equal(pushed.length,1);
+    assert.equal((await service.list(winner)).friends[0].status,'incoming');
+    // A different requester must also respect the target's cap.
+    await assert.rejects(service.change(users[52],owner.username_display,'request'), /limit reached/);
+    assert.equal((await service.list(users[52])).friends.length,0);
+    await service.change(winner,owner.username_display,'accept');
+    assert.equal((await service.list(winner)).friends[0].status,'accepted');
+    await service.change(owner,winner.username_display,'remove');
+    await service.change(users[52],owner.username_display,'request');
+    assert.equal((await service.list(owner)).friends.length,50);
+    assert.equal(pushed.length,2);
+  } finally { await pool.end(); }
+});
+
 test("friend consent, private weekly scores, ties, removal, username changes and deletion use account boundaries", { skip: !process.env.DATABASE_URL }, async () => {
   const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
   const dataset = "fog-grid-v1";

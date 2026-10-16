@@ -20,6 +20,7 @@ class TrackingRepositoryTest {
         val context: Context = RuntimeEnvironment.getApplication()
         repository = TrackingRepository(context)
         repository.readableDatabase().execSQL("DELETE FROM track_points")
+        repository.readableDatabase().execSQL("DELETE FROM skipped_driving_fixes")
         repository.readableDatabase().execSQL("DELETE FROM road_visits")
         repository.readableDatabase().execSQL("DELETE FROM roads")
     }
@@ -315,11 +316,11 @@ class TrackingRepositoryTest {
         assertEquals(1L, repository.getSummary().roadsUnlockedCount)
     }
 
-    @Test fun shortTurnRetryUsesSpareContextSlotsAtProductionBatchSize() {
+    @Test fun shortTurnRetryUsesSpareContextSlotsAtTenPointLimit() {
         val ids = (0..6).map { point(1_000_000L + it * 3_000L, lon = -74.0 + it * 0.0001) }
         repository.markMatched(listOf(ids[0], ids[1], ids[3], ids[4], ids[5], ids[6]))
 
-        val retry = repository.loadMatchingWindow(limit = com.roadconquest.app.matching.OsrmMatcher.MAX_MATCH_POINTS)
+        val retry = repository.loadMatchingWindow(limit = 10)
         assertEquals(setOf(ids[2]), retry.markableIds)
         assertEquals(ids, retry.points.map { it.id })
     }
@@ -378,12 +379,12 @@ class TrackingRepositoryTest {
         assertEquals(setOf(ids[2]), middle.markableIds)
     }
 
-    @Test fun publicServerSizeBatchesDrainBacklogWithoutMissingBoundaryEdges() {
+    @Test fun tenPointBatchesDrainBacklogWithoutMissingBoundaryEdges() {
         val ids = (0 until 27).map { point(1_000_000L + it * 3_000L) }
         val covered = mutableSetOf<Pair<Long, Long>>()
         var batches = 0
         while (true) {
-            val window = repository.loadMatchingWindow(limit = com.roadconquest.app.matching.OsrmMatcher.MAX_MATCH_POINTS)
+            val window = repository.loadMatchingWindow(limit = 10)
             if (window.points.isEmpty()) break
             assertTrue(window.points.size in 2..10)
             covered += window.points.map { it.id }.zipWithNext()
@@ -391,6 +392,22 @@ class TrackingRepositoryTest {
             assertTrue("Backlog must make progress", ++batches <= 5)
         }
         assertEquals(4, batches)
+        assertEquals(ids.zipWithNext().toSet(), covered)
+    }
+
+    @Test fun hundredPointProductionBatchesDrainLongDriveInTwoCalls() {
+        val ids = (0 until 180).map { point(1_000_000L + it * 3_000L, lon = -74.0 + it * 0.00001) }
+        val covered = mutableSetOf<Pair<Long, Long>>()
+        var batches = 0
+        while (true) {
+            val window = repository.loadMatchingWindow(limit = 100)
+            if (window.points.isEmpty()) break
+            assertTrue(window.points.size in 2..100)
+            covered += window.points.map { it.id }.zipWithNext()
+            repository.markMatched(window.markableIds.toList())
+            assertTrue("Bulk matching must drain the queue", ++batches <= 3)
+        }
+        assertEquals(2, batches)
         assertEquals(ids.zipWithNext().toSet(), covered)
     }
 
@@ -673,6 +690,77 @@ class TrackingRepositoryTest {
         assertEquals(2, repository.estimatedRoadVisitCount(road))
     }
 
+    @Test fun unexpectedProcessDeathRestoresTrailingCompressedGpsOnce() {
+        fun fix(lon: Double, timestamp: Long) = Location("gps").apply {
+            latitude = 40.0; longitude = lon; accuracy = 3f
+            speed = 8f; bearing = 90f; time = timestamp
+        }
+        val first = fix(-74.0, 1_000_000L)
+        val middle = fix(-73.9999, 1_003_000L)
+        val terminal = fix(-73.9998, 1_006_000L)
+        repository.insertLocation(first)
+        repository.recordSkippedDrivingFix(middle)
+        repository.recordSkippedDrivingFix(terminal)
+        assertTrue(repository.recoverTrailingSkippedDrivingFix())
+        assertFalse(repository.recoverTrailingSkippedDrivingFix())
+        assertEquals(2L, repository.getSummary().trackPointCount)
+        val expected = TravelDistance.between(first.latitude, first.longitude, first.time,
+            middle.latitude, middle.longitude, middle.time) +
+            TravelDistance.between(middle.latitude, middle.longitude, middle.time,
+                terminal.latitude, terminal.longitude, terminal.time)
+        assertEquals(expected, repository.getSummary().distanceMeters, 0.5)
+    }
+
+    @Test fun flushedCompressedEndpointRestoresMileageWithoutDuplicateDistance() {
+        fun fix(lon: Double, time: Long) = Location("gps").apply {
+            latitude = 40.0; longitude = lon; accuracy = 3f; speed = 8f; bearing = 90f
+            this.time = time
+        }
+        val a = fix(-74.0, 1_000_000L)
+        val skipped = fix(-73.9999, 1_003_000L)
+        repository.insertLocation(a)
+        repository.recordSkippedDrivingFix(skipped)
+        repository.insertLocation(skipped)
+        assertEquals(2L, repository.getSummary().trackPointCount)
+        assertEquals(TravelDistance.between(a.latitude, a.longitude, a.time,
+            skipped.latitude, skipped.longitude, skipped.time), repository.getSummary().distanceMeters, 0.5)
+    }
+
+    @Test fun compressedGpsIsRetainedLocallyAndRestoresMeasuredTripDistance() {
+        fun fix(lat: Double, lon: Double, time: Long) = Location("gps").apply {
+            latitude = lat; longitude = lon; accuracy = 3f; speed = 8f; bearing = 90f
+            this.time = time
+        }
+        val a = fix(40.0, -74.0, 1_000_000L)
+        val bend = fix(40.00010, -73.9999, 1_003_000L)
+        val b = fix(40.0, -73.9998, 1_006_000L)
+        repository.insertLocation(a)
+        repository.recordSkippedDrivingFix(bend)
+        repository.insertLocation(b)
+        val db = repository.readableDatabase()
+        assertEquals(1L, db.rawQuery("SELECT COUNT(*) FROM skipped_driving_fixes", null).use {
+            it.moveToFirst(); it.getLong(0)
+        })
+        assertEquals(2L, repository.getSummary().trackPointCount)
+        val expected = TravelDistance.between(a.latitude, a.longitude, a.time, bend.latitude, bend.longitude, bend.time) +
+            TravelDistance.between(bend.latitude, bend.longitude, bend.time, b.latitude, b.longitude, b.time)
+        assertEquals(expected, repository.getSummary().distanceMeters, 0.5)
+        assertTrue(expected > TravelDistance.between(a.latitude, a.longitude, a.time, b.latitude, b.longitude, b.time) + 5.0)
+    }
+
+    @Test fun curvedRoadGroupingPreservesConnectedAndDisconnectedDecisions() {
+        fun road(id: String, vertices: String) = RoadGrouping.Road(
+            segmentId = id, name = "Example Road", geometryJson = vertices,
+            minLatitude = 39.9999, maxLatitude = 40.0002,
+            minLongitude = -74.001, maxLongitude = -73.997
+        )
+        val original = road("a", "[[-74.001,40.0],[-74.0005,40.0001],[-74.0,40.0]]")
+        val connected = road("b", "[[-73.99999,40.0],[-73.9995,40.0001]]")
+        val disconnected = road("c", "[[-73.997,40.0002],[-73.9965,40.0002]]")
+        assertTrue(RoadGrouping.connected(original, connected))
+        assertFalse(RoadGrouping.connected(original, disconnected))
+    }
+
     @Test fun roadHitTestingReturnsOnlyNearbySavedRoads() {
         repository.upsertRoads(listOf(
             MatchedRoad("Tap Me", "[[-74.001,40],[-74.000,40]]", 100, 200, 1.0)
@@ -682,6 +770,50 @@ class TrackingRepositoryTest {
         assertEquals("Tap Me", road!!.name)
         assertEquals(85.0, repository.roadLengthMeters(road), 5.0)
         assertNull(repository.findRoadNear(40.01, -74.0005, 30.0))
+    }
+
+    @Test fun localRoadDistanceReusesVerticesAcrossValidMultiSegmentPolyline() {
+        repository.upsertRoads(listOf(
+            MatchedRoad("Curving road", "[[-74,40],[-73.9999,40],[-73.9998,40.0001],[-73.9997,40.0001]]",
+                1_000_000L, 1_010_000L, 0.99)
+        ))
+        assertNotNull(repository.findUnambiguousPreviouslyDrivenRoadNear(40.0, -73.99995))
+        assertNotNull(repository.findUnambiguousPreviouslyDrivenRoadNear(40.0001, -73.99975))
+        assertNull(repository.findUnambiguousPreviouslyDrivenRoadNear(40.0, -73.99975))
+    }
+
+    @Test fun ambiguousParallelSavedRoadsCannotResolveGpsLocally() {
+        repository.upsertRoads(listOf(
+            MatchedRoad("Original", "[[-74,40],[-73.999,40]]", 1_000_000L, 1_010_000L, 0.99),
+            MatchedRoad("Parallel", "[[-74,40.00006],[-73.999,40.00006]]",
+                1_000_000L, 1_010_000L, 0.99)
+        ))
+        assertNull(repository.findUnambiguousPreviouslyDrivenRoadNear(40.0, -73.9995))
+    }
+
+    @Test fun preciseRepeatDriveIsMatchedOnDeviceWithoutUnlockingNewRoads() {
+        repository.upsertRoads(listOf(MatchedRoad(
+            "Previously driven", "[[-74,40],[-73.999,40]]", 1_000_000L, 1_010_000L, 0.99)))
+        val ids = (0 until 6).map { index ->
+            repository.insertLocation(Location("gps").apply {
+                latitude = 40.0
+                longitude = -74.0 + index * 0.0001
+                accuracy = 3f
+                speed = 8f
+                bearing = 90f
+                time = 2_000_000L + index * 6_000L
+            })
+        }
+        val window = repository.loadMatchingWindow(100)
+        val reused = com.roadconquest.app.matching.KnownRoadReuse.find(
+            repository, window.points, window.markableIds)
+        assertEquals(6, repository.completeKnownRoadVisits(reused))
+        assertEquals(ids, reused.flatMap { it.pointIds })
+        assertEquals(1L, repository.getSummary().roadSegmentCount)
+        assertTrue(repository.loadMatchingWindow(100).points.isEmpty())
+        val known = repository.getRoadsInBounds(41.0, -73.0, 39.0, -75.0).single()
+        assertEquals(2_030_000L, known.lastDrivenAt)
+        assertTrue(known.timesDriven >= 2)
     }
 
     @Test fun backwardWallClockChangeBreaksTheMatchingWindow() {

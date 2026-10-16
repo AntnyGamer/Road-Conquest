@@ -248,6 +248,10 @@ class MainActivity : Activity() {
         mapView = findViewById(R.id.mapView)
         enableButton = findViewById(R.id.enableButton)
         statusText = findViewById(R.id.statusText)
+        findViewById<TextView>(R.id.locationIqCredit).apply {
+            movementMethod = android.text.method.LinkMovementMethod.getInstance()
+            visibility = if (BuildConfig.MAP_GATEWAY_URL.isBlank()) View.GONE else View.VISIBLE
+        }
         statsText = findViewById(R.id.statsText)
         pointsText = findViewById(R.id.pointsText)
         pointsText.setOnClickListener { startActivity(Intent(this, ShopActivity::class.java)) }
@@ -333,6 +337,7 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        com.roadconquest.app.notifications.OptionalNotifications.initialize(this)
         if (!repository.isHistoryCurrent()) {
             recreatingForAppearance = true
             recreate()
@@ -543,6 +548,7 @@ class MainActivity : Activity() {
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        com.roadconquest.app.notifications.OptionalNotifications.initialize(this)
         when (requestCode) {
             REQUEST_BASIC_PERMISSIONS -> {
                 if (hasLocationPermission()) {
@@ -642,7 +648,7 @@ class MainActivity : Activity() {
             .setTitle("Location use")
             .setMessage(
                 "Road Conquest collects precise location data to record driven roads and reveal visited places, including in the background when automatic tracking is enabled and the app is closed or not in use. " +
-                    "It also uses location to show your position. Road matching sends GPS batches to OSRM; foreground U.S. town discovery sends individual saved GPS coordinates to Census TIGERweb. Verified scoring sends live GPS and app-integrity evidence only if you explicitly enable it."
+                    "It also uses location to show your position. Road matching sends GPS batches, timestamps and accuracy through Road Conquest's map service to Geoapify or fallback LocationIQ; foreground U.S. town discovery sends individual saved GPS coordinates to Census TIGERweb. Verified scoring sends live GPS and app-integrity evidence only if you explicitly enable it."
             )
             .setPositiveButton("Continue") { _, _ ->
                 Prefs.setLocationDisclosureShown(this, true)

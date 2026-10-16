@@ -164,6 +164,7 @@ class DataImporterTest {
     @Test fun acceptsLegacySchemaNineAndDecodesEscapedNegativeCandidateCoordinates() {
         ProgressionRepository(context).recordPlaceCandidate(fix(1_000_000))
         val values = entries(export()).toMutableMap()
+        values.remove("skipped_driving_fixes.csv")
         values["metadata.json"] = JSONObject(values.getValue("metadata.json")).put("schema_version", 9).toString()
         // Legacy schema-9 and schema-10 had four grid columns, before
         // first-unlock times were introduced in format 11.
@@ -177,6 +178,7 @@ class DataImporterTest {
         val tracker = TrackingRepository(context)
         tracker.recordExploredGridCell(fix(1_000_000L))
         val values = entries(export()).toMutableMap()
+        values.remove("skipped_driving_fixes.csv")
         values["metadata.json"] = JSONObject(values.getValue("metadata.json"))
             .put("schema_version", 10).toString()
         values["explored_grid.csv"] = values.getValue("explored_grid.csv")

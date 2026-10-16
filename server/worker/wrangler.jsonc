@@ -1,0 +1,10 @@
+{
+  "name": "roadconquest-ingress",
+  "main": "./ingress.mjs",
+  "compatibility_date": "2026-10-15",
+  "workers_dev": true,
+  "preview_urls": false,
+  "vars": {
+    "API_ORIGIN": "https://br-withered-dew-b7u432kv-roadconquest.compute.c-13.us-east-1.aws.neon.tech"
+  }
+}

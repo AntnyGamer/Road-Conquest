@@ -43,6 +43,28 @@ class TripHistoryRepositoryTest {
         assertTrue(TripReplayRoute.visibleRanges(downsampled, 1).isEmpty())
     }
 
+    @Test fun replayDownsamplingPreservesSampleTimesAndTrueEndpoint() {
+        val context = RuntimeEnvironment.getApplication()
+        TrackingRepository(context).clearHistory()
+        TrackingRepository(context).insertLocations((0 until 55).map { index ->
+            android.location.Location("gps").apply {
+                latitude = 40.0
+                longitude = -74.0 + index * 0.00001
+                accuracy = 5f
+                time = 1_000_000L + index * 5_000L
+            }
+        })
+        val history = TripHistoryRepository(context)
+        val trip = history.recentTrips().single()
+        // ceil(55 / 6) = 10. Keep the five selected samples and the true last fix.
+        val sampled = history.replay(trip, maxPoints = 6)
+        assertEquals(listOf(0, 10, 20, 30, 40, 54).map { 1_000_000L + it * 5_000L },
+            sampled.map { it.timestamp })
+        assertTrue(sampled.none { it.breakBefore })
+        // A final point already sampled by the stride must not be duplicated.
+        assertEquals(55, history.replay(trip, maxPoints = 55).size)
+    }
+
     @Test fun tripInsightsKeepTileAndPendingCountsAccurateInOneSnapshot() {
         val context = RuntimeEnvironment.getApplication()
         TrackingRepository(context).clearHistory()

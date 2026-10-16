@@ -23,8 +23,9 @@ captures/
 *.key
 *.log
 hs_err_*
-.env
-.env.*
+.env*
+.dev.vars*
+.wrangler/
 
 node_modules/
 

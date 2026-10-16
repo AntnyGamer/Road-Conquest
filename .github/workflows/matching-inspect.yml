@@ -1,54 +1,31 @@
-name: Inspect recorded driving matches
+name: Inspect recorded driving fixtures
 on:
+  workflow_dispatch:
   push:
-    branches: [perf/battery-and-rendering-review]
+    branches: [ui-modernization-tile-milestones]
     paths:
       - .github/workflows/matching-inspect.yml
       - tools/inspect-match-replay.py
-      - tools/fixtures/philadelphia-recorded-beta20.json
-  workflow_dispatch:
+      - app/src/test/resources/matching/turn17-replay.json
 permissions:
   contents: read
 jobs:
   inspect:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Set up JDK 21
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
-        with:
-          distribution: temurin
-          java-version: '21'
-      - name: Restore Gradle build state
-        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
-        with:
-          cache-provider: basic
-      - name: Ensure Android SDK packages
-        shell: bash
+      - name: Inspect checked-in road matching fixture offline
         run: |
-          set -euo pipefail
-          packages=()
-          if [ ! -d "$ANDROID_HOME/platforms/android-37.0" ] && [ ! -d "$ANDROID_HOME/platforms/android-37" ]; then
-            packages+=("platforms;android-37.0")
-          fi
-          if [ ! -x "$ANDROID_HOME/build-tools/36.0.0/aapt2" ]; then
-            packages+=("build-tools;36.0.0")
-          fi
-          if [ "${#packages[@]}" -gt 0 ]; then
-            "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "${packages[@]}"
-          fi
-      - name: Inspect actual matcher responses with current and expanded context
-        run: python3 tools/inspect-match-replay.py --out "$RUNNER_TEMP/matching-inspect"
-      - name: Save responses and parsed road geometry
+          python3 -m py_compile tools/inspect-match-replay.py
+          python3 tools/inspect-match-replay.py --out "$RUNNER_TEMP/matching-inspect"
+      - name: Save the fixture report
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: matching-inspect
-          path: |
-            ${{ runner.temp }}/matching-inspect
-            app/build/test-results/testDebugUnitTest
+          name: matching-fixture-inspect
+          path: ${{ runner.temp }}/matching-inspect
           retention-days: 14

@@ -1,0 +1,22 @@
+{
+  "project_info": {
+    "project_number": "882324035275",
+    "project_id": "roadconquest-9f0eb"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:882324035275:android:fbd435d3edd6db8a32ed4e",
+        "android_client_info": {
+          "package_name": "com.roadconquest.app"
+        }
+      },
+      "api_key": [
+        {
+          "current_key": "AIzaSyAhi3eM2MTpdjY8M20d9vqJmG9C_OvPBAI"
+        }
+      ]
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -5,7 +5,7 @@ import android.os.SystemClock
 import com.roadconquest.app.data.TrackingRepository
 import com.roadconquest.app.account.VerifiedDriving
 import com.roadconquest.app.map.OverlayRoads
-import com.roadconquest.app.matching.OsrmMatcher
+import com.roadconquest.app.matching.RoadGeometryValidator
 import com.roadconquest.app.util.Prefs
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -24,6 +24,17 @@ import java.util.concurrent.TimeUnit
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31, 37], manifest = Config.NONE)
 class FogProgressTest {
+    private fun fixtureMatcher(server: MockWebServer) = object : com.roadconquest.app.matching.RoadMatcher {
+        override val unavailable = false
+        override fun rateLimitRemainingMs() = 0L
+        override fun match(points: List<com.roadconquest.app.data.TrackPoint>): com.roadconquest.app.matching.MatchResult? {
+            val connection = server.url("/").toUrl().openConnection() as java.net.HttpURLConnection
+            return try {
+                RoadGeometryValidator().parse(connection.inputStream.bufferedReader().use { it.readText() }, points)
+            } finally { connection.disconnect() }
+        }
+    }
+
     @Test fun drivingWithFogHiddenStillMatchesAndSavesRoadsForReenablingFog() {
         val app = RuntimeEnvironment.getApplication()
         val repo = TrackingRepository(app)
@@ -38,7 +49,7 @@ class FogProgressTest {
             fun field(name: String) = TrackingService::class.java.getDeclaredField(name).apply { isAccessible = true }
             field("repository").set(service, repo)
             field("verifiedDriving").set(service, VerifiedDriving(app))
-            field("matcher").set(service, OsrmMatcher(server.url("/").toString().trimEnd('/')))
+            field("matcher").set(service, fixtureMatcher(server))
             field("ready").setBoolean(service, true)
             try {
                 ShadowSystemClock.advanceBy(Duration.ofSeconds(10))

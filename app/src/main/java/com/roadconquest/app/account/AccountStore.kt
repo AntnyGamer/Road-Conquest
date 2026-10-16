@@ -65,6 +65,7 @@ object AccountStore {
 
     @Synchronized
     fun clear(context: Context) {
+        com.roadconquest.app.notifications.OptionalNotifications.disableLocal(context)
         // Disable precise-GPS sharing first, then durably remove the local bearer session.
         // Both changes must survive an abrupt process death immediately after logout/deletion.
         Prefs.setDriveVerificationEnabled(context, false)

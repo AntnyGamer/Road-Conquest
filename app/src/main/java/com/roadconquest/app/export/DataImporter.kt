@@ -35,8 +35,9 @@ object DataImporter {
     private const val PREFIX = "roadconquest-import-"
     internal val operationLock = Any()
     private var temporaryFilesInitialized = false
-    private val tables = listOf("track_points", "roads", "road_visits", "explored_places", "explored_grid",
+    private val legacyTables = listOf("track_points", "roads", "road_visits", "explored_places", "explored_grid",
         "visited_places", "place_candidates", "progression_rewards", "progression_purchases", "progression_counters")
+    private val tables = legacyTables + "skipped_driving_fixes"
 
     class Prepared internal constructor(
         internal val file: File,
@@ -81,9 +82,12 @@ object DataImporter {
             }
             ZipFile(zipPath).use { zip ->
                 val entries = zip.entries().toList()
-                val expected = tables.map { "$it.csv" }.toSet() + "metadata.json"
-                require(entries.size == expected.size && entries.map { it.name }.toSet() == expected &&
-                    entries.none { it.isDirectory || it.size < 0 }) { "Not a complete Road Conquest backup" }
+                val names = entries.mapTo(HashSet(entries.size)) { it.name }
+                require(entries.none { it.isDirectory || it.size < 0 } &&
+                    entries.count { it.name == "metadata.json" } == 1 &&
+                    names.size == entries.size) {
+                    "Not a complete Road Conquest backup"
+                }
                 var total = 0L
                 fun readEntry(name: String, consume: (InputStream) -> Unit) {
                     val entry = zip.getEntry(name)
@@ -95,7 +99,12 @@ object DataImporter {
                         val bounded = object : FilterInputStream(raw) {
                             override fun read(): Int {
                                 val byte = super.read()
-                                if (byte >= 0) account(byteArrayOf(byte.toByte()), 0, 1)
+                                if (byte >= 0) {
+                                    size++; total++
+                                    require(size <= limit && total <= MAX_BYTES) { "Expanded backup exceeds 512 MB" }
+                                    check(!Thread.currentThread().isInterrupted) { "Import cancelled" }
+                                    crc.update(byte)
+                                }
                                 return byte
                             }
                             override fun read(b: ByteArray, off: Int, len: Int): Int {
@@ -116,17 +125,22 @@ object DataImporter {
                 }
                 var metadata = JSONObject()
                 readEntry("metadata.json") { metadata = JSONObject(Charsets.UTF_8.newDecoder().decode(java.nio.ByteBuffer.wrap(it.readBytes())).toString()) }
-                require(metadata.getString("app") == "Road Conquest" && metadata.getInt("schema_version") in 9..11) {
+                require(metadata.getString("app") == "Road Conquest" && metadata.getInt("schema_version") in 9..12) {
                     "Unsupported backup format; use a current Road Conquest export"
                 }
                 val schema = metadata.getInt("schema_version")
+                val backupTables = if (schema >= 12) tables else legacyTables
+                val expected = backupTables.map { "$it.csv" }.toSet() + "metadata.json"
+                require(entries.size == expected.size && names == expected) {
+                    "Not a complete Road Conquest backup"
+                }
                 val exportedAt = Instant.parse(metadata.getString("exported_at")).toEpochMilli()
                 require(exportedAt in 0..System.currentTimeMillis() + 86_400_000L) { "Invalid backup date" }
                 SQLiteDatabase.openOrCreateDatabase(stage, null).use { db ->
                     helper.onCreate(db)
                     db.beginTransaction()
                     try {
-                        for (table in tables) readEntry("$table.csv") { stream ->
+                        for (table in backupTables) readEntry("$table.csv") { stream ->
                             val decoder = Charsets.UTF_8.newDecoder().onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
                             val csv = CsvReader(java.io.InputStreamReader(stream, decoder).buffered())
                             val header = csv.next() ?: error("Missing $table header")
@@ -180,7 +194,7 @@ object DataImporter {
         }
     }
 
-    /** All ten tables change in one transaction. Old asynchronous writers become no-ops. */
+    /** All local history tables change in one transaction. Prior async writers become no-ops. */
     fun restore(context: Context, prepared: Prepared) = synchronized(operationLock) {
         val app = context.applicationContext
         check(!Prefs.isDeviceDataDeletionPending(app)) { "Device data deletion is in progress" }
@@ -264,12 +278,14 @@ object DataImporter {
         }
         fun nonempty(key: String) { require(!v.getAsString(key).isNullOrEmpty()) { "Missing $key" } }
         when (table) {
-            "track_points" -> {
+            "track_points", "skipped_driving_fixes" -> {
                 coordinates()
                 // Leave ample AUTOINCREMENT headroom for future driving fixes.
                 require(v.getAsLong("id") in 1..1_000_000_000_000_000L && v.getAsDouble("accuracy_m") in 0.0..100_000.0 &&
                     v.getAsDouble("speed_mps") in 0.0..1000.0 && v.getAsDouble("bearing_deg") in 0.0..360.0 &&
-                    v.getAsDouble("distance_m") in 0.0..10_000_000.0) { "Invalid driving fix" }
+                    (table != "track_points" || v.getAsDouble("distance_m") in 0.0..10_000_000.0)) {
+                    "Invalid driving fix"
+                }
             }
             "roads" -> {
                 nonempty("segment_id"); nonempty("road_group_id")
@@ -325,6 +341,9 @@ object DataImporter {
         "row:grid_row:i", "column:grid_col:i", "latitude:latitude:d", "longitude:longitude:d"
     )
     private val columns = mapOf(
+        "skipped_driving_fixes" to spec("id:id:i", "latitude:latitude:d", "longitude:longitude:d",
+            "accuracy_m:accuracy_m:d", "speed_mps:speed_mps:d", "bearing_deg:bearing_deg:d",
+            "timestamp_utc:timestamp_ms:t"),
         "track_points" to spec("id:id:i", "latitude:latitude:d", "longitude:longitude:d", "accuracy_m:accuracy_m:d", "speed_mps:speed_mps:d", "bearing_deg:bearing_deg:d",
             "timestamp_utc:timestamp_ms:t", "matched:matched:b", "next_match_attempt_utc:next_match_attempt_ms:t", "distance_m:distance_m:d"),
         "roads" to spec("segment_id:segment_id:s", "road_group_id:road_group_id:s", "name:name:s", "first_unlocked_utc:first_unlocked_at:t", "last_driven_utc:last_driven_at:t",

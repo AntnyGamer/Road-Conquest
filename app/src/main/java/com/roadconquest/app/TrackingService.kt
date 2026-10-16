@@ -26,7 +26,10 @@ import androidx.core.content.ContextCompat
 import com.roadconquest.app.data.TrackingRepository
 import com.roadconquest.app.data.ProgressionRepository
 import com.roadconquest.app.account.VerifiedDriving
-import com.roadconquest.app.matching.OsrmMatcher
+import com.roadconquest.app.matching.RoadGeometryValidator
+import com.roadconquest.app.matching.FallbackRoadMatcher
+import com.roadconquest.app.matching.RoadMatcher
+import com.roadconquest.app.matching.KnownRoadReuse
 import com.roadconquest.app.map.FogGrid
 import com.roadconquest.app.progression.ProgressionManager
 import com.roadconquest.app.util.LocationProviders
@@ -43,7 +46,7 @@ class TrackingService : Service(), LocationListener {
     private lateinit var repository: TrackingRepository
     private lateinit var progressionRepository: ProgressionRepository
     private lateinit var verifiedDriving: VerifiedDriving
-    private val matcher = OsrmMatcher(BuildConfig.OSRM_API_URL)
+    private val matcher: RoadMatcher = FallbackRoadMatcher.configured()
     private val matchingExecutor = ScheduledThreadPoolExecutor(1).apply {
         // Stop-time finalization should not keep the process alive for obsolete retry
         // timers scheduled minutes into the future. Already queued immediate work still runs.
@@ -96,8 +99,30 @@ class TrackingService : Service(), LocationListener {
     }
     // Coalesce duplicate provider/mode callbacks while a final Location-off flush is queued.
     private val finalMatchingFlushScheduled = AtomicBoolean(false)
+    // Changed only by the serial matching executor; shrinks after long ambiguous traces.
+    private var adaptiveMatchPointLimit = com.roadconquest.app.matching.GeoapifyMatcher.MAX_MATCH_POINTS
+    private var successfulShortMatches = 0
+    private var lastRemotePointLimit = com.roadconquest.app.matching.GeoapifyMatcher.MAX_MATCH_POINTS
     private var lastObserved: Location? = null
     private var lastAccepted: Location? = null
+    // Accepted fixes omitted from network matching, also retained privately on disk.
+    private val skippedSinceRetained = ArrayList<Location>(4)
+
+    /** Persist the final compressed fix before a stop or an interrupted drive. */
+    private fun flushTrailingSkippedFix() {
+        val last = skippedSinceRetained.lastOrNull() ?: return
+        skippedSinceRetained.clear()
+        lastAccepted = last
+        storageExecutor.execute {
+            try {
+                repository.insertLocation(last)
+                persistedDrivingFixThisSession.set(true)
+                sendUiBroadcast(ACTION_STATS_UPDATED)
+            } catch (error: Exception) {
+                Log.e("RoadConquest", "Could not finalize the last compressed driving fix", error)
+            }
+        }
+    }
     private var lastExplored: Location? = null
     // Avoid repeatedly hitting SQLite for the same 50 m fog cell during one service session.
     // The concurrent set also prevents duplicate queued writes before storageExecutor catches up.
@@ -170,6 +195,9 @@ class TrackingService : Service(), LocationListener {
         // actually become a location foreground service. Delaying them avoids unnecessary
         // setup on blocked restarts (paused tracking, missing permission, or Location off).
         repository = TrackingRepository(this)
+        // Android may terminate a service without onDestroy; never lose its final GPS fix.
+        runCatching { repository.recoverTrailingSkippedDrivingFix() }
+            .onFailure { Log.w("RoadConquest", "Trailing GPS recovery will retry next start", it) }
         progressionRepository = ProgressionRepository(this)
         verifiedDriving = VerifiedDriving(this)
 
@@ -336,6 +364,7 @@ class TrackingService : Service(), LocationListener {
         }
 
         if (lastAccepted?.let { elapsedMillis(it, location) > MAX_MOTION_SAMPLE_AGE_MS } == true) {
+            flushTrailingSkippedFix()
             lastAccepted = null
         }
         if (!isUsableDrivingLocation(location, previous, elapsedFromPrevious, distanceFromPrevious)) return
@@ -350,19 +379,53 @@ class TrackingService : Service(), LocationListener {
         ) previous else null
 
         val accepted = requireNotNull(lastObserved)
-        lastAccepted = accepted
+        // Keep the live car, fog and verification stream at the original GPS rate.
+        // Only omit redundant high-quality straight-line *stored* fixes; retain every
+        // uncertain fix and directional change so junctions can still be matched.
+        val anchor = lastAccepted
+        val importantSkipped = if (anchor != null) skippedSinceRetained.filter {
+            skippedFixCarriesGeometry(anchor, it, accepted)
+        } else emptyList()
+        // Restore genuine bends before the route can be approximated by a straight chord.
+        val skipStraightFix = importantSkipped.isEmpty() &&
+            skippedSinceRetained.size < 4 &&
+            anchor?.let { !shouldPersistDrivingSample(it, accepted) } == true
         val placeCandidate = if (!accepted.isMock && accepted.hasAccuracy() &&
             accepted.accuracy in 0.01f..25f &&
             (lastPlaceCandidate?.distanceTo(accepted) ?: Float.POSITIVE_INFINITY) >= PLACE_CANDIDATE_MIN_DISTANCE_M
         ) Location(accepted) else null
         if (placeCandidate != null) lastPlaceCandidate = placeCandidate
+        if (skipStraightFix) {
+            skippedSinceRetained.add(Location(accepted))
+            // Save the *original* accepted evidence in a separate local table.
+            // It does not enter the matching queue and never costs an API request.
+            storageExecutor.execute {
+                try {
+                    repository.recordSkippedDrivingFix(accepted)
+                    if (placeCandidate != null && ::progressionRepository.isInitialized &&
+                        progressionRepository.recordPlaceCandidate(placeCandidate)
+                    ) {
+                        sendUiBroadcast(ACTION_PLACE_CANDIDATE_UPDATED)
+                        scheduleBackgroundPlaceDiscovery()
+                    }
+                } catch (error: Exception) {
+                    Log.e("RoadConquest", "Could not preserve a compressed-out driving fix", error)
+                    stopSelf()
+                }
+            }
+            return
+        }
+        skippedSinceRetained.clear()
+        lastAccepted = accepted
         storageExecutor.execute {
             try {
-                if (startAnchor == null) {
-                    repository.insertLocation(accepted)
-                } else {
-                    repository.insertLocations(listOf(startAnchor, accepted))
+                val fixes = buildList {
+                    if (startAnchor != null) add(startAnchor)
+                    addAll(importantSkipped)
+                    add(accepted)
                 }
+                if (fixes.size == 1) repository.insertLocation(accepted)
+                else repository.insertLocations(fixes)
                 if (placeCandidate != null && ::progressionRepository.isInitialized) {
                     try {
                         if (progressionRepository.recordPlaceCandidate(placeCandidate)) {
@@ -421,6 +484,7 @@ class TrackingService : Service(), LocationListener {
             !finalMatchingFlushScheduled.compareAndSet(false, true)
         ) return
 
+        flushTrailingSkippedFix()
         val storageSubmitted = runCatching {
             storageExecutor.execute {
                 try {
@@ -453,6 +517,8 @@ class TrackingService : Service(), LocationListener {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        // Finish accepted GPS history before draining the storage and matcher queues.
+        if (::repository.isInitialized && !Prefs.isDeviceDataDeletionPending(this)) flushTrailingSkippedFix()
         // Flip readiness before shutting down the scheduler so an in-flight matcher cannot
         // enqueue more work while teardown is in progress.
         ready = false
@@ -473,7 +539,7 @@ class TrackingService : Service(), LocationListener {
             val queued = runCatching {
                 storageExecutor.execute {
                     try {
-                        // Stopping without any new driving must not wake OSRM merely to
+                        // Stopping without any new driving must not wake the remote matcher merely to
                         // revisit unrelated historical backlog.
                         if (persistedDrivingFixThisSession.get()) matchingExecutor.execute {
                             try {
@@ -606,6 +672,36 @@ class TrackingService : Service(), LocationListener {
             (movedBeyondAccuracy && inferredSpeed >= MIN_DRIVING_SPEED_MPS)
     }
 
+    /** Conservative on-device GPS compression: never skip a bend, uncertain fix or gap. */
+    internal fun shouldPersistDrivingSample(previousSaved: Location, current: Location): Boolean {
+        val ageMs = elapsedMillis(previousSaved, current)
+        if (ageMs <= 0L || ageMs >= MIN_STRAIGHT_SAMPLE_INTERVAL_MS ||
+            !previousSaved.hasBearing() || !current.hasBearing() ||
+            !previousSaved.hasAccuracy() || !current.hasAccuracy() ||
+            previousSaved.accuracy !in 0.01f..15f || current.accuracy !in 0.01f..15f ||
+            !previousSaved.hasSpeed() || !current.hasSpeed() ||
+            previousSaved.speed < MIN_DRIVING_SPEED_MPS || current.speed < MIN_DRIVING_SPEED_MPS
+        ) return true
+        val delta = kotlin.math.abs(((current.bearing - previousSaved.bearing + 540f) % 360f) - 180f)
+        return !delta.isFinite() || delta >= MIN_RETAINED_BEND_DEGREES
+    }
+
+    /** Reintroduce compressed samples whose path strays from the straight-line chord. */
+    internal fun skippedFixCarriesGeometry(anchor: Location, skipped: Location, end: Location): Boolean {
+        if (anchor.time >= skipped.time || skipped.time >= end.time) return true
+        fun longitudeDelta(from: Double, to: Double) =
+            ((to - from + 540.0) % 360.0) - 180.0
+        val cosLat = kotlin.math.cos(Math.toRadians((anchor.latitude + end.latitude) / 2.0))
+        val sx = Math.toRadians(longitudeDelta(anchor.longitude, skipped.longitude)) * cosLat * 6_371_008.8
+        val sy = Math.toRadians(skipped.latitude - anchor.latitude) * 6_371_008.8
+        val ex = Math.toRadians(longitudeDelta(anchor.longitude, end.longitude)) * cosLat * 6_371_008.8
+        val ey = Math.toRadians(end.latitude - anchor.latitude) * 6_371_008.8
+        val lengthSquared = ex * ex + ey * ey
+        if (!lengthSquared.isFinite() || lengthSquared < 1.0) return true
+        val t = ((sx * ex + sy * ey) / lengthSquared).coerceIn(0.0, 1.0)
+        return kotlin.math.hypot(sx - ex * t, sy - ey * t) > 3.0
+    }
+
     private fun isFreshLocation(location: Location): Boolean {
         if (!location.latitude.isFinite() || !location.longitude.isFinite() ||
             location.latitude !in -90.0..90.0 || location.longitude !in -180.0..180.0 ||
@@ -672,7 +768,7 @@ class TrackingService : Service(), LocationListener {
     }
 
     private fun maybeRunMatching(force: Boolean = false) {
-        if (!ready || matcher.rateLimitRemainingMs() > 0L) return
+        if (!ready) return
         val now = SystemClock.elapsedRealtime()
         val cooldownRemaining = if (lastMatchAttempt == 0L) {
             0L
@@ -730,7 +826,12 @@ class TrackingService : Service(), LocationListener {
                 }
                 // Select a complete unresolved turn (up to eight fixes), not a
                 // single old fix with seven context points and no opposite anchor.
-                val window = repository.loadMatchingWindow(MATCH_BATCH_SIZE, retryGapStartId = retryStartId)
+                // Priority turn repairs keep ten-point context; bulk successful driving
+                // uses up to 100 points per paid credit. Shorter traces avoid repeatedly
+                // rejecting an entire long route at one complex junction.
+                val pointLimit = if (retryStartId != null) minOf(10, adaptiveMatchPointLimit, matcher.maxPoints)
+                    else minOf(adaptiveMatchPointLimit, matcher.maxPoints)
+                val window = repository.loadMatchingWindow(pointLimit, retryGapStartId = retryStartId)
                 val points = window.points
                 if (points.isEmpty()) return
 
@@ -752,10 +853,42 @@ class TrackingService : Service(), LocationListener {
                     return@repeat
                 }
 
-                lastMatchAttempt = SystemClock.elapsedRealtime()
+                // Repeated drives on previously verified road segments are resolved
+                // entirely on-device. Never use proximity to award a NEW road.
+                val locallyCovered = KnownRoadReuse.find(repository, points, window.markableIds)
+                if (locallyCovered.isNotEmpty()) {
+                    val resolvedLocally = repository.completeKnownRoadVisits(locallyCovered)
+                    if (resolvedLocally > 0) {
+                        sendUiBroadcast(ACTION_ROADS_UPDATED)
+                        sendUiBroadcast(ACTION_STATS_UPDATED)
+                        if (batchIndex + 1 == MAX_MATCH_BATCHES_PER_RUN) scheduleBacklogContinuation()
+                        return@repeat
+                    }
+                }
+                val nowElapsed = SystemClock.elapsedRealtime()
+                val wait = remainingRemoteMatchingDelayMs(nowElapsed, lastMatchAttempt, lastRemotePointLimit)
+                if (wait > 0L) {
+                    // This also covers final flushes and forced backlog retry runs.
+                    scheduleBacklogContinuation(wait)
+                    return
+                }
+                val providerCooldown = matcher.rateLimitRemainingMs()
+                if (providerCooldown > 0L) {
+                    // Still accept local visits while the provider is unavailable.
+                    // Do not call the online matcher or burn additional requests.
+                    scheduleBacklogContinuation(providerCooldown)
+                    return
+                }
+                lastMatchAttempt = nowElapsed
                 val result = matcher.match(points)
+                // The 25-point backup has its own shorter capacity-based cadence.
+                lastRemotePointLimit = matcher.maxPoints
                 if (result == null) {
                     val providerCooldown = matcher.rateLimitRemainingMs()
+                    if (!matcher.unavailable && providerCooldown == 0L && points.size >= 20) {
+                        adaptiveMatchPointLimit = maxOf(10, points.size / 2)
+                        successfulShortMatches = 0
+                    }
                     repository.deferMatching(
                         window.markableIds,
                         System.currentTimeMillis() +
@@ -776,10 +909,17 @@ class TrackingService : Service(), LocationListener {
                     return@repeat
                 }
 
-                val acceptedRoads = result.roads.filter { it.confidence >= OsrmMatcher.MIN_ACCEPTABLE_CONFIDENCE }
+                if (result.roads.isNotEmpty() && adaptiveMatchPointLimit < MATCH_BATCH_SIZE) {
+                    successfulShortMatches++
+                    if (successfulShortMatches >= 3) {
+                        adaptiveMatchPointLimit = minOf(MATCH_BATCH_SIZE, adaptiveMatchPointLimit * 2)
+                        successfulShortMatches = 0
+                    }
+                }
+                val acceptedRoads = result.roads.filter { it.confidence >= RoadGeometryValidator.MIN_ACCEPTABLE_CONFIDENCE }
                 val matchedIds = result.matchedPointConfidences.mapNotNull { (id, confidence) ->
                     id.takeIf {
-                        confidence >= OsrmMatcher.MIN_ACCEPTABLE_CONFIDENCE && id in window.markableIds
+                        confidence >= RoadGeometryValidator.MIN_ACCEPTABLE_CONFIDENCE && id in window.markableIds
                     }
                 }
 
@@ -791,14 +931,16 @@ class TrackingService : Service(), LocationListener {
                     emptySet()
                 }
 
-                val unresolvedIds = window.markableIds - resolvedIds
+                // A backup receives just the prefix; never defer unsent fixes.
+                val submittedIds = points.take(lastRemotePointLimit).mapTo(HashSet()) { it.id }
+                val unresolvedIds = (window.markableIds intersect submittedIds) - resolvedIds
                 if (unresolvedIds.isNotEmpty()) {
                     // A valid response with only part of the trace matched usually
                     // benefits from retrying soon with fresh neighboring fixes. Keep the
                     // longer backoff for actual network/server failures above.
                     repository.deferMatching(
                         unresolvedIds,
-                        System.currentTimeMillis() + MATCH_RETRY_AFTER_PARTIAL_MS
+                        System.currentTimeMillis() + (if (points.size >= 20) LONG_MATCH_RETRY_AFTER_PARTIAL_MS else MATCH_RETRY_AFTER_PARTIAL_MS)
                     )
                 }
 
@@ -820,7 +962,7 @@ class TrackingService : Service(), LocationListener {
         }
     }
 
-    private fun scheduleBacklogContinuation() {
+    private fun scheduleBacklogContinuation(delayMs: Long = MATCH_BACKLOG_CONTINUATION_MS) {
         if (!backlogContinuationScheduled.compareAndSet(false, true)) return
         runCatching {
             matchingExecutor.schedule(
@@ -828,7 +970,7 @@ class TrackingService : Service(), LocationListener {
                     backlogContinuationScheduled.set(false)
                     if (ready) maybeRunMatching(force = true)
                 },
-                MATCH_BACKLOG_CONTINUATION_MS,
+                delayMs.coerceAtLeast(1_000L),
                 TimeUnit.MILLISECONDS
             )
         }.onFailure { backlogContinuationScheduled.set(false) }
@@ -946,16 +1088,34 @@ class TrackingService : Service(), LocationListener {
         private const val MAX_LOCATION_AGE_NANOS = MAX_LOCATION_AGE_MS * 1_000_000L
         private const val MAX_START_ANCHOR_AGE_MS = 10_000L
         private const val BACKGROUND_PLACE_DISCOVERY_INTERVAL_MS = 60_000L
-        private const val MATCH_INTERVAL_MS = 10_000L
+        // Check locally saved roads twice per minute; remote API requests are
+        // independently throttled, so local progress does not consume credits.
+        private const val MATCH_INTERVAL_MS = 30_000L
+        // Match new roads online no more frequently than the original seven
+        // minute batching window, including forced retries and final flushes.
+        private const val MIN_REMOTE_MATCH_INTERVAL_MS = 7 * 60_000L
+
+        internal fun remainingRemoteMatchingDelayMs(
+            nowElapsed: Long, lastElapsed: Long,
+            pointsPerRequest: Int = com.roadconquest.app.matching.GeoapifyMatcher.MAX_MATCH_POINTS
+        ): Long {
+            if (lastElapsed <= 0 || nowElapsed < lastElapsed) return 0L
+            val interval = (MIN_REMOTE_MATCH_INTERVAL_MS * pointsPerRequest /
+                com.roadconquest.app.matching.GeoapifyMatcher.MAX_MATCH_POINTS).coerceAtLeast(30_000L)
+            return (interval - (nowElapsed - lastElapsed)).coerceAtLeast(0L)
+        }
+        private const val MIN_STRAIGHT_SAMPLE_INTERVAL_MS = 5_500L
+        private const val MIN_RETAINED_BEND_DEGREES = 18f
         private const val PLACE_CANDIDATE_MIN_DISTANCE_M = 55f
         private const val MAX_EXPLORED_CELL_CACHE = 4_096
         // A partial result usually means an intersection needs one or two newer fixes.
         // Retry on the normal matching cadence so turn holes close while the drive is still live.
-        private const val MATCH_RETRY_AFTER_PARTIAL_MS = MATCH_INTERVAL_MS
+        private const val MATCH_RETRY_AFTER_PARTIAL_MS = 10_000L
+        private const val LONG_MATCH_RETRY_AFTER_PARTIAL_MS = 5 * 60_000L
         private const val MATCH_RETRY_AFTER_FAILURE_MS = 5 * 60 * 1000L
         private const val MATCH_SINGLE_POINT_DEFERRAL_MS = 30_000L
         private const val MATCH_BACKLOG_CONTINUATION_MS = 30_000L
-        private const val MATCH_BATCH_SIZE = OsrmMatcher.MAX_MATCH_POINTS
+        private const val MATCH_BATCH_SIZE = com.roadconquest.app.matching.GeoapifyMatcher.MAX_MATCH_POINTS
         private const val MAX_MATCH_BATCHES_PER_RUN = 4
         private const val MATCH_BATCH_PAUSE_MS = 1_100L
 

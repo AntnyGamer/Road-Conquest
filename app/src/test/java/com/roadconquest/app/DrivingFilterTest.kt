@@ -61,6 +61,43 @@ class DrivingFilterTest {
         assertFalse(TrackingService.shouldRecoverLocationUpdates(now, now - 180_000L, now + 1L))
     }
 
+    @Test fun straightFixesAreCompressedButCornersAndUncertainFixesArePreserved() {
+        val service = TrackingService()
+        val a = point(40.0, 10, 8f).apply { bearing = 90f }
+        val straight = point(40.00002, 13, 8f).apply { bearing = 94f }
+        assertFalse(service.shouldPersistDrivingSample(a, straight))
+        assertTrue(service.shouldPersistDrivingSample(a, point(40.00004, 16, 8f).apply { bearing = 94f }))
+        assertTrue(service.shouldPersistDrivingSample(a, point(40.00002, 13, 8f).apply { bearing = 112f }))
+        assertTrue(service.shouldPersistDrivingSample(a, straight.apply { accuracy = 30f }))
+        assertTrue(service.shouldPersistDrivingSample(a, straight.apply { accuracy = 5f; removeBearing() }))
+    }
+
+    @Test fun missedSCurveApexIsRecoveredForNormalMatching() {
+        val service = TrackingService()
+        val a = point(40.0, 10, 8f).apply { bearing = 90f }
+        val bend = point(40.00008, 13, 8f).apply { longitude = -73.9999; bearing = 94f }
+        val end = point(40.0, 16, 8f).apply { longitude = -73.9998; bearing = 92f }
+        assertTrue(service.skippedFixCarriesGeometry(a, bend, end))
+        val straight = point(40.0, 13, 8f).apply { longitude = -73.9999; bearing = 94f }
+        assertFalse(service.skippedFixCarriesGeometry(a, straight, end))
+    }
+
+    @Test fun backupCadenceScalesWithMatchingCapacity() {
+        val start = 1_000_000L
+        assertEquals(52_500L, TrackingService.remainingRemoteMatchingDelayMs(start, start, 25))
+        assertEquals(0L, TrackingService.remainingRemoteMatchingDelayMs(start + 52_500L, start, 25))
+        assertEquals(420_000L, TrackingService.remainingRemoteMatchingDelayMs(start, start, 200))
+    }
+
+    @Test fun forcedRemoteRetriesRespectSevenMinuteCap() {
+        val time = 1_000_000L
+        assertEquals(0L, TrackingService.remainingRemoteMatchingDelayMs(time, 0L))
+        assertEquals(420_000L, TrackingService.remainingRemoteMatchingDelayMs(time, time))
+        assertEquals(300_000L, TrackingService.remainingRemoteMatchingDelayMs(time + 120_000L, time))
+        assertEquals(0L, TrackingService.remainingRemoteMatchingDelayMs(time + 420_000L, time))
+        assertEquals(0L, TrackingService.remainingRemoteMatchingDelayMs(time - 1L, time))
+    }
+
     @Test fun nanAccuracyCannotAuthorizeDriving() {
         assertFalse(accepts(point(40.0002, 13).apply { accuracy = Float.NaN }, point(40.0, 10)))
     }

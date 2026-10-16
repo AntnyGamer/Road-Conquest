@@ -1,0 +1,28 @@
+Additional services
+
+Road matching and backup street-map tiles: Geoapify (https://www.geoapify.com/).
+Fallback road matching: Search by LocationIQ.com (https://locationiq.com).
+LocationIQ road data © OpenStreetMap contributors, ODbL 1.0 (https://www.openstreetmap.org/copyright).
+LocationIQ Free permits commercial use with attribution and permanent storage of response data.
+Request-response caching is limited to 48 hours on Free; this app caches it in memory for at most 60 seconds.
+Map data: OpenStreetMap contributors (https://www.openstreetmap.org/copyright).
+Backup Geoapify map tiles also use OpenMapTiles (https://openmaptiles.org/).
+The backup map visibly credits Powered by Geoapify, OpenStreetMap contributors, and OpenMapTiles.
+Geoapify use is limited to the configured free allowance. No automatic paid upgrade.
+
+Backup country and first-level region display boundaries: geoBoundaries gbOpen,
+William & Mary geoLab and contributors (https://www.geoboundaries.org/).
+geoBoundaries is licensed under Creative Commons Attribution 4.0:
+https://creativecommons.org/licenses/by/4.0/
+Individual source licensing is checked against metadata before use. These backup
+boundaries do not establish municipality visits or verified competitive credit.
+
+Optional crash diagnostics: Firebase Crashlytics, Google.
+https://firebase.google.com/support/privacy
+Crash reporting is off until enabled in Settings. Google Analytics is not included.
+
+Optional friend notifications: Firebase Cloud Messaging, Google.
+https://firebase.google.com/support/privacy
+Friend alerts and weekly reminders are on by default; turn either off in Settings. Android notification permission is required; friend alerts also require sign-in. Weekly reminders run locally. Existing opt-outs are preserved.
+Provider availability switches: Cloudflare Workers KV.
+Service uptime checks: UptimeRobot (no player data).
