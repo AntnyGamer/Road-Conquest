@@ -213,16 +213,23 @@ object PlaceOverlayCache {
         }
         val directory = target.parentFile ?: return@synchronized false
         if (!directory.exists() && !directory.mkdirs()) return@synchronized false
+        writeCacheFile(context, target, overlayCacheJson(data))
+    }
+
+    // The normal and authoritative U.S. overlay caches share the same JSON format.
+    private fun overlayCacheJson(data: PlaceOverlayData?, verified: Boolean = false): JSONObject {
         val json = JSONObject()
             .put("found", data != null)
             .put("fetched_at", System.currentTimeMillis())
         if (data != null) {
-            json.put("name", data.name).put("kind", data.kind.name)
+            if (verified) json.put("discovery_verified", true)
+            json.put("name", data.name)
+                .put("kind", data.kind.name)
                 .put("population", data.population ?: JSONObject.NULL)
                 .put("area_sq_km", data.areaSquareKilometers)
                 .put("geometry", JSONObject(data.geometryJson))
         }
-        writeCacheFile(context, target, json)
+        return json
     }
 
     private fun officialUsFile(context: Context, place: PlaceDiscovery): File {
@@ -300,20 +307,7 @@ object PlaceOverlayCache {
         }
         val directory = target.parentFile ?: return@synchronized false
         if (!directory.exists() && !directory.mkdirs()) return@synchronized false
-        val json = JSONObject()
-            .put("found", data != null)
-            .put("fetched_at", System.currentTimeMillis())
-        if (data != null) {
-            if (verifiedForDiscovery && place.kind == PlaceKind.TOWN) {
-                json.put("discovery_verified", true)
-            }
-            json.put("name", data.name)
-                .put("kind", data.kind.name)
-                .put("population", data.population ?: JSONObject.NULL)
-                .put("area_sq_km", data.areaSquareKilometers)
-                .put("geometry", JSONObject(data.geometryJson))
-        }
-        writeCacheFile(context, target, json)
+        writeCacheFile(context, target, overlayCacheJson(data, verifiedForDiscovery && place.kind == PlaceKind.TOWN))
     }
 
     fun clear(context: Context) = synchronized(mutationLock) {
