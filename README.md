@@ -91,7 +91,7 @@ background-execution rules; a force-stopped app must be opened manually before i
 Mileage estimates distance between accepted driving fixes, including repeat drives. GPS speed is
 a heuristic and cannot prove you are in a car. Long gaps, reversed timestamps and implausible jumps
 are excluded. Local road totals use a human-road identity layer: signed route refs from the existing
-OSRM match response take priority, connected same-name fragments are joined, nearby divided
+matched route references take priority, connected same-name fragments are joined, nearby divided
 carriageways with the same route ref are treated as one road, and anonymous on/off ramps do not
 inflate the count. Distant same-name or same-ref roads remain separate unless driven geometry
 establishes a local connection. The counter is intentionally human-oriented rather than a raw
@@ -175,14 +175,11 @@ Keep the signing backup outside the repository and release assets. Each release 
 `versionName` and increasing `versionCode`; two-part and three-part release versions are supported.
 
 Override the account endpoint with the Gradle property
-`ROADCONQUEST_ACCOUNT_API_URL=https://accounts.example.com`. Local matching uses the configured
-Geoapify gateway; a permitted controlled OSRM matcher can be preferred with
-`ROADCONQUEST_OSRM_API_URL=https://roads.example.com`. See [service order, fallback behavior and configuration](SERVICE_PROVIDERS.md).
-
-**OSRM provider limits:** The shared public demo is restricted to noncommercial use and one
-request/second. It is excluded from normal automatic fallback; an explicit noncommercial test
-build can opt in with `ROADCONQUEST_ALLOW_PUBLIC_OSRM_DEMO=true`. Geoapify's shared free allowance
-is capped by the gateway. Unmatched GPS stays saved when no permitted provider is available.
+`ROADCONQUEST_ACCOUNT_API_URL=https://accounts.example.com`. Local matching recognizes repeat visits to previously verified roads on-device and sends other matching
+traces to the Geoapify gateway, configured with `ROADCONQUEST_MAP_GATEWAY_URL`.
+See [service order, fallback behavior and configuration](SERVICE_PROVIDERS.md).
+Geoapify's shared free allowance is capped by the gateway, and unmatched GPS remains saved
+when the provider is unavailable.
 
 Administrative overlay boundaries are requested only after the user enables an overlay; results are cached and requests are throttled. The APK reads the active provider from `OVERLAY_PROVIDER.txt` on this repository’s `main` branch so the service can be switched or disabled without an app update. Custom builds can point at another remote config with `ROADCONQUEST_PLACE_OVERLAY_CONFIG_URL=https://example.com/overlay-provider.txt`.
 See [server setup](server/README.md) and the [physical-device checklist](ANDROID_TEST_CHECKLIST.md).
@@ -256,8 +253,9 @@ Beta 17 map/tracking optimizations but does not claim ads have zero overhead.
 
 ## Privacy and map credits
 
-Driving history, explored places, points and purchases stay on the phone. Road matching sends small
-coordinate batches through the Road Conquest gateway to Geoapify or to a configured OSRM service. Town/state/country labels are requested through
+Driving history, explored places, points and purchases stay on the phone. Already verified
+road segments can be recognized locally on a repeat drive; new road matching sends bounded
+coordinate batches through the Road Conquest gateway to Geoapify. Town/state/country labels are requested through
 Android's system geocoder only while Road Conquest is foregrounded; the geocoder implementation and
 network behavior are supplied by the device. Pending data remains saved for retry after network or
 matching failures. User-selected ZIP exports contain precise history, road geometry and progression data.

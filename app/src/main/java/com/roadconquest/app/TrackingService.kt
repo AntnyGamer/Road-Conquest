@@ -500,7 +500,7 @@ class TrackingService : Service(), LocationListener {
             val queued = runCatching {
                 storageExecutor.execute {
                     try {
-                        // Stopping without any new driving must not wake OSRM merely to
+                        // Stopping without any new driving must not wake the remote matcher merely to
                         // revisit unrelated historical backlog.
                         if (persistedDrivingFixThisSession.get()) matchingExecutor.execute {
                             try {
@@ -867,7 +867,7 @@ class TrackingService : Service(), LocationListener {
                     // longer backoff for actual network/server failures above.
                     repository.deferMatching(
                         unresolvedIds,
-                        System.currentTimeMillis() + MATCH_RETRY_AFTER_PARTIAL_MS
+                        System.currentTimeMillis() + (if (points.size >= 20) LONG_MATCH_RETRY_AFTER_PARTIAL_MS else MATCH_RETRY_AFTER_PARTIAL_MS)
                     )
                 }
 
@@ -1023,7 +1023,8 @@ class TrackingService : Service(), LocationListener {
         private const val MAX_EXPLORED_CELL_CACHE = 4_096
         // A partial result usually means an intersection needs one or two newer fixes.
         // Retry on the normal matching cadence so turn holes close while the drive is still live.
-        private const val MATCH_RETRY_AFTER_PARTIAL_MS = 5 * 60_000L
+        private const val MATCH_RETRY_AFTER_PARTIAL_MS = 10_000L
+        private const val LONG_MATCH_RETRY_AFTER_PARTIAL_MS = 5 * 60_000L
         private const val MATCH_RETRY_AFTER_FAILURE_MS = 5 * 60 * 1000L
         private const val MATCH_SINGLE_POINT_DEFERRAL_MS = 30_000L
         private const val MATCH_BACKLOG_CONTINUATION_MS = 30_000L

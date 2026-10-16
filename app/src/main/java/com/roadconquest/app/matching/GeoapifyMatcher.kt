@@ -20,7 +20,7 @@ class GeoapifyMatcher(
     override var unavailable = false
         private set
     private val providerId = "matching:$origin"
-    private val validator = RoadGeometryValidator("https://validation.invalid")
+    private val validator = RoadGeometryValidator()
     private var cachedRequest: String? = null
     private var cachedBody: String? = null
     private var cachedAt = 0L
