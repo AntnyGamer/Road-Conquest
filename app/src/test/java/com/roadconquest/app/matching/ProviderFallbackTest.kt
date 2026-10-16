@@ -84,13 +84,38 @@ class ProviderFallbackTest {
         assertTrue(result.roads.all { it.name == "Morisse" })
         assertTrue(result.roads.all { it.countTowardsRoads })
     }
+    @Test fun unmatchedTailCannotEraseEarlierVerifiedLegs() {
+        val root = JSONObject(example)
+        val tail = points.last().copy(id = 3L, longitude = 10.696)
+        root.getJSONArray("features").getJSONObject(0).getJSONObject("properties")
+            .getJSONArray("waypoints").put(JSONObject()
+                .put("original_index", 2)
+                .put("original_location", org.json.JSONArray().put(tail.longitude).put(tail.latitude))
+                .put("match_type", "unmatched"))
+        val result = requireNotNull(GeoapifyMatcher("https://maps.example").parse(root.toString(), points + tail))
+        assertTrue(result.roads.isNotEmpty())
+        assertEquals(setOf(1L, 2L), result.matchedPointConfidences.keys)
+    }
+
+    @Test fun namedPrimaryRoadsCountButMotorwayLinkRampsDoNot() {
+        fun asClass(roadClass: String): MatchResult {
+            val sample = JSONObject(example)
+            val steps = sample.getJSONArray("features").getJSONObject(0).getJSONObject("properties")
+                .getJSONArray("legs").getJSONObject(0).getJSONArray("steps")
+            for (i in 0 until steps.length()) steps.getJSONObject(i).put("road_class", roadClass)
+            return requireNotNull(GeoapifyMatcher("https://maps.example").parse(sample.toString(), points))
+        }
+        assertTrue(asClass("primary").roads.all { it.countTowardsRoads })
+        assertTrue(asClass("motorway_link").roads.none { it.countTowardsRoads })
+    }
+
     @Test fun interpolatedFixOrChangedOriginalCannotEarnCredit() {
         for (field in listOf("match_type", "original_index", "leg_index")) {
             val root = JSONObject(example)
             root.getJSONArray("features").getJSONObject(0).getJSONObject("properties").getJSONArray("waypoints").getJSONObject(0)
                 .put(field, if (field == "match_type") "interpolated" else 12)
             val result = runCatching { GeoapifyMatcher("https://maps.example").parse(root.toString(), points) }.getOrNull()
-            assertNull(result)
+            assertTrue(result == null || result.matchedPointConfidences.isEmpty())
         }
         assertNull(runCatching { GeoapifyMatcher("https://maps.example").parse(example, points.map { it.copy(longitude = -74.0) }) }.getOrNull())
     }

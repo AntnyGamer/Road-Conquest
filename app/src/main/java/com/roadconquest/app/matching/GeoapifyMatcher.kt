@@ -16,7 +16,7 @@ class GeoapifyMatcher(
     private val origin: String,
     private val health: ProviderHealth = ProviderHealth.shared
 ) : RoadMatcher {
-    companion object { const val MAX_MATCH_POINTS = 100 }
+    companion object { const val MAX_MATCH_POINTS = 200 }
     override var unavailable = false
         private set
     private val providerId = "matching:$origin"
@@ -102,54 +102,77 @@ class GeoapifyMatcher(
         val waypoints = props.getJSONArray("waypoints")
         if (waypoints.length() != points.size) return null
         val positions = DoubleArray(points.size)
-        val locations = Array(points.size) { index ->
+        val locations = arrayOfNulls<JSONArray>(points.size)
+        for (index in points.indices) {
             val waypoint = waypoints.getJSONObject(index)
             require(waypoint.getInt("original_index") == index)
             val original = waypoint.getJSONArray("original_location")
             require(valid(original) && abs(original.getDouble(0) - points[index].longitude) < 0.000001 &&
                 abs(original.getDouble(1) - points[index].latitude) < 0.000001)
-            if (waypoint.optString("match_type") != "matched" || waypoint.optInt("leg_index", -1) != 0) return null
+            // Neither interpolated nor unmatched points establish a driven road.
+            // Keep them pending and salvage only independent, continuous matched legs.
+            if (waypoint.optString("match_type") != "matched") continue
+            if (waypoint.optInt("leg_index", -1) != 0) return null
             val location = waypoint.getJSONArray("location")
             if (!valid(location)) return null
             val stepIndex = waypoint.optInt("step_index", -1)
             if (stepIndex !in 0 until steps.length()) return null
             val step = steps.getJSONObject(stepIndex)
             positions[index] = position(line, location, step.getInt("from_index"), step.getInt("to_index")) ?: return null
-            if (index > 0 && positions[index] <= positions[index - 1]) return null
-            location
+            locations[index] = location
         }
-        val normalizedLegs = JSONArray()
-        for (i in 0 until points.lastIndex) {
-            val pieces = JSONArray()
-            for (s in 0 until steps.length()) {
-                val step = steps.getJSONObject(s)
-                val from = maxOf(positions[i], step.getInt("from_index").toDouble())
-                val to = minOf(positions[i + 1], step.getInt("to_index").toDouble())
-                if (to - from < 0.000001) continue
-                val coordinates = JSONArray().put(at(line, from))
-                for (v in (floor(from).toInt() + 1)..ceil(to).toInt()) if (v.toDouble() < to) coordinates.put(line.getJSONArray(v))
-                coordinates.put(at(line, to))
-                val distance = (0 until coordinates.length() - 1).sumOf { meters(coordinates.getJSONArray(it), coordinates.getJSONArray(it + 1)) }
-                val ordinaryNamedStreet = step.optString("name").isNotBlank() && step.optString("road_class") in
-                    setOf("residential", "unclassified", "tertiary", "secondary") && !step.optBoolean("roundabout")
-                pieces.put(JSONObject().put("name", step.optString("name")).put("distance", distance)
-                    .put("geometry", JSONObject().put("type", "LineString").put("coordinates", coordinates))
-                    // No explicit ramp maneuver is provided. Only ordinary named
-                    // street classes earn new road-count credit; connectors and
-                    // uncertain highway classes still draw without adding roads.
-                    .put("maneuver", JSONObject().put("type", if (ordinaryNamedStreet) "turn" else "ramp")))
+        val matchings = JSONArray()
+        val tracepoints = JSONArray().apply { repeat(points.size) { put(JSONObject.NULL) } }
+        var index = 0
+        while (index < points.size) {
+            if (locations[index] == null) { index++; continue }
+            val first = index++
+            while (index < points.size && locations[index] != null && positions[index] > positions[index - 1]) index++
+            if (index - first < 2) continue
+            val normalizedLegs = JSONArray()
+            var complete = true
+            for (i in first until index - 1) {
+                val pieces = JSONArray()
+                for (s in 0 until steps.length()) {
+                    val step = steps.getJSONObject(s)
+                    val from = maxOf(positions[i], step.getInt("from_index").toDouble())
+                    val to = minOf(positions[i + 1], step.getInt("to_index").toDouble())
+                    if (to - from < 0.000001) continue
+                    val coordinates = JSONArray().put(at(line, from))
+                    for (v in (floor(from).toInt() + 1)..ceil(to).toInt()) {
+                        if (v.toDouble() < to) coordinates.put(line.getJSONArray(v))
+                    }
+                    coordinates.put(at(line, to))
+                    val distance = (0 until coordinates.length() - 1).sumOf {
+                        meters(coordinates.getJSONArray(it), coordinates.getJSONArray(it + 1))
+                    }
+                    val roadClass = step.optString("road_class")
+                    // Include main/primary roads and highways, but never count
+                    // link ramps, footways, unknown classes or roundabouts by proximity.
+                    val namedDrivableRoad = step.optString("name").isNotBlank() &&
+                        roadClass in setOf("motorway", "trunk", "primary", "secondary", "tertiary",
+                            "residential", "unclassified", "living_street", "service") &&
+                        !step.optBoolean("roundabout")
+                    pieces.put(JSONObject().put("name", step.optString("name")).put("distance", distance)
+                        .put("geometry", JSONObject().put("type", "LineString").put("coordinates", coordinates))
+                        .put("maneuver", JSONObject().put("type", if (namedDrivableRoad) "turn" else "ramp")))
+                }
+                if (pieces.length() == 0) { complete = false; break }
+                normalizedLegs.put(JSONObject().put("steps", pieces))
             }
-            normalizedLegs.put(JSONObject().put("steps", pieces))
+            if (!complete) continue
+            val group = matchings.length()
+            matchings.put(JSONObject().put("confidence", RoadGeometryValidator.MIN_ACCEPTABLE_CONFIDENCE)
+                .put("legs", normalizedLegs))
+            for (i in first until index) {
+                tracepoints.put(i, JSONObject().put("matchings_index", group)
+                    .put("waypoint_index", i - first).put("alternatives_count", 0)
+                    .put("location", locations[i]))
+            }
         }
-        val tracepoints = JSONArray().apply {
-            points.indices.forEach { put(JSONObject().put("matchings_index", 0).put("waypoint_index", it)
-                .put("alternatives_count", 0).put("location", locations[it])) }
-        }
-        // 0.8 is the existing LOCAL acceptance threshold, not a claimed Geoapify
-        // probability. Every matched fix and leg still passes the same snap,
-        // continuity, speed, detour and endpoint checks as the original matcher.
+        if (matchings.length() == 0) return MatchResult(emptyList(), emptyMap())
         val normalized = JSONObject().put("code", "Ok").put("tracepoints", tracepoints)
-            .put("matchings", JSONArray().put(JSONObject().put("confidence", RoadGeometryValidator.MIN_ACCEPTABLE_CONFIDENCE).put("legs", normalizedLegs)))
+            .put("matchings", matchings)
         return validator.parse(normalized.toString(), points)
     }
 
