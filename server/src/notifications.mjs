@@ -70,30 +70,33 @@ export function createNotifications(pool, { pepper, sender, deliveryLimit }) {
         throw new EvidenceError('Invalid notification registration.', 400);
       if (!sender) throw new EvidenceError('Notifications are unavailable.', 503);
       const tokenHash = digest(body.fid);
-      const db = await pool.connect();
+      // All three effects share one atomic PostgreSQL statement: prove this
+      // exact session is still active, remove its previous DIFFERENT token,
+      // and upsert the newly encrypted FID. The DELETE excludes the upsert
+      // key so the CTEs can never modify the same row twice.
+      // A concurrent logout is protected by the device's session foreign key.
+      let registration;
       try {
-        await db.query('BEGIN');
-        // The foreign key locks session ownership during insertion and cascades on logout.
-        // Validate ownership and remove a different prior FID in one round trip.
-        // An invalid/expired session cannot delete another session's device.
-        const session = await db.query(`WITH active_session AS (
-          SELECT token_hash FROM sessions WHERE token_hash=$1 AND user_id=$2 AND expires_at>CURRENT_TIMESTAMP
+        registration = await pool.query(`WITH active_session AS (
+          SELECT token_hash FROM sessions
+          WHERE token_hash=$1 AND user_id=$2 AND expires_at>CURRENT_TIMESTAMP
         ), removed AS (
-          DELETE FROM notification_devices WHERE session_hash IN (SELECT token_hash FROM active_session)
-            AND token_hash<>$3
-        ) SELECT 1 FROM active_session`, [user.session_hash, user.id, tokenHash]);
-        if (!session.rowCount) throw new EvidenceError('Authentication required.', 401);
-        await db.query(`INSERT INTO notification_devices(token_hash,session_hash,encrypted_token,binding)
-          VALUES ($1,$2,$3,$4) ON CONFLICT(token_hash) DO UPDATE SET session_hash=EXCLUDED.session_hash,
-          encrypted_token=EXCLUDED.encrypted_token,binding=EXCLUDED.binding,updated_at=CURRENT_TIMESTAMP`,
-          [tokenHash, user.session_hash, seal(body.fid), body.binding]);
-        await db.query('COMMIT');
+          DELETE FROM notification_devices
+          WHERE session_hash IN (SELECT token_hash FROM active_session) AND token_hash<>$3
+        ), registered AS (
+          INSERT INTO notification_devices(token_hash,session_hash,encrypted_token,binding)
+          SELECT $3,token_hash,$4,$5 FROM active_session WHERE TRUE
+          ON CONFLICT(token_hash) DO UPDATE SET session_hash=EXCLUDED.session_hash,
+            encrypted_token=EXCLUDED.encrypted_token,binding=EXCLUDED.binding,
+            updated_at=CURRENT_TIMESTAMP
+          RETURNING 1
+        ) SELECT EXISTS(SELECT 1 FROM registered) AS registered`,
+          [user.session_hash, user.id, tokenHash, seal(body.fid), body.binding]);
       } catch (error) {
-        await db.query('ROLLBACK');
         if (error.code === '23503') throw new EvidenceError('Authentication required.', 401);
         throw error;
       }
-      finally { db.release(); }
+      if (!registration.rows[0].registered) throw new EvidenceError('Authentication required.', 401);
       return { ok: true };
     },
     async remove(user) {

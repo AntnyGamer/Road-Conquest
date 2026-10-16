@@ -20,6 +20,11 @@ device expiry, evidence freshness, foreign keys and explicit deletion retain
 their existing checks; physical cleanup after an idle interval happens when
 database activity resumes. No periodic job is added.
 
+## More efficient notification registration (draft PR #96)
+
+- Each notification registration now validates its live session, removes any previous different FID for that session, and inserts or updates the encrypted current FID in **one PostgreSQL statement** rather than two data statements plus explicit BEGIN/COMMIT calls. The SQL is atomic; foreign keys still prevent a logout race from rebinding a deleted session.
+- Existing FIDs are refreshed with new ciphertext, binding, and `updated_at` on every registration. Changed FIDs replace prior tokens, transfers between valid sessions still work, and invalid/expired sessions cannot delete another registration. A test meters one SQL round trip per request and checks replacement, impersonation, expiry, and transfer.
+
 ## Notification registration
 
 An ordinary refresh now keeps the same device row and updates its encrypted FID,
