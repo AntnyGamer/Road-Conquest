@@ -33,6 +33,7 @@ object DataExporter {
                     val summary = TrackingRepository.summaryOf(snapshot)
                     ZipOutputStream(output.buffered()).use { zip ->
                         val points = writeTrackPoints(snapshot, zip)
+                        writeSkippedDrivingFixes(snapshot, zip)
                         val roadCount = writeRoads(snapshot, zip)
                         val roadVisitCount = writeRoadVisits(snapshot, zip)
                         val exploredCount = writeExploredPlaces(snapshot, zip)
@@ -155,6 +156,31 @@ object DataExporter {
         }
         zip.closeEntry()
         return DataSummary(count, 0, firstTime, lastTime)
+    }
+
+    /** Offline GPS evidence is included in explicit user exports, never network requests. */
+    private fun writeSkippedDrivingFixes(database: SQLiteDatabase, zip: ZipOutputStream) {
+        zip.putNextEntry(ZipEntry("skipped_driving_fixes.csv"))
+        zip.writer(Charsets.UTF_8).buffered().let { writer ->
+            writer.write("id,latitude,longitude,accuracy_m,speed_mps,bearing_deg,timestamp_utc\n")
+            database.query(
+                "skipped_driving_fixes",
+                arrayOf("id", "latitude", "longitude", "accuracy_m", "speed_mps", "bearing_deg", "timestamp_ms"),
+                null, null, null, null, "timestamp_ms ASC, id ASC"
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    writer.write(listOf(
+                        cursor.getLong(0).toString(), cursor.getDouble(1).toString(),
+                        cursor.getDouble(2).toString(), cursor.getFloat(3).toString(),
+                        cursor.getFloat(4).toString(), cursor.getFloat(5).toString(),
+                        Instant.ofEpochMilli(cursor.getLong(6)).toString()
+                    ).joinToString(","))
+                    writer.write("\n")
+                }
+            }
+            writer.flush()
+        }
+        zip.closeEntry()
     }
 
     private fun writeExploredPlaces(database: SQLiteDatabase, zip: ZipOutputStream): Long {

@@ -146,6 +146,23 @@ class TrackingRepository(context: Context) {
         }
     }
 
+    /** Preserve accepted driving evidence omitted from the compressed online matching queue. */
+    @Synchronized
+    fun recordSkippedDrivingFix(location: Location) {
+        synchronized(dbHelper.historyLock) {
+            if (historyGeneration != dbHelper.historyGeneration) return
+            val values = ContentValues().apply {
+                put("latitude", location.latitude)
+                put("longitude", location.longitude)
+                put("accuracy_m", location.accuracy)
+                put("speed_mps", LocationProviders.reliableMeasuredSpeed(location))
+                put("bearing_deg", if (location.hasBearing() && location.bearing.isFinite()) location.bearing else 0f)
+                put("timestamp_ms", location.time.takeIf { it > 0L } ?: System.currentTimeMillis())
+            }
+            dbHelper.writableDatabase.insertOrThrow("skipped_driving_fixes", null, values)
+        }
+    }
+
     @Synchronized
     fun insertLocation(location: Location): Long {
         synchronized(dbHelper.historyLock) {
@@ -1376,7 +1393,7 @@ class TrackingRepository(context: Context) {
             destination.beginTransaction()
             try {
                 for (table in listOf(
-                    "track_points", "roads", "road_visits", "explored_places", "explored_grid",
+                    "track_points", "skipped_driving_fixes", "roads", "road_visits", "explored_places", "explored_grid",
                     "visited_places", "place_candidates", "progression_rewards",
                     "progression_purchases", "progression_counters"
                 )) {
@@ -1414,6 +1431,7 @@ class TrackingRepository(context: Context) {
             db.beginTransaction()
             try {
                 db.delete("track_points", null, null)
+                db.delete("skipped_driving_fixes", null, null)
                 db.delete("road_visits", null, null)
                 db.delete("roads", null, null)
                 db.delete("explored_places", null, null)

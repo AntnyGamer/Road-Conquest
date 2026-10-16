@@ -114,6 +114,7 @@ class AppDatabase private constructor(context: Context) :
         db.execSQL("CREATE INDEX idx_track_time ON track_points(timestamp_ms)")
         db.execSQL("CREATE INDEX idx_track_bounds ON track_points(latitude, longitude)")
         db.execSQL("CREATE INDEX idx_track_match_queue ON track_points(matched, next_match_attempt_ms, id)")
+        createDiscardedDrivingFixesTable(db)
 
         db.execSQL(
             """
@@ -218,7 +219,7 @@ class AppDatabase private constructor(context: Context) :
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        if (oldVersion !in 10..13 || newVersion !in 11..14 || newVersion <= oldVersion) {
+        if (oldVersion !in 10..14 || newVersion !in 11..15 || newVersion <= oldVersion) {
             error("Database upgrade $oldVersion -> $newVersion is unsupported")
         }
         if (oldVersion == 10) {
@@ -263,6 +264,11 @@ class AppDatabase private constructor(context: Context) :
             // Preserve every visit and road, but display historic counts as estimates.
             db.execSQL("UPDATE roads SET drive_count_exact = 0")
         }
+        if (oldVersion < 15 && newVersion >= 15) {
+            // Accepted GPS evidence discarded by network sampling stays on device.
+            // Never changes the existing match queue, mileage or online request count.
+            createDiscardedDrivingFixesTable(db)
+        }
         if (oldVersion < 13 && newVersion >= 13) {
             pruneHistoricalFogDrift(db)
             // Once-only correction for candidates collected by old versions from
@@ -284,6 +290,21 @@ class AppDatabase private constructor(context: Context) :
                    )"""
             )
         }
+    }
+
+    private fun createDiscardedDrivingFixesTable(db: SQLiteDatabase) {
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS skipped_driving_fixes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                latitude REAL NOT NULL,
+                longitude REAL NOT NULL,
+                accuracy_m REAL NOT NULL,
+                speed_mps REAL NOT NULL,
+                bearing_deg REAL NOT NULL,
+                timestamp_ms INTEGER NOT NULL
+            )
+        """.trimIndent())
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_skipped_driving_time ON skipped_driving_fixes(timestamp_ms)")
     }
 
     /**
@@ -336,7 +357,7 @@ class AppDatabase private constructor(context: Context) :
 
     companion object {
         private const val DB_NAME = "roadconquest.db"
-        private const val DB_VERSION = 14
+        private const val DB_VERSION = 15
 
         @Volatile
         private var instance: AppDatabase? = null
