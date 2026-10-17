@@ -105,6 +105,12 @@ class LocationIqMatcherTest {
             assertNotNull(matcher.match(points))
             val remapped = requireNotNull(matcher.match(points.map { it.copy(id = it.id + 20) }))
             assertEquals(setOf(21L, 22L, 23L, 24L), remapped.matchedPointConfidences.keys)
+            for (bad in listOf(points[0].copy(latitude = Double.NaN),
+                points[0].copy(longitude = 181.0), points[0].copy(accuracyMeters = Float.NaN))) {
+                val invalid = listOf(bad, points[1])
+                assertNull(matcher.cachedMatch(invalid))
+                assertNull(matcher.match(invalid))
+            }
             assertEquals(1, server.requestCount)
             val sent = server.takeRequest()
             assertEquals("POST", sent.method)
