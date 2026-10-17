@@ -379,6 +379,47 @@ class TrackingRepositoryTest {
         assertEquals(setOf(ids[2]), middle.markableIds)
     }
 
+    @Test fun nearbyUnmatchedIslandsShareActualResolvedGpsWithoutDoubleMarking() {
+        val ids = (0..15).map { point(1_000_000L + it * 3_000L, lon = -74.0 + it * 0.0001) }
+        // Three unresolved clusters are separated by already-verified saved GPS.
+        val unresolved = listOf(ids[2], ids[3], ids[7], ids[8], ids[12], ids[13])
+        repository.markMatched(ids - unresolved.toSet())
+        val window = repository.loadMatchingWindow(limit = 25)
+        assertEquals(ids, window.points.map { it.id })
+        assertEquals(unresolved.toSet(), window.markableIds)
+        assertTrue(window.points.filter { it.id !in window.markableIds }.all { it.matched })
+        repository.markMatched(window.markableIds.toList())
+        assertTrue(repository.loadMatchingWindow(limit = 25).points.isEmpty())
+    }
+
+    @Test fun gapAcrossDeletedGpsIsNeverJoinedEvenWhenWithinBridgeLimit() {
+        val ids = (0..12).map { point(1_000_000L + it * 3_000L, lon = -74.0 + it * 0.0001) }
+        repository.markMatched(ids.filter { it != ids[2] && it != ids[8] })
+        repository.readableDatabase().delete("track_points", "id = ?", arrayOf(ids[5].toString()))
+        val window = repository.loadMatchingWindow(limit = 25)
+        assertEquals(setOf(ids[8]), window.markableIds)
+        assertFalse(ids[2] in window.points.map { it.id })
+    }
+
+    @Test fun deferredPendingGpsCannotBeBridgedOrMarkedAsContext() {
+        val ids = (0..10).map { point(1_000_000L + it * 3_000L, lon = -74.0 + it * 0.0001) }
+        val unresolved = listOf(ids[2], ids[5], ids[8])
+        repository.markMatched(ids - unresolved.toSet())
+        repository.deferMatching(listOf(ids[5]), System.currentTimeMillis() + 60_000L)
+        val window = repository.loadMatchingWindow(limit = 25)
+        assertEquals(setOf(ids[8]), window.markableIds)
+        assertFalse(ids[2] in window.points.map { it.id })
+        assertFalse(ids[5] in window.markableIds)
+    }
+
+    @Test fun wideGapStaysSeparatedInsteadOfWastingProviderPoints() {
+        val ids = (0..25).map { point(1_000_000L + it * 3_000L, lon = -74.0 + it * 0.00005) }
+        repository.markMatched(ids.filter { it != ids[2] && it != ids[20] })
+        val window = repository.loadMatchingWindow(limit = 25)
+        assertEquals(setOf(ids[20]), window.markableIds)
+        assertFalse(ids[2] in window.points.map { it.id })
+    }
+
     @Test fun tenPointBatchesDrainBacklogWithoutMissingBoundaryEdges() {
         val ids = (0 until 27).map { point(1_000_000L + it * 3_000L) }
         val covered = mutableSetOf<Pair<Long, Long>>()
