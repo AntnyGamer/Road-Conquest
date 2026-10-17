@@ -125,7 +125,10 @@ object ProgressionManager {
                     repository.deferCandidate(candidate)
                 } else {
                     val missingStartTown = repository.hasMissingStartingTown()
-                    reconcileMissingStartingTown(context, repository, discoveries)
+                    // Most drives have an established starting municipality.
+                    // The reconciliation helper would immediately repeat the
+                    // same database check and return in that common case.
+                    if (missingStartTown) reconcileMissingStartingTown(context, repository, discoveries)
                     val startTownRecovered = missingStartTown && !repository.hasMissingStartingTown()
                     val newPlaces = repository.resolveCandidate(candidate, discoveries)
                     added += newPlaces
