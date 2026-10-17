@@ -572,9 +572,13 @@ class MapRenderer(
             installRoadLayer(style)
             installCarLayer(style)
             updateCarLayer()
+            // Initialize the camera from a fresh cached fix before the first
+            // viewport/bitmap query. Otherwise first launch briefly loads a
+            // world-scale fog and unrelated default-world tiles, then replaces
+            // them in visible chunks after centering on the car.
+            initialStyleReady?.let { ready -> initialStyleReady = null; ready() }
             refreshViewport()
             scheduleFogRender()
-            initialStyleReady?.let { ready -> initialStyleReady = null; ready() }
             onReady()
         }
     }
