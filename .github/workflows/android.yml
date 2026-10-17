@@ -194,6 +194,25 @@ jobs:
           echo "a099cfa1543f55593bc2ed16a70a7c67fe54b1747bb7301f37fdfd6d91028e29  $bundletool" | sha256sum -c -
           java -jar "$bundletool" validate --bundle=app/build/outputs/bundle/release/app-release.aab
 
+      - name: Verify Google Advertising ID permission in both release artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk="app/build/outputs/apk/release/app-release-unsigned.apk"
+          aab="app/build/outputs/bundle/release/app-release.aab"
+          permission="com.google.android.gms.permission.AD_ID"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt2" dump permissions "$apk" |
+            grep -Fq "$permission" || {
+              echo "::error::The release APK is missing $permission."
+              exit 1
+            }
+          bundletool="$RUNNER_TEMP/bundletool-all-1.18.3.jar"
+          java -jar "$bundletool" dump manifest --bundle="$aab" --module=base |
+            grep -Fq "$permission" || {
+              echo "::error::The Play upload AAB is missing $permission."
+              exit 1
+            }
+
       - name: Verify 16 KB native-library compatibility
         shell: bash
         run: |
