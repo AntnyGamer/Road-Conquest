@@ -117,6 +117,16 @@ class DataImporterTest {
         assertTrue(runCatching { DataImporter.prepare(context, ByteArrayInputStream(original.copyOf(original.size / 2))).use { } }.isFailure)
     }
 
+    @Test fun rejectsArchivesWithExcessEntriesBeforeMaterializingTheirContents() {
+        val original = entries(export())
+        val extras = (0 until 256).associate { "unexpected-$it.txt" to "" }
+        val oversized = repack(original + extras)
+        assertTrue(runCatching {
+            DataImporter.prepare(context, ByteArrayInputStream(oversized)).use { }
+        }.isFailure)
+        assertEquals(0L, TrackingRepository(context).getSummary().trackPointCount)
+    }
+
     @Test fun rejectsPreparedBackupAfterDeletionAndCannotResurrectOldProgress() {
         val bytes = export()
         DataImporter.prepare(context, ByteArrayInputStream(bytes)).use { backup ->
