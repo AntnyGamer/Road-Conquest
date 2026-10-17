@@ -25,14 +25,24 @@ object ServiceConfig {
         val providers = root.getJSONObject("providers")
         return names.associateWith { providers.opt(it) as? Boolean ?: true }
     }
+    internal fun cachedValues(raw: String?, ageMs: Long): Map<String, Boolean> =
+        if (ageMs in 0..86_400_000L) runCatching { parse(raw.orEmpty()) }.getOrDefault(emptyMap())
+        else emptyMap()
+
     @Synchronized fun refresh(context: Context) {
         val app = context.applicationContext
         val prefs = app.getSharedPreferences("roadconquest_service_config", Context.MODE_PRIVATE)
         val now = System.currentTimeMillis()
         val fetched = prefs.getLong("fetched", 0)
         val age = now - fetched
-        if (age in 0..86_400_000) runCatching { values = parse(prefs.getString("json", "")!!) }
-        else values = emptyMap()
+        val cached = cachedValues(prefs.getString("json", null), age)
+        // Expired or corrupt remote controls revert to safe defaults. Notify
+        // existing map renderers as well, or they may remain on a fallback
+        // despite the preferred provider becoming available again.
+        if (cached != values) {
+            values = cached
+            listeners.forEach { it() }
+        }
         if (refreshing || now < nextAttempt || age in 0..21_600_000 || BuildConfig.MAP_GATEWAY_URL.isBlank()) return
         nextAttempt = now + 900_000
         refreshing = true
