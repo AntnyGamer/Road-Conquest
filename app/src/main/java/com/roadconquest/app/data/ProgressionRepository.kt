@@ -9,10 +9,8 @@ import com.roadconquest.app.map.PlaceOverlayCache
 import com.roadconquest.app.map.UnitedStatesMunicipalBoundaries
 import org.json.JSONObject
 import kotlin.math.PI
-import kotlin.math.atan
 import kotlin.math.floor
 import kotlin.math.ln
-import kotlin.math.sinh
 import kotlin.math.tan
 
 enum class PlaceKind(val points: Long) {
@@ -145,15 +143,17 @@ class ProgressionRepository(context: Context) {
         }
     }
 
+    private fun validCandidateFix(location: Location): Boolean =
+        !location.isMock && location.latitude.isFinite() && location.longitude.isFinite() &&
+            location.latitude in -85.0..85.0 && location.longitude in -180.0..180.0
+
     /**
      * Save a sparse reverse-geocoding candidate locally. Background tracking never has to make
      * a geocoder/network request; candidates are resolved later while the app is foregrounded.
      */
     fun recordPlaceCandidate(location: Location): Boolean = synchronized(dbHelper.historyLock) {
         if (!isCurrentHistory()) return@synchronized false
-        if (location.isMock || !location.latitude.isFinite() || !location.longitude.isFinite() ||
-            location.latitude !in -85.0..85.0 || location.longitude !in -180.0..180.0
-        ) return@synchronized false
+        if (!validCandidateFix(location)) return@synchronized false
         val db = dbHelper.writableDatabase
         // Keep discoveries observed while the exact zero-point baseline is still resolving.
         // pendingPlaceCandidates() gates them behind the baseline, so they cannot earn points
@@ -271,9 +271,7 @@ class ProgressionRepository(context: Context) {
      */
     fun recordBaselineCandidate(location: Location): Boolean = synchronized(dbHelper.historyLock) {
         if (!isCurrentHistory()) return@synchronized false
-        if (location.isMock || !location.latitude.isFinite() || !location.longitude.isFinite() ||
-            location.latitude !in -85.0..85.0 || location.longitude !in -180.0..180.0
-        ) return@synchronized false
+        if (!validCandidateFix(location)) return@synchronized false
         val db = dbHelper.writableDatabase
         if (db.rawQuery("SELECT 1 FROM visited_places LIMIT 1", null).use { it.moveToFirst() }) {
             return@synchronized false
@@ -308,6 +306,11 @@ class ProgressionRepository(context: Context) {
         ) != -1L
     }
 
+    private fun candidateFromCursor(cursor: android.database.Cursor) = PendingPlaceCandidate(
+        cursor.getLong(0), cursor.getLong(1), cursor.getDouble(2),
+        cursor.getDouble(3), cursor.getLong(4), cursor.getInt(5)
+    )
+
     fun pendingPlaceCandidates(
         limit: Int = 8,
         nowMillis: Long = System.currentTimeMillis()
@@ -318,10 +321,6 @@ class ProgressionRepository(context: Context) {
         // Before the first live baseline exists, stale/sparse candidates cannot become the
         // starting place. Once the sentinel exists, it is an ordering barrier: ordinary
         // candidates can be recorded but remain hidden until zero-point resolution completes.
-        val hasKnownPlace = db.rawQuery(
-            "SELECT 1 FROM visited_places LIMIT 1",
-            null
-        ).use { it.moveToFirst() }
         val baseline = db.query(
             "place_candidates",
             arrayOf(
@@ -335,19 +334,15 @@ class ProgressionRepository(context: Context) {
             null,
             "1"
         ).use { cursor ->
-            if (!cursor.moveToFirst()) null else PendingPlaceCandidate(
-                cursor.getLong(0),
-                cursor.getLong(1),
-                cursor.getDouble(2),
-                cursor.getDouble(3),
-                cursor.getLong(4),
-                cursor.getInt(5)
-            ) to cursor.getLong(6)
+            if (!cursor.moveToFirst()) null else candidateFromCursor(cursor) to cursor.getLong(6)
         }
         if (baseline != null) {
             return baseline.takeIf { it.second <= nowMillis }?.let { listOf(it.first) }.orEmpty()
         }
-        if (!hasKnownPlace) return emptyList()
+        // When a zero-point baseline is still pending, its row alone decides
+        // eligibility. Avoid querying visited places until the baseline is gone.
+        if (!db.rawQuery("SELECT 1 FROM visited_places LIMIT 1", null).use { it.moveToFirst() })
+            return emptyList()
 
         val result = ArrayList<PendingPlaceCandidate>(limit)
         db.query(
@@ -365,14 +360,7 @@ class ProgressionRepository(context: Context) {
             limit.toString()
         ).use { cursor ->
             while (cursor.moveToNext()) {
-                result += PendingPlaceCandidate(
-                    cursor.getLong(0),
-                    cursor.getLong(1),
-                    cursor.getDouble(2),
-                    cursor.getDouble(3),
-                    cursor.getLong(4),
-                    cursor.getInt(5)
-                )
+                result += candidateFromCursor(cursor)
             }
         }
         return result
@@ -381,16 +369,22 @@ class ProgressionRepository(context: Context) {
     /** Earliest retry, including an unresolved zero-point baseline that blocks other places. */
     fun nextPlaceCandidateAttemptMillis(): Long? = synchronized(dbHelper.historyLock) {
         if (!isCurrentHistory()) return@synchronized null
-        val db = dbHelper.readableDatabase
-        val args = arrayOf(BASELINE_CANDIDATE_X.toString(), BASELINE_CANDIDATE_Y.toString())
-        db.rawQuery(
-            "SELECT next_attempt_ms FROM place_candidates WHERE cell_x = ? AND cell_y = ? LIMIT 1", args
-        ).use { if (it.moveToFirst()) return@synchronized it.getLong(0) }
-        if (!db.rawQuery("SELECT 1 FROM visited_places LIMIT 1", null).use { it.moveToFirst() }) {
-            return@synchronized null
-        }
-        db.rawQuery(
-            "SELECT MIN(next_attempt_ms) FROM place_candidates WHERE NOT (cell_x = ? AND cell_y = ?)", args
+        // A baseline candidate blocks ordinary places even if its retry is in
+        // the future. If none exists, ordinary candidates are eligible only
+        // after a verified starting place has been recorded. One statement
+        // replaces the separate baseline lookup, existence check, and MIN.
+        dbHelper.readableDatabase.rawQuery(
+            """SELECT COALESCE(
+                 (SELECT next_attempt_ms FROM place_candidates
+                   WHERE cell_x = ? AND cell_y = ? LIMIT 1),
+                 (SELECT MIN(next_attempt_ms) FROM place_candidates
+                   WHERE NOT (cell_x = ? AND cell_y = ?)
+                     AND EXISTS (SELECT 1 FROM visited_places LIMIT 1))
+               )""",
+            arrayOf(
+                BASELINE_CANDIDATE_X.toString(), BASELINE_CANDIDATE_Y.toString(),
+                BASELINE_CANDIDATE_X.toString(), BASELINE_CANDIDATE_Y.toString()
+            )
         ).use { if (it.moveToFirst() && !it.isNull(0)) it.getLong(0) else null }
     }
 

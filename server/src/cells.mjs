@@ -38,10 +38,13 @@ export function scoreCells(fixes) {
     const second = cellFor(b.lat, b.lon);
     const secondInside = second != null && safelyInside(b, second);
     if (firstInside && secondInside && first.row === second.row && first.column === second.column) {
-      const meters = distance(a, b), seconds = (b.time - a.time) / 1000;
-      if (seconds >= 2 && meters >= Math.max(10, a.accuracy + b.accuracy) &&
-          meters / seconds >= 2.5 && Math.max(a.speed, b.speed) >= 3) {
-        cells.set(`${first.row}:${first.column}`, first);
+      const seconds = (b.time - a.time) / 1000;
+      // Duration and reported speed can reject a pair without any trigonometry.
+      if (seconds >= 2 && Math.max(a.speed, b.speed) >= 3) {
+        const meters = distance(a, b);
+        if (meters >= Math.max(10, a.accuracy + b.accuracy) && meters / seconds >= 2.5) {
+          cells.set(`${first.row}:${first.column}`, first);
+        }
       }
     }
     a = b;

@@ -212,6 +212,24 @@ class TrackingRepositoryTest {
             retryGapStartId = ids[100]).markableIds.containsAll(ids.subList(100, 106)))
     }
 
+    @Test fun anchorBatchStillSkipsUncertainNewerGapBeforeChoosingOlderSafeTurn() {
+        val ids = (0..30).map { i ->
+            point(1_000_000L + i * 2_000L, lat = 40.0 + i * 0.00007)
+        }
+        val pending = (5..8).toSet() + (19..22).toSet()
+        repository.markMatched(ids.filterIndexed { index, _ -> index !in pending })
+        // An already-resolved but inaccurate GPS anchor cannot validate a turn.
+        repository.readableDatabase().execSQL(
+            "UPDATE track_points SET accuracy_m = 30 WHERE id = ?", arrayOf(ids[23])
+        )
+        assertEquals(ids[5], repository.newestEligibleAnchoredGapStartId())
+        repository.readableDatabase().execSQL(
+            "UPDATE track_points SET accuracy_m = 5 WHERE id = ?", arrayOf(ids[23])
+        )
+        assertEquals(ids[19], repository.newestEligibleAnchoredGapStartId())
+        assertEquals(ids[5], repository.newestEligibleAnchoredGapStartId(beforeId = ids[19]))
+    }
+
     @Test fun prioritizationNeverIncludesOpenEndedOrUnanchoredOldGps() {
         val ids = (0..12).map { i ->
             point(1_000_000L + i * 2_000L, lat = 40.0 + i * 0.00007)
@@ -377,6 +395,49 @@ class TrackingRepositoryTest {
         val middle = repository.loadMatchingWindow(limit = 4)
         assertEquals(listOf(ids[1], ids[2], ids[3]), middle.points.map { it.id })
         assertEquals(setOf(ids[2]), middle.markableIds)
+    }
+
+    @Test fun nearbyUnmatchedIslandsShareActualResolvedGpsWithoutDoubleMarking() {
+        val ids = (0..15).map { point(1_000_000L + it * 3_000L, lon = -74.0 + it * 0.0001) }
+        // Three unresolved clusters are separated by already-verified saved GPS.
+        val unresolved = listOf(ids[2], ids[3], ids[7], ids[8], ids[12], ids[13])
+        repository.markMatched(ids - unresolved.toSet())
+        val window = repository.loadMatchingWindow(limit = 25)
+        assertEquals(ids, window.points.map { it.id })
+        assertEquals(unresolved.toSet(), window.markableIds)
+        assertTrue(window.points.filter { it.id !in window.markableIds }.all { it.matched })
+        repository.markMatched(window.markableIds.toList())
+        assertTrue(repository.loadMatchingWindow(limit = 25).points.isEmpty())
+    }
+
+    @Test fun gapAcrossDeletedGpsIsNeverJoinedEvenWhenWithinBridgeLimit() {
+        val ids = (0..12).map { point(1_000_000L + it * 3_000L, lon = -74.0 + it * 0.0001) }
+        repository.markMatched(ids.filter { it != ids[2] && it != ids[8] })
+        repository.readableDatabase().delete("track_points", "id = ?", arrayOf(ids[5].toString()))
+        val window = repository.loadMatchingWindow(limit = 25)
+        assertEquals(setOf(ids[8]), window.markableIds)
+        assertFalse(ids[2] in window.points.map { it.id })
+    }
+
+    @Test fun deferredPendingGpsCannotBeBridgedOrMarkedAsContext() {
+        val ids = (0..10).map { point(1_000_000L + it * 3_000L, lon = -74.0 + it * 0.0001) }
+        val unresolved = listOf(ids[2], ids[5], ids[8])
+        repository.markMatched(ids - unresolved.toSet())
+        repository.deferMatching(listOf(ids[5]), System.currentTimeMillis() + 60_000L)
+        val window = repository.loadMatchingWindow(limit = 25)
+        assertEquals(setOf(ids[8]), window.markableIds)
+        // Older pending evidence may still appear as read-only anchor context.
+        assertFalse(ids[2] in window.markableIds)
+        assertFalse(ids[5] in window.markableIds)
+    }
+
+    @Test fun wideGapStaysSeparatedInsteadOfWastingProviderPoints() {
+        val ids = (0..25).map { point(1_000_000L + it * 3_000L, lon = -74.0 + it * 0.00005) }
+        repository.markMatched(ids.filter { it != ids[2] && it != ids[20] })
+        val window = repository.loadMatchingWindow(limit = 25)
+        assertEquals(setOf(ids[20]), window.markableIds)
+        assertTrue(window.points.size <= 25)
+        assertFalse(ids[2] in window.markableIds)
     }
 
     @Test fun tenPointBatchesDrainBacklogWithoutMissingBoundaryEdges() {
@@ -564,6 +625,28 @@ class TrackingRepositoryTest {
         assertEquals(2, roads.map { it.segmentId }.toSet().size)
         assertEquals(2, roads.map { it.geometryJson }.toSet().size)
         assertEquals(1L, repository.getSummary().roadsUnlockedCount)
+    }
+
+    @Test fun collisionAlternateIdSurvivesPrimaryRemovalWithoutDuplicateRoad() {
+        val first = "[[-74,40],[-73.9995,40.0005],[-74.001,40]]"
+        val second = "[[-74,40],[-74.0005,39.9995],[-74.001,40]]"
+        repository.upsertRoads(listOf(
+            MatchedRoad("Loop Road", first, 100, 200, 1.0),
+            MatchedRoad("Loop Road", second, 300, 400, 1.0)
+        ))
+        val before = repository.getRoadsInBounds(41.0, -73.0, 39.0, -75.0)
+        assertEquals(2, before.size)
+        val alternate = before.single { it.segmentId.startsWith("g") }
+        val primary = before.single { !it.segmentId.startsWith("g") }
+        repository.readableDatabase().execSQL(
+            "DELETE FROM roads WHERE segment_id = ?", arrayOf(primary.segmentId)
+        )
+        repository.upsertRoads(listOf(MatchedRoad("Loop Road", second, 500, 600, 1.0)))
+        val after = repository.getRoadsInBounds(41.0, -73.0, 39.0, -75.0)
+        assertEquals(1, after.size)
+        assertEquals(alternate.segmentId, after.single().segmentId)
+        assertEquals(300L, after.single().firstUnlockedAt)
+        assertEquals(600L, after.single().lastDrivenAt)
     }
 
     @Test fun overlappingMatcherRetryDoesNotInflateTimesDriven() {

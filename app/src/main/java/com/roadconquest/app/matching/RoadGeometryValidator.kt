@@ -4,6 +4,7 @@ import com.roadconquest.app.data.MatchedRoad
 import com.roadconquest.app.data.RoadGrouping
 import com.roadconquest.app.data.TrackPoint
 import org.json.JSONArray
+import org.json.JSONException
 import org.json.JSONObject
 import java.util.Locale
 import kotlin.math.atan2
@@ -15,47 +16,97 @@ import kotlin.math.sqrt
 
 data class MatchResult(
     val roads: List<MatchedRoad>,
-    val matchedPointConfidences: Map<Long, Double>
+    val matchedPointConfidences: Map<Long, Double>,
+    val explicitNoMatch: Boolean = false
 )
 
 /** Independent geometric plausibility checks shared by all current and future matchers. */
 class RoadGeometryValidator {
-    internal fun parse(json: String, points: List<TrackPoint>): MatchResult? {
-        val root = JSONObject(json)
+    internal fun parse(
+        json: String, points: List<TrackPoint>, additionallyBlockedBridgeEndIds: Set<Long> = emptySet()
+    ): MatchResult? = parse(JSONObject(json), points, additionallyBlockedBridgeEndIds)
+
+    internal fun parse(
+        root: JSONObject, points: List<TrackPoint>, additionallyBlockedBridgeEndIds: Set<Long> = emptySet()
+    ): MatchResult? {
+        // Treat caller-owned provider JSON as read-only throughout validation.
         if (root.optString("code") != "Ok") return null
         val matchings = root.optJSONArray("matchings") ?: return null
         if (matchings.length() == 0) return null
 
         val confidences = DoubleArray(matchings.length()) { index ->
-            matchings.getJSONObject(index).optDouble("confidence", 0.0)
-                .takeIf { it.isFinite() && it in 0.0..1.0 } ?: 0.0
+            matchings.optJSONObject(index)?.optDouble("confidence", 0.0)
+                ?.takeIf { it.isFinite() && it in 0.0..1.0 } ?: 0.0
         }
         val tracepoints = root.optJSONArray("tracepoints") ?: return null
         if (tracepoints.length() != points.size) return null
         val traces = Array(matchings.length()) { mutableListOf<Trace>() }
+        val invalidMatchings = BooleanArray(matchings.length())
+        val invalidPointIds = HashSet<Long>()
+        val unknownGroupInputs = HashSet<Int>()
         for (i in points.indices) {
-            val tracepoint = tracepoints.optJSONObject(i) ?: continue
+            val tracepoint = tracepoints.optJSONObject(i)
+            if (tracepoint == null) {
+                // JSON null means genuinely unmatched. Any other malformed value
+                // is unknown evidence and must not be bridged by a sibling group.
+                if (!tracepoints.isNull(i)) {
+                    unknownGroupInputs += i
+                    invalidPointIds += points[i].id
+                }
+                continue
+            }
             val matchingIndex = tracepoint.optInt("matchings_index", -1)
+            // An unknown group is untrusted, but cannot erase unrelated valid groups.
+            // Invalidate every matching that spans its original input position below.
+            if (matchingIndex !in traces.indices) {
+                unknownGroupInputs += i
+                invalidPointIds += points[i].id
+                continue
+            }
             val waypoint = tracepoint.optInt("waypoint_index", -1)
             val alternatives = tracepoint.optInt("alternatives_count", -1)
-            val location = tracepoint.optJSONArray("location") ?: return null
-            if (matchingIndex !in traces.indices || waypoint < 0 || alternatives < 0 ||
-                !validCoordinate(location)
-            ) return null
+            val location = tracepoint.optJSONArray("location")
+            if (waypoint < 0 || alternatives < 0 ||
+                location == null || !validCoordinate(location)
+            ) {
+                invalidMatchings[matchingIndex] = true
+                invalidPointIds += points[i].id
+                continue
+            }
             traces[matchingIndex] += Trace(i, waypoint, alternatives, location)
         }
 
         val roads = mutableListOf<MatchedRoad>()
         val resolved = mutableMapOf<Long, Double>()
-        val blockedBridgeEndIds = HashSet<Long>()
-        var rejectedLeg = false
+        val blockedBridgeEndIds = HashSet<Long>().apply {
+            addAll(invalidPointIds)
+            addAll(additionallyBlockedBridgeEndIds)
+        }
+        var rejectedLeg = unknownGroupInputs.isNotEmpty()
         for (m in traces.indices) {
             val trace = traces[m]
+            if (trace.isNotEmpty() && unknownGroupInputs.any {
+                it in trace.first().input..trace.last().input
+            }) invalidMatchings[m] = true
+            if (invalidMatchings[m]) {
+                // Never skip a malformed fix and join the two sides of its matching.
+                rejectedLeg = true
+                trace.forEach { blockedBridgeEndIds += points[it.input].id }
+                continue
+            }
             if (trace.size < 2) continue
-            val legs = matchings.getJSONObject(m).optJSONArray("legs") ?: return null
-            // All input fixes are requested as waypoints. Reject shifted, duplicated or missing
-            // leg indices rather than assigning another fix's geometry and completion state.
-            if (legs.length() != trace.size - 1 || trace.indices.any { trace[it].waypoint != it }) return null
+            val legs = matchings.optJSONObject(m)?.optJSONArray("legs")
+            // A malformed matching must never be credited. When the provider
+            // also supplied OTHER independent matchings, preserve their already
+            // verified roads instead of discarding the entire response.
+            // Block this group's GPS IDs from seam repair as well.
+            if (legs == null || legs.length() != trace.size - 1 ||
+                trace.indices.any { trace[it].waypoint != it }
+            ) {
+                rejectedLeg = true
+                trace.forEach { blockedBridgeEndIds += points[it.input].id }
+                continue
+            }
             // Alternative candidates at an incremental trace endpoint still need more evidence.
             // Inside a confident trace, fixes on both sides already disambiguate the route;
             // discarding those legs creates holes at ordinary turns and junctions.
@@ -89,6 +140,12 @@ class RoadGeometryValidator {
                         val legRoads = try {
                             parseLeg(legs.getJSONObject(l), trace[l], trace[l + 1], points, confidences[m])
                         } catch (_: IllegalArgumentException) {
+                            rejectedLeg = true
+                            emptyList()
+                        } catch (_: JSONException) {
+                            // A malformed sibling step is no more evidence than a
+                            // disconnected one. Preserve already validated legs and
+                            // leave only the untrusted interval pending for retry.
                             rejectedLeg = true
                             emptyList()
                         }
@@ -394,97 +451,6 @@ class RoadGeometryValidator {
     private fun bearingDifferenceDegrees(a: Double, b: Double): Double =
         kotlin.math.abs(((a - b + 540.0) % 360.0) - 180.0)
 
-    private fun supportedTurnGap(points: List<TrackPoint>): IntRange? {
-        // A retry window may include another, unrelated unmatched fix immediately before
-        // the turn. Check each contiguous pending island independently instead of treating
-        // the first and last pending fix in the entire window as one giant gap.
-        // Prefer the longest eligible turn when multiple gaps have confirmed anchors.
-        var best: IntRange? = null
-        var first = 0
-        while (first < points.size) {
-            if (points[first].matched) {
-                first++
-                continue
-            }
-            var last = first
-            while (last + 1 < points.size && !points[last + 1].matched) last++
-            if (isSupportedTurnGap(points, first, last) &&
-                (best == null || last - first > best.last - best.first)
-            ) best = first..last
-            first = last + 1
-        }
-        return best
-    }
-
-    private fun isSupportedTurnGap(points: List<TrackPoint>, first: Int, last: Int): Boolean {
-        val length = last - first + 1
-        if (first < 1 || last >= points.lastIndex ||
-            length > MAX_SUPPORTED_TURN_GAP_POINTS ||
-            !points[first - 1].matched || !points[last + 1].matched
-        ) return false
-
-        if (length <= 3) {
-            // Preserve the established two-independent-fix anchor evidence for
-            // short gaps, which are far more common than extended missing turns.
-            if (first < 2 || last >= points.size - 2) return false
-            val approachFrom = points[first - 2]
-            val approachTo = points[first - 1]
-            val exitFrom = points[last + 1]
-            val exitTo = points[last + 2]
-            if (pointDistanceMeters(approachFrom, approachTo) < MIN_BEARING_EVIDENCE_DISTANCE_M ||
-                pointDistanceMeters(exitFrom, exitTo) < MIN_BEARING_EVIDENCE_DISTANCE_M
-            ) return false
-            val change = bearingDifferenceDegrees(
-                initialBearingDegrees(approachFrom, approachTo),
-                initialBearingDegrees(exitFrom, exitTo)
-            )
-            if (change >= SHARP_TURN_DEGREES) return true
-            // Some valid junction transitions bend only 25-44 degrees. The
-            // independent GPS fixes on both sides still warrant a no-bearing
-            // provider retry, but only across a short and accurate sampled gap.
-            return change >= MODERATE_TURN_DEGREES &&
-                (first - 1..last + 1).all { index ->
-                    points[index].accuracyMeters.isFinite() &&
-                        points[index].accuracyMeters in 0.01f..MAX_LONG_TURN_ACCURACY_M
-                } &&
-                (first - 1 until last + 1).all { index ->
-                    val elapsed = points[index + 1].timestampMillis - points[index].timestampMillis
-                    elapsed in 1..MAX_LONG_TURN_SAMPLE_GAP_MS &&
-                        pointDistanceMeters(points[index], points[index + 1]) <= MAX_LONG_TURN_JUMP_M
-                }
-        }
-
-        // Long holes require precise, continuous GPS and actual turn geometry.
-        // Neither elapsed time nor a nearby road alone proves the driven path.
-        if (points[last].timestampMillis - points[first].timestampMillis !in 1..MAX_LONG_TURN_GAP_MS ||
-            (first - 1..last + 1).any { i ->
-                !points[i].accuracyMeters.isFinite() ||
-                    points[i].accuracyMeters > MAX_LONG_TURN_ACCURACY_M ||
-                    points[i].accuracyMeters < 0f
-            } ||
-            (first - 1 until last + 1).any { i ->
-                val elapsed = points[i + 1].timestampMillis - points[i].timestampMillis
-                elapsed !in 1..MAX_LONG_TURN_SAMPLE_GAP_MS ||
-                    pointDistanceMeters(points[i], points[i + 1]) > MAX_LONG_TURN_JUMP_M
-            }
-        ) return false
-
-        val approachFrom = points[first - 1]
-        val approachTo = points[first]
-        val exitFrom = points[last]
-        val exitTo = points[last + 1]
-        val approachDistance = pointDistanceMeters(approachFrom, approachTo)
-        val exitDistance = pointDistanceMeters(exitFrom, exitTo)
-        val cornerCourse = (first..last).any { isSharpTurn(points, it) } ||
-            (approachDistance >= MIN_BEARING_EVIDENCE_DISTANCE_M &&
-                exitDistance >= MIN_BEARING_EVIDENCE_DISTANCE_M &&
-                bearingDifferenceDegrees(
-                    initialBearingDegrees(approachFrom, approachTo),
-                    initialBearingDegrees(exitFrom, exitTo)
-                ) >= SHARP_TURN_DEGREES)
-        return cornerCourse
-    }
-
     private fun isSharpTurn(points: List<TrackPoint>, index: Int): Boolean {
         if (index == 0 || index == points.lastIndex) return false
         val incoming = points[index - 1]
@@ -634,16 +600,10 @@ class RoadGeometryValidator {
     companion object {
         // The public provider demo rejects larger traces with TooBig (verified 2026-10-03).
         const val MAX_MATCH_POINTS = 200
-        // Strict in-memory cap: at most four compact, successful provider responses for
-        // one minute. Changed coordinates/times/radii/bearings always bypass cache.
-        private const val RESPONSE_CACHE_TTL_MS = 60_000L
-        private const val MAX_CACHED_RESPONSES = 4
-        private const val MAX_CACHED_RESPONSE_CHARS = 256 * 1024
         // A point with alternatives is only accepted when it is internal to a trace, so fixes
         // on both sides constrain the route. Keep this identical to TrackingService's road
         // acceptance threshold; otherwise a 0.45-0.79 contextual match can retry forever.
         internal const val MIN_ACCEPTABLE_CONFIDENCE = 0.45
-        private const val MIN_MATCH_RADIUS_M = 10f
         private const val MAX_MATCH_RADIUS_M = 75f
         // Treat provider's radius as candidate discovery, not proof. Tighten permanent
         // geometry only while the vehicle is moving slowly enough for a nearby-road snap to be
@@ -680,17 +640,9 @@ class RoadGeometryValidator {
         // degrees is broad enough for ordinary curves while still excluding the opposite road.
         private const val BEARING_GUIDANCE_RANGE_DEGREES = 65
         private const val SHARP_TURN_DEGREES = 45.0
-        private const val MODERATE_TURN_DEGREES = 25.0
-        private const val MAX_SUPPORTED_TURN_GAP_POINTS = 8
-        private const val MAX_LONG_TURN_GAP_MS = 30_000L
-        private const val MAX_LONG_TURN_SAMPLE_GAP_MS = 15_000L
-        private const val MAX_LONG_TURN_JUMP_M = 100.0
-        private const val MAX_LONG_TURN_ACCURACY_M = 12f
-        private const val MIN_ALTERNATE_SNAP_CONFIDENCE = 0.75
         private const val EARTH_RADIUS_M = 6_371_008.8
         private const val MIN_GEOMETRY_LENGTH_M = 0.001
         private const val DUPLICATE_POINT_TOLERANCE_M = 0.01
         private const val JOIN_TOLERANCE_M = 1.0
-        private const val MAX_RESPONSE_BYTES = 4 * 1024 * 1024
     }
 }

@@ -30,6 +30,7 @@ import com.roadconquest.app.matching.RoadGeometryValidator
 import com.roadconquest.app.matching.FallbackRoadMatcher
 import com.roadconquest.app.matching.RoadMatcher
 import com.roadconquest.app.matching.KnownRoadReuse
+import com.roadconquest.app.matching.UnchangedNoMatchBackoff
 import com.roadconquest.app.map.FogGrid
 import com.roadconquest.app.progression.ProgressionManager
 import com.roadconquest.app.util.LocationProviders
@@ -47,6 +48,7 @@ class TrackingService : Service(), LocationListener {
     private lateinit var progressionRepository: ProgressionRepository
     private lateinit var verifiedDriving: VerifiedDriving
     private val matcher: RoadMatcher = FallbackRoadMatcher.configured()
+    private val noMatchBackoff = UnchangedNoMatchBackoff()
     private val matchingExecutor = ScheduledThreadPoolExecutor(1).apply {
         // Stop-time finalization should not keep the process alive for obsolete retry
         // timers scheduled minutes into the future. Already queued immediate work still runs.
@@ -845,11 +847,7 @@ class TrackingService : Service(), LocationListener {
                         window.markableIds,
                         System.currentTimeMillis() + MATCH_SINGLE_POINT_DEFERRAL_MS
                     )
-                    if (batchIndex + 1 < MAX_MATCH_BATCHES_PER_RUN) {
-                        Thread.sleep(MATCH_BATCH_PAUSE_MS)
-                    } else {
-                        scheduleBacklogContinuation()
-                    }
+                    continueMatchingBatch(batchIndex)
                     return@repeat
                 }
 
@@ -882,8 +880,9 @@ class TrackingService : Service(), LocationListener {
                 lastMatchAttempt = nowElapsed
                 val result = matcher.match(points)
                 // The 25-point backup has its own shorter capacity-based cadence.
-                lastRemotePointLimit = matcher.maxPoints
+                lastRemotePointLimit = matcher.lastUsedProviderPointLimit
                 if (result == null) {
+                    noMatchBackoff.clear(window.markableIds)
                     val providerCooldown = matcher.rateLimitRemainingMs()
                     if (!matcher.unavailable && providerCooldown == 0L && points.size >= 20) {
                         adaptiveMatchPointLimit = maxOf(10, points.size / 2)
@@ -901,11 +900,7 @@ class TrackingService : Service(), LocationListener {
                     // The newest batch may be intrinsically unmatchable, not merely
                     // offline. Since it is now deferred, keep draining older eligible
                     // history so one bad batch cannot permanently starve the queue.
-                    if (batchIndex + 1 < MAX_MATCH_BATCHES_PER_RUN) {
-                        Thread.sleep(MATCH_BATCH_PAUSE_MS)
-                    } else {
-                        scheduleBacklogContinuation()
-                    }
+                    continueMatchingBatch(batchIndex)
                     return@repeat
                 }
 
@@ -932,23 +927,27 @@ class TrackingService : Service(), LocationListener {
                 }
 
                 // A backup receives just the prefix; never defer unsent fixes.
-                val submittedIds = points.take(lastRemotePointLimit).mapTo(HashSet()) { it.id }
-                val unresolvedIds = (window.markableIds intersect submittedIds) - resolvedIds
+                val submittedPointIds = points.take(lastRemotePointLimit).map { it.id }
+                val unresolvedIds = (window.markableIds intersect submittedPointIds.toSet()) - resolvedIds
                 if (unresolvedIds.isNotEmpty()) {
-                    // A valid response with only part of the trace matched usually
-                    // benefits from retrying soon with fresh neighboring fixes. Keep the
-                    // longer backoff for actual network/server failures above.
-                    repository.deferMatching(
-                        unresolvedIds,
-                        System.currentTimeMillis() + (if (points.size >= 20) LONG_MATCH_RETRY_AFTER_PARTIAL_MS else MATCH_RETRY_AFTER_PARTIAL_MS)
-                    )
+                    // Repeated *valid* NoMatch responses for identical GPS/context evidence
+                    // do not justify the same paid request every seven minutes. The first
+                    // two attempts retain the original cadence. Fresh context or any
+                    // actual provider evidence immediately restores the normal retry.
+                    val usualDelay = if (points.size >= 20) LONG_MATCH_RETRY_AFTER_PARTIAL_MS
+                        else MATCH_RETRY_AFTER_PARTIAL_MS
+                    val delay = if (result.explicitNoMatch && result.roads.isEmpty() && result.matchedPointConfidences.isEmpty()) {
+                        noMatchBackoff.delayAfterNoMatch(submittedPointIds, unresolvedIds, usualDelay)
+                    } else {
+                        noMatchBackoff.clear(unresolvedIds)
+                        usualDelay
+                    }
+                    repository.deferMatching(unresolvedIds, System.currentTimeMillis() + delay)
+                } else {
+                    noMatchBackoff.clear(window.markableIds)
                 }
 
-                if (batchIndex + 1 < MAX_MATCH_BATCHES_PER_RUN) {
-                    Thread.sleep(MATCH_BATCH_PAUSE_MS)
-                } else {
-                    scheduleBacklogContinuation()
-                }
+                continueMatchingBatch(batchIndex)
             }
         } catch (_: InterruptedException) {
             Thread.currentThread().interrupt()
@@ -959,6 +958,15 @@ class TrackingService : Service(), LocationListener {
             matchingInFlight.set(false)
             if (ready) scheduleDeferredRetry(needsRecovery)
             if (matchingRerunRequested.getAndSet(false) && ready) maybeRunMatching()
+        }
+    }
+
+    // Keep the existing inter-batch pause and final backlog scheduling in one place.
+    private fun continueMatchingBatch(batchIndex: Int) {
+        if (batchIndex + 1 < MAX_MATCH_BATCHES_PER_RUN) {
+            Thread.sleep(MATCH_BATCH_PAUSE_MS)
+        } else {
+            scheduleBacklogContinuation()
         }
     }
 

@@ -161,15 +161,17 @@ class ShopActivity : Activity() {
         }
     }
 
+    private fun newShopCard() = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setBackgroundResource(R.drawable.panel_background)
+        elevation = dp(2).toFloat()
+        val padding = dp(16)
+        setPadding(padding, padding, padding, padding)
+    }
+
     private fun addVipCard() {
         val vip = VipEntitlement.isActive(this)
-        val card = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundResource(R.drawable.panel_background)
-            elevation = dp(2).toFloat()
-            val padding = dp(16)
-            setPadding(padding, padding, padding, padding)
-        }
+        val card = newShopCard()
         card.addView(TextView(this).apply {
             text = "VIP • Lifetime"
             textSize = 20f
@@ -222,13 +224,7 @@ class ShopActivity : Activity() {
         val owned = item.cost == 0L || item.id in snapshot.purchasedItems ||
             (VipEntitlement.isActive(this) && VipEntitlement.isGoldIncluded(item.id))
         val equipped = Cosmetics.isEquipped(this, item)
-        val card = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundResource(R.drawable.panel_background)
-            elevation = dp(2).toFloat()
-            val padding = dp(16)
-            setPadding(padding, padding, padding, padding)
-        }
+        val card = newShopCard()
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL

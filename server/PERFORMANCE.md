@@ -260,3 +260,134 @@ friend status/order equivalence, unchanged row versions, case-only renames,
 content-type precedence and zero stream reads/SQL on cold oversized requests,
 with schema auto-apply both enabled and disabled. No Android source, Worker,
 schema, service plan, provider quota or credential change is required.
+
+## Minor weekly-friends query reduction (draft PR #96)
+
+- The verified weekly friends ranking now uses `UNION ALL` rather than
+  `UNION` to combine the user with their accepted friends. The existing
+  `friendships` primary key and `user_low < user_high` constraint guarantee
+  that the user cannot be their own friend and every accepted counterpart
+  occurs at most once. Removing the unnecessary de-duplication stage preserves
+  participant counts, score ranks, privacy/eligibility, and the 50-friend cap.
+  The friendship integration test explicitly checks distinct ranking entries.
+  This reduces PostgreSQL ranking work but does not reduce HTTP request count.
+
+## Reject syntactically unauthenticated private routes before database work (draft PR #96)
+
+- Notifications-device and friends routes now reject missing/malformed bearer tokens before allocating a PostgreSQL-backed IP rate-limit entry. Enabled verified endpoints do the same; disabled verified endpoints continue to return their existing 404.
+- Every syntactically valid 43-character bearer token still passes the original persistent IP rate limiter, current-session verification, user-specific limits and permission/scoring checks. Anonymous public rankings retain their original rate limits.
+- Under saturation, malformed authentication returns a cheap 401 rather than spending a 429 rate reservation; no valid authentication can bypass the existing limit. The offline/cold Function regression test asserts that such requests return without opening any PostgreSQL connection, even with startup schema application enabled.
+- This primarily saves Neon database work during unauthenticated probes; it does not reduce authenticated users' normal API request counts.
+
+## Shared sign-in budget and credential lookup (draft PR #96)
+
+- A normal login now retrieves the username's salt/hash/profile fields as part of the same PostgreSQL statement that reserves the per-IP and per-username budgets. Previously every permitted, validly formatted username needed a separate SELECT. This saves **one database round trip per permitted sign-in attempt**, not one password-hash operation.
+- The existing ordered IP/username budget CTEs and short-circuit/saturation behavior are unchanged. Denied budgets cannot return password hash fields; unknown or malformed usernames still consume their ordinary budgets and execute the full dummy scrypt password verification. Signup, login limits and session creation are unchanged.
+- Regression coverage verifies matched/missing users, saturated budget denial, no leaked hash fields on denial and null usernames. Existing end-to-end login and 100-way concurrency limit tests continue to apply.
+
+## Merge private-route IP budgets and live session lookup (draft PR #96)
+
+- Friends, notification-device and enabled verified-scoring endpoints now combine their existing PostgreSQL-backed IP allowance reservation and currently valid session check in **one database query instead of two**. This saves one round trip on each normal authenticated call, including the combined friends/weekly-ranking screen request. Session hashes and user identities are not cached, and account deletion/logout/expiration checks stay in place.
+- Requests without a syntactically valid bearer token are still cheaply rejected as 401 before PostgreSQL; syntactically valid expired or forged tokens still consume the same IP budget. An exhausted window still returns 429 without disclosing account identity, and per-user write budgets remain separate and unchanged.
+- PostgreSQL regressions check allowed, nonexistent, exhausted and expired sessions, as well as accounting. An end-to-end Function test counts only two database calls for the authenticated friends screen (rate/session and friends list).
+
+## Public/verified leaderboard rate-limit consolidation (draft PR #96)
+
+- An authenticated optional `GET /v1/leaderboard?metric=cells&mine=1` now reuses the same single SQL statement to reserve the global leaderboard IP allowance and check the user's current session. The subsequent combined ranking/private-total SQL remains unchanged. This removes **one more PostgreSQL round trip per signed-in leaderboard refresh**.
+- Anonymous rankings, unsigned `mine=1` requests, and disabled competition still use the original public IP budget and response shape. Valid-but-expired session tokens remain rate limited and see only public results. No score, privacy filter, or cache rule changes.
+
+## Single-chunk JSON parsing (draft PR #96)
+
+Compared with PR head `df04c50`, `readJson` uses a Buffer view of a single
+received chunk instead of copying it through `Buffer.concat`. The view preserves
+the chunk's byte offset and length for both Node Buffers and Fetch Uint8Arrays.
+Multiple chunks still join before decoding, preserving split UTF-8 characters.
+The byte cap, Content-Type checks, JSON validation and all API rules stay intact.
+
+An isolated comparison of the actual old/new parsing functions checked 64-byte,
+4-KiB and 32-KiB JSON bodies. For 100 single-chunk 32-KiB requests, concatenation
+copies fell from 3,276,800 bytes to zero; multi-chunk copies were unchanged.
+This eliminates one body-sized allocation/copy per single-chunk request, not
+UTF-8 string allocation, JSON object allocation or platform buffering. Database
+and external-service request counts do not change.
+
+Five interleaved local timing rounds showed faster single-chunk medians for
+4-KiB and 32-KiB bodies. Small-body and multi-chunk timing varied, with measured
+increases below 0.0001 ms/call in this run. The additional length branch has a
+cost; this is not a promise of zero CPU overhead or production latency.
+No functional regression was found. All **74 server tests passed**, zero skips
+or failures, on the latest PR base. New built-bundle checks cover offset
+Buffer/Uint8Array bodies and split UTF-8, with schema initialization enabled and
+disabled, while retaining the newer anonymous/malformed authentication checks.
+Malformed JSON, non-object JSON, empty bodies and size-limit behavior also
+matched in the isolated comparison. No merge, deployment or Android change is
+part of this follow-up.
+
+## Additional matching and verification work reductions (draft PR #96)
+
+This pass compares with `99f63f5` and preserves the preceding PR changes:
+
+- **LocationIQ parsing:** reuse the already-parsed provider JSON for geometric
+  validation instead of parsing the same response twice. The string entry point
+  remains available, and the object entry point treats provider evidence as
+  read-only. Cache hits still validate against the current point IDs/accuracy.
+- **Geoapify normalization:** pass normalized JSON directly into the same shared
+  validator, removing a serialization/parse round trip for each normalized
+  matching. Confidence, geometry, blocked seams and fallback decisions are
+  unchanged.
+- **Geoapify multi-leg waypoints:** copy top-level waypoint properties directly
+  before changing the local leg index. Nested values remain read-only; the
+  original waypoint is not modified. This avoids one text serialization/parse
+  round trip for each copied waypoint while retaining all properties.
+- **Scoring rejection order:** check the existing two-second duration and
+  three-meters/second reported-speed gates before computing great-circle
+  distance. Passing pairs still execute every existing distance/accuracy gate;
+  rejected pairs cannot earn credit merely because a calculation was skipped.
+- **Zero-credit batches:** compute the UTC week only when new cells require a
+  weekly write. Zero-credit batches still persist the checkpoint, sequence and
+  retry receipt in the same transaction. Positive batches still belong to the
+  UTC week of their final fix.
+- **Checkpoint cryptography:** reuse one per-batch derived key and authenticated
+  scope buffer for continuity verification and sealing. Keys are not cached
+  between batches/accounts. AES-GCM, random IVs, fingerprint checks and the
+  version-2 ciphertext format are unchanged; old/new ciphertext interoperability
+  was checked in both directions. The small per-batch context adds an object
+  and closures while removing duplicate cryptographic derivation.
+- **Password bounds:** avoid materializing passwords as code-point arrays.
+  UTF-16 bounds handle guaranteed cases; remaining counting stops after the
+  maximum. Signup/current-password validation still accepts 8–128 Unicode code
+  points, and login retains its existing maximum-only check and exact input.
+  Password text, scrypt parameters, salting, peppering and login budgets do not
+  change. Tests compare both paths with the prior policy across 1,510 inputs,
+  including emoji, mixed text, lone surrogates, wrong types and long input.
+- **FCM token race:** a delayed 401 clears the cached authorization only when it
+  rejected the currently cached token. It cannot discard a newer refresh.
+  Rejection of the current token still invalidates it. No message retry, extra
+  push or notification timing change is added.
+
+| Local before/after work | Before | After |
+|---|---:|---:|
+| Distance calculations for 24 one-second GPS pairs inside one cell | 24 | 0 |
+| Distance calculations for 24 pairs below the reported-speed gate | 24 | 0 |
+| Distance calculations for 24 eligible moving pairs | 24 | 24 |
+| Key derivations for 1,000 verify/seal pairs with an existing checkpoint | 2,000 | 1,000 |
+| Scope buffer allocations for those checkpoint pairs | 2,000 | 1,000 |
+| Week-date allocations per zero-credit submission | 1 | 0 |
+| Password arrays for 100 validation/login pairs | 200 | 0 |
+| OAuth calls in a delayed-old-401 race, three push attempts | 3 | 2 |
+
+All **77 server tests** and **155 focused Android matcher tests** passed with
+zero failures or skips. Scoring results also matched the previous code across
+10,000 generated cases. Existing multi-leg, corrupt-sibling, Date Line, junction,
+turn, confidence, cache-ID remapping and provider-fallback tests passed; added
+coverage checks object-path equivalence and unchanged provider evidence.
+
+Measurements use the actual before/after source locally, synthetic data, a stub
+verifier/database for the submission counters, and mocked Google requests.
+No player data, real provider quota or real push was used. Local checkpoint
+timings were comparable across five interleaved rounds; these are operation
+reductions, not a production latency, battery or user-capacity guarantee.
+The pass adds no SQL queries, persistent cache, schema, service plan, paid
+dependency or changed provider allowance. SQL counts stayed identical in the
+instrumented zero/positive submission flows. Android changes require an app
+build; the PR remains draft and this pass does not merge or deploy it.

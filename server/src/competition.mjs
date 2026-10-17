@@ -3,7 +3,7 @@ import { createIntegrityVerifier } from "./integrity.mjs";
 import { EvidenceError, evidenceHash, parseEvidence, requireFreshFixes } from "./scoring.mjs";
 
 import { GRID_ID, scoreCells } from "./cells.mjs";
-import { sealCheckpoint, verifyContinuity } from "./checkpoints.mjs";
+import { createCheckpointCodec } from "./checkpoints.mjs";
 
 export function competitionConfig(env) {
   if (env.LEADERBOARDS_ENABLED !== "1") return null;
@@ -131,7 +131,8 @@ export async function createCompetition(pool, config, dependencies = {}) {
           [user.id, config.dataset]
         );
         const scope = `3:${user.id}:${config.dataset}`;
-        verifyContinuity(old.rows[0].last_verified_fix, body.fixes[0], body.run, scope, config.checkpointKey);
+        const checkpoint = createCheckpointCodec(scope, config.checkpointKey);
+        checkpoint.verify(old.rows[0].last_verified_fix, body.fixes[0], body.run);
         const inserted = await db.query(
           `WITH added AS (INSERT INTO competition_cells(user_id,dataset,grid_row,grid_col)
            SELECT $1,$2,* FROM unnest($3::integer[],$4::integer[])
@@ -142,15 +143,19 @@ export async function createCompetition(pool, config, dependencies = {}) {
         const newCells = inserted.rows[0]?.count || 0;
         // Batches spanning Monday midnight belong to the week of their final fix.
         // The timestamp is already freshness-checked and bound by Play Integrity.
-        const week = new Date(body.fixes.at(-1).time);
-        week.setUTCHours(0, 0, 0, 0);
-        week.setUTCDate(week.getUTCDate() - (week.getUTCDay() + 6) % 7);
+        let weekStart;
+        if (newCells) {
+          const week = new Date(body.fixes.at(-1).time);
+          week.setUTCHours(0, 0, 0, 0);
+          week.setUTCDate(week.getUTCDate() - (week.getUTCDay() + 6) % 7);
+          weekStart = week.toISOString().slice(0, 10);
+        }
         // Persist the checkpoint/total and this week's nonzero increment in one
         // statement. Zero-credit batches still advance continuity without a
         // weekly write. Both writes remain inside the same user-locked transaction.
         const updateTotal = `UPDATE cell_scores SET cells=cells+$1,last_verified_fix=$2
           WHERE user_id=$3 AND dataset=$4 RETURNING cells`;
-        const scoreArgs = [newCells, JSON.stringify(sealCheckpoint(body.fixes.at(-1), body.run, scope, config.checkpointKey)),
+        const scoreArgs = [newCells, JSON.stringify(checkpoint.seal(body.fixes.at(-1), body.run)),
           user.id, config.dataset];
         const updatedScore = await db.query(newCells ?
           `WITH updated AS (${updateTotal}), recorded_week AS (
@@ -159,7 +164,7 @@ export async function createCompetition(pool, config, dependencies = {}) {
             ON CONFLICT (user_id,dataset,week_start) DO UPDATE
             SET new_cells=cell_weeks.new_cells+EXCLUDED.new_cells
           ) SELECT cells FROM updated` : updateTotal,
-          newCells ? [...scoreArgs, week.toISOString().slice(0, 10)] : scoreArgs
+          newCells ? [...scoreArgs, weekStart] : scoreArgs
         );
         const result = { sequence: body.sequence + 1, credited_cells: newCells, accepted_cells: cells,
           verified: true, scoring_policy: 3, dataset: config.dataset, cells: Number(updatedScore.rows[0].cells) };
@@ -188,7 +193,10 @@ export async function createCompetition(pool, config, dependencies = {}) {
           SELECT date_trunc('week', CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date AS start_date
         ), participants AS (
           SELECT $1::bigint AS id
-          UNION
+          UNION ALL
+          -- The CHECK(user_low < user_high) and PK(user_low,user_high)
+          -- guarantee exactly one distinct counterpart for each friendship.
+          -- Neither a self-edge nor a duplicate friend can enter this result.
           SELECT CASE WHEN f.user_low=$1 THEN f.user_high ELSE f.user_low END
           FROM friendships f WHERE f.accepted AND (f.user_low=$1 OR f.user_high=$1)
         ), scores AS (
@@ -212,20 +220,39 @@ export async function createCompetition(pool, config, dependencies = {}) {
         entries: result.rows.filter(r => r.username !== null)
           .map(r => ({ username: r.username, rank: Number(r.rank), cells: Number(r.cells) })) };
     },
-    async leaderboard(metric = "cells") {
+    async leaderboard(metric = "cells", authenticatedUserId = null) {
       if (metric !== "cells") throw new EvidenceError("Choose cells.", 400);
-      const result = await pool.query(
-        `WITH leaders AS (
+      // Public callers keep exactly the existing query and response. A verified
+      // authenticated caller gets its total as one additional scalar projection
+      // in the same indexed rankings query, without a second PostgreSQL round trip.
+      // One ranking definition for both public and signed-in responses.
+      const leadersCte = `WITH leaders AS (
            SELECT u.username_display AS username,u.username_key,s.cells
            FROM cell_scores s JOIN users u ON u.id=s.user_id
            WHERE s.dataset=$1 AND s.cells>0 AND u.leaderboard_visible AND u.leaderboard_eligible
            ORDER BY s.cells DESC,u.username_key ASC LIMIT 50
-         )
+         )`;
+      const publicSql = `${leadersCte}
          SELECT username,cells,RANK() OVER (ORDER BY cells DESC) AS rank
-         FROM leaders ORDER BY cells DESC,username_key ASC`, [config.dataset]
-      );
-      return { verified: true, scoring_policy: 3, metric, dataset: config.dataset,
-        entries: result.rows.map(r => ({ username: r.username, rank: Number(r.rank), cells: Number(r.cells) })) };
+         FROM leaders ORDER BY cells DESC,username_key ASC`;
+      const withMine = authenticatedUserId != null;
+      const sql = withMine ? `${leadersCte}, ranked AS (
+           SELECT username,username_key,cells,RANK() OVER (ORDER BY cells DESC) AS rank
+           FROM leaders
+         )
+         SELECT ranked.username,ranked.cells,ranked.rank,mine.cells AS mine_cells
+         FROM (SELECT COALESCE((
+           SELECT cells FROM cell_scores WHERE user_id=$2 AND dataset=$1
+         ),0) AS cells) mine LEFT JOIN ranked ON TRUE
+         ORDER BY ranked.cells DESC NULLS LAST,ranked.username_key ASC NULLS LAST`
+        : publicSql;
+      const result = await pool.query(sql, withMine ? [config.dataset, authenticatedUserId] : [config.dataset]);
+      const ranking = { verified: true, scoring_policy: 3, metric, dataset: config.dataset,
+        entries: result.rows.filter(r => r.username !== null)
+          .map(r => ({ username: r.username, rank: Number(r.rank), cells: Number(r.cells) })) };
+      if (withMine) ranking.mine = { verified: true, scoring_policy: 3, dataset: config.dataset,
+        cells: Number(result.rows[0].mine_cells) };
+      return ranking;
     }
   };
 }

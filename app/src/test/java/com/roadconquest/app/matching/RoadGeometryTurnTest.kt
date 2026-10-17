@@ -294,6 +294,79 @@ class RoadGeometryTurnTest {
         assertNull(RoadGeometryValidator().parse(valid.toString(), points(a, b)))
     }
 
+    @Test fun malformedIndependentMatchingCannotEraseValidSiblingOrEarnCredit() {
+        val good = matching(leg("Verified Approach", a, b))
+        val invalid = matching(leg("Invalid", c, d))
+        val raw = response(listOf(
+            trace(0, 0, a), trace(0, 1, b),
+            trace(1, 0, c), trace(1, 3, d)
+        ), good, invalid)
+        val result = requireNotNull(RoadGeometryValidator().parse(raw, points(a, b, c, d)))
+        assertEquals(listOf("Verified Approach"), result.roads.map { it.name })
+        assertEquals(setOf(1L, 2L), result.matchedPointConfidences.keys)
+        assertFalse(3L in result.matchedPointConfidences)
+        assertFalse(4L in result.matchedPointConfidences)
+        // Even though the group has two tracepoints, a wrong waypoint sequence
+        // in the ONLY matching remains a failed batch rather than a credited road.
+        assertNull(RoadGeometryValidator().parse(response(listOf(
+            trace(0, 0, c), trace(0, 3, d)
+        ), invalid), points(c, d)))
+    }
+
+    @Test fun malformedTracepointInvalidatesOnlyItsOwnMatching() {
+        val response = JSONObject(response(listOf(
+            trace(0, 0, a), trace(0, 1, b),
+            trace(1, 0, c), trace(1, 1, d)
+        ), matching(leg("Valid approach", a, b)), matching(leg("Untrusted exit", c, d))))
+        response.getJSONArray("tracepoints").getJSONObject(3).put("location", "invalid")
+        val result = requireNotNull(RoadGeometryValidator().parse(response.toString(), points(a, b, c, d)))
+        assertEquals(listOf("Valid approach"), result.roads.map { it.name })
+        assertEquals(setOf(1L, 2L), result.matchedPointConfidences.keys)
+
+        // Missing ambiguity metadata must not let the remaining fix in that group
+        // masquerade as a valid route (nor earn an invented connector).
+        response.getJSONArray("tracepoints").getJSONObject(3)
+            .put("location", d).remove("alternatives_count")
+        val noCredit = requireNotNull(RoadGeometryValidator().parse(response.toString(), points(a, b, c, d)))
+        assertEquals(setOf(1L, 2L), noCredit.matchedPointConfidences.keys)
+    }
+
+    @Test fun unknownTraceMatchingIndexKeepsOnlyIndependentValidatedRoads() {
+        val separate = response(listOf(
+            trace(0, 0, a), trace(0, 1, b), trace(99, 0, c),
+            trace(1, 0, d), trace(1, 1, e)
+        ), matching(leg("Approach", a, b)), matching(leg("Exit", d, e)))
+        val recovered = requireNotNull(RoadGeometryValidator().parse(separate, points(a, b, c, d, e)))
+        assertEquals(listOf("Approach", "Exit"), recovered.roads.map { it.name })
+        assertEquals(setOf(1L, 2L, 5L), recovered.matchedPointConfidences.keys)
+        assertFalse(3L in recovered.matchedPointConfidences)
+        assertFalse(4L in recovered.matchedPointConfidences)
+
+        // If an unknown tracepoint is INSIDE a matching, do not bridge over it
+        // even when the surrounding metadata supplies two plausible endpoints.
+        val inside = response(listOf(
+            trace(0, 0, a), trace(99, 0, b), trace(0, 1, c),
+            trace(1, 0, d), trace(1, 1, e)
+        ), matching(leg("Untrusted span", a, c)), matching(leg("Exit", d, e)))
+        val withheld = requireNotNull(RoadGeometryValidator().parse(inside, points(a, b, c, d, e)))
+        assertEquals(listOf("Exit"), withheld.roads.map { it.name })
+        assertEquals(setOf(5L), withheld.matchedPointConfidences.keys)
+
+        // An invalid JSON tracepoint is not the same as the provider's explicit
+        // null/unmatched value; it cannot justify the neighboring route either.
+        val brokenObject = JSONObject(inside)
+        brokenObject.getJSONArray("tracepoints").put(1, "malformed tracepoint")
+        val noBridge = requireNotNull(RoadGeometryValidator().parse(
+            brokenObject.toString(), points(a, b, c, d, e)))
+        assertEquals(listOf("Exit"), noBridge.roads.map { it.name })
+        assertEquals(setOf(5L), noBridge.matchedPointConfidences.keys)
+
+        val entirelyUnknown = response(listOf(
+            trace(99, 0, a), trace(99, 1, b)
+        ), matching(leg("Not evidence", a, b)))
+        assertNull(RoadGeometryValidator().parse(entirelyUnknown, points(a, b)))
+    }
+
     @Test fun confidentRouteKeepsAnInternalAlternativeWhenBothSidesProvideContext() {
         val result = requireNotNull(RoadGeometryValidator().parse(response(listOf(
             trace(0, 0, a), trace(0, 1, b), trace(0, 2, c, 2),
@@ -365,6 +438,26 @@ class RoadGeometryTurnTest {
     @Test fun missingStepsOnTheOnlyLegLeavesTheWholeTracePending() {
         assertNull(RoadGeometryValidator().parse(
             response(listOf(trace(0, 0, a), trace(0, 1, b)), matching(JSONObject())),
+            points(a, b)
+        ))
+    }
+
+    @Test fun malformedProviderStepPreservesValidatedSiblingWithoutMarkingBrokenLeg() {
+        val malformed = JSONObject().put("steps", JSONArray().put("not a road step"))
+        val result = requireNotNull(RoadGeometryValidator().parse(
+            response(listOf(trace(0, 0, a), trace(0, 1, b), trace(0, 2, c)),
+                matching(leg("Approach", a, b), malformed)),
+            points(a, b, c)
+        ))
+        assertEquals(listOf("Approach"), result.roads.map { it.name })
+        assertEquals(setOf(1L, 2L), result.matchedPointConfidences.keys)
+        assertFalse(3L in result.matchedPointConfidences)
+        assertTrue(result.roads.none { it.coordinatesJson.contains("not a road step") })
+
+        // When the malformed provider leg is the only leg, keep the original
+        // failure path/backoff; never invent a road to avoid a visible gap.
+        assertNull(RoadGeometryValidator().parse(
+            response(listOf(trace(0, 0, a), trace(0, 1, b)), matching(malformed)),
             points(a, b)
         ))
     }

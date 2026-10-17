@@ -41,7 +41,7 @@ class LocationIqMatcher(
                     .put("timestamp", Instant.ofEpochMilli(time).toString()).put("accuracyMeters", point.accuracyMeters))
             }
         }).toString()
-        if (cachedRequest == payload && System.currentTimeMillis() - cachedAt in 0L..60_000L) {
+        if (cachedRequest == payload && System.currentTimeMillis() - cachedAt in 0L..900_000L) {
             return runCatching { parse(requireNotNull(cachedBody), points) }.getOrNull()
         }
         if (rateLimitRemainingMs() > 0L) { unavailable = true; return null }
@@ -80,9 +80,10 @@ class LocationIqMatcher(
 
     internal fun parse(body: String, points: List<TrackPoint>): MatchResult? {
         if (points.size !in 2..maxPoints) return null
-        if (JSONObject(body).optString("code") in setOf("NoMatch", "NoSegment")) return MatchResult(emptyList(), emptyMap())
+        val root = JSONObject(body)
+        if (root.optString("code") in setOf("NoMatch", "NoSegment")) return MatchResult(emptyList(), emptyMap(), explicitNoMatch = true)
         // Provider confidence and ambiguous tracepoints pass through unchanged.
         // The same endpoint, detour, continuity, speed and snap gates still apply.
-        return validator.parse(body, points)
+        return validator.parse(root, points)
     }
 }

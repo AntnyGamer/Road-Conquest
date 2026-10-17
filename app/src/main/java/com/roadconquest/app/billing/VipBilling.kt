@@ -97,11 +97,8 @@ class VipBilling(
         }
         connect {
             // Never launch a flow using stale cached ProductDetails.
-            val product = QueryProductDetailsParams.Product.newBuilder()
-                .setProductId(VipEntitlement.PRODUCT_ID)
-                .setProductType(BillingClient.ProductType.INAPP).build()
             client.queryProductDetailsAsync(
-                QueryProductDetailsParams.newBuilder().setProductList(listOf(product)).build()
+                vipProductQuery()
             ) { result, response ->
                 if (closed || activity.isDestroyed || activity.isFinishing) return@queryProductDetailsAsync
                 val details = if (result.responseCode == BillingClient.BillingResponseCode.OK) {
@@ -224,13 +221,17 @@ class VipBilling(
         else details.oneTimePurchaseOfferDetails?.takeIf(::permanent)
     }
 
-    private fun queryOffer() {
-        if (closed || !client.isReady) return
+    private fun vipProductQuery(): QueryProductDetailsParams {
         val product = QueryProductDetailsParams.Product.newBuilder()
             .setProductId(VipEntitlement.PRODUCT_ID)
             .setProductType(BillingClient.ProductType.INAPP).build()
+        return QueryProductDetailsParams.newBuilder().setProductList(listOf(product)).build()
+    }
+
+    private fun queryOffer() {
+        if (closed || !client.isReady) return
         client.queryProductDetailsAsync(
-            QueryProductDetailsParams.newBuilder().setProductList(listOf(product)).build()
+            vipProductQuery()
         ) { result, response ->
             if (closed) return@queryProductDetailsAsync
             offer = if (result.responseCode == BillingClient.BillingResponseCode.OK) {

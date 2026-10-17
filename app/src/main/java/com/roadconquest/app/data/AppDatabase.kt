@@ -322,22 +322,18 @@ class AppDatabase private constructor(context: Context) :
             }
         }
         if (oldCells.isEmpty()) return
-        db.rawQuery(
+        // Include both recorded driving and walking-only exploration evidence;
+        // an old tile survives if either source contains its physical position.
+        for (query in listOf(
             "SELECT latitude, longitude FROM track_points WHERE accuracy_m BETWEEN 0.01 AND 25",
-            null
-        ).use { cursor ->
-            while (cursor.moveToNext() && oldCells.isNotEmpty()) {
-                val tile = FogGrid.cell(cursor.getDouble(0), cursor.getDouble(1)) ?: continue
-                oldCells.remove(tile.key)
-            }
-        }
-        // Walking legitimately revealed fog in older versions without recording
-        // road miles. Preserve its explored 50-m samples instead of incorrectly
-        // deleting all walking-only squares during this one-time cleanup.
-        db.rawQuery("SELECT latitude, longitude FROM explored_places", null).use { cursor ->
-            while (cursor.moveToNext() && oldCells.isNotEmpty()) {
-                val tile = FogGrid.cell(cursor.getDouble(0), cursor.getDouble(1)) ?: continue
-                oldCells.remove(tile.key)
+            "SELECT latitude, longitude FROM explored_places"
+        )) {
+            if (oldCells.isEmpty()) break
+            db.rawQuery(query, null).use { cursor ->
+                while (cursor.moveToNext() && oldCells.isNotEmpty()) {
+                    val tile = FogGrid.cell(cursor.getDouble(0), cursor.getDouble(1)) ?: continue
+                    oldCells.remove(tile.key)
+                }
             }
         }
         val delete = db.compileStatement(

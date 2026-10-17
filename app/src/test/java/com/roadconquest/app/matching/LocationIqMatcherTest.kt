@@ -32,6 +32,19 @@ class LocationIqMatcherTest {
         assertFalse("Ambiguous endpoint must stay queued", 5L in result.matchedPointConfidences)
     }
 
+    @Test fun parsedResponseMatchesStringPathWithoutMutatingProviderEvidence() {
+        val validator = RoadGeometryValidator()
+        val root = JSONObject(example)
+        val original = root.toString()
+        val blocked = setOf(points[2].id)
+        assertEquals(validator.parse(original, points, blocked), validator.parse(root, points, blocked))
+        assertEquals(original, root.toString())
+        assertEquals(validator.parse(original, points), validator.parse(root, points))
+        assertEquals(original, root.toString())
+        root.getJSONArray("tracepoints").getJSONObject(1).put("waypoint_index", 12)
+        assertEquals(validator.parse(root.toString(), points), validator.parse(root, points))
+    }
+
     @Test fun distantGeometryAndMalformedPointMappingCannotEarnCredit() {
         val matcher = LocationIqMatcher("https://maps.example")
         val far = matcher.parse(example, points.map { it.copy(longitude = it.longitude + 0.01) })
@@ -63,6 +76,23 @@ class LocationIqMatcherTest {
             now += 3_600_001L
             server.enqueue(MockResponse().setBody(example))
             assertTrue(requireNotNull(fallback.match(points)).roads.isNotEmpty())
+            assertEquals(2, server.requestCount)
+        }
+    }
+
+    @Test fun exactTwoMinuteOldResponseDoesNotConsumeAnotherLocationIqRequest() {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody(example))
+            server.enqueue(MockResponse().setBody(example))
+            server.start()
+            val matcher = LocationIqMatcher(server.url("/").toString(), ProviderHealth())
+            assertNotNull(matcher.match(points))
+            val storedAt = LocationIqMatcher::class.java.getDeclaredField("cachedAt").apply { isAccessible = true }
+            storedAt.setLong(matcher, System.currentTimeMillis() - 2 * 60_000L)
+            assertNotNull(matcher.match(points))
+            assertEquals(1, server.requestCount)
+            storedAt.setLong(matcher, System.currentTimeMillis() - 16 * 60_000L)
+            assertNotNull(matcher.match(points))
             assertEquals(2, server.requestCount)
         }
     }

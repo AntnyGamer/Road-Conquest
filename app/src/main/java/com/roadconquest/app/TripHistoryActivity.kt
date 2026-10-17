@@ -8,7 +8,6 @@ import android.app.AlertDialog
 import android.widget.Toast
 import com.roadconquest.app.billing.VipBilling
 import com.roadconquest.app.billing.VipEntitlement
-import com.roadconquest.app.data.SavedTripInsights
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -499,13 +498,7 @@ class TripHistoryActivity : Activity() {
         val expected = ++generation
         // Clear the previous drive immediately; never show its track or marker
         // while the next drive is loading or if loading fails.
-        points = emptyList()
-        routeCoordinates = emptyList()
-        lastRenderedIndex = -1
-        seek?.isEnabled = false
-        playButton?.isEnabled = false
-        seek?.progress = 0
-        renderReplay()
+        resetReplayDisplay()
         routeStatus?.text = "Loading drive…"
         replayProgress?.text = "Loading drive…"
         worker.execute {
@@ -551,6 +544,16 @@ class TripHistoryActivity : Activity() {
                 })
             }
         }
+    }
+
+    private fun resetReplayDisplay() {
+        points = emptyList()
+        routeCoordinates = emptyList()
+        lastRenderedIndex = -1
+        seek?.isEnabled = false
+        playButton?.isEnabled = false
+        seek?.progress = 0
+        renderReplay()
     }
 
     private fun renderReplay() {
@@ -626,13 +629,7 @@ class TripHistoryActivity : Activity() {
             selectedTrip = null
             selectedTripButton = null
             shareSummaryReady = false
-            points = emptyList()
-            routeCoordinates = emptyList()
-            lastRenderedIndex = -1
-            seek?.isEnabled = false
-            playButton?.isEnabled = false
-            seek?.progress = 0
-            renderReplay()
+            resetReplayDisplay()
             routeStatus?.text = "Driving history changed. Choose a saved drive."
             replayProgress?.text = "Choose a drive to replay"
             insightsText?.text = "Choose a drive for its distance, new roads and matching status."

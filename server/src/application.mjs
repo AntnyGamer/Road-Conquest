@@ -1,9 +1,10 @@
-import { createHash, createHmac, randomBytes } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { databaseConfig } from "./database-config.mjs";
 import {
+  boundedLoginPassword,
   createSessionToken,
   hashPassword,
   hashSessionToken,
@@ -15,7 +16,7 @@ import { competitionConfig, createCompetition } from "./competition.mjs";
 import { createFriends } from "./friends.mjs";
 import { createNotifications, createFcmSender } from "./notifications.mjs";
 import { createRequestMaintenance } from "./maintenance.mjs";
-import { RATE_LIMIT_SQL, LOGIN_LIMIT_SQL } from "./rate-limits.mjs";
+import { RATE_LIMIT_SQL, RATE_LIMIT_SESSION_SQL, LOGIN_WITH_USER_SQL } from "./rate-limits.mjs";
 
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -115,15 +116,13 @@ function clientIp(req) {
 }
 
 function opaqueRateKey(bucket, key) {
-  if (PEPPER) {
-    return createHmac("sha256", PEPPER)
-      .update("rate-limit\0", "utf8")
-      .update(bucket, "utf8")
-      .update("\0", "utf8")
-      .update(key, "utf8")
-      .digest();
-  }
-  return createHash("sha256").update(bucket, "utf8").update("\0").update(key, "utf8").digest();
+  // Startup requires a strong pepper, so the unkeyed fallback is unreachable.
+  return createHmac("sha256", PEPPER)
+    .update("rate-limit\0", "utf8")
+    .update(bucket, "utf8")
+    .update("\0", "utf8")
+    .update(key, "utf8")
+    .digest();
 }
 
 async function rateLimit(bucket, key, limit, windowMs) {
@@ -134,6 +133,22 @@ async function rateLimit(bucket, key, limit, windowMs) {
   );
   // A missing RETURNING row means an already-saturated window: still denied.
   return result.rows[0]?.allowed === true;
+}
+
+// Authenticated-only routes used to run this rate-limit write and a separate
+// session lookup. Keep the same rate budget and expiry check in one statement;
+// never cache a session, skip a limit, or return identity for a denied request.
+async function rateLimitedUser(req, bucket, limit, windowMs) {
+  const token = bearerToken(req);
+  if (!token) return { allowed: true, user: null };
+  await prepareDatabase();
+  const sessionHash = hashSessionToken(token);
+  const result = await pool.query(RATE_LIMIT_SESSION_SQL, [
+    bucket, opaqueRateKey(bucket, clientIp(req)), windowMs, limit, sessionHash
+  ]);
+  const row = result.rows[0];
+  return { allowed: row?.allowed === true,
+    user: row?.allowed === true && row.id != null ? { id: row.id, session_hash: sessionHash } : null };
 }
 
 function sendHtml(res, status, body) {
@@ -188,7 +203,12 @@ async function readJson(req) {
   }
   if (!chunks.length) return {};
   try {
-    const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    // A single HTTP/Fetch chunk needs a view, not another allocation and copy.
+    // Preserve its byte range; multi-chunk UTF-8 still decodes only after joining.
+    const bytes = chunks.length === 1
+      ? Buffer.from(chunks[0].buffer, chunks[0].byteOffset, chunks[0].byteLength)
+      : Buffer.concat(chunks);
+    const body = JSON.parse(bytes.toString("utf8"));
     if (!body || Array.isArray(body) || typeof body !== "object") throw new Error("JSON object required");
     return body;
   } catch {
@@ -262,8 +282,13 @@ async function handle(req, res) {
 
   const ip = clientIp(req);
   if (url.pathname === "/v1/notifications/device") {
-    if (!await rateLimit("push-ip", ip, 60, 60 * 1000)) return send(res, 429, { error: "Try again later." });
-    const user = await authenticatedUser(req);
+    // No database-backed rate-limit reservation or session lookup is needed
+    // for an absent/malformed bearer token. Validly shaped but invalid tokens
+    // retain the original persistent IP/session limits.
+    if (!bearerToken(req)) return send(res, 401, { error: "Authentication required." });
+    const access = await rateLimitedUser(req, "push-ip", 60, 60 * 1000);
+    if (!access.allowed) return send(res, 429, { error: "Try again later." });
+    const user = access.user;
     if (!user) return send(res, 401, { error: "Authentication required." });
     if (!await rateLimit("push-user", String(user.id), 20, 60 * 1000)) return send(res, 429, { error: "Try again later." });
     if (req.method === "POST") return send(res, 200, await notifications.register(user, await readJson(req)));
@@ -271,8 +296,10 @@ async function handle(req, res) {
     return send(res, 405, { error: "Method not allowed." });
   }
   if (url.pathname === "/v1/friends" || url.pathname === "/v1/friends/weekly") {
-    if (!await rateLimit("friends-ip", ip, 120, 60 * 1000)) return send(res, 429, { error: "Try again later." });
-    const user = await authenticatedUser(req);
+    if (!bearerToken(req)) return send(res, 401, { error: "Authentication required." });
+    const access = await rateLimitedUser(req, "friends-ip", 120, 60 * 1000);
+    if (!access.allowed) return send(res, 429, { error: "Try again later." });
+    const user = access.user;
     if (!user) return send(res, 401, { error: "Authentication required." });
     if (req.method === "GET" && url.pathname === "/v1/friends/weekly") {
       const metric = url.searchParams.get("metric") || "cells";
@@ -303,29 +330,38 @@ async function handle(req, res) {
     return send(res, 405, { error: "Method not allowed." });
   }
   if (req.method === "GET" && url.pathname === "/v1/leaderboard") {
-    if (!await rateLimit("competition-ip", ip, 180, 60 * 1000)) return send(res, 429, { error: "Try again later." });
+    // The public route stays public. Signed-in opt-in requests share a single
+    // SQL statement for the same IP allowance and fresh session validation.
+    const wantsMine = Boolean(competition) && url.searchParams.get("mine") === "1" && bearerToken(req) != null;
+    const access = wantsMine ? await rateLimitedUser(req, "competition-ip", 180, 60 * 1000) : null;
+    const allowed = access ? access.allowed : await rateLimit("competition-ip", ip, 180, 60 * 1000);
+    if (!allowed) return send(res, 429, { error: "Try again later." });
     const metric = url.searchParams.get("metric") || "cells";
     if (metric !== "cells") return send(res, 400, { error: "Choose cells." });
     // The public page can load before verification is provisioned. No scores are invented,
     // and every drive-writing endpoint below remains gated on strict competition setup.
-    const ranking = competition
-      ? { ...await competition.leaderboard(metric), verification_available: true }
-      : { metric, dataset: null, entries: [], verification_available: false };
-    if (competition && url.searchParams.get("mine") === "1") {
-      // An optional authenticated total avoids another HTTP request and
-      // rate-limit DB write. Public rankings remain accessible anonymously.
-      const user = await authenticatedUser(req);
-      if (user) {
-        try { ranking.mine = await competition.totals(user); }
-        catch { /* Keep the public rankings if the personal count is unavailable. */ }
+    if (!competition) return send(res, 200,
+      { metric, dataset: null, entries: [], verification_available: false });
+    // The requested total is still tied to a freshly checked session. Public
+    // rankings and invalid/anonymous sessions never reveal another user's score.
+    const user = access?.user || null;
+    let ranking;
+    if (user) {
+      try { ranking = await competition.leaderboard(metric, user.id); }
+      catch {
+        // Same best-effort behavior as the old optional totals query: keep the
+        // public leaderboard available when a personal-score read fails.
+        ranking = await competition.leaderboard(metric);
       }
-    }
-    return send(res, 200, ranking);
+    } else ranking = await competition.leaderboard(metric);
+    return send(res, 200, { ...ranking, verification_available: true });
   }
   if (url.pathname.startsWith("/v1/verified/")) {
     if (!competition) return send(res, 404, { error: "Verified leaderboards are unavailable." });
-    if (!await rateLimit("competition-ip", ip, 180, 60 * 1000)) return send(res, 429, { error: "Try again later." });
-    const user = await authenticatedUser(req);
+    if (!bearerToken(req)) return send(res, 401, { error: "Authentication required." });
+    const access = await rateLimitedUser(req, "competition-ip", 180, 60 * 1000);
+    if (!access.allowed) return send(res, 429, { error: "Try again later." });
+    const user = access.user;
     if (!user) return send(res, 401, { error: "Authentication required." });
     if (req.method === "GET" && url.pathname === "/v1/verified/me") {
       return send(res, 200, await competition.totals(user));
@@ -387,25 +423,22 @@ async function handle(req, res) {
   if (req.method === "POST" && url.pathname === "/v1/login") {
     const body = await readJson(req);
     const username = normalizeUsername(body.username);
-    const password = typeof body.password === "string" && Array.from(body.password).length <= 128 ? body.password : "";
+    const password = boundedLoginPassword(body.password);
     const key = username?.key || "invalid";
 
     await prepareDatabase();
-    const loginPermit = await pool.query(LOGIN_LIMIT_SQL, [
+    // Account selection shares the atomic pair of login reservations. A denied
+    // permit returns no account data. Unknown/malformed usernames still run the
+    // same dummy password check after consuming the same rate-limit budget.
+    const loginResult = await pool.query(LOGIN_WITH_USER_SQL, [
       "login-ip", opaqueRateKey("login-ip", ip), 15 * 60 * 1000, 20,
-      "login-user", opaqueRateKey("login-user", key), 15 * 60 * 1000, 8
+      "login-user", opaqueRateKey("login-user", key), 15 * 60 * 1000, 8,
+      username?.key || null
     ]);
-    if (loginPermit.rows[0]?.allowed !== true) {
+    if (loginResult.rows[0]?.allowed !== true) {
       return send(res, 429, { error: "Too many attempts. Try again later." });
     }
-
-    const result = username
-      ? await pool.query(
-          "SELECT id, username_display, password_salt, password_hash, leaderboard_visible FROM users WHERE username_key = $1",
-          [username.key]
-        )
-      : { rows: [] };
-    const user = result.rows[0];
+    const user = loginResult.rows[0]?.id == null ? null : loginResult.rows[0];
     const valid = user
       ? await verifyPassword(password, user.password_salt, user.password_hash, PEPPER)
       : await verifyPassword(password, dummy.salt, dummy.hash, PEPPER);

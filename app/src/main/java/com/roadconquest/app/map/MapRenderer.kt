@@ -948,6 +948,16 @@ class MapRenderer(
         style.addLayer(layer)
     }
 
+    private fun installFogRaster(
+        style: Style, sourceId: String, layerId: String, quad: LatLngQuad,
+        image: Bitmap, opacity: Float
+    ) {
+        style.addSource(ImageSource(sourceId, quad, image))
+        style.addLayer(RasterLayer(layerId, sourceId).withProperties(
+            rasterOpacity(opacity), rasterFadeDuration(0f)
+        ).apply { setRasterOpacityTransition(TransitionOptions(0L, 0L)) })
+    }
+
     private fun installFogLayer(style: Style) {
         worldFogHasExploration = false
         activeDetailedFogAlternate = false
@@ -958,34 +968,17 @@ class MapRenderer(
         installedRegionalFogKey = null
         // Keep a ready native world layer behind the detailed viewport. A fast pinch can
         // outrun even a padded bitmap; it must never reveal an unrendered rectangle.
-        style.addSource(ImageSource(WORLD_FOG_SOURCE_ID, worldFogQuad(), overviewFog))
-        style.addLayer(RasterLayer(WORLD_FOG_LAYER_ID, WORLD_FOG_SOURCE_ID).withProperties(
-            rasterOpacity(if (fogEnabled) 1f else 0f), rasterFadeDuration(0f)
-        ).apply { setRasterOpacityTransition(TransitionOptions(0L, 0L)) })
+        installFogRaster(style, WORLD_FOG_SOURCE_ID, WORLD_FOG_LAYER_ID, worldFogQuad(), overviewFog,
+            if (fogEnabled) 1f else 0f)
         val transparent = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888)
         // Kept at a broader map scale while idle. Only one fog raster is visible:
         // stacking world/regional/detail would darken the unexplored map and cover holes.
-        style.addSource(ImageSource(REGIONAL_FOG_SOURCE_ID, currentFogQuad(), transparent))
-        style.addLayer(RasterLayer(REGIONAL_FOG_LAYER_ID, REGIONAL_FOG_SOURCE_ID).withProperties(
-            rasterOpacity(0f), rasterFadeDuration(0f)
-        ).apply { setRasterOpacityTransition(TransitionOptions(0L, 0L)) })
-        style.addSource(ImageSource(FOG_SOURCE_ID, currentFogQuad(), transparent))
-        style.addLayer(
-            RasterLayer(FOG_LAYER_ID, FOG_SOURCE_ID).withProperties(
-                rasterOpacity(0f),
-                rasterFadeDuration(0f)
-            ).apply { setRasterOpacityTransition(TransitionOptions(0L, 0L)) }
-        )
+        installFogRaster(style, REGIONAL_FOG_SOURCE_ID, REGIONAL_FOG_LAYER_ID, currentFogQuad(), transparent, 0f)
+        installFogRaster(style, FOG_SOURCE_ID, FOG_LAYER_ID, currentFogQuad(), transparent, 0f)
         // Prepare the NEXT georeferenced raster while it is invisible.
         // Updating pixels and corners in place on the visible ImageSource
         // displayed the old clearing at the new coordinates for a frame.
-        style.addSource(ImageSource(FOG_ALT_SOURCE_ID, currentFogQuad(), transparent))
-        style.addLayer(
-            RasterLayer(FOG_ALT_LAYER_ID, FOG_ALT_SOURCE_ID).withProperties(
-                rasterOpacity(0f),
-                rasterFadeDuration(0f)
-            ).apply { setRasterOpacityTransition(TransitionOptions(0L, 0L)) }
-        )
+        installFogRaster(style, FOG_ALT_SOURCE_ID, FOG_ALT_LAYER_ID, currentFogQuad(), transparent, 0f)
         transparent.recycle()
     }
 
@@ -1231,12 +1224,7 @@ class MapRenderer(
                         }
                         if (!capture.world && source != null) {
                             activeDetailedFogAlternate = nextAlternate
-                            detailedFogCoordinates = doubleArrayOf(
-                                capture.quad.topLeft.latitude, capture.quad.topLeft.longitude,
-                                capture.quad.topRight.latitude, capture.quad.topRight.longitude,
-                                capture.quad.bottomRight.latitude, capture.quad.bottomRight.longitude,
-                                capture.quad.bottomLeft.latitude, capture.quad.bottomLeft.longitude
-                            )
+                            detailedFogCoordinates = fogQuadCoordinates(capture.quad)
                         }
                         updateFogCoverage(force = true)
                     }
@@ -1288,12 +1276,7 @@ class MapRenderer(
                         source?.setImage(rendered)
                         if (source != null) {
                             installedRegionalFogKey = capture.key
-                            regionalFogCoordinates = doubleArrayOf(
-                                capture.quad.topLeft.latitude, capture.quad.topLeft.longitude,
-                                capture.quad.topRight.latitude, capture.quad.topRight.longitude,
-                                capture.quad.bottomRight.latitude, capture.quad.bottomRight.longitude,
-                                capture.quad.bottomLeft.latitude, capture.quad.bottomLeft.longitude
-                            )
+                            regionalFogCoordinates = fogQuadCoordinates(capture.quad)
                             updateFogCoverage(force = true)
                         }
                     }
@@ -1302,6 +1285,13 @@ class MapRenderer(
             }
         }
     }
+
+    private fun fogQuadCoordinates(quad: LatLngQuad) = doubleArrayOf(
+        quad.topLeft.latitude, quad.topLeft.longitude,
+        quad.topRight.latitude, quad.topRight.longitude,
+        quad.bottomRight.latitude, quad.bottomRight.longitude,
+        quad.bottomLeft.latitude, quad.bottomLeft.longitude
+    )
 
     private fun captureFog(regional: Boolean = false): FogCaptureResult? {
         if (mapView.width <= 0 || mapView.height <= 0 || map.style == null) return null

@@ -18,6 +18,9 @@ class TrackingRepository(context: Context) {
     private val dbHelper = AppDatabase.get(context)
     private val historyGeneration = synchronized(dbHelper.historyLock) { dbHelper.historyGeneration }
 
+    private fun wrap(value: Double): Double =
+        ((value + 180.0) % 360.0 + 360.0) % 360.0 - 180.0
+
     internal fun isHistoryCurrent(): Boolean = historyGeneration == dbHelper.historyGeneration
 
     /** A visited cell reveals fog only; it never enters driving history or road matching. */
@@ -49,21 +52,31 @@ class TrackingRepository(context: Context) {
         }
     }
 
-    @Synchronized
-    fun getExploredPlacesInBounds(north: Double, east: Double, south: Double, west: Double): DoubleArray {
-        val longitudeSelection = if (east >= west) "longitude BETWEEN ? AND ?" else "(longitude >= ? OR longitude <= ?)"
-        dbHelper.readableDatabase.query("explored_places", arrayOf("latitude", "longitude"),
+    /** Reuse the same indexed viewport scan for 50 m samples and mile-cell centers. */
+    private fun exploredCoordinatesInBounds(
+        table: String, north: Double, east: Double, south: Double, west: Double
+    ): DoubleArray {
+        val longitudeSelection = if (east >= west) "longitude BETWEEN ? AND ?" else
+            "(longitude >= ? OR longitude <= ?)"
+        return dbHelper.readableDatabase.query(
+            table, arrayOf("latitude", "longitude"),
             "latitude BETWEEN ? AND ? AND $longitudeSelection",
-            arrayOf(south.toString(), north.toString(), west.toString(), east.toString()), null, null, null).use { cursor ->
+            arrayOf(south.toString(), north.toString(), west.toString(), east.toString()),
+            null, null, null
+        ).use { cursor ->
             val coordinates = DoubleArray(cursor.count * 2)
             var index = 0
             while (cursor.moveToNext()) {
                 coordinates[index++] = cursor.getDouble(0)
                 coordinates[index++] = cursor.getDouble(1)
             }
-            return coordinates
+            coordinates
         }
     }
+
+    @Synchronized
+    fun getExploredPlacesInBounds(north: Double, east: Double, south: Double, west: Double): DoubleArray =
+        exploredCoordinatesInBounds("explored_places", north, east, south, west)
 
     /**
      * Authoritative persisted mile-cell unlock. This is independent of 50 m legacy
@@ -127,24 +140,8 @@ class TrackingRepository(context: Context) {
 
     /** Read the authoritative mile cells (as centers) with a padded viewport query. */
     @Synchronized
-    fun getExploredGridInBounds(north: Double, east: Double, south: Double, west: Double): DoubleArray {
-        val longitudeSelection = if (east >= west) "longitude BETWEEN ? AND ?" else
-            "(longitude >= ? OR longitude <= ?)"
-        dbHelper.readableDatabase.query(
-            "explored_grid", arrayOf("latitude", "longitude"),
-            "latitude BETWEEN ? AND ? AND $longitudeSelection",
-            arrayOf(south.toString(), north.toString(), west.toString(), east.toString()),
-            null, null, null
-        ).use { cursor ->
-            val result = DoubleArray(cursor.count * 2)
-            var offset = 0
-            while (cursor.moveToNext()) {
-                result[offset++] = cursor.getDouble(0)
-                result[offset++] = cursor.getDouble(1)
-            }
-            return result
-        }
-    }
+    fun getExploredGridInBounds(north: Double, east: Double, south: Double, west: Double): DoubleArray =
+        exploredCoordinatesInBounds("explored_grid", north, east, south, west)
 
     /**
      * Recover the final compressed point when Android killed tracking without onDestroy.
@@ -171,19 +168,22 @@ class TrackingRepository(context: Context) {
         true
     }
 
+    /** Common GPS columns for saved and compressed-only driving fixes. */
+    private fun drivingValues(location: Location, timestamp: Long) = ContentValues().apply {
+        put("latitude", location.latitude)
+        put("longitude", location.longitude)
+        put("accuracy_m", location.accuracy)
+        put("speed_mps", LocationProviders.reliableMeasuredSpeed(location))
+        put("bearing_deg", if (location.hasBearing() && location.bearing.isFinite()) location.bearing else 0f)
+        put("timestamp_ms", timestamp)
+    }
+
     /** Preserve accepted driving evidence omitted from the compressed online matching queue. */
     @Synchronized
     fun recordSkippedDrivingFix(location: Location) {
         synchronized(dbHelper.historyLock) {
             if (historyGeneration != dbHelper.historyGeneration) return
-            val values = ContentValues().apply {
-                put("latitude", location.latitude)
-                put("longitude", location.longitude)
-                put("accuracy_m", location.accuracy)
-                put("speed_mps", LocationProviders.reliableMeasuredSpeed(location))
-                put("bearing_deg", if (location.hasBearing() && location.bearing.isFinite()) location.bearing else 0f)
-                put("timestamp_ms", location.time.takeIf { it > 0L } ?: System.currentTimeMillis())
-            }
+            val values = drivingValues(location, location.time.takeIf { it > 0L } ?: System.currentTimeMillis())
             dbHelper.writableDatabase.insertOrThrow("skipped_driving_fixes", null, values)
         }
     }
@@ -323,13 +323,7 @@ class TrackingRepository(context: Context) {
                 )
             }
         }
-        val values = ContentValues().apply {
-            put("latitude", location.latitude)
-            put("longitude", location.longitude)
-            put("accuracy_m", location.accuracy)
-            put("speed_mps", LocationProviders.reliableMeasuredSpeed(location))
-            put("bearing_deg", if (location.hasBearing() && location.bearing.isFinite()) location.bearing else 0f)
-            put("timestamp_ms", timestamp)
+        val values = drivingValues(location, timestamp).apply {
             put("matched", 0)
             put("distance_m", distance)
         }
@@ -420,24 +414,50 @@ class TrackingRepository(context: Context) {
         }
         if (pending.isEmpty()) return MatchingWindow(emptyList(), emptySet())
 
-        // Work backward only through the newest continuous drive. A stale unmatched outlier
-        // from an earlier trip must never make OSRM bridge a large time gap to a new drive.
-        val newestFirst = ArrayList<TrackPoint>(pending.size)
+        // Keep the actual GPS samples between nearby pending islands as matching context.
+        // A locally resolved re-drive can otherwise split one continuous trip into many
+        // one-credit requests. Never omit samples or bridge a deleted fix, a long pause,
+        // a deferred pending fix, or a gap larger than eight already-resolved samples.
+        // Specialized anchored-turn and small priority windows retain their narrow
+        // selection and newest-first ordering; explicit age caps never widen.
+        val newestFirst = ArrayList<TrackPoint>(maxPoints - anchorSlots)
         newestFirst += pending.first()
         for (i in 1 until pending.size) {
             val newer = newestFirst.last()
             val older = pending[i]
-            // A gap in ids means an intervening raw point was already resolved. Do not omit that
-            // guidance point and then ask OSRM to bridge across it; retry each unresolved island
-            // separately so the matched neighbors become context on both sides.
-            if (older.id + 1 != newer.id ||
-                !isMatchingContinuation(older, newer, MATCH_CLUSTER_GAP_MS)
+            val betweenCount = newer.id - older.id - 1L
+            if (betweenCount < 0 ||
+                newestFirst.size + betweenCount + 1 > maxPoints - anchorSlots ||
+                (betweenCount > 0 && (wideRetry || maxPendingId != null || maxPoints <= 10 || betweenCount > 8))
             ) break
+
+            val between = ArrayList<TrackPoint>(betweenCount.toInt())
+            if (betweenCount > 0) {
+                dbHelper.readableDatabase.query(
+                    "track_points", TRACK_COLUMNS, "id > ? AND id < ?",
+                    arrayOf(older.id.toString(), newer.id.toString()),
+                    null, null, "id DESC", betweenCount.toString()
+                ).use { cursor ->
+                    while (cursor.moveToNext()) between += cursor.toTrackPoint()
+                }
+                if (between.size.toLong() != betweenCount || between.any { !it.matched }) break
+            }
+            val chain = buildList {
+                add(newer)
+                addAll(between)
+                add(older)
+            }
+            if (chain.zipWithNext().any { (newerFix, olderFix) ->
+                    !isMatchingContinuation(olderFix, newerFix, MATCH_CLUSTER_GAP_MS)
+                }) break
+            newestFirst.addAll(between)
             newestFirst += older
         }
         newestFirst.reverse()
 
-        val markableIds = newestFirst.mapTo(LinkedHashSet(newestFirst.size)) { it.id }
+        // Bridged, previously matched fixes provide true route context only. They
+        // must never be marked a second time or awarded as newly discovered roads.
+        val markableIds = newestFirst.filter { !it.matched }.mapTo(LinkedHashSet(newestFirst.size)) { it.id }
         val earliest = newestFirst.first()
         val latest = newestFirst.last()
 
@@ -577,6 +597,11 @@ class TrackingRepository(context: Context) {
             while (cursor.moveToNext()) eligible += cursor.toTrackPoint()
         }
 
+        // Evaluate cheap continuity predicates first; fetch the two saved
+        // anchors for ALL qualifying gaps in one bounded indexed query instead
+        // of issuing one SQLite query for every candidate turn. The priority
+        // order and strict two-sided confirmation remain unchanged.
+        val candidates = ArrayList<Pair<TrackPoint, TrackPoint>>()
         var offset = 0
         while (offset < eligible.size) {
             var until = offset + 1
@@ -597,31 +622,42 @@ class TrackingRepository(context: Context) {
                         isMatchingContinuation(a, b, MATCH_CLUSTER_GAP_MS)
                     }
                 if (continuous && first.id > 0 && last.id < Long.MAX_VALUE) {
-                    val anchorIds = listOf(first.id - 1, last.id + 1)
-                    val anchors = HashMap<Long, TrackPoint>(2)
-                    db.query(
-                        "track_points",
-                        TRACK_COLUMNS,
-                        "id IN (?, ?)",
-                        anchorIds.map(Long::toString).toTypedArray(),
-                        null, null, null
-                    ).use { cursor ->
-                        while (cursor.moveToNext()) {
-                            val point = cursor.toTrackPoint()
-                            anchors[point.id] = point
-                        }
-                    }
-                    val before = anchors[first.id - 1]
-                    val after = anchors[last.id + 1]
-                    if (before?.matched == true && after?.matched == true &&
-                        before.accuracyMeters in 0.01f..PRIORITY_GAP_MAX_ACCURACY_M &&
-                        after.accuracyMeters in 0.01f..PRIORITY_GAP_MAX_ACCURACY_M &&
-                        isMatchingContinuation(before, first, MATCH_ANCHOR_MAX_GAP_MS) &&
-                        isMatchingContinuation(last, after, MATCH_ANCHOR_MAX_GAP_MS)
-                    ) return first.id
+                    candidates += first to last
                 }
             }
             offset = until
+        }
+        if (candidates.isEmpty()) return null
+
+        // Read at most eight candidate pairs per query. The newest safe turn
+        // remains first, and an early hit does not unnecessarily load anchors
+        // for every older corner in a large saved history.
+        for (group in candidates.chunked(8)) {
+            val anchorIds = group.flatMap { (first, last) ->
+                listOf(first.id - 1, last.id + 1)
+            }.distinct()
+            val anchors = HashMap<Long, TrackPoint>(anchorIds.size)
+            db.query(
+                "track_points", TRACK_COLUMNS,
+                "id IN (${anchorIds.joinToString(",") { "?" }})",
+                anchorIds.map(Long::toString).toTypedArray(),
+                null, null, null
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    val point = cursor.toTrackPoint()
+                    anchors[point.id] = point
+                }
+            }
+            for ((first, last) in group) {
+                val before = anchors[first.id - 1]
+                val after = anchors[last.id + 1]
+                if (before?.matched == true && after?.matched == true &&
+                    before.accuracyMeters in 0.01f..PRIORITY_GAP_MAX_ACCURACY_M &&
+                    after.accuracyMeters in 0.01f..PRIORITY_GAP_MAX_ACCURACY_M &&
+                    isMatchingContinuation(before, first, MATCH_ANCHOR_MAX_GAP_MS) &&
+                    isMatchingContinuation(last, after, MATCH_ANCHOR_MAX_GAP_MS)
+                ) return first.id
+            }
         }
         return null
     }
@@ -714,15 +750,7 @@ class TrackingRepository(context: Context) {
                     put("matched", 1)
                     put("next_match_attempt_ms", 0)
                 }
-                ids.chunked(400).forEach { chunk ->
-                    val placeholders = chunk.joinToString(",") { "?" }
-                    db.update(
-                        "track_points",
-                        values,
-                        "id IN ($placeholders)",
-                        chunk.map(Long::toString).toTypedArray()
-                    )
-                }
+                updateTrackPoints(db, ids, values, unmatchedOnly = false)
                 db.setTransactionSuccessful()
             } finally {
                 db.endTransaction()
@@ -739,19 +767,21 @@ class TrackingRepository(context: Context) {
             db.beginTransaction()
             try {
                 val values = ContentValues().apply { put("next_match_attempt_ms", untilMillis) }
-                ids.chunked(400).forEach { chunk ->
-                    val placeholders = chunk.joinToString(",") { "?" }
-                    db.update(
-                        "track_points",
-                        values,
-                        "matched = 0 AND id IN ($placeholders)",
-                        chunk.map(Long::toString).toTypedArray()
-                    )
-                }
+                updateTrackPoints(db, ids, values, unmatchedOnly = true)
                 db.setTransactionSuccessful()
             } finally {
                 db.endTransaction()
             }
+        }
+    }
+
+    private fun updateTrackPoints(
+        db: SQLiteDatabase, ids: Collection<Long>, values: ContentValues, unmatchedOnly: Boolean
+    ) {
+        ids.chunked(400).forEach { chunk ->
+            val placeholders = chunk.joinToString(",") { "?" }
+            val selection = if (unmatchedOnly) "matched = 0 AND id IN ($placeholders)" else "id IN ($placeholders)"
+            db.update("track_points", values, selection, chunk.map(Long::toString).toTypedArray())
         }
     }
 
@@ -876,7 +906,6 @@ class TrackingRepository(context: Context) {
         } else {
             bounds.maxLon - bounds.minLon + 360.0
         }
-        fun wrap(value: Double) = ((value + 180.0) % 360.0 + 360.0) % 360.0 - 180.0
         val querySpan = (longitudeSpan + 2 * longitudePad).coerceAtMost(360.0)
         val queryWest = if (querySpan >= 360.0) -180.0 else wrap(bounds.minLon - longitudePad)
         val queryEast = if (querySpan >= 360.0) 180.0 else wrap(bounds.maxLon + longitudePad)
@@ -1309,7 +1338,6 @@ class TrackingRepository(context: Context) {
             .coerceAtMost(180.0)
         val longitudeSpan = if (east >= west) east - west else east - west + 360.0
         val querySpan = (longitudeSpan + 2 * longitudePad).coerceAtMost(360.0)
-        fun wrap(value: Double) = ((value + 180.0) % 360.0 + 360.0) % 360.0 - 180.0
         val queryWest = if (querySpan >= 360.0) -180.0 else wrap(west - longitudePad)
         val queryEast = if (querySpan >= 360.0) 180.0 else wrap(east + longitudePad)
         val querySouth = (south - latitudePad).coerceAtLeast(-90.0)
@@ -1539,6 +1567,19 @@ class TrackingRepository(context: Context) {
         timesDrivenExact = getInt(10) != 0
     )
 
+    private fun nearbyRoadCandidates(latitude: Double, longitude: Double, radiusMeters: Double): List<RoadRecord> {
+        val latitudePad = radiusMeters / METERS_PER_DEGREE
+        val longitudePad = (radiusMeters /
+            (METERS_PER_DEGREE * cos(Math.toRadians(latitude)).coerceAtLeast(0.01))).coerceAtMost(180.0)
+        return getRoadsInBounds(
+            (latitude + latitudePad).coerceAtMost(90.0),
+            wrap(longitude + longitudePad),
+            (latitude - latitudePad).coerceAtLeast(-90.0),
+            wrap(longitude - longitudePad),
+            Int.MAX_VALUE
+        )
+    }
+
     /**
      * Fail closed when another saved road is nearby. An ambiguous junction or
      * parallel road must be verified online rather than credited as a local re-drive.
@@ -1552,17 +1593,7 @@ class TrackingRepository(context: Context) {
             latitude !in -90.0..90.0 || longitude !in -180.0..180.0 ||
             snapRadiusMeters <= 0.0 || exclusionRadiusMeters <= snapRadiusMeters
         ) return null
-        val latitudePad = exclusionRadiusMeters / METERS_PER_DEGREE
-        val longitudePad = (exclusionRadiusMeters /
-            (METERS_PER_DEGREE * cos(Math.toRadians(latitude)).coerceAtLeast(0.01))).coerceAtMost(180.0)
-        fun wrap(value: Double) = ((value + 180.0) % 360.0 + 360.0) % 360.0 - 180.0
-        val roads = getRoadsInBounds(
-            (latitude + latitudePad).coerceAtMost(90.0),
-            wrap(longitude + longitudePad),
-            (latitude - latitudePad).coerceAtLeast(-90.0),
-            wrap(longitude - longitudePad),
-            Int.MAX_VALUE
-        )
+        val roads = nearbyRoadCandidates(latitude, longitude, exclusionRadiusMeters)
         var single: RoadRecord? = null
         var nearbyCount = 0
         for (road in roads) {
@@ -1579,17 +1610,7 @@ class TrackingRepository(context: Context) {
     @Synchronized
     fun findRoadNear(latitude: Double, longitude: Double, radiusMeters: Double): RoadRecord? {
         if (!latitude.isFinite() || !longitude.isFinite() || radiusMeters <= 0.0) return null
-        val latitudePad = radiusMeters / METERS_PER_DEGREE
-        val longitudePad = (radiusMeters /
-            (METERS_PER_DEGREE * cos(Math.toRadians(latitude)).coerceAtLeast(0.01))).coerceAtMost(180.0)
-        fun wrap(value: Double) = ((value + 180.0) % 360.0 + 360.0) % 360.0 - 180.0
-        val candidates = getRoadsInBounds(
-            (latitude + latitudePad).coerceAtMost(90.0),
-            wrap(longitude + longitudePad),
-            (latitude - latitudePad).coerceAtLeast(-90.0),
-            wrap(longitude - longitudePad),
-            Int.MAX_VALUE
-        )
+        val candidates = nearbyRoadCandidates(latitude, longitude, radiusMeters)
         var best: RoadRecord? = null
         var bestDistance = radiusMeters
         for (road in candidates) {
@@ -1700,55 +1721,47 @@ class TrackingRepository(context: Context) {
                 gapEnd = longitudes[i + 1]
             }
         }
-        fun wrap(value: Double) = ((value + 180.0) % 360.0 + 360.0) % 360.0 - 180.0
         return RoadBounds(minLat, maxLat, wrap(gapEnd), wrap(gapStart))
     }
 
     private fun roadSegmentId(db: SQLiteDatabase, name: String, coordinates: JSONArray): String {
         val primary = stableRoadSegmentId(name, coordinates)
-        val storedGeometry = db.query(
-            "roads",
-            arrayOf("geometry_json"),
-            "segment_id = ?",
-            arrayOf(primary),
-            null,
-            null,
-            null
-        ).use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
         val incomingKey = canonicalGeometryKey(coordinates)
         val normalizedName = name.trim().lowercase(Locale.US).ifBlank { "unnamed road" }
-        if (storedGeometry == null) {
-            // A geometry collision can outlive the primary row after later cleanup.
-            // Reuse its deterministic alternate ID instead of recreating identical geometry
-            // under the now-free primary ID.
-            db.query(
-                "roads",
-                arrayOf("segment_id", "name", "geometry_json"),
-                "segment_id LIKE 'g%'",
-                null,
-                null,
-                null,
-                null
-            ).use { cursor ->
-                while (cursor.moveToNext()) {
-                    val existingName = cursor.getString(1).trim().lowercase(Locale.US)
-                        .ifBlank { "unnamed road" }
-                    if (existingName != normalizedName) continue
-                    val existingKey = runCatching {
-                        canonicalGeometryKey(JSONArray(cursor.getString(2)))
-                    }.getOrNull()
-                    if (existingKey == incomingKey) return cursor.getString(0)
-                }
-            }
-            return primary
+        fun alternateId(): String {
+            return "g" + roadHashPrefix("$normalizedName|$incomingKey", 31)
         }
 
-        val storedKey = runCatching { canonicalGeometryKey(JSONArray(storedGeometry)) }.getOrNull()
-        if (storedKey == incomingKey) return primary
+        val storedGeometry = db.query(
+            "roads", arrayOf("geometry_json"), "segment_id = ?", arrayOf(primary),
+            null, null, null
+        ).use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
+        if (storedGeometry != null) {
+            val storedKey = runCatching { canonicalGeometryKey(JSONArray(storedGeometry)) }.getOrNull()
+            return if (storedKey == incomingKey) primary else alternateId()
+        }
 
-        val digest = MessageDigest.getInstance("SHA-256")
-            .digest("$normalizedName|$incomingKey".toByteArray(Charsets.UTF_8))
-        return "g" + String(CharArray(31) { i ->
+        // A collision's alternate ID survives deletion of the original primary row.
+        // It is deterministic, so look up that ID directly instead of scanning and
+        // decoding every alternate geometry whenever a new road is inserted.
+        val alternate = alternateId()
+        val existingAlternate = db.query(
+            "roads", arrayOf("name", "geometry_json"), "segment_id = ?", arrayOf(alternate),
+            null, null, null
+        ).use { cursor ->
+            if (!cursor.moveToFirst()) null
+            else cursor.getString(0) to cursor.getString(1)
+        }
+        if (existingAlternate != null &&
+            existingAlternate.first.trim().lowercase(Locale.US).ifBlank { "unnamed road" } == normalizedName &&
+            runCatching { canonicalGeometryKey(JSONArray(existingAlternate.second)) }.getOrNull() == incomingKey
+        ) return alternate
+        return primary
+    }
+
+    private fun roadHashPrefix(value: String, chars: Int): String {
+        val digest = MessageDigest.getInstance("SHA-256").digest(value.toByteArray(Charsets.UTF_8))
+        return String(CharArray(chars) { i ->
             val byte = digest[i / 2].toInt() and 0xff
             "0123456789abcdef"[if (i % 2 == 0) byte ushr 4 else byte and 0x0f]
         })
@@ -1780,11 +1793,7 @@ class TrackingRepository(context: Context) {
         val endpoints = if (first <= last) "$first|$last" else "$last|$first"
         val normalizedName = name.trim().lowercase(Locale.US).ifBlank { "unnamed road" }
         val normalized = "$normalizedName|$endpoints"
-        val digest = MessageDigest.getInstance("SHA-256").digest(normalized.toByteArray(Charsets.UTF_8))
-        return String(CharArray(24) { i ->
-            val byte = digest[i / 2].toInt() and 0xff
-            "0123456789abcdef"[if (i % 2 == 0) byte ushr 4 else byte and 0x0f]
-        })
+        return roadHashPrefix(normalized, 24)
     }
 
     private data class RoadBounds(

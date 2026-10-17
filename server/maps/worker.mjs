@@ -45,8 +45,9 @@ export class MapBudget {
     // Geoapify uses four/second; LocationIQ gets one slot per 1.05 seconds,
     // below both its two/second and 60/minute free limits. Separate objects
     // keep each provider's reservations and pacing independent.
-    const slot = Math.max(Date.now(), used('next-slot'));
-    if (slot - Date.now() > 10_000) return json({ error: 'Map service busy' }, 503, { 'Retry-After': '10' });
+    const nowMs = Date.now();
+    const slot = Math.max(nowMs, used('next-slot'));
+    if (slot - nowMs > 10_000) return json({ error: 'Map service busy' }, 503, { 'Retry-After': '10' });
     // Shared quota, per-client quota and the next provider slot advance in ONE
     // atomic SQLite statement. The pacing value is replaced, not incremented;
     // counting rows are still additive. Failed reservations write nothing.
@@ -56,7 +57,7 @@ export class MapBudget {
         'THEN excluded.used ELSE used + excluded.used END',
       day, 'units:all', costUnits, day, 'units:' + bucket, costUnits,
       day, 'next-slot', slot + spacingMs);
-    return json({ allowed: true, waitMs: Math.max(0, slot - Date.now()) });
+    return json({ allowed: true, waitMs: Math.max(0, slot - nowMs) });
   }
 }
 
@@ -140,7 +141,7 @@ export function createMapsGateway(fetchUpstream = fetch) {
     const ip = request.headers.get('CF-Connecting-IP');
     if (!ip || request.headers.has('CF-Worker') || ip === '2a06:98c0:3600::103') return json({ error: 'Direct client required' }, 403);
     const bytes = await sign(secret, new Date().toISOString().slice(0, 10) + '\n' + ip);
-    const bucket = [...bytes].map(x => x.toString(16).padStart(2, '0')).join('');
+    const bucket = Array.from(bytes, x => x.toString(16).padStart(2, '0')).join('');
     try {
       const budget = env.MAP_BUDGET.get(env.MAP_BUDGET.idFromName(locationiq ? 'locationiq-free-allowance' : 'geoapify-free-allowance'));
       const limit = locationiq

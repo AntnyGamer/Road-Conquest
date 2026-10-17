@@ -28,6 +28,10 @@ test("cells require independent moving observations safely inside, never jitter 
   assert.deepEqual(scoreCells([a, { ...a, time: 5000 }]), []);
   assert.deepEqual(scoreCells([a, fix(cell, 0.00001, 5000)]), []);
   assert.deepEqual(scoreCells([a, fix(cell, 0.0005, 1000)]), []);
+  assert.deepEqual(scoreCells([a, fix(cell, 0.0005, 1999)]), []);
+  assert.deepEqual(scoreCells([{ ...a, speed: 2.99 }, { ...b, speed: 2.99 }]), []);
+  assert.deepEqual(scoreCells([{ ...a, speed: 0 }, { ...b, speed: 3 }]), [cell]);
+  assert.deepEqual(scoreCells([a, fix(cell, 0.0005, 2000)]), [cell]);
   const west = -180 + cell.column * LONGITUDE_STEP;
   assert.deepEqual(scoreCells([{ ...a, lon: west + 0.00001 }, { ...b, lon: west + 0.00002 }]), []);
   const distant = { ...cell, column: cell.column + 3 };

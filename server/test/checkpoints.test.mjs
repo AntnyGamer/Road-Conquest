@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { sealCheckpoint, verifyContinuity } from "../src/checkpoints.mjs";
+import { createCheckpointCodec, sealCheckpoint, verifyContinuity } from "../src/checkpoints.mjs";
 import { parseEvidence } from "../src/scoring.mjs";
 import { randomUUID } from "node:crypto";
 
@@ -9,6 +9,20 @@ const run = randomUUID();
 const scope = "2:123:dataset";
 const fix = { lat: 40, lon: -75, time: Date.now() - 5000, elapsed: 100000, accuracy: 5, speed: 10, mock: false };
 const next = (changes = {}) => ({ ...fix, lon: -74.9995, time: fix.time + 5000, elapsed: fix.elapsed + 5000, ...changes });
+
+test("batch checkpoint contexts interoperate with existing ciphertext and retain scope and replay checks", () => {
+  const codec = createCheckpointCodec(scope, secret);
+  const old = sealCheckpoint(fix, run, scope, secret);
+  assert.doesNotThrow(() => codec.verify(old, next(), run));
+  assert.doesNotThrow(() => codec.verify(null, fix, run));
+  const sealed = codec.seal(fix, run);
+  assert.doesNotThrow(() => verifyContinuity(sealed, next(), run, scope, secret));
+  assert.notEqual(codec.seal(fix, run).sealed, sealed.sealed);
+  assert.throws(() => createCheckpointCodec('other-account', secret).verify(sealed, next(), run), /checkpoint unavailable/u);
+  assert.throws(() => createCheckpointCodec(scope, 'L'.repeat(43)).verify(sealed, next(), run), /checkpoint unavailable/u);
+  assert.throws(() => codec.verify(sealed, { ...fix, lon: fix.lon + 0.00001 }, run), /Overlapping/u);
+  assert.throws(() => codec.verify(sealed, next({ lon: 0 }), run), /Impossible travel/u);
+});
 
 test("checkpoint encryption is randomized, scoped, authenticated and not exposed as coordinates", () => {
   const a = sealCheckpoint(fix, run, scope, secret);

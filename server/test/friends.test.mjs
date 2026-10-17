@@ -86,7 +86,10 @@ test("friend consent, private weekly scores, ties, removal, username changes and
     const recipient = requester === alpha ? beta : alpha;
     await assert.rejects(friends.change(requester, recipient === beta ? "Beta" : "Alpha", "accept"), /incoming/u);
     await friends.change(recipient, requester === alpha ? "Alpha" : "Beta", "accept");
-    assert.deepEqual((await competition.friendWeek(alpha, "cells")).entries.map(r => [r.username, r.rank]), [["Alpha", 1], ["Beta", 1]]);
+    const pairStandings = (await competition.friendWeek(alpha, "cells")).entries;
+    assert.deepEqual(pairStandings.map(r => [r.username, r.rank]), [["Alpha", 1], ["Beta", 1]]);
+    assert.equal(new Set(pairStandings.map(r => r.username)).size, pairStandings.length,
+      'The unique friendship schema must not produce duplicate ranked participants');
     assert.deepEqual((await competition.friendWeek(outsider, "cells")).entries.map(r => r.username), ["Outsider"]);
     await pool.query("UPDATE users SET leaderboard_visible=FALSE WHERE id=$1", [outsider.id]);
     const hiddenWeek = await competition.friendWeek(outsider, "cells");
