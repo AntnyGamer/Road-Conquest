@@ -58,8 +58,12 @@ object BaseMapProviders {
         BuildConfig.MAP_GATEWAY_URL.isNotBlank() && available("geoapify-tiles") -> "geoapify-tiles"
         else -> "local"
     }
-    fun retryInMs(): Long = listOf("openfreemap", "geoapify-tiles", "esri-imagery").map { health.remaining(it) }
-        .filter { it > 0 }.minOrNull() ?: 30_000L
+    // No cooldown means there is nothing to retry. ServiceConfig listeners
+    // independently handle remote provider enable/disable changes, so avoid
+    // waking the map every 30 seconds while an intentionally disabled provider
+    // remains unavailable.
+    fun retryInMs(): Long? = listOf("openfreemap", "geoapify-tiles", "esri-imagery")
+        .map { health.remaining(it) }.filter { it > 0 }.minOrNull()
     fun style(context: Context, mode: MapMode, provider: String): String {
         if (provider.startsWith("openfreemap")) {
             val root = JSONObject(context.assets.open(
