@@ -154,7 +154,10 @@ export class MapBudget {
     // minute. Explicit provider instructions are honored. Key rotation changes healthKey.
     const pause = Math.max(2000, Math.min(DAY, Number.isFinite(retryAfterMs) ? retryAfterMs : 0));
     this.sql.exec(`INSERT INTO map_health(key,until_ms,probe_id,probe_until) VALUES(?,?,NULL,0)
-      ON CONFLICT(key) DO UPDATE SET until_ms = MAX(until_ms,excluded.until_ms), probe_id = NULL, probe_until = 0`, healthKey, now + pause);
+      ON CONFLICT(key) DO UPDATE SET until_ms = MAX(until_ms,excluded.until_ms),
+        probe_until = CASE WHEN map_health.probe_id IS NULL OR map_health.probe_id = ? THEN 0 ELSE map_health.probe_until END,
+        probe_id = CASE WHEN map_health.probe_id IS NULL OR map_health.probe_id = ? THEN NULL ELSE map_health.probe_id END`,
+      healthKey, now + pause, attemptId, attemptId);
     this.healthCache.delete(healthKey);
     return json({ ok: true });
   }
