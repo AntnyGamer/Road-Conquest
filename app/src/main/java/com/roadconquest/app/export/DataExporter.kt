@@ -74,6 +74,11 @@ object DataExporter {
         zip.closeEntry()
     }
 
+    private fun writeProgressionRow(writer: java.io.BufferedWriter, key: String, amount: Long, at: Long) {
+        writer.write(listOf(key, amount.toString(), Instant.ofEpochMilli(at).toString())
+            .joinToString(",") { CsvUtil.escape(it) } + "\n")
+    }
+
     private fun writeMetadata(
         context: Context,
         summary: DataSummary,
@@ -329,13 +334,7 @@ object DataExporter {
             ).use { cursor ->
                 while (cursor.moveToNext()) {
                     earned += cursor.getLong(1)
-                    writer.write(
-                        listOf(
-                            cursor.getString(0),
-                            cursor.getLong(1).toString(),
-                            Instant.ofEpochMilli(cursor.getLong(2)).toString()
-                        ).joinToString(",") { CsvUtil.escape(it) } + "\n"
-                    )
+                    writeProgressionRow(writer, cursor.getString(0), cursor.getLong(1), cursor.getLong(2))
                 }
             }
         }
@@ -350,13 +349,7 @@ object DataExporter {
             ).use { cursor ->
                 while (cursor.moveToNext()) {
                     spent += cursor.getLong(1)
-                    writer.write(
-                        listOf(
-                            cursor.getString(0),
-                            cursor.getLong(1).toString(),
-                            Instant.ofEpochMilli(cursor.getLong(2)).toString()
-                        ).joinToString(",") { CsvUtil.escape(it) } + "\n"
-                    )
+                    writeProgressionRow(writer, cursor.getString(0), cursor.getLong(1), cursor.getLong(2))
                 }
             }
         }
