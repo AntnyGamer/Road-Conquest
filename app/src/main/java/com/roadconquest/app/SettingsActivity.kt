@@ -152,23 +152,18 @@ class SettingsActivity : Activity() {
             openBatteryOptimizationSettings()
         }
 
-        findViewById<Button>(R.id.accountButton).setOnClickListener {
-            startActivity(Intent(this, AccountActivity::class.java))
-        }
-        findViewById<Button>(R.id.achievementsButton).setOnClickListener {
-            startActivity(Intent(this, AchievementsActivity::class.java))
-        }
-        findViewById<Button>(R.id.shopButton).setOnClickListener {
-            startActivity(Intent(this, ShopActivity::class.java))
-        }
-        findViewById<Button>(R.id.tripHistoryButton).setOnClickListener {
-            startActivity(Intent(this, TripHistoryActivity::class.java))
-        }
-        findViewById<Button>(R.id.challengesButton).setOnClickListener {
-            startActivity(Intent(this, ChallengesActivity::class.java))
-        }
-        findViewById<Button>(R.id.importButton).setOnClickListener {
-            startActivity(Intent(this, RestoreActivity::class.java))
+        val destinations = listOf(
+            R.id.accountButton to AccountActivity::class.java,
+            R.id.achievementsButton to AchievementsActivity::class.java,
+            R.id.shopButton to ShopActivity::class.java,
+            R.id.tripHistoryButton to TripHistoryActivity::class.java,
+            R.id.challengesButton to ChallengesActivity::class.java,
+            R.id.importButton to RestoreActivity::class.java
+        )
+        for ((buttonId, activityClass) in destinations) {
+            findViewById<Button>(buttonId).setOnClickListener {
+                startActivity(Intent(this, activityClass))
+            }
         }
         leaderboardPrivacySwitch.setOnCheckedChangeListener { _, visible ->
             if (!renderingAccountPrivacy) updateLeaderboardPrivacy(visible)
