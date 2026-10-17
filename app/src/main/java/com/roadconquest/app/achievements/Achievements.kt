@@ -137,11 +137,7 @@ object Achievements {
         // snapshot recreate the separate achievement preference cache after DB history moved on.
         if (!isCurrentSummary(context, summary)) return@synchronized progress(summary, metrics)
         val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val savedMax = prefs.getLong(KEY_MAX_ROADS, 0L)
-        val highestRoads = maxOf(summary.roadsUnlockedCount, savedMax)
-        if (highestRoads > savedMax) {
-            prefs.edit().putLong(KEY_MAX_ROADS, highestRoads).apply()
-        }
+        val highestRoads = persistentRoadMaximum(prefs, summary.roadsUnlockedCount)
         progress(summary.copy(roadsUnlockedCount = highestRoads), metrics)
     }
 
@@ -161,11 +157,7 @@ object Achievements {
         val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         // We already validated this summary under stateLock. Avoid calling progress(context,...),
         // which would repeat the database-generation check and preferences lookup.
-        val savedMax = prefs.getLong(KEY_MAX_ROADS, 0L)
-        val highestRoads = maxOf(summary.roadsUnlockedCount, savedMax)
-        if (highestRoads > savedMax) {
-            prefs.edit().putLong(KEY_MAX_ROADS, highestRoads).apply()
-        }
+        val highestRoads = persistentRoadMaximum(prefs, summary.roadsUnlockedCount)
         val current = progress(summary.copy(roadsUnlockedCount = highestRoads), metrics)
             .filter { it.unlocked }
         val announced = prefs.getStringSet(KEY_ANNOUNCED, emptySet()).orEmpty().toMutableSet()
@@ -180,6 +172,13 @@ object Achievements {
             prefs.edit().putStringSet(KEY_ANNOUNCED, announced).apply()
         }
         fresh
+    }
+
+    private fun persistentRoadMaximum(prefs: android.content.SharedPreferences, unlocked: Long): Long {
+        val savedMax = prefs.getLong(KEY_MAX_ROADS, 0L)
+        val highest = maxOf(unlocked, savedMax)
+        if (highest > savedMax) prefs.edit().putLong(KEY_MAX_ROADS, highest).apply()
+        return highest
     }
 
     private fun isCurrentSummary(context: Context, summary: DataSummary): Boolean =
