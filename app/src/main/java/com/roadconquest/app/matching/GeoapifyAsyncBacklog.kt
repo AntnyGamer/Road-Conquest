@@ -16,7 +16,9 @@ import java.time.Instant
  * Job metadata contains only IDs/hashes; GPS remains in the existing local database.
  * The server owns the API key and accepts batches only when they save credits.
  */
-internal class GeoapifyAsyncBacklog(context: Context, private val origin: String) {
+internal class GeoapifyAsyncBacklog(
+    context: Context, private val origin: String, private val onRoadsUpdated: () -> Unit = {}
+) {
     private val prefs = context.getSharedPreferences("mapmatching-async-v1", Context.MODE_PRIVATE)
     private val parser = GeoapifyMatcher(origin)
 
@@ -43,10 +45,11 @@ internal class GeoapifyAsyncBacklog(context: Context, private val origin: String
 
     private data class Job(
         val id: String, val token: String, val submittedAt: Long,
-        val nextPollAt: Long, val windows: List<Window>
+        val nextPollAt: Long, val windows: List<Window>, val pollCount: Int = 0
     ) {
         fun toJson(): String = JSONObject().put("id", id).put("token", token)
             .put("submittedAt", submittedAt).put("nextPollAt", nextPollAt)
+            .put("pollCount", pollCount)
             .put("windows", JSONArray().apply { windows.forEach { put(it.toJson()) } }).toString()
 
         companion object {
@@ -62,7 +65,8 @@ internal class GeoapifyAsyncBacklog(context: Context, private val origin: String
                 }
                 val ids = windows.flatMap { it.markableIds }
                 require(ids.size == ids.toSet().size)
-                return Job(id, token, obj.getLong("submittedAt"), obj.getLong("nextPollAt"), windows)
+                return Job(id, token, obj.getLong("submittedAt"), obj.getLong("nextPollAt"), windows,
+                    obj.optInt("pollCount", 0).coerceIn(0, MAX_PAID_POLLS))
             }
         }
     }
@@ -95,6 +99,12 @@ internal class GeoapifyAsyncBacklog(context: Context, private val origin: String
                 prefs.edit().putBoolean("deferred", true).apply()
             }
             if (now < job.nextPollAt) return job.nextPollAt - now
+            // Status lookups each cost one full credit. A perpetually pending
+            // job must never consume unlimited polls and negate the discount.
+            if (job.pollCount >= MAX_PAID_POLLS) {
+                release(repository, job)
+                return null
+            }
             val answer = request("GET", "/v1/batch/mapmatching?id=" + job.id, null, job.token)
             if (answer?.code == 200 && answer.json.optJSONArray("results") != null &&
                 answer.json.optString("id") == job.id) {
@@ -103,7 +113,9 @@ internal class GeoapifyAsyncBacklog(context: Context, private val origin: String
                 return null
             }
             val nextPoll = now + POLL_INTERVAL_MS
-            prefs.edit().putString("job", job.copy(nextPollAt = nextPoll).toJson()).apply()
+            prefs.edit().putString("job", job.copy(
+                nextPollAt = nextPoll, pollCount = job.pollCount + 1
+            ).toJson()).apply()
             return POLL_INTERVAL_MS
         }
         // Never delay a currently moving user's road unlocks. Old saved history
@@ -178,8 +190,10 @@ internal class GeoapifyAsyncBacklog(context: Context, private val origin: String
             val ids = parsed.matchedPointConfidences.filter { (id, confidence) ->
                 id in window.markableIds && confidence >= RoadGeometryValidator.MIN_ACCEPTABLE_CONFIDENCE
             }.keys
-            if (roads.isNotEmpty() && ids.isNotEmpty())
+            if (roads.isNotEmpty() && ids.isNotEmpty()) {
                 repository.completeMatch(roads, ids.toList())
+                onRoadsUpdated()
+            }
         }
     }
 
@@ -225,8 +239,9 @@ internal class GeoapifyAsyncBacklog(context: Context, private val origin: String
         private const val MIN_POINTS_PER_WINDOW = 120
         private const val OLD_TRACE_AGE_MS = 30 * 60_000L
         private const val ATTEMPT_INTERVAL_MS = 2 * 60 * 60_000L
-        private const val FIRST_POLL_MS = 60 * 60_000L
-        private const val POLL_INTERVAL_MS = 2 * 60 * 60_000L
+        private const val FIRST_POLL_MS = 3 * 60 * 60_000L
+        private const val POLL_INTERVAL_MS = 7 * 60 * 60_000L
+        private const val MAX_PAID_POLLS = 2
         private const val MAX_JOB_AGE_MS = 23 * 60 * 60_000L
 
         internal fun fingerprint(points: List<TrackPoint>): String {
