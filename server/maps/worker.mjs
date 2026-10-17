@@ -140,7 +140,7 @@ export function createMapsGateway(fetchUpstream = fetch) {
     const ip = request.headers.get('CF-Connecting-IP');
     if (!ip || request.headers.has('CF-Worker') || ip === '2a06:98c0:3600::103') return json({ error: 'Direct client required' }, 403);
     const bytes = await sign(secret, new Date().toISOString().slice(0, 10) + '\n' + ip);
-    const bucket = [...bytes].map(x => x.toString(16).padStart(2, '0')).join('');
+    const bucket = Array.from(bytes, x => x.toString(16).padStart(2, '0')).join('');
     try {
       const budget = env.MAP_BUDGET.get(env.MAP_BUDGET.idFromName(locationiq ? 'locationiq-free-allowance' : 'geoapify-free-allowance'));
       const limit = locationiq
