@@ -695,6 +695,65 @@ class MapRenderingDeviceTest {
         }
     }
 
+    @Test fun exploreNearbyRendersLocalVisitedAndUnvisitedNumberedTiles() {
+        val app = InstrumentationRegistry.getInstrumentation().targetContext
+        Prefs.setManualOnly(app, true)
+        Prefs.setAccountPromptShown(app, true)
+        Prefs.setBackgroundPromptShown(app, true)
+        val repository = TrackingRepository(app)
+        repository.readableDatabase().execSQL("DELETE FROM explored_grid")
+        val visited = Location("gps").apply {
+            latitude = 40.0
+            longitude = -74.0
+            accuracy = 5f
+            time = System.currentTimeMillis()
+        }
+        assertTrue(repository.recordExploredGridCell(visited))
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                val styleReady = CountDownLatch(1)
+                scenario.onActivity { activity ->
+                    activity.findViewById<MapView>(R.id.mapView).getMapAsync { map ->
+                        map.getStyle { styleReady.countDown() }
+                    }
+                }
+                assertTrue("Native map style initializes", styleReady.await(30, TimeUnit.SECONDS))
+                val nearbyReady = CountDownLatch(1)
+                var failed = false
+                lateinit var renderer: MapRenderer
+                scenario.onActivity { activity ->
+                    renderer = MainActivity::class.java.getDeclaredField("renderer")
+                        .apply { isAccessible = true }.get(activity) as MapRenderer
+                    renderer.showNearbyExploration(40.0, -74.0,
+                        onShown = { explored, total ->
+                            if (explored != 1 || total != 25) failed = true
+                            nearbyReady.countDown()
+                        },
+                        onError = { failed = true; nearbyReady.countDown() }
+                    )
+                }
+                assertTrue("The local grid query completes", nearbyReady.await(30, TimeUnit.SECONDS))
+                assertFalse("Correct local tile count with no network", failed)
+                scenario.onActivity { activity ->
+                    assertTrue(renderer.isNearbyExplorationVisible())
+                    val map = activity.findViewById<MapView>(R.id.mapView)
+                    val ready = MainActivity::class.java.getDeclaredField("activeMap")
+                        .apply { isAccessible = true }.get(activity) as MapLibreMap
+                    val style = ready.style!!
+                    assertNotNull(style.getLayer("roadconquest-nearby-visited-fill"))
+                    assertNotNull(style.getLayer("roadconquest-nearby-unvisited-fill"))
+                    assertNotNull(style.getLayer("roadconquest-nearby-number-labels"))
+                    assertNotNull(style.getSource("roadconquest-nearby-numbers"))
+                    assertTrue("The map remains sized", map.width > 0 && map.height > 0)
+                    renderer.hideNearbyExploration()
+                    assertFalse(renderer.isNearbyExplorationVisible())
+                }
+            }
+        } finally {
+            repository.readableDatabase().execSQL("DELETE FROM explored_grid")
+        }
+    }
+
     @Test fun notificationStopRemainsStoppedUntilTheAppIsReopened() {
         val app = InstrumentationRegistry.getInstrumentation().targetContext
         Prefs.setManualOnly(app, true)
