@@ -880,7 +880,7 @@ class TrackingService : Service(), LocationListener {
                 lastMatchAttempt = nowElapsed
                 val result = matcher.match(points)
                 // The 25-point backup has its own shorter capacity-based cadence.
-                lastRemotePointLimit = matcher.maxPoints
+                lastRemotePointLimit = matcher.lastUsedProviderPointLimit
                 if (result == null) {
                     noMatchBackoff.clear(window.markableIds)
                     val providerCooldown = matcher.rateLimitRemainingMs()
