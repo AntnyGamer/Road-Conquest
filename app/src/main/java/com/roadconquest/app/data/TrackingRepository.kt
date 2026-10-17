@@ -418,7 +418,8 @@ class TrackingRepository(context: Context) {
         // A locally resolved re-drive can otherwise split one continuous trip into many
         // one-credit requests. Never omit samples or bridge a deleted fix, a long pause,
         // a deferred pending fix, or a gap larger than eight already-resolved samples.
-        // Specialized anchored-turn retries retain their original narrow selection.
+        // Specialized anchored-turn and small priority windows retain their narrow
+        // selection and newest-first ordering; explicit age caps never widen.
         val newestFirst = ArrayList<TrackPoint>(maxPoints - anchorSlots)
         newestFirst += pending.first()
         for (i in 1 until pending.size) {
@@ -427,7 +428,7 @@ class TrackingRepository(context: Context) {
             val betweenCount = newer.id - older.id - 1L
             if (betweenCount < 0 ||
                 newestFirst.size + betweenCount + 1 > maxPoints - anchorSlots ||
-                (betweenCount > 0 && (wideRetry || maxPoints < 10 || betweenCount > 8))
+                (betweenCount > 0 && (wideRetry || maxPendingId != null || maxPoints <= 10 || betweenCount > 8))
             ) break
 
             val between = ArrayList<TrackPoint>(betweenCount.toInt())
