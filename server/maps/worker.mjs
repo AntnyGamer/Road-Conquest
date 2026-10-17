@@ -232,10 +232,13 @@ export function createMapsGateway(fetchUpstream = fetch) {
       const response = json({ ok: true, configured: Boolean(env.GEOAPIFY_API_KEY), locationiqConfigured: Boolean(env.LOCATIONIQ_API_KEY) });
       return request.method === 'HEAD' ? new Response(null, { headers: response.headers }) : response;
     }
-    if (url.pathname === '/v1/config' && request.method === 'GET') return json({ version: 1,
-      providers: await serviceSwitches(env),
-      asyncBatchEnabled: env.MAP_ASYNC_BATCH_ENABLED === 'true' && Boolean(env.GEOAPIFY_API_KEY) && Boolean(env.MAP_BUDGET) },
-      200, { 'Cache-Control': 'public, max-age=300', 'X-Content-Type-Options': 'nosniff' });
+    if (url.pathname === '/v1/config' && request.method === 'GET') {
+      const providers = await serviceSwitches(env);
+      return json({ version: 1, providers,
+        asyncBatchEnabled: env.MAP_ASYNC_BATCH_ENABLED === 'true' &&
+          Boolean(env.GEOAPIFY_API_KEY) && Boolean(env.MAP_BUDGET) && providers['geoapify-matching'] },
+        200, { 'Cache-Control': 'public, max-age=300', 'X-Content-Type-Options': 'nosniff' });
+    }
     if (!env.MAP_BUDGET) return json({ error: 'Map service is not configured' }, 503);
     const locationiq = url.pathname === '/v1/locationiq/mapmatching';
     const secret = locationiq ? env.LOCATIONIQ_API_KEY : env.GEOAPIFY_API_KEY;
