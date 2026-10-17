@@ -31,6 +31,7 @@ import com.roadconquest.app.matching.FallbackRoadMatcher
 import com.roadconquest.app.matching.RoadMatcher
 import com.roadconquest.app.matching.KnownRoadReuse
 import com.roadconquest.app.matching.UnchangedNoMatchBackoff
+import com.roadconquest.app.matching.GeoapifyAsyncBacklog
 import com.roadconquest.app.map.FogGrid
 import com.roadconquest.app.progression.ProgressionManager
 import com.roadconquest.app.util.LocationProviders
@@ -49,6 +50,9 @@ class TrackingService : Service(), LocationListener {
     private lateinit var verifiedDriving: VerifiedDriving
     private val matcher: RoadMatcher = FallbackRoadMatcher.configured()
     private val noMatchBackoff = UnchangedNoMatchBackoff()
+    private val asyncBacklog by lazy(LazyThreadSafetyMode.NONE) {
+        GeoapifyAsyncBacklog(this, BuildConfig.MAP_GATEWAY_URL)
+    }
     private val matchingExecutor = ScheduledThreadPoolExecutor(1).apply {
         // Stop-time finalization should not keep the process alive for obsolete retry
         // timers scheduled minutes into the future. Already queued immediate work still runs.
@@ -807,6 +811,10 @@ class TrackingService : Service(), LocationListener {
     private fun runMatchingBatches() {
         var needsRecovery = false
         try {
+            // Old large saved backlogs may use discounted asynchronous matching;
+            // fresh GPS still follows the original immediate matching path.
+            val asyncDelay = asyncBacklog.tick(repository, lastObserved?.time ?: 0L)
+            if (asyncDelay != null) scheduleBacklogContinuation(asyncDelay)
             repeat(MAX_MATCH_BATCHES_PER_RUN) { batchIndex ->
                 // Keep the first batch focused on the freshest drive for responsive live
                 // updates. Spare slots preferentially revisit expired retries so isolated
