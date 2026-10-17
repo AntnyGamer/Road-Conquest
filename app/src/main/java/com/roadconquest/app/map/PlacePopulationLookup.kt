@@ -147,6 +147,9 @@ internal object PlacePopulationLookup {
     private fun lookupCurrent(
         context: Context, info: PlaceOverlayInfo, startedAtGeneration: Long
     ): Value? {
+        // A queued request from before Delete all data must not issue a new
+        // provider request after the saved-data generation has changed.
+        if (startedAtGeneration != cacheGeneration) return null
         cached[key(info)]?.let { return it }
         savedCensus(context, info)?.let { saved ->
             // A reset can occur between reading disk and populating the memory
