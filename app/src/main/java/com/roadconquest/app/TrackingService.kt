@@ -51,7 +51,10 @@ class TrackingService : Service(), LocationListener {
     private val matcher: RoadMatcher = FallbackRoadMatcher.configured()
     private val noMatchBackoff = UnchangedNoMatchBackoff()
     private val asyncBacklog by lazy(LazyThreadSafetyMode.NONE) {
-        GeoapifyAsyncBacklog(this, BuildConfig.MAP_GATEWAY_URL)
+        GeoapifyAsyncBacklog(this, BuildConfig.MAP_GATEWAY_URL) {
+            sendUiBroadcast(ACTION_ROADS_UPDATED)
+            sendUiBroadcast(ACTION_STATS_UPDATED)
+        }
     }
     private val matchingExecutor = ScheduledThreadPoolExecutor(1).apply {
         // Stop-time finalization should not keep the process alive for obsolete retry
@@ -813,7 +816,11 @@ class TrackingService : Service(), LocationListener {
         try {
             // Old large saved backlogs may use discounted asynchronous matching;
             // fresh GPS still follows the original immediate matching path.
-            val asyncDelay = asyncBacklog.tick(repository, lastObserved?.time ?: 0L)
+            // Optional batch failures must not stop ordinary matching for new
+            // roads. The persisted GPS queue remains authoritative.
+            val asyncDelay = runCatching {
+                asyncBacklog.tick(repository, lastObserved?.time ?: 0L)
+            }.onFailure { Log.w("RoadConquest", "Async backlog unavailable; using normal matching") }.getOrNull()
             if (asyncDelay != null) scheduleBacklogContinuation(asyncDelay)
             repeat(MAX_MATCH_BATCHES_PER_RUN) { batchIndex ->
                 // Keep the first batch focused on the freshest drive for responsive live
