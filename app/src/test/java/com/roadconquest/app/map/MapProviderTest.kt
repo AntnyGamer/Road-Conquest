@@ -34,11 +34,22 @@ class MapProviderTest {
             assertTrue(backup.contains("Powered by Geoapify"))
             assertTrue(backup.contains("© OpenStreetMap contributors"))
             assertTrue(backup.contains("© OpenMapTiles"))
+            assertFalse("The only prominent link belongs on the home screen",
+                backup.contains("locationiq.com"))
             val local = JSONObject(BaseMapProviders.fallbackStyle(mode, null))
             assertEquals(0, local.getJSONObject("sources").length())
             assertEquals("background", local.getJSONArray("layers").getJSONObject(0).getString("type"))
         }
     }
+    @Test fun preferredMapDoesNotDuplicateTheVisibleLocationIqCredit() {
+        val app = Application()
+        for (mode in MapMode.entries) {
+            val style = BaseMapProviders.style(app, mode, "openfreemap")
+            assertFalse(style.contains("locationiq.com"))
+            assertTrue(style.contains("OpenStreetMap"))
+        }
+    }
+
     @Test fun boundaryBackupRequiresUniqueContainedExactRegionAndNeverAwardsTowns() {
         val data = JSONObject("""{"type":"FeatureCollection","features":[{"properties":{"shapeName":"Test Region"},"geometry":{"type":"Polygon","coordinates":[[[0,0],[2,0],[2,2],[0,2],[0,0]]]}}]}""")
         val state = PlaceDiscovery(PlaceKind.STATE,"gb|test region","Test Region","","United Kingdom",1L,1.0,1.0)
