@@ -68,6 +68,84 @@ function fixes() {
   ];
 }
 
+test("batch preflight shares one read while retaining retry, eligibility and late-commit checks", { skip: !connectionString }, async () => {
+  const pool = new pg.Pool({ connectionString });
+  try {
+    await pool.query(await readFile(new URL('../schema.sql', import.meta.url), 'utf8'));
+    await pool.query('TRUNCATE users CASCADE');
+    const user = (await pool.query(`INSERT INTO users(username_display,username_key,password_salt,password_hash)
+      VALUES ('Preflight','preflight',$1,$2) RETURNING id`, [Buffer.alloc(16), Buffer.alloc(64)])).rows[0];
+    let queries = 0, verifications = 0, afterSnapshot;
+    const tracked = {
+      async query(...args) {
+        queries++;
+        const result = await pool.query(...args);
+        if (afterSnapshot && args[0].includes('FROM users u LEFT JOIN cell_receipts')) {
+          const hook = afterSnapshot;
+          afterSnapshot = null;
+          await hook();
+        }
+        return result;
+      },
+      async connect() {
+        const db = await pool.connect();
+        return { query(...args) { queries++; return db.query(...args); }, release() { db.release(); } };
+      }
+    };
+    const service = await createCompetition(tracked, config, { verify: async () => { verifications++; } });
+    const run = await service.begin(user), points = fixes();
+    const evidence = JSON.stringify({ ...run, fixes: points });
+    queries = 0;
+    const credited = await service.submit(user, evidence, 'test');
+    assert.equal(queries, 10, 'New credit keeps the entire locked transaction but saves two preflight queries');
+    assert.equal(credited.credited_cells, 1);
+    assert.equal(verifications, 1);
+    queries = 0;
+    assert.deepEqual(await service.submit(user, evidence, 'test'), credited);
+    assert.equal(queries, 1, 'An exact receipt needs one fresh eligibility/receipt read');
+    assert.equal(verifications, 1);
+    const next = { ...points[1], lon: points[1].lon + 0.0005,
+      time: points[1].time + 5000, elapsed: points[1].elapsed + 5000 };
+    const repeat = JSON.stringify({ ...run, sequence: 1, fixes: [points[1], next] });
+    queries = 0;
+    const zero = await service.submit(user, repeat, 'test');
+    assert.equal(zero.credited_cells, 0);
+    assert.equal(queries, 10);
+    assert.equal(verifications, 2);
+    queries = 0;
+    await assert.rejects(service.submit(user, '{}', 'test'), /Invalid evidence/u);
+    assert.equal(queries, 1);
+
+    await pool.query("UPDATE cell_runs SET created_at=CURRENT_TIMESTAMP-INTERVAL '4 minutes',expires_at=CURRENT_TIMESTAMP-INTERVAL '1 minute'");
+    const late = JSON.stringify({ ...run, sequence: 2, fixes: points });
+    queries = 0;
+    await assert.rejects(service.submit(user, late, 'test'), /challenge/u);
+    assert.equal(queries, 2, 'A missing/expired challenge still rechecks for a late commit');
+    assert.equal(verifications, 2);
+    const { evidenceHash } = await import('../src/scoring.mjs');
+    const committed = { ...zero, sequence: 3 };
+    afterSnapshot = () => pool.query(`INSERT INTO cell_receipts(run_id,sequence,user_id,evidence_hash,response)
+      VALUES ($1,2,$2,$3,$4)`, [run.run, user.id, evidenceHash(late), JSON.stringify(committed)]);
+    queries = 0;
+    assert.deepEqual(await service.submit(user, late, 'test'), committed);
+    assert.equal(queries, 2);
+    assert.equal(verifications, 2, 'A receipt committed after the snapshot needs no Google token replay');
+    queries = 0;
+    await assert.rejects(service.submit(user, JSON.stringify({ ...run, fixes: points.map(p => ({ ...p, speed: 11 })) }), 'test'), /already used/u);
+    assert.equal(queries, 1);
+
+    await pool.query('UPDATE users SET leaderboard_eligible=FALSE WHERE id=$1', [user.id]);
+    for (const input of [evidence, '{}', JSON.stringify({ ...run, sequence: Number.MAX_SAFE_INTEGER, fixes: points })]) {
+      queries = 0;
+      await assert.rejects(service.submit(user, input, 'test'), error => error.status === 403);
+      assert.equal(queries, 1, 'Ineligible accounts cannot recover a receipt or change error priority');
+    }
+    await pool.query('DELETE FROM users WHERE id=$1', [user.id]);
+    await assert.rejects(service.submit(user, evidence, 'test'), error => error.status === 403);
+    assert.equal(verifications, 2);
+  } finally { await pool.end(); }
+});
+
 test("a weekly write failure rolls back new cells, totals, checkpoint, sequence and receipt together", { skip: !connectionString }, async () => {
   const pool = new pg.Pool({ connectionString });
   try {

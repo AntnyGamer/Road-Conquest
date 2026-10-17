@@ -76,3 +76,19 @@ test("upstream failures and oversized verification responses fail closed", async
   await assert.rejects(boundedJson(new Response("x".repeat(100)), 10));
   await assert.rejects(boundedJson(new Response("not JSON")));
 });
+
+test("failed verification responses release unread streams and preserve the retryable error", async () => {
+  for (const status of [401, 403, 429, 500, 503]) {
+    let cancelled = 0;
+    const response = new Response(new ReadableStream({
+      cancel() { cancelled++; }
+    }), { status });
+    await assert.rejects(boundedJson(response), error => error.status === 503);
+    assert.equal(cancelled, 1);
+    assert.equal(response.bodyUsed, true);
+  }
+  await assert.rejects(boundedJson(new Response(new ReadableStream({
+    cancel() { throw new Error('socket already failed'); }
+  }), { status: 500 })), error => error.status === 503);
+  await assert.rejects(boundedJson(new Response(null, { status: 503 })), error => error.status === 503);
+});

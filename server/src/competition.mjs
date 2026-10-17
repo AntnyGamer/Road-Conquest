@@ -34,17 +34,21 @@ export async function createCompetition(pool, config, dependencies = {}) {
     if (result.rows[0]?.leaderboard_eligible !== true) throw new EvidenceError("Account is not eligible for verified competition.", 403);
   }
 
+  function receiptResponse(row, hash) {
+    if (row?.evidence_hash == null) return null;
+    if (row.evidence_hash !== hash) throw new EvidenceError("Batch sequence already used.", 409);
+    if (row.response?.scoring_policy !== 3 || row.response?.verified !== true) {
+      throw new EvidenceError("Batch belongs to an older scoring policy.", 409);
+    }
+    return row.response;
+  }
+
   async function receipt(db, user, body, hash) {
     const result = await db.query(
       "SELECT evidence_hash, response FROM cell_receipts WHERE run_id = $1 AND sequence = $2 AND user_id = $3",
       [body.run, body.sequence, user.id]
     );
-    if (!result.rowCount) return null;
-    if (result.rows[0].evidence_hash !== hash) throw new EvidenceError("Batch sequence already used.", 409);
-    if (result.rows[0].response?.scoring_policy !== 3 || result.rows[0].response?.verified !== true) {
-      throw new EvidenceError("Batch belongs to an older scoring policy.", 409);
-    }
-    return result.rows[0].response;
+    return receiptResponse(result.rows[0], hash);
   }
 
   async function totals(db, userId) {
@@ -77,26 +81,43 @@ export async function createCompetition(pool, config, dependencies = {}) {
       return { run: id, nonce, sequence: 0 };
     },
     async submit(user, evidence, integrityToken) {
-      await eligible(pool, user);
       // Validate shape/motion before looking up a receipt, but do not age out an
       // exact committed retry. Only new credit requires fresh GPS and attestation.
-      const body = parseEvidence(evidence, Date.now(), false);
+      let body;
+      try { body = parseEvidence(evidence, Date.now(), false); }
+      catch (error) {
+        // Preserve the eligibility-first error even for malformed evidence.
+        await eligible(pool, user);
+        throw error;
+      }
+      // The three read-only preflight checks share one indexed snapshot/round
+      // trip. A receipt hit skips the challenge lookup altogether. The separate
+      // locked checks below still guard changes while attestation is in flight.
+      const checked = await pool.query(
+        `SELECT u.leaderboard_eligible,r.evidence_hash,r.response,
+           CASE WHEN u.leaderboard_eligible AND r.run_id IS NULL THEN EXISTS (
+             SELECT 1 FROM cell_runs WHERE user_id=$1 AND id=$2 AND nonce=$4 AND sequence=$3::bigint
+               AND dataset=$5 AND expires_at>CURRENT_TIMESTAMP
+               AND created_at<=to_timestamp($6::double precision / 1000)+INTERVAL '10 seconds'
+           ) ELSE FALSE END AS active
+         FROM users u LEFT JOIN cell_receipts r
+           ON u.leaderboard_eligible AND r.user_id=u.id AND r.run_id=$2 AND r.sequence=$3::bigint
+         WHERE u.id=$1`,
+        [user.id, body.run, body.sequence, body.nonce, config.dataset, body.fixes[0].time]
+      );
+      const preflight = checked.rows[0];
+      if (preflight?.leaderboard_eligible !== true)
+        throw new EvidenceError("Account is not eligible for verified competition.", 403);
       const hash = evidenceHash(evidence);
       // A committed retry needs no second Google decode (standard tokens have replay protection).
-      const previous = await receipt(pool, user, body, hash);
+      const previous = receiptResponse(preflight, hash);
       if (previous) return previous;
       // No need to repeat JSON parsing, geometry validation and continuity
       // checks: the first parse already validated them. New batches must still
       // pass the exact same per-fix freshness limits as before.
       requireFreshFixes(body);
-      const active = await pool.query(
-        `SELECT 1 FROM cell_runs WHERE user_id = $1 AND id = $2 AND nonce = $3 AND sequence = $4
-         AND dataset = $5 AND expires_at > CURRENT_TIMESTAMP
-         AND created_at <= to_timestamp($6::double precision / 1000) + INTERVAL '10 seconds'`,
-        [user.id, body.run, body.nonce, body.sequence, config.dataset, body.fixes[0].time]
-      );
-      if (!active.rowCount) {
-        // Another copy may have committed between the receipt read and challenge check.
+      if (!preflight.active) {
+        // An already in-flight copy may have committed after the preflight snapshot.
         const committed = await receipt(pool, user, body, hash);
         if (committed) return committed;
         throw new EvidenceError("Drive challenge expired or changed.", 409);
