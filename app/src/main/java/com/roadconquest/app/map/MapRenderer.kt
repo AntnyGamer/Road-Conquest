@@ -770,6 +770,9 @@ class MapRenderer(
         }
         resumeVisibilityCheck = awaitVisible
         mainHandler.post(awaitVisible)
+        // Unlocks recorded while the activity was stopped do not reach its
+        // broadcast receiver; refresh the visible local tile overlay on return.
+        refreshNearbyExploration()
     }
 
     fun refreshExploration() {
