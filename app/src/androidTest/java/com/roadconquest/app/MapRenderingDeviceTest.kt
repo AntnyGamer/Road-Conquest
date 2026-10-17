@@ -92,6 +92,10 @@ class MapRenderingDeviceTest {
                     }
                 }
                 assertTrue(whiteReady.await(30, TimeUnit.SECONDS))
+                scenario.onActivity {
+                    assertNotNull("Native overview fog must exist independently of camera callbacks",
+                        map.style?.getLayer("roadconquest-world-fog-overview-raster"))
+                }
                 fun move(target: LatLng, zoom: Double, bearing: Double = 0.0) {
                     val idle = CountDownLatch(1)
                     val listener = MapLibreMap.OnCameraIdleListener { idle.countDown() }
