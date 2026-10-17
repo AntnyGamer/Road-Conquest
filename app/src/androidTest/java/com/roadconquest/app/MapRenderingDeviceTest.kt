@@ -21,6 +21,7 @@ import com.roadconquest.app.data.MatchedRoad
 import com.roadconquest.app.data.TrackingRepository
 import com.roadconquest.app.map.MapMode
 import com.roadconquest.app.map.MapRenderer
+import com.roadconquest.app.map.PlaceOverlayMode
 import com.roadconquest.app.map.LiveLocation
 import com.roadconquest.app.util.Prefs
 import org.junit.Assert.*
@@ -608,6 +609,9 @@ class MapRenderingDeviceTest {
         Prefs.setBackgroundPromptShown(app, true)
         Prefs.setFogEnabled(app, true)
         Prefs.setMapMode(app, MapMode.STREETS)
+        // This projection fixture owns its GeoJSON source. A previous test's
+        // saved town-overlay mode must not start a loader that replaces it.
+        Prefs.setPlaceOverlayMode(app, PlaceOverlayMode.NONE)
         val roadPoint = LatLng(37.7749, -122.4191)
         TrackingRepository(app).apply {
             readableDatabase().execSQL("DELETE FROM roads")
@@ -660,24 +664,24 @@ class MapRenderingDeviceTest {
                 val deadline = SystemClock.elapsedRealtime() + 10_000L
                 var screen = android.graphics.PointF()
                 var found = false
-                while (!found && SystemClock.elapsedRealtime() < deadline) {
+                var overlayFound = false
+                // Separate native sources finish loading independently. A road
+                // frame alone is not proof that the polygon has reached the renderer.
+                while ((!found || !overlayFound) && SystemClock.elapsedRealtime() < deadline) {
                     scenario.onActivity {
                         screen = map.projection.toScreenLocation(roadPoint)
                         found = map.queryRenderedFeatures(
                             screen,
                             "roadconquest-traveled-roads-line"
                         ).isNotEmpty()
+                        overlayFound = map.queryRenderedFeatures(
+                            screen,
+                            "roadconquest-town-overlays-fill"
+                        ).isNotEmpty()
                     }
-                    if (!found) SystemClock.sleep(50)
+                    if (!found || !overlayFound) SystemClock.sleep(50)
                 }
                 assertTrue("Traveled road stays rendered at its projected geographic point", found)
-                var overlayFound = false
-                scenario.onActivity {
-                    overlayFound = map.queryRenderedFeatures(
-                        map.projection.toScreenLocation(roadPoint),
-                        "roadconquest-town-overlays-fill"
-                    ).isNotEmpty()
-                }
                 assertTrue("Place overlay stays anchored to its geographic polygon", overlayFound)
                 return screen
             }
