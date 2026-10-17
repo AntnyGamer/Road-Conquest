@@ -837,6 +837,9 @@ class TrackingRepositoryTest {
     }
 
     @Test fun emptySignedRoadReferenceRequiresNoNormalization() {
+        assertEquals("", RoadGrouping.normalizeName(""))
+        assertEquals("", RoadGrouping.normalizeName("Unnamed Road"))
+        assertEquals("main street", RoadGrouping.normalizeName("Main  Street"))
         assertTrue(RoadGrouping.normalizeReferences("").isEmpty())
         assertTrue(RoadGrouping.normalizeReferences(" ; ").isEmpty())
         assertEquals(linkedSetOf("I295", "US322"),
