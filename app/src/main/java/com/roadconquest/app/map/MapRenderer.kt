@@ -329,9 +329,9 @@ class MapRenderer(
         val side = (24 * density).toInt()
         val top = (52 * density).toInt()
         val bottom = (166 * density).toInt()
-        val room = (mapView.height - top - bottom).coerceAtLeast(1)
-        val insetTop = if (room > 0) top else 0
-        val insetBottom = if (room > 0) bottom else 0
+        val enoughRoom = mapView.height - top - bottom > (80 * density).toInt()
+        val insetTop = if (enoughRoom) top else 0
+        val insetBottom = if (enoughRoom) bottom else 0
         map.getCameraForLatLngBounds(bounds, intArrayOf(side, insetTop, side, insetBottom))?.let {
             map.moveCamera(CameraUpdateFactory.newCameraPosition(
                 CameraPosition.Builder(it).padding(0.0, 0.0, 0.0, 0.0).build()
