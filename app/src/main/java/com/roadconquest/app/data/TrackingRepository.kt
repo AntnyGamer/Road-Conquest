@@ -597,6 +597,11 @@ class TrackingRepository(context: Context) {
             while (cursor.moveToNext()) eligible += cursor.toTrackPoint()
         }
 
+        // Evaluate cheap continuity predicates first; fetch the two saved
+        // anchors for ALL qualifying gaps in one bounded indexed query instead
+        // of issuing one SQLite query for every candidate turn. The priority
+        // order and strict two-sided confirmation remain unchanged.
+        val candidates = ArrayList<Pair<TrackPoint, TrackPoint>>()
         var offset = 0
         while (offset < eligible.size) {
             var until = offset + 1
@@ -617,31 +622,39 @@ class TrackingRepository(context: Context) {
                         isMatchingContinuation(a, b, MATCH_CLUSTER_GAP_MS)
                     }
                 if (continuous && first.id > 0 && last.id < Long.MAX_VALUE) {
-                    val anchorIds = listOf(first.id - 1, last.id + 1)
-                    val anchors = HashMap<Long, TrackPoint>(2)
-                    db.query(
-                        "track_points",
-                        TRACK_COLUMNS,
-                        "id IN (?, ?)",
-                        anchorIds.map(Long::toString).toTypedArray(),
-                        null, null, null
-                    ).use { cursor ->
-                        while (cursor.moveToNext()) {
-                            val point = cursor.toTrackPoint()
-                            anchors[point.id] = point
-                        }
-                    }
-                    val before = anchors[first.id - 1]
-                    val after = anchors[last.id + 1]
-                    if (before?.matched == true && after?.matched == true &&
-                        before.accuracyMeters in 0.01f..PRIORITY_GAP_MAX_ACCURACY_M &&
-                        after.accuracyMeters in 0.01f..PRIORITY_GAP_MAX_ACCURACY_M &&
-                        isMatchingContinuation(before, first, MATCH_ANCHOR_MAX_GAP_MS) &&
-                        isMatchingContinuation(last, after, MATCH_ANCHOR_MAX_GAP_MS)
-                    ) return first.id
+                    candidates += first to last
                 }
             }
             offset = until
+        }
+        if (candidates.isEmpty()) return null
+
+        // With a 512-fix scan and at least four fixes per candidate there
+        // can be at most 256 distinct anchors, below SQLite's bind limit.
+        val anchorIds = candidates.flatMap { (first, last) ->
+            listOf(first.id - 1, last.id + 1)
+        }.distinct()
+        val anchors = HashMap<Long, TrackPoint>(anchorIds.size)
+        db.query(
+            "track_points", TRACK_COLUMNS,
+            "id IN (${anchorIds.joinToString(",") { "?" }})",
+            anchorIds.map(Long::toString).toTypedArray(),
+            null, null, null
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                val point = cursor.toTrackPoint()
+                anchors[point.id] = point
+            }
+        }
+        for ((first, last) in candidates) {
+            val before = anchors[first.id - 1]
+            val after = anchors[last.id + 1]
+            if (before?.matched == true && after?.matched == true &&
+                before.accuracyMeters in 0.01f..PRIORITY_GAP_MAX_ACCURACY_M &&
+                after.accuracyMeters in 0.01f..PRIORITY_GAP_MAX_ACCURACY_M &&
+                isMatchingContinuation(before, first, MATCH_ANCHOR_MAX_GAP_MS) &&
+                isMatchingContinuation(last, after, MATCH_ANCHOR_MAX_GAP_MS)
+            ) return first.id
         }
         return null
     }
