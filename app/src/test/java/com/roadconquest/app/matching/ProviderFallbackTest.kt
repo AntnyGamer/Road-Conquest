@@ -27,6 +27,25 @@ class ProviderFallbackTest {
         override fun match(points: List<TrackPoint>): MatchResult? { calls++; return response }
         override fun rateLimitRemainingMs() = cooldown
     }
+    @Test fun invalidGeoapifyCoordinatesNeverThrowOrUseNetwork() {
+        MockWebServer().use { server ->
+            server.start()
+            val matcher = GeoapifyMatcher(server.url("/").toString(), ProviderHealth())
+            for (bad in listOf(
+                points[0].copy(latitude = Double.NaN),
+                points[0].copy(latitude = 91.0),
+                points[0].copy(longitude = Double.POSITIVE_INFINITY),
+                points[0].copy(longitude = -181.0)
+            )) {
+                val input = listOf(bad, points[1])
+                assertNull(matcher.cachedMatch(input))
+                assertNull(matcher.match(input))
+                assertFalse(matcher.lastCallUsedNetwork)
+            }
+            assertEquals(0, server.requestCount)
+        }
+    }
+
     @Test fun unavailableProvidersFallThroughInOrderAndPrimaryRecovers() {
         val primary = Fake(unavailable = true)
         val secondary = Fake(MatchResult(emptyList(), emptyMap()))
