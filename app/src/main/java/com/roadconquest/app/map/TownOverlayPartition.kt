@@ -109,12 +109,7 @@ internal object TownOverlayPartition {
         }
         val boundaryFeatures = JSONArray()
         if (lines.length() > 0) {
-            boundaryFeatures.put(JSONObject()
-                .put("type", "Feature")
-                .put("properties", JSONObject())
-                .put("geometry", JSONObject()
-                    .put("type", "MultiLineString")
-                    .put("coordinates", lines)))
+            boundaryFeatures.put(borderFeature(lines))
         }
         return Result(collection(fills), collection(boundaryFeatures), shown)
     }
@@ -135,12 +130,7 @@ internal object TownOverlayPartition {
         }
         val features = JSONArray()
         if (lines.length() > 0) {
-            features.put(JSONObject()
-                .put("type", "Feature")
-                .put("properties", JSONObject())
-                .put("geometry", JSONObject()
-                    .put("type", "MultiLineString")
-                    .put("coordinates", lines)))
+            features.put(borderFeature(lines))
         }
         return collection(features)
     }
@@ -231,6 +221,13 @@ internal object TownOverlayPartition {
             }
         }
     }
+
+    private fun borderFeature(lines: JSONArray): JSONObject = JSONObject()
+        .put("type", "Feature")
+        .put("properties", JSONObject())
+        .put("geometry", JSONObject()
+            .put("type", "MultiLineString")
+            .put("coordinates", lines))
 
     private fun collection(features: JSONArray): String =
         JSONObject().put("type", "FeatureCollection").put("features", features).toString()
