@@ -33,6 +33,14 @@ class GeoapifyMatcher(
     private var cachedAt = 0L
     override fun rateLimitRemainingMs(): Long = health.remaining(providerId)
 
+    // Reject corrupt/out-of-range fixes before JSONObject serializes doubles:
+    // non-finite coordinates otherwise throw outside the network try/catch.
+    private fun validPoints(points: List<TrackPoint>): Boolean =
+        points.size in 2..MAX_MATCH_POINTS && points.all {
+            it.latitude.isFinite() && it.latitude in -90.0..90.0 &&
+                it.longitude.isFinite() && it.longitude in -180.0..180.0
+        }
+
     private fun payload(points: List<TrackPoint>): String {
         return JSONObject().put("mode", "drive").put("waypoints", JSONArray().apply {
             var previous = Long.MIN_VALUE
@@ -48,7 +56,7 @@ class GeoapifyMatcher(
     @Synchronized override fun cachedMatch(points: List<TrackPoint>): MatchResult? {
         lastCallUsedNetwork = false
         val request = cachedRequest ?: return null
-        if (points.size !in 2..maxPoints || System.currentTimeMillis() - cachedAt !in 0L..900_000L) return null
+        if (!validPoints(points) || System.currentTimeMillis() - cachedAt !in 0L..900_000L) return null
         if (request != payload(points)) return null
         return runCatching { parse(requireNotNull(cachedBody), points) }.getOrNull()
     }
@@ -56,7 +64,7 @@ class GeoapifyMatcher(
     @Synchronized override fun match(points: List<TrackPoint>): MatchResult? {
         unavailable = false
         lastCallUsedNetwork = false
-        if (points.size !in 2..MAX_MATCH_POINTS) return null
+        if (!validPoints(points)) return null
         val payload = payload(points)
         if (cachedRequest == payload && System.currentTimeMillis() - cachedAt in 0L..900_000L) {
             return runCatching { parse(requireNotNull(cachedBody), points) }.getOrNull()
