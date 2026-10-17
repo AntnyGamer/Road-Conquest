@@ -1,4 +1,16 @@
-# Road Conquest 1.0 Beta 49
+# Road Conquest 1.0 Beta 50
+
+## What's new since Beta 49
+
+- **Fewer matching credits:** Adjacent unmatched GPS gaps can be submitted together using real, already-verified saved fixes as context. New GPS evidence, boundaries and confidence requirements remain authoritative; context never earns duplicate road credit.
+- **Safer primary/backup matching:** Track the exact number of points sent to the provider that really handled the request, so unsubmitted GPS is not treated as attempted. Repeated *explicit* NoMatch responses on unchanged evidence back off temporarily; ambiguous intersections retain normal retries.
+- **Lower network overhead:** Exact matching requests reuse successful provider responses for up to 15 minutes, with the geometry revalidated against the current GPS IDs. Repeated Firebase device registrations are avoided for six hours after confirmed success; changed devices, sessions and consent trigger fresh registration.
+- **Cheaper idle database work:** Expired account records are purged hourly instead of every 15 minutes, while access checks still reject expired records immediately. Road-gap anchor lookups and local place discovery now require fewer SQLite queries.
+- **Preserved immediate road matching:** The experimental asynchronous Geoapify job system was removed in full. There is no delayed-job polling or altered location-history retention.
+- **Reliability and cleanup:** Additional tests and simplifications for saved tracks, backup helpers, map rendering, location lookup, achievements and account security. Existing progress and purchases remain intact, and optional verified competition remains hidden by default.
+
+## Included features and detailed changes
+
 
 - **Simpler map UI:** Group Driving miles/roads and Exploration tiles in a compact summary; Settings now has categorized Driving, Exploration, Progression, Tracking and Backup details. The three bottom destinations are Trips, Badges and Goals; the already-clickable points chip is clearly labeled Garage, removing its redundant bottom-bar button.
 
