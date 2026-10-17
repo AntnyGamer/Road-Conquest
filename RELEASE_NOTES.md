@@ -12,6 +12,7 @@
 - **More efficient Explore Nearby camera framing:** Convert the already-ordered tile corner coordinates directly rather than creating nested temporary lists; zoom, map bounds and anti-meridian handling stay unchanged.
 - **Less work when refreshing rewarded-ad controls:** Reuse a single consent/availability check for each reward-button update; ad gating and earnings behavior are unchanged.
 - **More efficient backup exports:** Write skipped GPS fixes and progression CSV rows directly to the buffered ZIP output, avoiding temporary row lists/strings while keeping the exact CSV escape rules and backup format.
+- **Faster large-history backup copies and restores:** Read each SQLite cursor's unchanging column-name array once per table rather than once for every GPS/road/progression row; the exported and restored data remain identical.
 - **Safer backup imports:** Stop enumerating malformed ZIP archives as soon as their entry count exceeds the fixed RoadConquest backup schema, avoiding needless memory growth. Valid backups are unchanged.
 - **Documentation cleanup:** Fix a visible paragraph-formatting error introduced into the Beta 53 README.
 - **Compatibility:** Android 12+, versionCode **80**, unchanged package name and permanent release signing identity; saved roads, matching, account data, points and purchases are unaffected. Any separately deployed verified-scoring server must accept version 80 before verified submissions can be enabled.
