@@ -595,16 +595,10 @@ class RoadGeometryValidator {
     companion object {
         // The public provider demo rejects larger traces with TooBig (verified 2026-10-03).
         const val MAX_MATCH_POINTS = 200
-        // Strict in-memory cap: at most four compact, successful provider responses for
-        // one minute. Changed coordinates/times/radii/bearings always bypass cache.
-        private const val RESPONSE_CACHE_TTL_MS = 60_000L
-        private const val MAX_CACHED_RESPONSES = 4
-        private const val MAX_CACHED_RESPONSE_CHARS = 256 * 1024
         // A point with alternatives is only accepted when it is internal to a trace, so fixes
         // on both sides constrain the route. Keep this identical to TrackingService's road
         // acceptance threshold; otherwise a 0.45-0.79 contextual match can retry forever.
         internal const val MIN_ACCEPTABLE_CONFIDENCE = 0.45
-        private const val MIN_MATCH_RADIUS_M = 10f
         private const val MAX_MATCH_RADIUS_M = 75f
         // Treat provider's radius as candidate discovery, not proof. Tighten permanent
         // geometry only while the vehicle is moving slowly enough for a nearby-road snap to be
@@ -641,11 +635,9 @@ class RoadGeometryValidator {
         // degrees is broad enough for ordinary curves while still excluding the opposite road.
         private const val BEARING_GUIDANCE_RANGE_DEGREES = 65
         private const val SHARP_TURN_DEGREES = 45.0
-        private const val MIN_ALTERNATE_SNAP_CONFIDENCE = 0.75
         private const val EARTH_RADIUS_M = 6_371_008.8
         private const val MIN_GEOMETRY_LENGTH_M = 0.001
         private const val DUPLICATE_POINT_TOLERANCE_M = 0.01
         private const val JOIN_TOLERANCE_M = 1.0
-        private const val MAX_RESPONSE_BYTES = 4 * 1024 * 1024
     }
 }
