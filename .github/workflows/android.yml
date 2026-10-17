@@ -201,17 +201,17 @@ jobs:
           apk="app/build/outputs/apk/release/app-release-unsigned.apk"
           aab="app/build/outputs/bundle/release/app-release.aab"
           permission="com.google.android.gms.permission.AD_ID"
-          "$ANDROID_HOME/build-tools/36.0.0/aapt2" dump permissions "$apk" |
-            grep -Fq "$permission" || {
-              echo "::error::The release APK is missing $permission."
-              exit 1
-            }
+          "$ANDROID_HOME/build-tools/36.0.0/aapt2" dump permissions "$apk" > "$RUNNER_TEMP/release-apk-permissions.txt"
+          if ! grep -Fq "$permission" "$RUNNER_TEMP/release-apk-permissions.txt"; then
+            echo "::error::The release APK is missing $permission."
+            exit 1
+          fi
           bundletool="$RUNNER_TEMP/bundletool-all-1.18.3.jar"
-          java -jar "$bundletool" dump manifest --bundle="$aab" --module=base |
-            grep -Fq "$permission" || {
-              echo "::error::The Play upload AAB is missing $permission."
-              exit 1
-            }
+          java -jar "$bundletool" dump manifest --bundle="$aab" --module=base > "$RUNNER_TEMP/release-aab-manifest.xml"
+          if ! grep -Fq "$permission" "$RUNNER_TEMP/release-aab-manifest.xml"; then
+            echo "::error::The Play upload AAB is missing $permission."
+            exit 1
+          fi
 
       - name: Verify 16 KB native-library compatibility
         shell: bash
