@@ -20,6 +20,7 @@ import com.roadconquest.app.util.Prefs
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
+import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.geometry.LatLngQuad
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
@@ -287,6 +288,7 @@ class MapRenderer(
                     nearbyNumberFeatures = snapshot.markers
                     ensureNearbyMarkerImages(snapshot.states)
                     applyNearbyExploration()
+                    fitNearbyExploration(latitude, longitude)
                     onShown(snapshot.exploredCount, snapshot.states.size)
                 }, { error ->
                     Log.w("RoadConquest", "Could not load nearby cells", error)
@@ -295,6 +297,36 @@ class MapRenderer(
                 })
             }
         }
+    }
+
+    /** Fit the 25-cell neighborhood into the visible map area, not under the bottom sheet. */
+    private fun fitNearbyExploration(latitude: Double, longitude: Double) {
+        val origin = FogGrid.cell(latitude, longitude) ?: return
+        val cells = FogGrid.neighbors(origin)
+        if (cells.isEmpty() || mapView.width <= 0 || mapView.height <= 0) return
+        val corners = cells.flatMap { cell ->
+            val (lat, lon) = FogGrid.center(cell)
+            FogGrid.corners(lat, lon).toList().chunked(2)
+                .map { (cornerLat, cornerLon) -> cornerLat to cornerLon }
+        }
+        // MapLibre's ordinary LatLngBounds does not wrap across the date line.
+        // Use a compact centered view there instead of zooming out to the world.
+        if (corners.any { (_, lon) -> lon !in -180.0..180.0 } ||
+            corners.maxOf { it.second } - corners.minOf { it.second } > 180.0) {
+            map.moveCamera(CameraUpdateFactory.newCameraPosition(
+                CameraPosition.Builder(map.cameraPosition).target(LatLng(latitude, longitude))
+                    .zoom(11.0).build()
+            ))
+            return
+        }
+        val bounds = LatLngBounds.Builder().apply {
+            corners.forEach { (lat, lon) -> include(LatLng(lat, lon)) }
+        }.build()
+        // The panel overlaps the lower map. Uniform padding also prevents marker
+        // numbers being obscured by top floating controls on compact displays.
+        val padding = minOf(mapView.width / 5, mapView.height / 5)
+            .coerceAtLeast((32 * context.resources.displayMetrics.density).toInt())
+        map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, padding))
     }
 
     private fun applyNearbyExploration() {
