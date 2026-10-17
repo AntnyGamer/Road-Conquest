@@ -16,7 +16,8 @@ import kotlin.math.sqrt
 
 data class MatchResult(
     val roads: List<MatchedRoad>,
-    val matchedPointConfidences: Map<Long, Double>
+    val matchedPointConfidences: Map<Long, Double>,
+    val explicitNoMatch: Boolean = false
 )
 
 /** Independent geometric plausibility checks shared by all current and future matchers. */
