@@ -321,10 +321,6 @@ class ProgressionRepository(context: Context) {
         // Before the first live baseline exists, stale/sparse candidates cannot become the
         // starting place. Once the sentinel exists, it is an ordering barrier: ordinary
         // candidates can be recorded but remain hidden until zero-point resolution completes.
-        val hasKnownPlace = db.rawQuery(
-            "SELECT 1 FROM visited_places LIMIT 1",
-            null
-        ).use { it.moveToFirst() }
         val baseline = db.query(
             "place_candidates",
             arrayOf(
@@ -343,7 +339,10 @@ class ProgressionRepository(context: Context) {
         if (baseline != null) {
             return baseline.takeIf { it.second <= nowMillis }?.let { listOf(it.first) }.orEmpty()
         }
-        if (!hasKnownPlace) return emptyList()
+        // When a zero-point baseline is still pending, its row alone decides
+        // eligibility. Avoid querying visited places until the baseline is gone.
+        if (!db.rawQuery("SELECT 1 FROM visited_places LIMIT 1", null).use { it.moveToFirst() })
+            return emptyList()
 
         val result = ArrayList<PendingPlaceCandidate>(limit)
         db.query(
