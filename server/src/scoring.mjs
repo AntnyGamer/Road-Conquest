@@ -80,8 +80,9 @@ export function verifyIntegrityVerdict(payload, hash, config, now = Date.now()) 
 export async function boundedJson(response, limit = 1024 * 1024) {
   if (!response.ok || !response.body) {
     // Rejected OAuth/Integrity replies need no body. Release the fetch stream
-    // now rather than keeping an unread connection until its timeout/GC.
-    await response.body?.cancel().catch(() => {});
+    // now rather than keeping an unread connection until its timeout/GC. Slow
+    // cleanup must not delay reporting the original retryable failure.
+    void response.body?.cancel().catch(() => {});
     throw new EvidenceError("Verification service unavailable.", 503);
   }
   let size = 0;

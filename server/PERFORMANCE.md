@@ -467,7 +467,7 @@ requests and standard preparations, not every standard token request.
 See [official quota details](https://developer.android.com/google/play/integrity/setup#understand_api_usage_limits).
 No attestation gate is relaxed to avoid this quota.
 
-All 98 server tests and all 979 Android unit tests (including the 145 focused
+All 100 server tests and all 979 Android unit tests (including the 145 focused
 repository/reuse tests) passed with no failures or skips. `lintDebug` and
 `assembleDebug` passed. Regression coverage includes concurrent scoring,
 moderation during attestation, account deletion, stale exact retries, old scoring
@@ -476,3 +476,20 @@ values on ineligible accounts, and cancellation of failed upstream streams.
 [Raw measurements and assumptions](pr100-performance-evidence.json) accompany this
 pass. No schema, new service, paid dependency, production configuration or
 provider-cap change is introduced. Nothing is merged, released or deployed.
+
+
+### Double-check follow-up
+
+A controlled slow-cancellation test found that awaiting error-stream cleanup
+could postpone the 503 response. Cleanup now starts without waiting for its
+completion; rejected cleanup is still caught. The regression test failed before
+the fix and passes afterward. A second test uses an actual local HTTP server
+that sends error headers but never finishes its body, and confirms cancellation
+closes that upstream response. All 100 server tests pass. The Android source is
+unchanged from the passing 979-test run.
+
+The measured competition function's SHA-256 still matches the benchmarked
+implementation. Raw statement/data totals and daily/week/month/year arithmetic
+were independently recalculated. All 13 original PR #100 files and the complete
+older performance-report prefix are unchanged. No production service was tested
+or changed, and the remaining provider-capacity caveats still apply.

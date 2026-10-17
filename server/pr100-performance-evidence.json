@@ -219,7 +219,7 @@
   },
   "validation": {
     "baseline_server_tests": 96,
-    "final_server_tests": 98,
+    "final_server_tests": 100,
     "android_unit_tests": 979,
     "android_suites": 59,
     "focused_android_tests_included_in_total": 145,
@@ -228,5 +228,15 @@
     "lintDebug": "passed",
     "assembleDebug": "passed",
     "original_pr100_changed_files_preserved_byte_for_byte": 13
+  },
+  "double_check": {
+    "slow_cancellation_regression_before_fix": "failed as expected",
+    "slow_cancellation_regression_after_fix": "passed",
+    "actual_unfinished_http_error_response_cancellation": "passed",
+    "statement_and_response_byte_medians": "recalculated and verified",
+    "period_arithmetic": "recalculated and verified",
+    "measured_competition_function_sha256": "matches current source",
+    "original_pr100_changed_files_preserved": 13,
+    "android_source_changed_in_followup": false
   }
 }
