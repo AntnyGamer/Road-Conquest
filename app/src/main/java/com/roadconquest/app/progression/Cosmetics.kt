@@ -220,13 +220,31 @@ object LauncherIcon {
         val enabled = PackageManager.COMPONENT_ENABLED_STATE_ENABLED
         val disabled = PackageManager.COMPONENT_ENABLED_STATE_DISABLED
         val flags = PackageManager.DONT_KILL_APP
+
         runCatching {
-            if (gold) {
-                manager.setComponentEnabledSetting(goldIcon, enabled, flags)
-                manager.setComponentEnabledSetting(defaultIcon, disabled, flags)
+            // Manifest defaults: ordinary launcher enabled; gold disabled.
+            // Repeated VIP/equip callbacks should not restart launcher resolution.
+            fun effectiveEnabled(component: ComponentName, manifestEnabled: Boolean): Boolean =
+                when (manager.getComponentEnabledSetting(component)) {
+                    enabled -> true
+                    PackageManager.COMPONENT_ENABLED_STATE_DEFAULT -> manifestEnabled
+                    else -> false
+                }
+            if (effectiveEnabled(defaultIcon, true) == !gold &&
+                effectiveEnabled(goldIcon, false) == gold) return
+
+            val newIcon = if (gold) goldIcon else defaultIcon
+            val previousIcon = if (gold) defaultIcon else goldIcon
+            if (android.os.Build.VERSION.SDK_INT >= 33) {
+                // Update the launcher pair atomically so Android never observes
+                // two (or zero) enabled launcher aliases between calls.
+                manager.setComponentEnabledSettings(listOf(
+                    PackageManager.ComponentEnabledSetting(newIcon, enabled, flags),
+                    PackageManager.ComponentEnabledSetting(previousIcon, disabled, flags)
+                ))
             } else {
-                manager.setComponentEnabledSetting(defaultIcon, enabled, flags)
-                manager.setComponentEnabledSetting(goldIcon, disabled, flags)
+                manager.setComponentEnabledSetting(newIcon, enabled, flags)
+                manager.setComponentEnabledSetting(previousIcon, disabled, flags)
             }
         }
     }
