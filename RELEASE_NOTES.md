@@ -1,3 +1,18 @@
+# Road Conquest 1.0 Beta 54
+
+## What's new since Beta 53
+
+- **Google Play advertising ID compatibility:** Explicitly declare the `com.google.android.gms.permission.AD_ID` permission for AdMob and verify that both the final release APK and Google Play App Bundle actually contain it. This guards against a missing permission being silently published in the future.
+- **Faster map-provider recovery:** A deliberate remote provider-disable decision no longer counts as a network failure or adds an unnecessary cooldown. Automatic fallback behavior and recovery checks remain in place.
+- **Lower map tile processing overhead:** Cache the immutable map-gateway hostname rather than reparsing its address for every MapLibre HTTP request.
+- **Documentation cleanup:** Fix a visible paragraph-formatting error introduced into the Beta 53 README.
+- **Compatibility:** Android 12+, versionCode **80**, unchanged package name and permanent release signing identity; saved roads, matching, account data, points and purchases are unaffected. Any separately deployed verified-scoring server must accept version 80 before verified submissions can be enabled.
+- **Release validation:** Android unit tests, lint, native map tests, minified-release cold starts, and explicit packaged APK/AAB Advertising ID permission checks must pass before publishing signed files.
+
+Upload the signed Beta 54 AAB through Google Play; do not attempt to replace the already-uploaded versionCode 79. Publishing the GitHub release does not automatically update Google Play or deploy the server.
+
+---
+
 # Road Conquest 1.0 Beta 53
 
 ## What's new since Beta 52
