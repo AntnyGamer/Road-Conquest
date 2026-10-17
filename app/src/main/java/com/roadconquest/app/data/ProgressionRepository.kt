@@ -370,16 +370,22 @@ class ProgressionRepository(context: Context) {
     /** Earliest retry, including an unresolved zero-point baseline that blocks other places. */
     fun nextPlaceCandidateAttemptMillis(): Long? = synchronized(dbHelper.historyLock) {
         if (!isCurrentHistory()) return@synchronized null
-        val db = dbHelper.readableDatabase
-        val args = arrayOf(BASELINE_CANDIDATE_X.toString(), BASELINE_CANDIDATE_Y.toString())
-        db.rawQuery(
-            "SELECT next_attempt_ms FROM place_candidates WHERE cell_x = ? AND cell_y = ? LIMIT 1", args
-        ).use { if (it.moveToFirst()) return@synchronized it.getLong(0) }
-        if (!db.rawQuery("SELECT 1 FROM visited_places LIMIT 1", null).use { it.moveToFirst() }) {
-            return@synchronized null
-        }
-        db.rawQuery(
-            "SELECT MIN(next_attempt_ms) FROM place_candidates WHERE NOT (cell_x = ? AND cell_y = ?)", args
+        // A baseline candidate blocks ordinary places even if its retry is in
+        // the future. If none exists, ordinary candidates are eligible only
+        // after a verified starting place has been recorded. One statement
+        // replaces the separate baseline lookup, existence check, and MIN.
+        dbHelper.readableDatabase.rawQuery(
+            """SELECT COALESCE(
+                 (SELECT next_attempt_ms FROM place_candidates
+                   WHERE cell_x = ? AND cell_y = ? LIMIT 1),
+                 (SELECT MIN(next_attempt_ms) FROM place_candidates
+                   WHERE NOT (cell_x = ? AND cell_y = ?)
+                     AND EXISTS (SELECT 1 FROM visited_places LIMIT 1))
+               )""",
+            arrayOf(
+                BASELINE_CANDIDATE_X.toString(), BASELINE_CANDIDATE_Y.toString(),
+                BASELINE_CANDIDATE_X.toString(), BASELINE_CANDIDATE_Y.toString()
+            )
         ).use { if (it.moveToFirst() && !it.isNull(0)) it.getLong(0) else null }
     }
 
