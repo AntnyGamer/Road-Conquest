@@ -19,75 +19,75 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="top|start"
-        android:layout_margin="16dp"
+        android:layout_margin="10dp"
         android:maxWidth="210dp"
         android:background="@drawable/panel_background"
         android:elevation="6dp"
         android:text="@string/stats_grouped_initial"
         android:textColor="?attr/rcTextPrimary"
-        android:textSize="14sp"
+        android:textSize="12sp"
         android:fontFamily="sans-serif-medium"
-        android:lineSpacingExtra="5dp" />
+        android:lineSpacingExtra="1dp" />
 
     <TextView
         android:id="@+id/pointsText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="top|start"
-        android:layout_marginStart="16dp"
-        android:layout_marginTop="102dp"
+        android:layout_marginStart="10dp"
+        android:layout_marginTop="68dp"
         android:background="@drawable/points_chip_background"
         android:clickable="true"
         android:elevation="6dp"
         android:focusable="true"
-        android:minHeight="48dp"
+        android:minHeight="40dp"
         android:gravity="center_vertical"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
         android:text="Garage · ⚔ 0"
         android:contentDescription="Garage and shop. 0 points. Double tap to open."
         android:textColor="?attr/rcTextPrimary"
-        android:textSize="14sp"
+        android:textSize="12sp"
         android:fontFamily="sans-serif-medium" />
 
     <ImageButton
         android:id="@+id/settingsButton"
-        android:layout_width="52dp"
-        android:layout_height="52dp"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
         android:layout_gravity="top|end"
-        android:layout_margin="16dp"
+        android:layout_margin="10dp"
         android:background="@drawable/circle_button_background"
         android:contentDescription="@string/settings"
         android:elevation="6dp"
-        android:padding="13dp"
+        android:padding="12dp"
         android:src="@drawable/ic_settings"
         android:tint="?attr/rcTextPrimary" />
 
     <ImageButton
         android:id="@+id/centerCarButton"
-        android:layout_width="52dp"
-        android:layout_height="52dp"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
         android:layout_gravity="top|end"
-        android:layout_marginEnd="16dp"
-        android:layout_marginTop="80dp"
+        android:layout_marginEnd="10dp"
+        android:layout_marginTop="68dp"
         android:background="@drawable/circle_button_background"
         android:contentDescription="@string/center_on_car"
         android:elevation="6dp"
-        android:padding="13dp"
+        android:padding="12dp"
         android:src="@drawable/ic_my_location"
         android:tint="?attr/rcTextPrimary" />
 
     <ImageButton
         android:id="@+id/overlayButton"
-        android:layout_width="52dp"
-        android:layout_height="52dp"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
         android:layout_gravity="top|end"
-        android:layout_marginEnd="16dp"
-        android:layout_marginTop="144dp"
+        android:layout_marginEnd="10dp"
+        android:layout_marginTop="126dp"
         android:background="@drawable/circle_button_background"
         android:contentDescription="Map layers and overlays"
         android:elevation="6dp"
-        android:padding="13dp"
+        android:padding="12dp"
         android:src="@drawable/ic_layers"
         android:tint="?attr/rcTextPrimary" />
 
@@ -99,25 +99,19 @@
         android:background="@drawable/home_panel_background"
         android:elevation="10dp"
         android:orientation="vertical"
-        android:padding="16dp">
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="YOUR DRIVE"
-            android:letterSpacing="0.12"
-            android:textColor="?attr/rcTextSecondary"
-            android:textSize="11sp"
-            android:fontFamily="sans-serif-medium" />
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="6dp">
 
         <TextView
             android:id="@+id/statusText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
+            android:layout_marginTop="0dp"
             android:text="Not tracking"
             android:textColor="?attr/rcTextPrimary"
-            android:textSize="18sp"
+            android:textSize="15sp"
             android:fontFamily="sans-serif-medium"
             android:accessibilityLiveRegion="polite" />
 
@@ -125,45 +119,43 @@
             android:id="@+id/enableButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:minHeight="56dp"
-            android:layout_marginTop="12dp"
+            android:minHeight="48dp"
+            android:layout_marginTop="6dp"
             android:text="Enable tracking" />
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:layout_marginTop="14dp"
-            android:background="?attr/rcOutline" />
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="6dp"
             android:orientation="horizontal">
 
             <Button
                 android:id="@+id/tripsNavButton"
                 android:drawableTop="@drawable/ic_nav_trips"
-                android:drawablePadding="3dp"
+                android:drawablePadding="2dp"
                 android:drawableTint="?attr/rcTextPrimary"
                 android:contentDescription="Trip history and replay"
                 style="@style/RoadConquest.NavigationAction"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:minHeight="52dp"
+                android:minHeight="58dp"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp"
                 android:layout_weight="1"
                 android:text="Trips" />
 
             <Button
                 android:id="@+id/badgesNavButton"
                 android:drawableTop="@drawable/ic_nav_badges"
-                android:drawablePadding="3dp"
+                android:drawablePadding="2dp"
                 android:drawableTint="?attr/rcTextPrimary"
                 android:contentDescription="Achievements and milestones"
                 style="@style/RoadConquest.NavigationAction"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:minHeight="52dp"
+                android:minHeight="58dp"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp"
                 android:layout_marginStart="6dp"
                 android:layout_weight="1"
                 android:text="Badges" />
@@ -171,26 +163,18 @@
             <Button
                 android:id="@+id/weeklyGoalsNavButton"
                 android:drawableTop="@drawable/ic_nav_weekly"
-                android:drawablePadding="3dp"
+                android:drawablePadding="2dp"
                 android:drawableTint="?attr/rcTextPrimary"
                 android:contentDescription="Weekly exploration goals"
                 style="@style/RoadConquest.NavigationAction"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:minHeight="52dp"
+                android:minHeight="58dp"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp"
                 android:layout_marginStart="6dp"
                 android:layout_weight="1"
                 android:text="Goals" />
         </LinearLayout>
-        <TextView
-            android:id="@+id/locationIqCredit"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="48dp"
-            android:gravity="center"
-            android:text="@string/locationiq_credit"
-            android:textColor="?attr/rcTextSecondary"
-            android:textColorLink="?attr/rcAccent"
-            android:textSize="12sp" />
     </LinearLayout>
 </FrameLayout>
