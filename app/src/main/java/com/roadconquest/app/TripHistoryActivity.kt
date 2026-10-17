@@ -8,7 +8,6 @@ import android.app.AlertDialog
 import android.widget.Toast
 import com.roadconquest.app.billing.VipBilling
 import com.roadconquest.app.billing.VipEntitlement
-import com.roadconquest.app.data.SavedTripInsights
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper

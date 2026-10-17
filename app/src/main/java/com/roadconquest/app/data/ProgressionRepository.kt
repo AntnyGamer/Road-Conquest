@@ -9,10 +9,8 @@ import com.roadconquest.app.map.PlaceOverlayCache
 import com.roadconquest.app.map.UnitedStatesMunicipalBoundaries
 import org.json.JSONObject
 import kotlin.math.PI
-import kotlin.math.atan
 import kotlin.math.floor
 import kotlin.math.ln
-import kotlin.math.sinh
 import kotlin.math.tan
 
 enum class PlaceKind(val points: Long) {

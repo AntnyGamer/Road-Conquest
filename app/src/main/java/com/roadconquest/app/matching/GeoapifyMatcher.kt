@@ -5,7 +5,6 @@ import com.roadconquest.app.services.ProviderHealth
 import com.roadconquest.app.services.readBounded
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.time.Instant
