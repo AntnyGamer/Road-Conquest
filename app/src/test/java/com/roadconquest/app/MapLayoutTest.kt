@@ -70,13 +70,14 @@ class MapLayoutTest {
                     when (parser.getAttributeResourceValue(ns, "id", 0)) {
                         R.id.mapView -> {
                             foundMap = true
-                            assertEquals("match_parent", parser.getAttributeValue(ns, "layout_width"))
-                            assertEquals("match_parent", parser.getAttributeValue(ns, "layout_height"))
+                            assertEquals(-1, parser.getAttributeIntValue(ns, "layout_width", 0))
+                            assertEquals(-1, parser.getAttributeIntValue(ns, "layout_height", 0))
                             assertNull("Let MapLibre use native device resolution",
                                 parser.getAttributeValue(mapNs, "maplibre_pixelRatio"))
                         }
                         R.id.controlPanel -> foundPanel = true
-                        R.id.locationIqCredit -> foundDuplicateCredit = true
+                        else -> if (parser.getAttributeResourceValue(ns, "text", 0) ==
+                            R.string.locationiq_credit) foundDuplicateCredit = true
                     }
                 }
                 parser.next()
