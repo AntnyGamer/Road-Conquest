@@ -18,7 +18,7 @@ export class MapBudget {
     const { bucket, limit, ipLimit, costUnits = 1, spacingMs = 250 } = await request.json();
     if (!/^[a-f0-9]{64}$/.test(bucket) || !Number.isInteger(limit) || limit < 1 || limit > 9600 ||
         !Number.isInteger(ipLimit) || ipLimit < 1 || ipLimit > limit ||
-        !Number.isInteger(costUnits) || costUnits < 1 || costUnits > 40 ||
+        !Number.isInteger(costUnits) || costUnits < 1 || costUnits > 80 ||
         ![250, 1050].includes(spacingMs)) return json({ error: 'Invalid budget' }, 400);
     const day = new Date().toISOString().slice(0, 10);
     // No await between reads and writes: reservations cannot interleave.
@@ -75,10 +75,159 @@ function waypointSeconds(body) {
   return seconds;
 }
 
+
+/**
+ * Batch matching is deliberately limited to genuine historical backlogs.
+ * Eight or more nearly full windows amortize the two fixed credits (submit +
+ * first poll). Never route live fixes through an hours-long async queue.
+ */
+function sanitizeBatch(payload) {
+  if (payload?.priority !== 0.5 || !Array.isArray(payload.inputs) ||
+      payload.inputs.length < 8 || payload.inputs.length > 12) return null;
+  let wrappedCredits = 0;
+  const inputs = [];
+  for (const [i, entry] of payload.inputs.entries()) {
+    const trace = { mode: 'drive', waypoints: entry?.waypoints };
+    if (!Array.isArray(trace.waypoints) || trace.waypoints.length < 120 ||
+        !waypointSeconds(trace)) return null;
+    wrappedCredits += Math.ceil(trace.waypoints.length / 100);
+    inputs.push({ id: String(i), params: {
+      mode: 'drive', waypoints: trace.waypoints.map(p => ({
+        location: p.location, timestamp: p.timestamp,
+        ...(p.bearing === undefined ? {} : { bearing: p.bearing })
+      }))
+    } });
+  }
+  // Protect the user against poll overhead and small batches. A job with two
+  // polling calls must still cost >=25% less than its synchronous equivalent.
+  if ((wrappedCredits / 2 + 3) > wrappedCredits * 0.75) return null;
+  return { inputs, costUnits: 4 + 2 * wrappedCredits };
+}
+
+const BATCH_ID = /^[0-9a-f]{32}$/i;
+const asHex = bytes => Array.from(bytes, x => x.toString(16).padStart(2, '0')).join('');
+const batchSignature = async (sign, secret, id) => asHex(await sign(secret, 'roadconquest-map-batch-v1:' + id));
+const sameSignature = (one, two) => {
+  if (typeof one !== 'string' || one.length !== 64 || !/^[0-9a-f]{64}$/i.test(one)) return false;
+  let difference = 0;
+  for (let i = 0; i < 64; i++) difference |= one.charCodeAt(i) ^ two.charCodeAt(i);
+  return difference === 0;
+};
+
+async function boundedJson(response, maxBytes = 8 * 1024 * 1024) {
+  if (!(response.headers.get('Content-Type') || '').includes('application/json')) return null;
+  const data = await response.body?.getReader();
+  if (!data) return null;
+  const chunks = []; let length = 0;
+  while (true) {
+    const { done, value } = await data.read();
+    if (done) break;
+    length += value.byteLength;
+    if (length > maxBytes) { await data.cancel(); return null; }
+    chunks.push(value);
+  }
+  const output = new Uint8Array(length);
+  let position = 0;
+  for (const chunk of chunks) { output.set(chunk, position); position += chunk.byteLength; }
+  try { return JSON.parse(new TextDecoder().decode(output)); } catch { return null; }
+}
+
 export function createMapsGateway(fetchUpstream = fetch) {
   const sign = createHmacSigner(2); // Geoapify + LocationIQ; bounded across rotations.
   return { async fetch(request, env) {
     const url = new URL(request.url);
+    // Opt-in gateway support only. Client-side background job lifecycle and
+    // crash recovery must be complete before the deployment flag is enabled.
+    if (url.pathname === '/v1/batch/mapmatching' && ['POST', 'GET'].includes(request.method)) {
+      if (env.MAP_ASYNC_BATCH_ENABLED !== 'true' || !env.GEOAPIFY_API_KEY || !env.MAP_BUDGET)
+        return json({ error: 'Batch matching unavailable' }, 503);
+      const switches = await serviceSwitches(env);
+      if (!switches['geoapify-matching']) return json({ error: 'Provider disabled' }, 503);
+      const ip = request.headers.get('CF-Connecting-IP');
+      if (!ip || request.headers.has('CF-Worker') || ip === '2a06:98c0:3600::103')
+        return json({ error: 'Direct client required' }, 403);
+      let upstream;
+      let reservedUnits;
+      const secret = env.GEOAPIFY_API_KEY;
+      if (request.method === 'POST') {
+        const size = Number(request.headers.get('Content-Length'));
+        if (size > 256_000) return json({ error: 'Batch too large' }, 413);
+        const reader = request.body?.getReader();
+        if (!reader) return json({ error: 'Missing batch' }, 400);
+        const chunks = []; let length = 0;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          length += value.byteLength;
+          if (length > 256_000) { await reader.cancel(); return json({ error: 'Batch too large' }, 413); }
+          chunks.push(value);
+        }
+        const bytes = new Uint8Array(length);
+        let offset = 0;
+        for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+        let submitted;
+        try { submitted = sanitizeBatch(JSON.parse(new TextDecoder().decode(bytes))); }
+        catch { /* Reject malformed JSON without reserving credits. */ }
+        if (!submitted) return json({ error: 'Invalid or uneconomical batch' }, 400);
+        reservedUnits = submitted.costUnits;
+        upstream = { method: 'POST', body: JSON.stringify({
+          api: '/v1/mapmatching', priority: 0.5, inputs: submitted.inputs
+        }) };
+      } else {
+        const id = url.searchParams.get('id');
+        if (!id || !BATCH_ID.test(id) ||
+            !sameSignature(request.headers.get('X-Batch-Token'), await batchSignature(sign, secret, id)))
+          return json({ error: 'Invalid batch token' }, 403);
+        // Each poll costs a credit. Let the device use long backoffs.
+        reservedUnits = 4;
+        upstream = { method: 'GET', id };
+      }
+      const bytes = await sign(secret, new Date().toISOString().slice(0, 10) + '\n' + ip);
+      const bucket = asHex(bytes);
+      const cap = Math.max(1, Math.min(2400, Math.floor(Number(env.DAILY_CREDIT_CAP) || 2400)));
+      try {
+        const budget = env.MAP_BUDGET.get(env.MAP_BUDGET.idFromName('geoapify-free-allowance'));
+        const permit = await budget.fetch('https://budget/reserve', {
+          method: 'POST', body: JSON.stringify({
+            bucket, limit: cap * 4, ipLimit: Math.min(600, cap) * 4,
+            costUnits: reservedUnits, spacingMs: 250
+          })
+        });
+        if (!permit.ok) return permit;
+        const { waitMs = 0 } = await permit.json();
+        if (waitMs > 0) await new Promise(resolve => setTimeout(resolve, Math.min(waitMs, 10_000)));
+        const target = new URL('https://api.geoapify.com/v1/batch');
+        target.searchParams.set('apiKey', secret);
+        if (upstream.id) target.searchParams.set('id', upstream.id);
+        const response = await fetchUpstream(target, {
+          method: upstream.method, redirect: 'manual',
+          headers: { Accept: 'application/json', ...(upstream.body ? { 'Content-Type': 'application/json' } : {}) },
+          ...(upstream.body ? { body: upstream.body } : {}),
+          signal: AbortSignal.timeout(20_000)
+        });
+        if (response.status !== 200 && response.status !== 202) {
+          await response.body?.cancel();
+          const retry = response.headers.get('Retry-After') || '60';
+          return json({ error: 'Batch provider unavailable' },
+            response.status === 429 ? 429 : [401, 403].includes(response.status) ? 403 : 502,
+            { 'Retry-After': retry });
+        }
+        const result = await boundedJson(response);
+        if (!result || !BATCH_ID.test(result.id)) return json({ error: 'Invalid batch response' }, 502);
+        if (request.method === 'POST') {
+          const token = await batchSignature(sign, secret, result.id);
+          if (response.status === 200 && !Array.isArray(result.results)) return json({ error: 'Invalid batch result' }, 502);
+          return json({ id: result.id, token, status: response.status === 202 ? 'pending' : 'complete',
+            ...(response.status === 200 ? { results: result.results } : {}) }, response.status);
+        }
+        if (result.id !== upstream.id || (response.status === 200 && !Array.isArray(result.results)))
+          return json({ error: 'Batch result mismatch' }, 502);
+        return json(response.status === 200 ? { id: result.id, results: result.results } :
+          { id: result.id, status: 'pending' }, response.status);
+      } catch {
+        return json({ error: 'Batch provider temporarily unavailable' }, 503, { 'Retry-After': '60' });
+      }
+    }
     if (url.pathname === '/health' && ['GET', 'HEAD'].includes(request.method)) {
       const response = json({ ok: true, configured: Boolean(env.GEOAPIFY_API_KEY), locationiqConfigured: Boolean(env.LOCATIONIQ_API_KEY) });
       return request.method === 'HEAD' ? new Response(null, { headers: response.headers }) : response;
