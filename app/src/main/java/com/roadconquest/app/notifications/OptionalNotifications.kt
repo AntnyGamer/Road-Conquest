@@ -24,6 +24,12 @@ import java.util.concurrent.Executors
 
 object OptionalNotifications {
     private const val PREFS = "roadconquest_notifications"
+    private const val REGISTER_REFRESH_MS = 6 * 60 * 60_000L
+    internal fun needsDeviceRegistration(
+        cachedIdHash: String?, cachedBinding: String?, cachedAt: Long,
+        idHash: String, binding: String, now: Long
+    ): Boolean = cachedIdHash != idHash || cachedBinding != binding ||
+        now - cachedAt !in 0 until REGISTER_REFRESH_MS
     private val executor = Executors.newSingleThreadExecutor()
     private val displayLock = Any()
     private fun sessionDigest(token: String) = java.security.MessageDigest.getInstance("SHA-256")
@@ -91,7 +97,9 @@ object OptionalNotifications {
     /** Called before discarding an account session, including corrupt/expired credentials. */
     fun disableLocal(context: Context) {
         synchronized(displayLock) {
-            prefs(context).edit().remove("binding").remove("session_binding").commit()
+            prefs(context).edit().remove("binding").remove("session_binding")
+                .remove("registered_id_hash").remove("registered_binding")
+                .remove("registered_at").commit()
             lastRegistrationBinding = null
             context.getSystemService(NotificationManager::class.java).cancel(9101)
         }
@@ -119,7 +127,29 @@ object OptionalNotifications {
             if (deletion?.isComplete == false || !friendsEnabled(app) || !permission(app) || AccountStore.load(app)?.token != session.token ||
                 prefs(app).getString("session_binding", null) != sessionDigest(session.token) ||
                 prefs(app).getString("binding", null) != binding) return@execute
+            // The same FID can be emitted again on every app start. Re-registering
+            // it immediately would spend one rate-limit reservation, a session
+            // lookup and a database transaction without changing delivery.
+            // Refresh well before the server's 30-day registration expiry; a
+            // changed FID, login binding or consent bypasses the cache.
+            val settings = prefs(app)
+            val idHash = sessionDigest(token)
+            val now = System.currentTimeMillis()
+            if (!needsDeviceRegistration(
+                    settings.getString("registered_id_hash", null),
+                    settings.getString("registered_binding", null),
+                    settings.getLong("registered_at", 0L),
+                    idHash, binding, now
+                )) return@execute
             runCatching { AccountClient.registerNotificationDevice(session.token, token, binding) }
+                .onSuccess {
+                    if (AccountStore.load(app)?.token == session.token && friendsEnabled(app) && permission(app) &&
+                        settings.getString("binding", null) == binding) {
+                        settings.edit().putString("registered_id_hash", idHash)
+                            .putString("registered_binding", binding)
+                            .putLong("registered_at", System.currentTimeMillis()).apply()
+                    }
+                }
         }
     }
     internal fun acceptsFriend(context: Context, kind: String?, binding: String?): Boolean {
