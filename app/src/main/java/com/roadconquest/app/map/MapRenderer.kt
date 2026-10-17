@@ -26,6 +26,7 @@ import org.maplibre.android.geometry.LatLngQuad
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
+import org.maplibre.android.style.expressions.Expression
 import org.maplibre.android.style.layers.FillLayer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
@@ -419,7 +420,7 @@ class MapRenderer(
             .withProperties(fillColor(0xFF149F72.toInt()), fillOpacity(0.38f),
                 fillOutlineColor(0xFF7FE2AE.toInt())))
         style.addLayer(SymbolLayer(NEARBY_NUMBERS_LAYER_ID, NEARBY_NUMBERS_SOURCE_ID)
-            .withProperties(iconImage("{icon}"), iconAllowOverlap(true), iconIgnorePlacement(true)))
+            .withProperties(iconImage(Expression.image(Expression.get("icon"))), iconAllowOverlap(true), iconIgnorePlacement(true)))
     }
 
     private fun captureTownViewport(): OverlayViewport? {
