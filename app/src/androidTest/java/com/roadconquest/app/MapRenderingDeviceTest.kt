@@ -197,7 +197,8 @@ class MapRenderingDeviceTest {
                     }
                 }
                 for ((zoom, bearing) in listOf(
-                    6.5 to 0.0, 7.5 to 0.0, 8.0 to 0.0, 9.0 to 30.0, 11.0 to 60.0
+                    6.5 to 0.0, 7.5 to 0.0, 8.0 to 0.0,
+                    8.95 to 0.0, 9.05 to 0.0, 9.0 to 30.0, 11.0 to 60.0
                 )) {
                     move(LatLng(0.0, 0.0), zoom, bearing)
                     awaitPixels("Blue road pixels remain visible above fog at zoom $zoom") { bitmap ->
