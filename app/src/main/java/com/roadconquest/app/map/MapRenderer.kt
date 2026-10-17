@@ -647,12 +647,15 @@ class MapRenderer(
             }
         }
         if (!centeredOnce) {
-            centeredOnce = true
-            centerOnCar()
+            // Initial centering must finish before the first fog/road viewport query.
+            // Animating the startup camera loads an unnecessary intermediate area.
+            centerOnCar(animated = false)
         }
     }
 
-    fun centerOnCar(): Boolean {
+    fun centerOnCar(): Boolean = centerOnCar(animated = true)
+
+    private fun centerOnCar(animated: Boolean): Boolean {
         if (destroyed) return false
         val fix = liveLocation.current(SystemClock.elapsedRealtime()) ?: return false
         centeredOnce = true
@@ -662,7 +665,8 @@ class MapRenderer(
             .zoom(currentCamera.zoom.coerceIn(FogBitmapRenderer.CENTER_ZOOM, FogBitmapRenderer.MAX_ZOOM))
             .tilt(0.0)
             .build()
-        map.animateCamera(CameraUpdateFactory.newCameraPosition(camera))
+        val change = CameraUpdateFactory.newCameraPosition(camera)
+        if (animated) map.animateCamera(change) else map.moveCamera(change)
         return true
     }
 
