@@ -347,7 +347,7 @@ class MapRenderer(
     fun refreshNearbyExploration() {
         if (!nearbyExplorationRequested) return
         val (latitude, longitude) = nearbyCenter ?: return
-        showNearbyExploration(latitude, longitude, {}, {}, fitCamera = false)
+        showNearbyExploration(latitude, longitude, { _, _ -> }, {}, fitCamera = false)
     }
 
     private fun applyNearbyExploration() {
