@@ -332,7 +332,7 @@ class MapRenderer(
         val room = (mapView.height - top - bottom).coerceAtLeast(1)
         val insetTop = if (room > 0) top else 0
         val insetBottom = if (room > 0) bottom else 0
-        map.getCameraForLatLngBounds(bounds, arrayOf(side, insetTop, side, insetBottom))?.let {
+        map.getCameraForLatLngBounds(bounds, intArrayOf(side, insetTop, side, insetBottom))?.let {
             map.moveCamera(CameraUpdateFactory.newCameraPosition(
                 CameraPosition.Builder(it).padding(0.0, 0.0, 0.0, 0.0).build()
             ))
