@@ -50,6 +50,7 @@ import org.maplibre.android.style.layers.PropertyFactory.rasterOpacity
 import org.maplibre.android.style.layers.PropertyFactory.iconAllowOverlap
 import org.maplibre.android.style.layers.PropertyFactory.iconIgnorePlacement
 import org.maplibre.android.style.sources.GeoJsonSource
+import org.maplibre.android.style.sources.GeoJsonOptions
 import org.maplibre.android.style.sources.ImageSource
 import org.maplibre.geojson.Feature
 import org.maplibre.geojson.FeatureCollection
@@ -1167,25 +1168,36 @@ class MapRenderer(
     }
 
     private fun installRoadLayer(style: Style) {
-        // Keep MapLibre's efficient default GeoJSON tiling. Short roads appear
-        // as dots at regional zoom mainly when their round caps dominate their
-        // subpixel projected length, which the zoom-scaled stroke addresses.
-        style.addSource(GeoJsonSource(ROAD_SOURCE_ID, displayedRoadFeatures))
+        // Native GeoJSON tiling otherwise discards short bends at regional zoom
+        // (default tolerance 0.375), leaving real driven segments as dots or gaps.
+        // Keep original saved coordinates; this affects drawing only, never scoring.
+        style.addSource(GeoJsonSource(
+            ROAD_SOURCE_ID, displayedRoadFeatures, GeoJsonOptions().withTolerance(0f)
+        ))
         appliedRoadColor = Prefs.roadColor(context)
-        val layer = LineLayer(ROAD_LAYER_ID, ROAD_SOURCE_ID).withProperties(
-            lineColor(Cosmetics.roadColor(context).argb),
-            lineOpacity(242f / 255f),
-            // At regional scales a 4px round cap dominates a subpixel segment
-            // and looks like a large dot. Use thinner lines until individual
-            // roads occupy enough pixels to render at their normal 4px width.
+        val color = Cosmetics.roadColor(context).argb
+
+        // At regional zoom a short road is less than one pixel long: rounded
+        // caps render it as a dot. Butt caps and a legible minimum width keep
+        // the existing geometry visible without inventing connecting roads.
+        val regional = LineLayer("${ROAD_LAYER_ID}-regional", ROAD_SOURCE_ID).withProperties(
+            lineColor(color), lineOpacity(242f / 255f),
             lineWidth(Expression.interpolate(Expression.linear(), Expression.zoom(),
-                Expression.stop(6f, 1.5f), Expression.stop(9f, 2.5f),
-                Expression.stop(12f, 4f))),
-            lineCap(Property.LINE_CAP_ROUND),
-            lineJoin(Property.LINE_JOIN_ROUND)
+                Expression.stop(6f, 2f), Expression.stop(9f, 2.75f))),
+            lineCap(Property.LINE_CAP_BUTT), lineJoin(Property.LINE_JOIN_ROUND)
         )
-        layer.setMinZoom(FogBitmapRenderer.MIN_ROAD_ZOOM.toFloat())
-        style.addLayer(layer)
+        regional.setMinZoom(FogBitmapRenderer.MIN_ROAD_ZOOM.toFloat())
+        regional.setMaxZoom(9f)
+        style.addLayer(regional)
+
+        val detailed = LineLayer(ROAD_LAYER_ID, ROAD_SOURCE_ID).withProperties(
+            lineColor(color), lineOpacity(242f / 255f),
+            lineWidth(Expression.interpolate(Expression.linear(), Expression.zoom(),
+                Expression.stop(9f, 2.75f), Expression.stop(12f, 4f))),
+            lineCap(Property.LINE_CAP_ROUND), lineJoin(Property.LINE_JOIN_ROUND)
+        )
+        detailed.setMinZoom(9f)
+        style.addLayer(detailed)
     }
 
     private fun installFogRaster(
