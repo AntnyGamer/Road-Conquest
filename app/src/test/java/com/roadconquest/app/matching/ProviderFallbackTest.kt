@@ -363,6 +363,23 @@ class ProviderFallbackTest {
         }.getOrNull()
         assertTrue(rejected == null || (rejected.roads.isEmpty() && rejected.matchedPointConfidences.isEmpty()))
     }
+    @Test fun staleGatewayPermitUsesBackupAndItsShortRetryWithoutTreatingOrdinary409AsAnOutage() {
+        for (code in listOf("budget_conflict", "other_conflict")) {
+            MockWebServer().use { server ->
+                server.enqueue(MockResponse().setResponseCode(409).addHeader("Retry-After", "1")
+                    .addHeader("X-RoadConquest-Error", code))
+                server.start()
+                val primary = GeoapifyMatcher(server.url("/").toString().trimEnd('/'), ProviderHealth { 1000L })
+                val backup = Fake(MatchResult(emptyList(), emptyMap()))
+                val router = FallbackRoadMatcher(listOf(primary, backup))
+                router.match(points)
+                assertEquals(code == "budget_conflict", primary.unavailable)
+                assertEquals(if (code == "budget_conflict") 1000L else 0L, primary.rateLimitRemainingMs())
+                assertEquals(if (code == "budget_conflict") 1 else 0, backup.calls)
+            }
+        }
+    }
+
     @Test fun quotaResponseHonorsRetryAfterAndSkipsProviderWhileCoolingDown() {
         MockWebServer().use { server ->
             server.enqueue(MockResponse().setResponseCode(429).addHeader("Retry-After", "7200"))
@@ -411,5 +428,78 @@ class ProviderFallbackTest {
             assertEquals(setOf(21L, 22L), remapped.matchedPointConfidences.keys)
             assertEquals(1, server.requestCount)
         }
+    }
+
+    @Test fun completeCachedAnswerBypassesCooldownWithoutBackupOrNetworkAttempt() {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody(example)); server.start()
+            val origin = server.url("/").toString()
+            val health = ProviderHealth()
+            val primary = GeoapifyMatcher(origin, health)
+            val backup = Fake(MatchResult(emptyList(), emptyMap()))
+            val router = FallbackRoadMatcher(listOf(primary, backup))
+            val first = requireNotNull(router.match(points))
+            assertTrue(router.lastCallUsedNetwork)
+            health.failed("matching:$origin", 503, "60")
+            val cached = requireNotNull(router.match(points))
+            assertEquals(first, cached)
+            assertFalse(router.lastCallUsedNetwork)
+            assertEquals(0, backup.calls)
+            assertEquals(1, server.requestCount)
+            // Cache keys are exact; a changed trace cannot use that answer.
+            assertNull(router.cachedMatch(points.map { it.copy(timestampMillis = it.timestampMillis + 1000) }))
+        }
+    }
+
+    @Test fun cachePreflightCannotSuppressFreshEvidenceWithPartialOrNegativeResults() {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody("""{"type":"FeatureCollection","features":[]}"""))
+            server.start()
+            val primary = GeoapifyMatcher(server.url("/").toString())
+            assertNotNull(primary.match(points))
+            assertFalse(requireNotNull(primary.cachedMatch(points)).completelyCoversPending(points))
+            val backup = object : RoadMatcher {
+                override val unavailable = false
+                override fun rateLimitRemainingMs() = 0L
+                override fun cachedMatch(points: List<TrackPoint>): MatchResult? =
+                    error("A valid primary NoMatch must preserve provider precedence")
+                override fun match(points: List<TrackPoint>): MatchResult? = error("Must not shop for an easier match")
+            }
+            val router = FallbackRoadMatcher(listOf(primary, backup))
+            assertTrue(requireNotNull(router.cachedMatch(points)).explicitNoMatch)
+            val good = requireNotNull(GeoapifyMatcher("https://unused.example").parse(example, points))
+            assertTrue(good.completelyCoversPending(points))
+            assertFalse(good.copy(matchedPointConfidences = mapOf(1L to 0.9)).completelyCoversPending(points))
+            assertFalse(good.copy(matchedPointConfidences = mapOf(1L to 0.1, 2L to 0.9)).completelyCoversPending(points))
+            assertEquals(1, server.requestCount)
+        }
+    }
+
+    @Test fun realPrimaryFailureStillCountsWhenBackupAnswerIsCached() {
+        val primary = Fake(unavailable = true)
+        val cachedBackup = object : RoadMatcher {
+            override val maxPoints = 25
+            override val unavailable = false
+            override val lastCallUsedNetwork = false
+            override fun rateLimitRemainingMs() = 0L
+            override fun match(points: List<TrackPoint>) = MatchResult(emptyList(), emptyMap())
+        }
+        val router = FallbackRoadMatcher(listOf(primary, cachedBackup))
+        assertNotNull(router.match(points))
+        assertTrue(router.lastCallUsedNetwork)
+        assertEquals(200, router.lastNetworkProviderPointLimit)
+        assertEquals(25, router.lastUsedProviderPointLimit)
+    }
+
+    @Test fun queueRetryInstructionDoesNotCreateThirtySecondProviderOutage() {
+        var now = 1000L
+        val health = ProviderHealth { now }
+        health.failed("queue", 503, "10", "queue_busy")
+        health.failed("provider", 503, "10")
+        assertEquals(10_000L, health.remaining("queue"))
+        assertEquals(30_000L, health.remaining("provider"))
+        now += 10_001
+        assertEquals(0L, health.remaining("queue"))
+        assertTrue(health.remaining("provider") > 0)
     }
 }

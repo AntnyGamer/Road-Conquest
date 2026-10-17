@@ -31,6 +31,7 @@ import com.roadconquest.app.matching.FallbackRoadMatcher
 import com.roadconquest.app.matching.RoadMatcher
 import com.roadconquest.app.matching.KnownRoadReuse
 import com.roadconquest.app.matching.UnchangedNoMatchBackoff
+import com.roadconquest.app.matching.completelyCoversPending
 import com.roadconquest.app.map.FogGrid
 import com.roadconquest.app.progression.ProgressionManager
 import com.roadconquest.app.util.LocationProviders
@@ -102,7 +103,7 @@ class TrackingService : Service(), LocationListener {
     // Coalesce duplicate provider/mode callbacks while a final Location-off flush is queued.
     private val finalMatchingFlushScheduled = AtomicBoolean(false)
     // Changed only by the serial matching executor; shrinks after long ambiguous traces.
-    private var adaptiveMatchPointLimit = com.roadconquest.app.matching.GeoapifyMatcher.MAX_MATCH_POINTS
+    private var adaptiveMatchPointLimit = MATCH_BATCH_SIZE
     private var successfulShortMatches = 0
     private var lastRemotePointLimit = com.roadconquest.app.matching.GeoapifyMatcher.MAX_MATCH_POINTS
     private var lastObserved: Location? = null
@@ -863,24 +864,31 @@ class TrackingService : Service(), LocationListener {
                         return@repeat
                     }
                 }
+                val cached = matcher.cachedMatch(points)?.takeIf {
+                    it.completelyCoversPending(points.take(matcher.lastUsedProviderPointLimit))
+                }
                 val nowElapsed = SystemClock.elapsedRealtime()
-                val wait = remainingRemoteMatchingDelayMs(nowElapsed, lastMatchAttempt, lastRemotePointLimit)
-                if (wait > 0L) {
+                val wait = remainingRemoteMatchingDelayMs(nowElapsed, lastMatchAttempt, lastRemotePointLimit,
+                    if (retryStartId == null) window.markableIds.size else 0)
+                if (cached == null && wait > 0L) {
                     // This also covers final flushes and forced backlog retry runs.
                     scheduleBacklogContinuation(wait)
                     return
                 }
                 val providerCooldown = matcher.rateLimitRemainingMs()
-                if (providerCooldown > 0L) {
+                if (cached == null && providerCooldown > 0L) {
                     // Still accept local visits while the provider is unavailable.
                     // Do not call the online matcher or burn additional requests.
                     scheduleBacklogContinuation(providerCooldown)
                     return
                 }
-                lastMatchAttempt = nowElapsed
-                val result = matcher.match(points)
+                val result = cached ?: matcher.match(points)
+                if (matcher.lastCallUsedNetwork) {
+                    lastMatchAttempt = nowElapsed
+                    lastRemotePointLimit = matcher.lastNetworkProviderPointLimit
+                }
                 // The 25-point backup has its own shorter capacity-based cadence.
-                lastRemotePointLimit = matcher.lastUsedProviderPointLimit
+                val submittedPointLimit = matcher.lastUsedProviderPointLimit
                 if (result == null) {
                     noMatchBackoff.clear(window.markableIds)
                     val providerCooldown = matcher.rateLimitRemainingMs()
@@ -927,7 +935,7 @@ class TrackingService : Service(), LocationListener {
                 }
 
                 // A backup receives just the prefix; never defer unsent fixes.
-                val submittedPointIds = points.take(lastRemotePointLimit).map { it.id }
+                val submittedPointIds = points.take(submittedPointLimit).map { it.id }
                 val unresolvedIds = (window.markableIds intersect submittedPointIds.toSet()) - resolvedIds
                 if (unresolvedIds.isNotEmpty()) {
                     // Repeated *valid* NoMatch responses for identical GPS/context evidence
@@ -1105,10 +1113,13 @@ class TrackingService : Service(), LocationListener {
 
         internal fun remainingRemoteMatchingDelayMs(
             nowElapsed: Long, lastElapsed: Long,
-            pointsPerRequest: Int = com.roadconquest.app.matching.GeoapifyMatcher.MAX_MATCH_POINTS
+            pointsPerRequest: Int = com.roadconquest.app.matching.GeoapifyMatcher.MAX_MATCH_POINTS,
+            pendingPointCount: Int = 0
         ): Long {
             if (lastElapsed <= 0 || nowElapsed < lastElapsed) return 0L
-            val interval = (MIN_REMOTE_MATCH_INTERVAL_MS * pointsPerRequest /
+            val intervalPoints = if (pointsPerRequest == com.roadconquest.app.matching.GeoapifyMatcher.MAX_MATCH_POINTS &&
+                pendingPointCount >= MATCH_BATCH_SIZE - 3) MATCH_BATCH_SIZE else pointsPerRequest
+            val interval = (MIN_REMOTE_MATCH_INTERVAL_MS * intervalPoints /
                 com.roadconquest.app.matching.GeoapifyMatcher.MAX_MATCH_POINTS).coerceAtLeast(30_000L)
             return (interval - (nowElapsed - lastElapsed)).coerceAtLeast(0L)
         }
@@ -1123,7 +1134,9 @@ class TrackingService : Service(), LocationListener {
         private const val MATCH_RETRY_AFTER_FAILURE_MS = 5 * 60 * 1000L
         private const val MATCH_SINGLE_POINT_DEFERRAL_MS = 30_000L
         private const val MATCH_BACKLOG_CONTINUATION_MS = 30_000L
-        private const val MATCH_BATCH_SIZE = com.roadconquest.app.matching.GeoapifyMatcher.MAX_MATCH_POINTS
+        // 100 TOTAL fixes, including context, fit one Geoapify credit. A full
+        // live window may leave sooner; sparse windows keep the seven-minute deadline.
+        private const val MATCH_BATCH_SIZE = 100
         private const val MAX_MATCH_BATCHES_PER_RUN = 4
         private const val MATCH_BATCH_PAUSE_MS = 1_100L
 

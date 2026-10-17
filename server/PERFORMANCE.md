@@ -14,7 +14,7 @@ endpoint remains a database readiness check.
 
 The first real database operation shares a lazy initialization/cleanup promise
 with concurrent requests. Successful cleanup is checked again by active requests
-after fifteen minutes. There is no background timer to wake an idle database.
+after one hour. There is no background timer to wake an idle database.
 Initialization or cleanup failures retry on the next real request. Session and
 device expiry, evidence freshness, foreign keys and explicit deletion retain
 their existing checks; physical cleanup after an idle interval happens when
@@ -391,3 +391,15 @@ The pass adds no SQL queries, persistent cache, schema, service plan, paid
 dependency or changed provider allowance. SQL counts stayed identical in the
 instrumented zero/positive submission flows. Android changes require an app
 build; the PR remains draft and this pass does not merge or deploy it.
+
+
+## Driving allowance and recovery — October 17, 2026
+
+PR #97 adds credit-boundary primary batches, complete-cache preflight, accurate
+network timing, compatible deadlines and conservative shared matching recovery.
+New reservation tables retain no traces. Public tiles keep their existing native
+cache and lightweight allowance path. See [capacity and measured evidence](maps/CAPACITY.md)
+for behavior, extra bookkeeping costs, free-limit headroom and conditional driving
+hour estimates. Android and gateway changes each need their own build/deployment.
+The earlier sections describe their original passes; this work does not deploy
+services, raise provider caps or migrate the account database.

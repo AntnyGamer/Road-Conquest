@@ -80,8 +80,12 @@ class MapLayoutTest {
                             visibleCreditCount++
                             assertEquals(R.string.locationiq_credit,
                                 parser.getAttributeResourceValue(ns, "text", 0))
-                            assertEquals(48f, parser.getAttributeValue(ns, "minHeight")
-                                .removeSuffix("dp").toFloat(), 0f)
+                            val attributes = context.obtainStyledAttributes(parser,
+                                intArrayOf(android.R.attr.minHeight))
+                            try {
+                                assertEquals(48f * context.resources.displayMetrics.density,
+                                    attributes.getDimension(0, 0f), 0.01f)
+                            } finally { attributes.recycle() }
                         }
                     }
                 }

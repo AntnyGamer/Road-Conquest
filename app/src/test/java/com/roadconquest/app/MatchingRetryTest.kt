@@ -20,6 +20,125 @@ import java.util.concurrent.TimeUnit
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31, 37], manifest = Config.NONE)
 class MatchingRetryTest {
+    @Test fun cachedNoMatchCannotBypassTheRemoteGateOrRetirePendingFixesEarly() {
+        val controller = Robolectric.buildService(TrackingService::class.java)
+        val service = controller.get()
+        val repo = repository()
+        repeat(2) { i -> repo.insertLocation(Location("gps").apply {
+            latitude = 40.0; longitude = -74.0 - i * .001
+            accuracy = 5f; time = 1_000_000L + i * 6_000L
+        }) }
+        val cached = object : com.roadconquest.app.matching.RoadMatcher {
+            override val unavailable = false
+            override val lastCallUsedNetwork = false
+            override fun rateLimitRemainingMs() = 60_000L
+            override fun cachedMatch(points: List<com.roadconquest.app.data.TrackPoint>) =
+                com.roadconquest.app.matching.MatchResult(emptyList(), emptyMap(), explicitNoMatch = true)
+            override fun match(points: List<com.roadconquest.app.data.TrackPoint>): com.roadconquest.app.matching.MatchResult? =
+                error("A negative cache must still wait for the remote gate")
+        }
+        org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofMinutes(10))
+        val previousAttempt = android.os.SystemClock.elapsedRealtime()
+        field(service, "repository").set(service, repo)
+        field(service, "matcher").set(service, cached)
+        field(service, "lastMatchAttempt").setLong(service, previousAttempt)
+        field(service, "ready").setBoolean(service, true)
+        val executor = field(service, "matchingExecutor").get(service) as ScheduledExecutorService
+        try {
+            TrackingService::class.java.getDeclaredMethod("maybeRunMatching", Boolean::class.javaPrimitiveType)
+                .apply { isAccessible = true }.invoke(service, true)
+            executor.submit {}.get(10, TimeUnit.SECONDS)
+            assertEquals(2, repo.loadMatchingWindow().markableIds.size)
+            assertNull(repo.nextDeferredMatchAttempt(System.currentTimeMillis()))
+            assertEquals(previousAttempt, field(service, "lastMatchAttempt").getLong(service))
+        } finally {
+            field(service, "ready").setBoolean(service, false)
+            controller.destroy()
+        }
+    }
+
+    @Test fun completeLocalCacheBypassesBothNetworkGatesWithoutMovingTheNetworkClock() {
+        val controller = Robolectric.buildService(TrackingService::class.java)
+        val service = controller.get()
+        val repo = repository()
+        repeat(2) { i -> repo.insertLocation(Location("gps").apply {
+            latitude = 40.0; longitude = -74.0 - i * .001
+            accuracy = 5f; speed = 8f; time = 1_000_000L + i * 6_000L
+        }) }
+        var hits = 0
+        val cached = object : com.roadconquest.app.matching.RoadMatcher {
+            override val unavailable = false
+            override val lastCallUsedNetwork = false
+            override fun rateLimitRemainingMs() = 60_000L
+            override fun match(points: List<com.roadconquest.app.data.TrackPoint>): com.roadconquest.app.matching.MatchResult? =
+                error("A complete local cache must not make a network attempt")
+            override fun cachedMatch(points: List<com.roadconquest.app.data.TrackPoint>): com.roadconquest.app.matching.MatchResult? {
+                hits++
+                return com.roadconquest.app.matching.RoadGeometryValidator().parse(
+                    """{"code":"Ok","tracepoints":[{"matchings_index":0,"waypoint_index":0,"alternatives_count":0,"location":[-74,40]},{"matchings_index":0,"waypoint_index":1,"alternatives_count":0,"location":[-74.001,40]}],"matchings":[{"confidence":0.99,"legs":[{"steps":[{"name":"Cached road","distance":85,"geometry":{"type":"LineString","coordinates":[[-74,40],[-74.001,40]]}}]}]}]}""", points)
+            }
+        }
+        org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofMinutes(10))
+        val previousAttempt = android.os.SystemClock.elapsedRealtime()
+        field(service, "repository").set(service, repo)
+        field(service, "matcher").set(service, cached)
+        field(service, "lastMatchAttempt").setLong(service, previousAttempt)
+        field(service, "ready").setBoolean(service, true)
+        val executor = field(service, "matchingExecutor").get(service) as ScheduledExecutorService
+        try {
+            TrackingService::class.java.getDeclaredMethod("maybeRunMatching", Boolean::class.javaPrimitiveType)
+                .apply { isAccessible = true }.invoke(service, true)
+            executor.submit {}.get(10, TimeUnit.SECONDS)
+            assertEquals(1, hits)
+            assertEquals(1L, repo.getSummary().roadSegmentCount)
+            assertTrue(repo.loadMatchingWindow().points.isEmpty())
+            assertEquals(previousAttempt, field(service, "lastMatchAttempt").getLong(service))
+        } finally {
+            field(service, "ready").setBoolean(service, false)
+            controller.destroy()
+        }
+    }
+
+    @Test fun fullPrimaryWindowLeavesBeforeSevenMinutesAndKeepsAllSavedFixes() {
+        val controller = Robolectric.buildService(TrackingService::class.java)
+        val service = controller.get()
+        val repo = repository()
+        val ids = (0 until 100).map { i -> repo.insertLocation(Location("gps").apply {
+            latitude = 40.0; longitude = -74.0 - i * .00005
+            accuracy = 5f; speed = 8f; time = 1_000_000L + i * 4_000L
+        }) }
+        repo.readableDatabase().execSQL("UPDATE track_points SET matched = 1 WHERE id <= ?", arrayOf(ids[2]))
+        val submitted = mutableListOf<List<com.roadconquest.app.data.TrackPoint>>()
+        val matcher = object : com.roadconquest.app.matching.RoadMatcher {
+            override val unavailable = false
+            override fun rateLimitRemainingMs() = 0L
+            override fun match(points: List<com.roadconquest.app.data.TrackPoint>): com.roadconquest.app.matching.MatchResult {
+                submitted += points
+                return com.roadconquest.app.matching.MatchResult(emptyList(), emptyMap(), explicitNoMatch = true)
+            }
+        }
+        org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofMinutes(10))
+        field(service, "repository").set(service, repo)
+        field(service, "matcher").set(service, matcher)
+        field(service, "lastMatchAttempt").setLong(service, android.os.SystemClock.elapsedRealtime() - 388_000L)
+        field(service, "ready").setBoolean(service, true)
+        val executor = field(service, "matchingExecutor").get(service) as ScheduledExecutorService
+        try {
+            TrackingService::class.java.getDeclaredMethod("maybeRunMatching", Boolean::class.javaPrimitiveType)
+                .apply { isAccessible = true }.invoke(service, true)
+            executor.submit {}.get(10, TimeUnit.SECONDS)
+            assertEquals(1, submitted.size)
+            assertEquals(ids, submitted.single().map { it.id })
+            assertEquals(3, submitted.single().count { it.matched })
+            repo.readableDatabase().rawQuery("SELECT COUNT(*) FROM track_points", null).use {
+                assertTrue(it.moveToFirst()); assertEquals(100, it.getInt(0))
+            }
+        } finally {
+            field(service, "ready").setBoolean(service, false)
+            controller.destroy()
+        }
+    }
+
     /** Local network fixture isolates retry scheduling from removed provider transport. */
     private fun fixtureMatcher(server: MockWebServer): com.roadconquest.app.matching.RoadMatcher =
         object : com.roadconquest.app.matching.RoadMatcher {

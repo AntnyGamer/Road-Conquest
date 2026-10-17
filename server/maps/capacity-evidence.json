@@ -1,0 +1,87 @@
+{
+  "date": "2026-10-17",
+  "baseCommit": "7236640d894f2a64011705c6b9264cba7f3a7251",
+  "noProductionTraffic": true,
+  "compiledMatcherAndMockGateway": {
+    "initial_valid_roads": 1,
+    "initial_resolved_points": 2,
+    "backup_calls_with_exact_primary_cache": 0,
+    "router_roads_during_primary_cooldown": 1,
+    "direct_primary_cache_roads_during_cooldown": 1,
+    "slow_elapsed_ms": 21529,
+    "slow_result_null": false,
+    "slow_marked_unavailable": false
+  },
+  "localCloudflareRuntime": {
+    "runtime": "local Cloudflare workerd via Miniflare",
+    "before": [
+      {
+        "requests": 2400,
+        "firstDay": {
+          "reads": 44800,
+          "writes": 19614,
+          "bytes": 581632
+        },
+        "nextDayCleanupAndOneRequest": {
+          "reads": 2814,
+          "writes": 2819
+        },
+        "permits": 1
+      },
+      {
+        "requests": 4000,
+        "firstDay": {
+          "reads": 75200,
+          "writes": 32414,
+          "bytes": 876544
+        },
+        "nextDayCleanupAndOneRequest": {
+          "reads": 4414,
+          "writes": 4419
+        },
+        "permits": 1
+      }
+    ],
+    "after": [
+      {
+        "requests": 2400,
+        "firstDay": {
+          "reads": 44800,
+          "writes": 17212,
+          "bytes": 479232
+        },
+        "nextDayCleanupAndOneRequest": {
+          "reads": 2814,
+          "writes": 2818
+        },
+        "permits": 1
+      },
+      {
+        "requests": 4000,
+        "firstDay": {
+          "reads": 75200,
+          "writes": 28412,
+          "bytes": 761856
+        },
+        "nextDayCleanupAndOneRequest": {
+          "reads": 4414,
+          "writes": 4418
+        },
+        "permits": 1
+      }
+    ]
+  },
+  "estimatedOrdinaryOnlineHoursPerDay": 230.5923961096375,
+  "estimatedOrdinaryHoursAt55PercentLocalAvoidance": 512.4275469103055,
+  "estimatedDenseOnlineHoursPerDay": 187.15348208248818,
+  "modelAssumptions": {
+    "ordinaryRetainedFixesPerHour": 900,
+    "denseRetainedFixesPerHour": 1200,
+    "tripMinutes": 75,
+    "contextSlots": 3,
+    "geoapifyWorkingCreditsPerDay": 1920,
+    "locationIqWorkingCallsPerDay": 3200,
+    "backupCadenceUnchanged": true,
+    "productionReuseRateMeasured": false
+  }
+}

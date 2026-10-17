@@ -98,6 +98,16 @@ class DrivingFilterTest {
         assertEquals(0L, TrackingService.remainingRemoteMatchingDelayMs(time - 1L, time))
     }
 
+    @Test fun fullOneCreditPrimaryWindowCanLeaveEarlierWithoutSlowingSparseOrBackupWork() {
+        val time = 1_000_000L
+        assertEquals(210_000L, TrackingService.remainingRemoteMatchingDelayMs(time, time, 200, 97))
+        assertEquals(0L, TrackingService.remainingRemoteMatchingDelayMs(time + 388_000L, time, 200, 97))
+        assertEquals(420_000L, TrackingService.remainingRemoteMatchingDelayMs(time, time, 200, 96))
+        assertEquals(52_500L, TrackingService.remainingRemoteMatchingDelayMs(time, time, 25, 97))
+        // A local cache hit must leave the last actual network timestamp alone.
+        assertEquals(0L, TrackingService.remainingRemoteMatchingDelayMs(time + 421_000L, time))
+    }
+
     @Test fun nanAccuracyCannotAuthorizeDriving() {
         assertFalse(accepts(point(40.0002, 13).apply { accuracy = Float.NaN }, point(40.0, 10)))
     }

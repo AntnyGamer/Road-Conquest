@@ -20,7 +20,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [31], manifest = Config.NONE)
+@Config(sdk = [31], manifest = Config.NONE, shadows = [PosixAtomicFileShadow::class])
 class PlaceOverlayTest {
     @Test fun parserKeepsPolygonPopulationAndComputesArea() {
         val place = PlaceDiscovery(

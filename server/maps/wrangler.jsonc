@@ -2,6 +2,7 @@
 	"name": "roadconquest-maps",
 	"main": "./worker.mjs",
 	"compatibility_date": "2026-10-15",
+	"compatibility_flags": ["enable_request_signal"],
 	"workers_dev": true,
 	"preview_urls": false,
 	"cache": {
