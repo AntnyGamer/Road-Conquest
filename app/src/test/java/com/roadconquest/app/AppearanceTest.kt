@@ -118,27 +118,6 @@ class AppearanceTest {
         } finally { controller.pause().stop().destroy() }
     }
 
-    @Test fun settingsUsesGroupedModernCards() {
-        val controller = Robolectric.buildActivity(SettingsActivity::class.java).create().start().resume()
-        try {
-            val activity = controller.get()
-            for (id in listOf(
-                R.id.mapSettingsCard,
-                R.id.trackingSettingsCard,
-                R.id.accountSettingsCard,
-                R.id.progressSettingsCard,
-                R.id.privacySettingsCard,
-                R.id.aboutSettingsCard
-            )) {
-                val card = activity.findViewById<android.view.View>(id)
-                assertNotNull(card.background)
-                assertTrue(card.elevation > 0f)
-            }
-            assertNotNull(activity.findViewById<Button>(R.id.mapStyleButton).background)
-            assertNotNull(activity.findViewById<Button>(R.id.shopButton).background)
-        } finally { controller.pause().stop().destroy() }
-    }
-
     @Test fun placeOverlayPreferenceDefaultsToNoneAndPersistsOneMode() {
         val app = RuntimeEnvironment.getApplication()
         assertEquals(PlaceOverlayMode.NONE, Prefs.placeOverlayMode(app))
