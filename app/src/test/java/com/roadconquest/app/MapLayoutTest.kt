@@ -75,7 +75,11 @@ class MapLayoutTest {
                             foundStartupCover = true
                             assertEquals(-1, parser.getAttributeIntValue(ns, "layout_width", 0))
                             assertEquals(-1, parser.getAttributeIntValue(ns, "layout_height", 0))
-                            assertEquals("gone", parser.getAttributeValue(ns, "visibility"))
+                            val attributes = context.obtainStyledAttributes(parser,
+                                intArrayOf(android.R.attr.visibility))
+                            try {
+                                assertEquals(View.GONE, attributes.getInt(0, View.VISIBLE))
+                            } finally { attributes.recycle() }
                         }
                         R.id.locationIqCredit -> {
                             visibleCreditCount++
