@@ -322,3 +322,72 @@ disabled, while retaining the newer anonymous/malformed authentication checks.
 Malformed JSON, non-object JSON, empty bodies and size-limit behavior also
 matched in the isolated comparison. No merge, deployment or Android change is
 part of this follow-up.
+
+## Additional matching and verification work reductions (draft PR #96)
+
+This pass compares with `99f63f5` and preserves the preceding PR changes:
+
+- **LocationIQ parsing:** reuse the already-parsed provider JSON for geometric
+  validation instead of parsing the same response twice. The string entry point
+  remains available, and the object entry point treats provider evidence as
+  read-only. Cache hits still validate against the current point IDs/accuracy.
+- **Geoapify normalization:** pass normalized JSON directly into the same shared
+  validator, removing a serialization/parse round trip for each normalized
+  matching. Confidence, geometry, blocked seams and fallback decisions are
+  unchanged.
+- **Geoapify multi-leg waypoints:** copy top-level waypoint properties directly
+  before changing the local leg index. Nested values remain read-only; the
+  original waypoint is not modified. This avoids one text serialization/parse
+  round trip for each copied waypoint while retaining all properties.
+- **Scoring rejection order:** check the existing two-second duration and
+  three-meters/second reported-speed gates before computing great-circle
+  distance. Passing pairs still execute every existing distance/accuracy gate;
+  rejected pairs cannot earn credit merely because a calculation was skipped.
+- **Zero-credit batches:** compute the UTC week only when new cells require a
+  weekly write. Zero-credit batches still persist the checkpoint, sequence and
+  retry receipt in the same transaction. Positive batches still belong to the
+  UTC week of their final fix.
+- **Checkpoint cryptography:** reuse one per-batch derived key and authenticated
+  scope buffer for continuity verification and sealing. Keys are not cached
+  between batches/accounts. AES-GCM, random IVs, fingerprint checks and the
+  version-2 ciphertext format are unchanged; old/new ciphertext interoperability
+  was checked in both directions. The small per-batch context adds an object
+  and closures while removing duplicate cryptographic derivation.
+- **Password bounds:** avoid materializing passwords as code-point arrays.
+  UTF-16 bounds handle guaranteed cases; remaining counting stops after the
+  maximum. Signup/current-password validation still accepts 8–128 Unicode code
+  points, and login retains its existing maximum-only check and exact input.
+  Password text, scrypt parameters, salting, peppering and login budgets do not
+  change. Tests compare both paths with the prior policy across 1,510 inputs,
+  including emoji, mixed text, lone surrogates, wrong types and long input.
+- **FCM token race:** a delayed 401 clears the cached authorization only when it
+  rejected the currently cached token. It cannot discard a newer refresh.
+  Rejection of the current token still invalidates it. No message retry, extra
+  push or notification timing change is added.
+
+| Local before/after work | Before | After |
+|---|---:|---:|
+| Distance calculations for 24 one-second GPS pairs inside one cell | 24 | 0 |
+| Distance calculations for 24 pairs below the reported-speed gate | 24 | 0 |
+| Distance calculations for 24 eligible moving pairs | 24 | 24 |
+| Key derivations for 1,000 verify/seal pairs with an existing checkpoint | 2,000 | 1,000 |
+| Scope buffer allocations for those checkpoint pairs | 2,000 | 1,000 |
+| Week-date allocations per zero-credit submission | 1 | 0 |
+| Password arrays for 100 validation/login pairs | 200 | 0 |
+| OAuth calls in a delayed-old-401 race, three push attempts | 3 | 2 |
+
+All **77 server tests** and **155 focused Android matcher tests** passed with
+zero failures or skips. Scoring results also matched the previous code across
+10,000 generated cases. Existing multi-leg, corrupt-sibling, Date Line, junction,
+turn, confidence, cache-ID remapping and provider-fallback tests passed; added
+coverage checks object-path equivalence and unchanged provider evidence.
+
+Measurements use the actual before/after source locally, synthetic data, a stub
+verifier/database for the submission counters, and mocked Google requests.
+No player data, real provider quota or real push was used. Local checkpoint
+timings were comparable across five interleaved rounds; these are operation
+reductions, not a production latency, battery or user-capacity guarantee.
+The pass adds no SQL queries, persistent cache, schema, service plan, paid
+dependency or changed provider allowance. SQL counts stayed identical in the
+instrumented zero/positive submission flows. Android changes require an app
+build; the PR remains draft and this pass does not merge or deploy it.

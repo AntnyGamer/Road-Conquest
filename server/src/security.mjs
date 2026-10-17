@@ -21,9 +21,27 @@ export function normalizeUsername(value) {
 }
 
 export function validatePassword(value) {
-  if (typeof value !== "string") return false;
-  const length = Array.from(value).length;
+  if (typeof value !== "string" || value.length < PASSWORD_MIN || value.length > PASSWORD_MAX * 2) return false;
+  // Each code point uses one or two UTF-16 units. This middle range is
+  // guaranteed to meet both bounds, including passwords made only of emoji.
+  if (value.length >= PASSWORD_MIN * 2 && value.length <= PASSWORD_MAX) return true;
+  const length = passwordLength(value);
   return length >= PASSWORD_MIN && length <= PASSWORD_MAX;
+}
+
+// Count Unicode code points without materializing the whole password as an
+// array. Stop once it cannot satisfy the existing maximum; never normalize it.
+function passwordLength(value) {
+  let length = 0;
+  for (const character of value) if (++length > PASSWORD_MAX) break;
+  return length;
+}
+
+export function boundedLoginPassword(value) {
+  if (typeof value !== "string" || value.length > PASSWORD_MAX * 2) return "";
+  // UTF-16 length is an upper bound on code-point length, so most passwords
+  // need neither a scan nor an allocation to establish their maximum length.
+  return value.length <= PASSWORD_MAX || passwordLength(value) <= PASSWORD_MAX ? value : "";
 }
 
 function passwordInput(password, pepper) {

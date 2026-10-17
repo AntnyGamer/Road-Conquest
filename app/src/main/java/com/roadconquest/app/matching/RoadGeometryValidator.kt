@@ -23,8 +23,12 @@ data class MatchResult(
 class RoadGeometryValidator {
     internal fun parse(
         json: String, points: List<TrackPoint>, additionallyBlockedBridgeEndIds: Set<Long> = emptySet()
+    ): MatchResult? = parse(JSONObject(json), points, additionallyBlockedBridgeEndIds)
+
+    internal fun parse(
+        root: JSONObject, points: List<TrackPoint>, additionallyBlockedBridgeEndIds: Set<Long> = emptySet()
     ): MatchResult? {
-        val root = JSONObject(json)
+        // Treat caller-owned provider JSON as read-only throughout validation.
         if (root.optString("code") != "Ok") return null
         val matchings = root.optJSONArray("matchings") ?: return null
         if (matchings.length() == 0) return null

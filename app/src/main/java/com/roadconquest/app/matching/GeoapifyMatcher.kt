@@ -146,7 +146,11 @@ class GeoapifyMatcher(
                     if (waypoint.optString("match_type") != "matched" ||
                         waypoint.optInt("leg_index", -1) != legIndex) continue
                     // Keep the original input index and all other provider evidence.
-                    subset.put(pointIndex, JSONObject(waypoint.toString()).put("leg_index", 0))
+                    // Only this local leg index changes; nested provider values
+                    // are read-only, so copying through JSON text is unnecessary.
+                    val localWaypoint = JSONObject()
+                    for (name in waypoint.keys()) localWaypoint.put(name, waypoint.get(name))
+                    subset.put(pointIndex, localWaypoint.put("leg_index", 0))
                 }
                 val part = JSONObject().put("geometry", JSONObject().put("type", "MultiLineString")
                     .put("coordinates", JSONArray().put(coordinates)))
@@ -281,7 +285,7 @@ class GeoapifyMatcher(
             else MatchResult(emptyList(), emptyMap())
         val normalized = JSONObject().put("code", "Ok").put("tracepoints", tracepoints)
             .put("matchings", matchings)
-        return validator.parse(normalized.toString(), points, blockedBridgeEndIds)
+        return validator.parse(normalized, points, blockedBridgeEndIds)
     }
 
     private fun position(line: JSONArray, point: JSONArray, start: Int, end: Int): Double? {

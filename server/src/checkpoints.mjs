@@ -13,18 +13,35 @@ function fingerprint(fix, key) {
 }
 
 export function sealCheckpoint(fix, run, scope, secret) {
+  return createCheckpointCodec(scope, secret).seal(fix, run);
+}
+
+export function verifyContinuity(checkpoint, first, run, scope, secret) {
+  if (checkpoint) createCheckpointCodec(scope, secret).verify(checkpoint, first, run);
+}
+
+// Keep this context local to one batch: reuse its derived key and AAD for
+// continuity verification and sealing, without caching account keys globally.
+export function createCheckpointCodec(scope, secret) {
   const key = keyFor(secret, scope);
+  const aad = Buffer.from(scope);
+  return {
+    seal: (fix, run) => seal(fix, run, key, aad),
+    verify: (checkpoint, first, run) => verify(checkpoint, first, run, key, aad)
+  };
+}
+
+function seal(fix, run, key, aad) {
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
-  cipher.setAAD(Buffer.from(scope));
+  cipher.setAAD(aad);
   const encrypted = Buffer.concat([cipher.update(JSON.stringify({ ...fix, run }), "utf8"), cipher.final()]);
   return { version: 2, time: fix.time, fingerprint: fingerprint(fix, key),
     sealed: Buffer.concat([iv, encrypted, cipher.getAuthTag()]).toString("base64url") };
 }
 
-export function verifyContinuity(checkpoint, first, run, scope, secret) {
+function verify(checkpoint, first, run, key, aad) {
   if (!checkpoint) return;
-  const key = keyFor(secret, scope);
   let previous;
   try {
     if (checkpoint.version !== 2 || typeof checkpoint.sealed !== "string" ||
@@ -32,7 +49,7 @@ export function verifyContinuity(checkpoint, first, run, scope, secret) {
     const bytes = Buffer.from(checkpoint.sealed, "base64url");
     if (bytes.length < 29) throw new Error("Invalid checkpoint");
     const decipher = createDecipheriv("aes-256-gcm", key, bytes.subarray(0, 12));
-    decipher.setAAD(Buffer.from(scope));
+    decipher.setAAD(aad);
     decipher.setAuthTag(bytes.subarray(-16));
     previous = JSON.parse(Buffer.concat([decipher.update(bytes.subarray(12, -16)), decipher.final()]).toString("utf8"));
     if (previous.time !== checkpoint.time || fingerprint(previous, key) !== checkpoint.fingerprint ||

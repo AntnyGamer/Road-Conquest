@@ -80,9 +80,10 @@ class LocationIqMatcher(
 
     internal fun parse(body: String, points: List<TrackPoint>): MatchResult? {
         if (points.size !in 2..maxPoints) return null
-        if (JSONObject(body).optString("code") in setOf("NoMatch", "NoSegment")) return MatchResult(emptyList(), emptyMap())
+        val root = JSONObject(body)
+        if (root.optString("code") in setOf("NoMatch", "NoSegment")) return MatchResult(emptyList(), emptyMap())
         // Provider confidence and ambiguous tracepoints pass through unchanged.
         // The same endpoint, detour, continuity, speed and snap gates still apply.
-        return validator.parse(body, points)
+        return validator.parse(root, points)
     }
 }

@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { databaseConfig } from "./database-config.mjs";
 import {
+  boundedLoginPassword,
   createSessionToken,
   hashPassword,
   hashSessionToken,
@@ -422,7 +423,7 @@ async function handle(req, res) {
   if (req.method === "POST" && url.pathname === "/v1/login") {
     const body = await readJson(req);
     const username = normalizeUsername(body.username);
-    const password = typeof body.password === "string" && Array.from(body.password).length <= 128 ? body.password : "";
+    const password = boundedLoginPassword(body.password);
     const key = username?.key || "invalid";
 
     await prepareDatabase();

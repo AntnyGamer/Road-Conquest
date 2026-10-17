@@ -6,6 +6,32 @@ import pg from 'pg';
 import { createFcmSender, createNotifications } from '../src/notifications.mjs';
 import { createFriends } from '../src/friends.mjs';
 
+test('a delayed old-token 401 preserves a newer OAuth refresh while a current-token 401 still expires it', async () => {
+  const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const account = { project_id: 'roadconquest-9f0eb', client_email: 'race@roadconquest-9f0eb.iam.gserviceaccount.com',
+    private_key: privateKey.export({ type: 'pkcs8', format: 'pem' }) };
+  let now=0,auth=0,releaseOld,started;
+  const oldStarted=new Promise(resolve=>{started=resolve;});
+  const sender=createFcmSender(JSON.stringify(account),async(url,init)=>{
+    if(url==='https://oauth2.googleapis.com/token')return Response.json({access_token:'test-token-'+(++auth),expires_in:3600});
+    const fid=JSON.parse(init.body).message.fid;
+    if(fid==='slow'){
+      assert.equal(init.headers.Authorization,'Bearer test-token-1');started();
+      return new Promise(resolve=>{releaseOld=()=>resolve(Response.json({error:{}},{status:401}));});
+    }
+    assert.equal(init.headers.Authorization,'Bearer test-token-'+auth);
+    return fid==='reject-current'?Response.json({error:{}},{status:401}):Response.json({name:'test-message'});
+  },()=>now);
+  const binding=randomUUID(),slow=sender('slow',binding);
+  await oldStarted;
+  now=3_600_000;
+  assert.equal(await sender('fresh',binding),'sent');assert.equal(auth,2);
+  releaseOld();assert.equal(await slow,'unavailable');
+  assert.equal(await sender('reuse',binding),'sent');assert.equal(auth,2);
+  assert.equal(await sender('reject-current',binding),'unavailable');
+  assert.equal(await sender('refresh-again',binding),'sent');assert.equal(auth,3);
+});
+
 test('FCM uses scoped OAuth, private data-only payloads, shared refresh, validation and safe invalid-token handling', async () => {
   const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
   const account = { project_id: 'roadconquest-9f0eb', client_email: 'test@roadconquest-9f0eb.iam.gserviceaccount.com',

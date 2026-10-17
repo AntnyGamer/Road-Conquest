@@ -3,7 +3,7 @@ import { createIntegrityVerifier } from "./integrity.mjs";
 import { EvidenceError, evidenceHash, parseEvidence, requireFreshFixes } from "./scoring.mjs";
 
 import { GRID_ID, scoreCells } from "./cells.mjs";
-import { sealCheckpoint, verifyContinuity } from "./checkpoints.mjs";
+import { createCheckpointCodec } from "./checkpoints.mjs";
 
 export function competitionConfig(env) {
   if (env.LEADERBOARDS_ENABLED !== "1") return null;
@@ -131,7 +131,8 @@ export async function createCompetition(pool, config, dependencies = {}) {
           [user.id, config.dataset]
         );
         const scope = `3:${user.id}:${config.dataset}`;
-        verifyContinuity(old.rows[0].last_verified_fix, body.fixes[0], body.run, scope, config.checkpointKey);
+        const checkpoint = createCheckpointCodec(scope, config.checkpointKey);
+        checkpoint.verify(old.rows[0].last_verified_fix, body.fixes[0], body.run);
         const inserted = await db.query(
           `WITH added AS (INSERT INTO competition_cells(user_id,dataset,grid_row,grid_col)
            SELECT $1,$2,* FROM unnest($3::integer[],$4::integer[])
@@ -142,15 +143,19 @@ export async function createCompetition(pool, config, dependencies = {}) {
         const newCells = inserted.rows[0]?.count || 0;
         // Batches spanning Monday midnight belong to the week of their final fix.
         // The timestamp is already freshness-checked and bound by Play Integrity.
-        const week = new Date(body.fixes.at(-1).time);
-        week.setUTCHours(0, 0, 0, 0);
-        week.setUTCDate(week.getUTCDate() - (week.getUTCDay() + 6) % 7);
+        let weekStart;
+        if (newCells) {
+          const week = new Date(body.fixes.at(-1).time);
+          week.setUTCHours(0, 0, 0, 0);
+          week.setUTCDate(week.getUTCDate() - (week.getUTCDay() + 6) % 7);
+          weekStart = week.toISOString().slice(0, 10);
+        }
         // Persist the checkpoint/total and this week's nonzero increment in one
         // statement. Zero-credit batches still advance continuity without a
         // weekly write. Both writes remain inside the same user-locked transaction.
         const updateTotal = `UPDATE cell_scores SET cells=cells+$1,last_verified_fix=$2
           WHERE user_id=$3 AND dataset=$4 RETURNING cells`;
-        const scoreArgs = [newCells, JSON.stringify(sealCheckpoint(body.fixes.at(-1), body.run, scope, config.checkpointKey)),
+        const scoreArgs = [newCells, JSON.stringify(checkpoint.seal(body.fixes.at(-1), body.run)),
           user.id, config.dataset];
         const updatedScore = await db.query(newCells ?
           `WITH updated AS (${updateTotal}), recorded_week AS (
@@ -159,7 +164,7 @@ export async function createCompetition(pool, config, dependencies = {}) {
             ON CONFLICT (user_id,dataset,week_start) DO UPDATE
             SET new_cells=cell_weeks.new_cells+EXCLUDED.new_cells
           ) SELECT cells FROM updated` : updateTotal,
-          newCells ? [...scoreArgs, week.toISOString().slice(0, 10)] : scoreArgs
+          newCells ? [...scoreArgs, weekStart] : scoreArgs
         );
         const result = { sequence: body.sequence + 1, credited_cells: newCells, accepted_cells: cells,
           verified: true, scoring_policy: 3, dataset: config.dataset, cells: Number(updatedScore.rows[0].cells) };

@@ -41,7 +41,8 @@ export function createFcmSender(raw, fetcher = fetch, now = Date.now) {
       body: JSON.stringify({ validate_only: validateOnly, message: { fid: token,
         data: { kind: 'friend_request', binding }, android: { priority: 'normal', ttl: '3600s', collapse_key: 'friend_request' } } })
     });
-    if (response.status === 401) cached = null;
+    // A delayed rejection of an older token must not discard a newer refresh.
+    if (response.status === 401 && cached?.token === access) cached = null;
     if (response.ok) { await response.body?.cancel(); return 'sent'; }
     const error = await response.json().catch(() => ({}));
     return error.error?.details?.some(item => item.errorCode === 'UNREGISTERED') ? 'unregistered' : 'unavailable';

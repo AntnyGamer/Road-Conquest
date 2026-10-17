@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  boundedLoginPassword,
   createSessionToken,
   hashPassword,
   hashSessionToken,
@@ -23,6 +24,18 @@ test("password policy accepts eight or more characters without composition rules
   assert.equal(validatePassword("correct horse battery staple"), true);
   assert.equal(validatePassword("x".repeat(128)), true);
   assert.equal(validatePassword("x".repeat(129)), false);
+});
+
+test("bounded password checks preserve Unicode code-point limits and the exact login value", () => {
+  const values=[undefined,null,12,{},'x'.repeat(32000)];
+  for(let length=0;length<=300;length++) {
+    for(const unit of ['a','😀','a😀','\ud800','\udc00'])values.push(unit.repeat(length));
+  }
+  for(const value of values) {
+    const length=typeof value==='string'?Array.from(value).length:-1;
+    assert.equal(validatePassword(value),length>=8&&length<=128);
+    assert.equal(boundedLoginPassword(value),length>=0&&length<=128?value:'');
+  }
 });
 
 test("password hashes are salted, peppered, and verified with constant-time comparison", async () => {
