@@ -629,32 +629,35 @@ class TrackingRepository(context: Context) {
         }
         if (candidates.isEmpty()) return null
 
-        // With a 512-fix scan and at least four fixes per candidate there
-        // can be at most 256 distinct anchors, below SQLite's bind limit.
-        val anchorIds = candidates.flatMap { (first, last) ->
-            listOf(first.id - 1, last.id + 1)
-        }.distinct()
-        val anchors = HashMap<Long, TrackPoint>(anchorIds.size)
-        db.query(
-            "track_points", TRACK_COLUMNS,
-            "id IN (${anchorIds.joinToString(",") { "?" }})",
-            anchorIds.map(Long::toString).toTypedArray(),
-            null, null, null
-        ).use { cursor ->
-            while (cursor.moveToNext()) {
-                val point = cursor.toTrackPoint()
-                anchors[point.id] = point
+        // Read at most eight candidate pairs per query. The newest safe turn
+        // remains first, and an early hit does not unnecessarily load anchors
+        // for every older corner in a large saved history.
+        for (group in candidates.chunked(8)) {
+            val anchorIds = group.flatMap { (first, last) ->
+                listOf(first.id - 1, last.id + 1)
+            }.distinct()
+            val anchors = HashMap<Long, TrackPoint>(anchorIds.size)
+            db.query(
+                "track_points", TRACK_COLUMNS,
+                "id IN (${anchorIds.joinToString(",") { "?" }})",
+                anchorIds.map(Long::toString).toTypedArray(),
+                null, null, null
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    val point = cursor.toTrackPoint()
+                    anchors[point.id] = point
+                }
             }
-        }
-        for ((first, last) in candidates) {
-            val before = anchors[first.id - 1]
-            val after = anchors[last.id + 1]
-            if (before?.matched == true && after?.matched == true &&
-                before.accuracyMeters in 0.01f..PRIORITY_GAP_MAX_ACCURACY_M &&
-                after.accuracyMeters in 0.01f..PRIORITY_GAP_MAX_ACCURACY_M &&
-                isMatchingContinuation(before, first, MATCH_ANCHOR_MAX_GAP_MS) &&
-                isMatchingContinuation(last, after, MATCH_ANCHOR_MAX_GAP_MS)
-            ) return first.id
+            for ((first, last) in group) {
+                val before = anchors[first.id - 1]
+                val after = anchors[last.id + 1]
+                if (before?.matched == true && after?.matched == true &&
+                    before.accuracyMeters in 0.01f..PRIORITY_GAP_MAX_ACCURACY_M &&
+                    after.accuracyMeters in 0.01f..PRIORITY_GAP_MAX_ACCURACY_M &&
+                    isMatchingContinuation(before, first, MATCH_ANCHOR_MAX_GAP_MS) &&
+                    isMatchingContinuation(last, after, MATCH_ANCHOR_MAX_GAP_MS)
+                ) return first.id
+            }
         }
         return null
     }
