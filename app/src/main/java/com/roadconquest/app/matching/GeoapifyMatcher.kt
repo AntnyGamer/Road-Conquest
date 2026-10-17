@@ -85,7 +85,7 @@ class GeoapifyMatcher(
         val root = JSONObject(body)
         require(root.getString("type") == "FeatureCollection")
         val features = root.getJSONArray("features")
-        if (features.length() == 0) return MatchResult(emptyList(), emptyMap())
+        if (features.length() == 0) return MatchResult(emptyList(), emptyMap(), explicitNoMatch = true)
         if (features.length() == 1) return parseFeature(features.getJSONObject(0), points)
 
         // Multiple features are safe to salvage only when each explicitly identifies
