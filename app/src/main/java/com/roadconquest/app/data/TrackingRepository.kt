@@ -18,6 +18,9 @@ class TrackingRepository(context: Context) {
     private val dbHelper = AppDatabase.get(context)
     private val historyGeneration = synchronized(dbHelper.historyLock) { dbHelper.historyGeneration }
 
+    private fun wrap(value: Double): Double =
+        ((value + 180.0) % 360.0 + 360.0) % 360.0 - 180.0
+
     internal fun isHistoryCurrent(): Boolean = historyGeneration == dbHelper.historyGeneration
 
     /** A visited cell reveals fog only; it never enters driving history or road matching. */
@@ -870,7 +873,6 @@ class TrackingRepository(context: Context) {
         } else {
             bounds.maxLon - bounds.minLon + 360.0
         }
-        fun wrap(value: Double) = ((value + 180.0) % 360.0 + 360.0) % 360.0 - 180.0
         val querySpan = (longitudeSpan + 2 * longitudePad).coerceAtMost(360.0)
         val queryWest = if (querySpan >= 360.0) -180.0 else wrap(bounds.minLon - longitudePad)
         val queryEast = if (querySpan >= 360.0) 180.0 else wrap(bounds.maxLon + longitudePad)
@@ -1303,7 +1305,6 @@ class TrackingRepository(context: Context) {
             .coerceAtMost(180.0)
         val longitudeSpan = if (east >= west) east - west else east - west + 360.0
         val querySpan = (longitudeSpan + 2 * longitudePad).coerceAtMost(360.0)
-        fun wrap(value: Double) = ((value + 180.0) % 360.0 + 360.0) % 360.0 - 180.0
         val queryWest = if (querySpan >= 360.0) -180.0 else wrap(west - longitudePad)
         val queryEast = if (querySpan >= 360.0) 180.0 else wrap(east + longitudePad)
         val querySouth = (south - latitudePad).coerceAtLeast(-90.0)
@@ -1549,7 +1550,6 @@ class TrackingRepository(context: Context) {
         val latitudePad = exclusionRadiusMeters / METERS_PER_DEGREE
         val longitudePad = (exclusionRadiusMeters /
             (METERS_PER_DEGREE * cos(Math.toRadians(latitude)).coerceAtLeast(0.01))).coerceAtMost(180.0)
-        fun wrap(value: Double) = ((value + 180.0) % 360.0 + 360.0) % 360.0 - 180.0
         val roads = getRoadsInBounds(
             (latitude + latitudePad).coerceAtMost(90.0),
             wrap(longitude + longitudePad),
@@ -1576,7 +1576,6 @@ class TrackingRepository(context: Context) {
         val latitudePad = radiusMeters / METERS_PER_DEGREE
         val longitudePad = (radiusMeters /
             (METERS_PER_DEGREE * cos(Math.toRadians(latitude)).coerceAtLeast(0.01))).coerceAtMost(180.0)
-        fun wrap(value: Double) = ((value + 180.0) % 360.0 + 360.0) % 360.0 - 180.0
         val candidates = getRoadsInBounds(
             (latitude + latitudePad).coerceAtMost(90.0),
             wrap(longitude + longitudePad),
@@ -1694,7 +1693,6 @@ class TrackingRepository(context: Context) {
                 gapEnd = longitudes[i + 1]
             }
         }
-        fun wrap(value: Double) = ((value + 180.0) % 360.0 + 360.0) % 360.0 - 180.0
         return RoadBounds(minLat, maxLat, wrap(gapEnd), wrap(gapStart))
     }
 
