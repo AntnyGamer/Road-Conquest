@@ -161,6 +161,9 @@ object PlaceResolver {
         val townCandidates = buildList {
             add(originalTown)
             for (address in addresses) {
+                val code = address.countryCode?.trim().orEmpty()
+                if (code.isNotBlank() && code.lowercase(Locale.ROOT) !=
+                    originalTown.key.substringBefore('|')) continue
                 val alternate = address.locality?.trim().orEmpty()
                 if (alternate.isNotBlank()) add(
                     originalTown.copy(
@@ -248,8 +251,16 @@ object PlaceResolver {
         candidate: PendingPlaceCandidate,
         addresses: List<android.location.Address>
     ): List<PlaceDiscovery> {
+        // Nearby addresses on opposite sides of a national border can disagree.
+        // Never borrow a locality or region from a different reported country.
+        val preferredCountryCode = addresses.asSequence().mapNotNull { it.countryCode }
+            .map(String::trim).firstOrNull(String::isNotBlank)
+        val sameCountryAddresses = if (preferredCountryCode == null) addresses else addresses.filter {
+            it.countryCode.isNullOrBlank() || it.countryCode.equals(preferredCountryCode, ignoreCase = true)
+        }
         fun firstValue(selector: (android.location.Address) -> String?): String =
-            addresses.asSequence().mapNotNull(selector).map(String::trim).firstOrNull(String::isNotBlank).orEmpty()
+            sameCountryAddresses.asSequence().mapNotNull(selector).map(String::trim)
+                .firstOrNull(String::isNotBlank).orEmpty()
 
         // Reverse geocoders sometimes return a road/address result first with incomplete
         // administrative fields. Combine only results for this same coordinate rather than
@@ -263,7 +274,15 @@ object PlaceResolver {
         // Reverse geocoders can omit either country field for the very same GPS
         // position. Use one stable US key and display name regardless of which
         // field was present, including during the zero-point baseline.
-        val countryName = if (isUnitedStates) "United States" else reportedCountryName
+        // Some Android geocoders report an ISO country code but no country name.
+        // Resolve its English display name locally instead of dropping the
+        // international country (and its dependent state/town) entirely.
+        val countryCode = reportedCountryCode.uppercase(Locale.ROOT)
+        val countryName = if (isUnitedStates) "United States" else reportedCountryName.ifBlank {
+            countryCode.takeIf { it in ISO_COUNTRY_CODES }?.let {
+                Locale.Builder().setRegion(it).build().getDisplayCountry(Locale.US)
+            }.orEmpty()
+        }
         val countryKey = if (isUnitedStates) "us" else
             canonical(reportedCountryCode.ifBlank { countryName })
         val stateName = UnitedStatesMunicipalBoundaries.normalizedStateName(
@@ -323,5 +342,6 @@ object PlaceResolver {
         " township", " borough", " municipality", " village", " town", " city"
     )
     private val WHITESPACE_RE = Regex("\\s+")
+    private val ISO_COUNTRY_CODES = Locale.getISOCountries().toSet()
     private const val MAX_RESULTS = 5
 }

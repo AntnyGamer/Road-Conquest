@@ -47,6 +47,37 @@ class PlaceResolverTest {
         assertFalse(places.any { it.kind == PlaceKind.TOWN })
     }
 
+    @Test fun internationalCodeOnlyGeocodersStillDiscoverCountriesAndRegions() {
+        val checks = mapOf("GB" to "United Kingdom", "JP" to "Japan", "DE" to "Germany",
+            "CA" to "Canada", "BR" to "Brazil", "AU" to "Australia", "IN" to "India")
+        for ((code, expectedName) in checks) {
+            val foreign = Address(Locale.US).apply {
+                countryCode = code
+                adminArea = "Sample Region"
+                locality = "Sample Town"
+            }
+            val places = PlaceResolver.resolveAddresses(candidate, listOf(foreign))
+            assertEquals(expectedName, places.single { it.kind == PlaceKind.COUNTRY }.displayName)
+            assertEquals(code.lowercase(Locale.ROOT),
+                places.single { it.kind == PlaceKind.COUNTRY }.key)
+            assertEquals(code.lowercase(Locale.ROOT) + "|sample region",
+                places.single { it.kind == PlaceKind.STATE }.key)
+        }
+    }
+
+    @Test fun adjacentCountriesCannotMixGeocoderMunicipalities() {
+        val germany = Address(Locale.US).apply {
+            countryCode = "DE"; countryName = "Germany"; adminArea = "Bavaria"
+        }
+        val france = Address(Locale.US).apply {
+            countryCode = "FR"; countryName = "France"; adminArea = "Grand Est"
+            locality = "Strasbourg"
+        }
+        val places = PlaceResolver.resolveAddresses(candidate, listOf(germany, france))
+        assertEquals(listOf("de", "de|bavaria"), places.map { it.key })
+        assertFalse(places.any { it.kind == PlaceKind.TOWN })
+    }
+
     @Test fun officialFallbackNeverOverwritesAKnownNonUsCountry() {
         val context = org.robolectric.RuntimeEnvironment.getApplication()
         val french = Address(Locale.FRANCE).apply { countryCode = "FR"; countryName = "France" }
