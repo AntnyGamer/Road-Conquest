@@ -31,7 +31,9 @@ export function createRequestMaintenance(pool, { initialize = async () => {}, no
     if (pending) return pending;
     if (now() < nextCleanup) return;
     pending = Promise.resolve().then(() => cleanupExpiredState(pool)).then(() => {
-      nextCleanup = now() + 15 * 60 * 1000;
+      // Expired sessions, runs and notification devices are checked on use.
+      // Physical purging can be hourly without weakening those access gates.
+      nextCleanup = now() + 60 * 60 * 1000;
     }).finally(() => { pending = undefined; });
     return pending;
   };
