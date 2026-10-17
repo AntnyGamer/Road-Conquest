@@ -39,7 +39,12 @@ class FallbackRoadMatcher(private val providers: List<RoadMatcher>) : RoadMatche
         return null
     }
     @Synchronized override fun match(points: List<TrackPoint>): MatchResult? {
-        if (providers.any { it.rateLimitRemainingMs() > 0L }) cachedMatch(points)?.let { return it }
+        if (providers.any { it.rateLimitRemainingMs() > 0L }) {
+            // Incomplete cached evidence must not suppress a ready backup provider.
+            cachedMatch(points)?.takeIf {
+                it.completelyCoversPending(points.take(lastUsedProviderPointLimit))
+            }?.let { return it }
+        }
         unavailable = false
         lastCallUsedNetwork = false
         for (provider in providers) {
