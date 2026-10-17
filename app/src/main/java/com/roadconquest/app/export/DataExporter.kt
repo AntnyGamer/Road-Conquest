@@ -77,9 +77,9 @@ object DataExporter {
     private fun writeProgressionRow(writer: java.io.BufferedWriter, key: String, amount: Long, at: Long) {
         writer.write(CsvUtil.escape(key))
         writer.write(','.code)
-        writer.write(amount.toString())
+        writer.write(CsvUtil.escape(amount.toString()))
         writer.write(','.code)
-        writer.write(Instant.ofEpochMilli(at).toString())
+        writer.write(CsvUtil.escape(Instant.ofEpochMilli(at).toString()))
         writer.write("\n")
     }
 
