@@ -126,10 +126,6 @@ class MapRenderer(
     private var loadedOverlayCacheGeneration = -1L
     private var loadedOverlayData: List<PlaceOverlayData> = emptyList()
     private val overlayBounds = HashMap<String, OverlayViewport?>()
-    // Municipal polygons can be large: reuse the GPS-in-polygon decision when
-    // the same saved visit and geometry are redrawn on repeated camera refreshes.
-    // Only overlayExecutor accesses this cache.
-    private val verifiedOverlayVisits = HashMap<String, Boolean>()
     @Volatile private var destroyed = false
     private val liveLocation = LiveLocation()
     private var displayedRoads = OverlayRoads.EMPTY
@@ -483,7 +479,7 @@ class MapRenderer(
                     PlaceOverlayCache.readOfficialUs(context, place)
                 } else PlaceOverlayCache.read(context, place)
                 if (!cached.cached) missing += place
-                cached.data?.takeIf { hasRecordedVisitInside(place, it) }?.let(loaded::add)
+                cached.data?.takeIf { it.containsRecordedVisit(place) }?.let(loaded::add)
             }
             loadedOverlayData = loaded
             loadedOverlayGeneration = generation
@@ -524,7 +520,7 @@ class MapRenderer(
                     if (us) PlaceOverlayCache.readOfficialUs(context, place).data
                     else PlaceOverlayCache.read(context, place).data
                 } else data
-                if (resolved != null && hasRecordedVisitInside(place, resolved)) {
+                if (resolved != null && resolved.containsRecordedVisit(place)) {
                     loaded += resolved
                     changesSincePost++
                     val now = SystemClock.elapsedRealtime()
@@ -544,17 +540,6 @@ class MapRenderer(
                 postPlaceOverlay(generation, kind, loaded, cacheGeneration)
             }
         }
-    }
-
-    private fun hasRecordedVisitInside(
-        place: com.roadconquest.app.data.PlaceDiscovery,
-        polygon: PlaceOverlayData
-    ): Boolean {
-        if (place.kind != PlaceKind.TOWN || place.key != polygon.key ||
-            place.kind != polygon.kind
-        ) return polygon.containsRecordedVisit(place)
-        val key = "${place.key}:${place.latitude}:${place.longitude}:${polygon.geometryJson.hashCode()}"
-        return verifiedOverlayVisits.getOrPut(key) { polygon.containsRecordedVisit(place) }
     }
 
     fun cancelPlaceOverlayLoads() {
