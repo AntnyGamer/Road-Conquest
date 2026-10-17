@@ -11,8 +11,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         maplibre:maplibre_cameraZoomMax="20.0"
-        maplibre:maplibre_renderTextureMode="true"
-        maplibre:maplibre_pixelRatio="2.0" />
+        maplibre:maplibre_renderTextureMode="true" />
 
     <TextView
         android:id="@+id/statsText"
