@@ -670,6 +670,8 @@ class MapRenderingDeviceTest {
                 while ((!found || !overlayFound) && SystemClock.elapsedRealtime() < deadline) {
                     scenario.onActivity {
                         screen = map.projection.toScreenLocation(roadPoint)
+                        assertTrue("Projection fixture remains inside the map viewport",
+                            screen.x >= 0f && screen.x < view.width && screen.y >= 0f && screen.y < view.height)
                         found = map.queryRenderedFeatures(
                             screen,
                             "roadconquest-traveled-roads-line"
@@ -687,7 +689,9 @@ class MapRenderingDeviceTest {
             }
 
             val first = moveAndAssert(LatLng(37.7749, -122.4194), 18.0, 0.0)
-            val second = moveAndAssert(LatLng(37.77505, -122.41955), 20.0, 55.0)
+            // At zoom 20 the old ~40 m offset could move the point offscreen.
+            // Query actual rendered geometry inside the viewport at every zoom.
+            val second = moveAndAssert(LatLng(37.77493, -122.41916), 20.0, 55.0)
             val third = moveAndAssert(LatLng(37.77475, -122.4190), 19.0, 125.0)
             assertTrue("Camera changes actually move the tested road on screen",
                 kotlin.math.hypot((first.x - second.x).toDouble(), (first.y - second.y).toDouble()) > 20.0)
