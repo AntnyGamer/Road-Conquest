@@ -414,24 +414,49 @@ class TrackingRepository(context: Context) {
         }
         if (pending.isEmpty()) return MatchingWindow(emptyList(), emptySet())
 
-        // Work backward only through the newest continuous drive. A stale unmatched outlier
-        // from an earlier trip must never make OSRM bridge a large time gap to a new drive.
-        val newestFirst = ArrayList<TrackPoint>(pending.size)
+        // Keep the actual GPS samples between nearby pending islands as matching context.
+        // A locally resolved re-drive can otherwise split one continuous trip into many
+        // one-credit requests. Never omit samples or bridge a deleted fix, a long pause,
+        // a deferred pending fix, or a gap larger than eight already-resolved samples.
+        // Specialized anchored-turn retries retain their original narrow selection.
+        val newestFirst = ArrayList<TrackPoint>(maxPoints - anchorSlots)
         newestFirst += pending.first()
         for (i in 1 until pending.size) {
             val newer = newestFirst.last()
             val older = pending[i]
-            // A gap in ids means an intervening raw point was already resolved. Do not omit that
-            // guidance point and then ask OSRM to bridge across it; retry each unresolved island
-            // separately so the matched neighbors become context on both sides.
-            if (older.id + 1 != newer.id ||
-                !isMatchingContinuation(older, newer, MATCH_CLUSTER_GAP_MS)
+            val betweenCount = newer.id - older.id - 1L
+            if (betweenCount < 0 ||
+                newestFirst.size + betweenCount + 1 > maxPoints - anchorSlots ||
+                (betweenCount > 0 && (wideRetry || maxPoints < 10 || betweenCount > 8))
             ) break
+
+            val between = ArrayList<TrackPoint>(betweenCount.toInt())
+            if (betweenCount > 0) {
+                dbHelper.readableDatabase.query(
+                    "track_points", TRACK_COLUMNS, "id > ? AND id < ?",
+                    arrayOf(older.id.toString(), newer.id.toString()),
+                    null, null, "id DESC", betweenCount.toString()
+                ).use { cursor ->
+                    while (cursor.moveToNext()) between += cursor.toTrackPoint()
+                }
+                if (between.size.toLong() != betweenCount || between.any { !it.matched }) break
+            }
+            val chain = buildList {
+                add(newer)
+                addAll(between)
+                add(older)
+            }
+            if (chain.zipWithNext().any { (newerFix, olderFix) ->
+                    !isMatchingContinuation(olderFix, newerFix, MATCH_CLUSTER_GAP_MS)
+                }) break
+            newestFirst.addAll(between)
             newestFirst += older
         }
         newestFirst.reverse()
 
-        val markableIds = newestFirst.mapTo(LinkedHashSet(newestFirst.size)) { it.id }
+        // Bridged, previously matched fixes provide true route context only. They
+        // must never be marked a second time or awarded as newly discovered roads.
+        val markableIds = newestFirst.filter { !it.matched }.mapTo(LinkedHashSet(newestFirst.size)) { it.id }
         val earliest = newestFirst.first()
         val latest = newestFirst.last()
 
