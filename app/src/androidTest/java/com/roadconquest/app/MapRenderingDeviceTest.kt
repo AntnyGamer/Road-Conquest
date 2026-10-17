@@ -783,6 +783,29 @@ class MapRenderingDeviceTest {
                     if (!markerVisible) SystemClock.sleep(100)
                 }
                 assertTrue("Number marker must render at the visited tile center", markerVisible)
+                // More than a single central marker should be usable: verify
+                // every nearby tile center fits between the floating controls
+                // and the bottom sheet on the default portrait device.
+                scenario.onActivity { activity ->
+                    val map = MainActivity::class.java.getDeclaredField("activeMap")
+                        .apply { isAccessible = true }.get(activity) as MapLibreMap
+                    val view = activity.findViewById<MapView>(R.id.mapView)
+                    val panelTop = activity.findViewById<View>(R.id.controlPanel).top
+                    val topControlsBottom = maxOf(
+                        activity.findViewById<View>(R.id.overlayButton).bottom,
+                        activity.findViewById<View>(R.id.pointsText).bottom
+                    )
+                    val sourceCenter = com.roadconquest.app.map.FogGrid.cell(40.0, -74.0)!!
+                    val centers = com.roadconquest.app.map.FogGrid.neighbors(sourceCenter)
+                    assertEquals(25, centers.size)
+                    for (cell in centers) {
+                        val (lat, lon) = com.roadconquest.app.map.FogGrid.center(cell)
+                        val pixel = map.projection.toScreenLocation(LatLng(lat, lon))
+                        assertTrue("Nearby marker at $cell stays inside unobstructed map: $pixel",
+                            pixel.x >= 0f && pixel.x <= view.width &&
+                            pixel.y >= topControlsBottom && pixel.y <= panelTop)
+                    }
+                }
                 scenario.onActivity { activity ->
                     assertTrue(renderer.isNearbyExplorationVisible())
                     val map = activity.findViewById<MapView>(R.id.mapView)
