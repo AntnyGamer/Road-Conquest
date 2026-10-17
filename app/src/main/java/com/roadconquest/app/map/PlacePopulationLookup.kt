@@ -25,16 +25,26 @@ internal object PlacePopulationLookup {
     private val officialGeoid = Regex("""[|]census-(1|3|4)-([0-9]+)$""")
     private val cached = ConcurrentHashMap<String, Value>()
     private val cacheLock = Any()
-    // Only simultaneous lookups for the *same* place wait on each other.
-    // Keep network I/O outside cacheLock so unrelated cards never block.
-    private val activeLookups = ConcurrentHashMap<String, Any>()
+    // Register waiting callers before entering a per-place monitor. Removing
+    // the monitor when the first caller returns would let a third caller create
+    // another lock while the second caller still waits or runs.
+    private class LookupLock {
+        val monitor = Any()
+        var users = 0
+    }
+    private val lookupRegistryLock = Any()
+    private val activeLookups = HashMap<String, LookupLock>()
 
     internal fun <T> withLookupLock(identity: String, task: () -> T): T {
-        val guard = activeLookups.computeIfAbsent(identity) { Any() }
+        val guard = synchronized(lookupRegistryLock) {
+            activeLookups.getOrPut(identity) { LookupLock() }.also { it.users++ }
+        }
         try {
-            return synchronized(guard) { task() }
+            return synchronized(guard.monitor) { task() }
         } finally {
-            activeLookups.remove(identity, guard)
+            synchronized(lookupRegistryLock) {
+                if (--guard.users == 0) activeLookups.remove(identity)
+            }
         }
     }
     @Volatile private var cacheGeneration = 0L
