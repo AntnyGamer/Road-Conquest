@@ -295,3 +295,30 @@ schema, service plan, provider quota or credential change is required.
 
 - An authenticated optional `GET /v1/leaderboard?metric=cells&mine=1` now reuses the same single SQL statement to reserve the global leaderboard IP allowance and check the user's current session. The subsequent combined ranking/private-total SQL remains unchanged. This removes **one more PostgreSQL round trip per signed-in leaderboard refresh**.
 - Anonymous rankings, unsigned `mine=1` requests, and disabled competition still use the original public IP budget and response shape. Valid-but-expired session tokens remain rate limited and see only public results. No score, privacy filter, or cache rule changes.
+
+## Single-chunk JSON parsing (draft PR #96)
+
+Compared with PR head `df04c50`, `readJson` uses a Buffer view of a single
+received chunk instead of copying it through `Buffer.concat`. The view preserves
+the chunk's byte offset and length for both Node Buffers and Fetch Uint8Arrays.
+Multiple chunks still join before decoding, preserving split UTF-8 characters.
+The byte cap, Content-Type checks, JSON validation and all API rules stay intact.
+
+An isolated comparison of the actual old/new parsing functions checked 64-byte,
+4-KiB and 32-KiB JSON bodies. For 100 single-chunk 32-KiB requests, concatenation
+copies fell from 3,276,800 bytes to zero; multi-chunk copies were unchanged.
+This eliminates one body-sized allocation/copy per single-chunk request, not
+UTF-8 string allocation, JSON object allocation or platform buffering. Database
+and external-service request counts do not change.
+
+Five interleaved local timing rounds showed faster single-chunk medians for
+4-KiB and 32-KiB bodies. Small-body and multi-chunk timing varied, with measured
+increases below 0.0001 ms/call in this run. The additional length branch has a
+cost; this is not a promise of zero CPU overhead or production latency.
+No functional regression was found. All **74 server tests passed**, zero skips
+or failures, on the latest PR base. New built-bundle checks cover offset
+Buffer/Uint8Array bodies and split UTF-8, with schema initialization enabled and
+disabled, while retaining the newer anonymous/malformed authentication checks.
+Malformed JSON, non-object JSON, empty bodies and size-limit behavior also
+matched in the isolated comparison. No merge, deployment or Android change is
+part of this follow-up.

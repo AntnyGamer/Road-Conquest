@@ -202,7 +202,12 @@ async function readJson(req) {
   }
   if (!chunks.length) return {};
   try {
-    const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    // A single HTTP/Fetch chunk needs a view, not another allocation and copy.
+    // Preserve its byte range; multi-chunk UTF-8 still decodes only after joining.
+    const bytes = chunks.length === 1
+      ? Buffer.from(chunks[0].buffer, chunks[0].byteOffset, chunks[0].byteLength)
+      : Buffer.concat(chunks);
+    const body = JSON.parse(bytes.toString("utf8"));
     if (!body || Array.isArray(body) || typeof body !== "object") throw new Error("JSON object required");
     return body;
   } catch {
