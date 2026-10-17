@@ -734,6 +734,22 @@ class MapRenderingDeviceTest {
                 }
                 assertTrue("The local grid query completes", nearbyReady.await(30, TimeUnit.SECONDS))
                 assertFalse("Correct local tile count with no network", failed)
+                // A source existing in the style is not enough: ensure its fill is
+                // actually rendered at the visited GPS cell after fitting the camera.
+                val renderDeadline = SystemClock.elapsedRealtime() + 10_000L
+                var tileVisible = false
+                while (!tileVisible && SystemClock.elapsedRealtime() < renderDeadline) {
+                    scenario.onActivity { activity ->
+                        val map = MainActivity::class.java.getDeclaredField("activeMap")
+                            .apply { isAccessible = true }.get(activity) as MapLibreMap
+                        val screen = map.projection.toScreenLocation(LatLng(40.0, -74.0))
+                        tileVisible = map.queryRenderedFeatures(
+                            screen, "roadconquest-nearby-visited-fill"
+                        ).isNotEmpty()
+                    }
+                    if (!tileVisible) SystemClock.sleep(100)
+                }
+                assertTrue("A visited tile must really draw on the native map", tileVisible)
                 scenario.onActivity { activity ->
                     assertTrue(renderer.isNearbyExplorationVisible())
                     val map = activity.findViewById<MapView>(R.id.mapView)
