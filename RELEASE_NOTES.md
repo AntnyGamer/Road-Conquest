@@ -7,6 +7,7 @@
 - **Provider settings recover on cache expiry:** Notify map renderers when a cached service configuration expires or becomes corrupt, instead of silently reverting to defaults while leaving the current fallback map unchanged.
 - **Safer matching input handling:** Reject non-finite and out-of-range Geoapify coordinates before creating JSON or sending requests; apply LocationIQ's existing validation to cached responses too. Valid driving coordinates and road acceptance thresholds are unchanged.
 - **Lower map tile processing overhead:** Cache the immutable map-gateway hostname rather than reparsing its address for every MapLibre HTTP request.
+- **Safer backup imports:** Stop enumerating malformed ZIP archives as soon as their entry count exceeds the fixed RoadConquest backup schema, avoiding needless memory growth. Valid backups are unchanged.
 - **Documentation cleanup:** Fix a visible paragraph-formatting error introduced into the Beta 53 README.
 - **Compatibility:** Android 12+, versionCode **80**, unchanged package name and permanent release signing identity; saved roads, matching, account data, points and purchases are unaffected. Any separately deployed verified-scoring server must accept version 80 before verified submissions can be enabled.
 - **Release validation:** Android unit tests, lint, native map tests, minified-release cold starts, and explicit packaged APK/AAB Advertising ID permission checks must pass before publishing signed files.
