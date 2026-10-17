@@ -385,6 +385,23 @@ class ProviderFallbackTest {
             assertFalse(sent.body.readUtf8().contains("apiKey"))
         }
     }
+    @Test fun exactTwoMinuteOldResponseDoesNotConsumeAnotherGeoapifyCredit() {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody(example))
+            server.enqueue(MockResponse().setBody(example))
+            server.start()
+            val matcher = GeoapifyMatcher(server.url("/").toString(), ProviderHealth())
+            assertNotNull(matcher.match(points))
+            val storedAt = GeoapifyMatcher::class.java.getDeclaredField("cachedAt").apply { isAccessible = true }
+            storedAt.setLong(matcher, System.currentTimeMillis() - 2 * 60_000L)
+            assertNotNull(matcher.match(points))
+            assertEquals(1, server.requestCount)
+            storedAt.setLong(matcher, System.currentTimeMillis() - 16 * 60_000L)
+            assertNotNull(matcher.match(points))
+            assertEquals(2, server.requestCount)
+        }
+    }
+
     @Test fun successfulResponseCacheReparsesWithCurrentIdsWithoutAnotherQuotaCharge() {
         MockWebServer().use { server ->
             server.enqueue(MockResponse().setBody(example)); server.start()
