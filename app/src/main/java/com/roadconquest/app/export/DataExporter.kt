@@ -75,8 +75,12 @@ object DataExporter {
     }
 
     private fun writeProgressionRow(writer: java.io.BufferedWriter, key: String, amount: Long, at: Long) {
-        writer.write(listOf(key, amount.toString(), Instant.ofEpochMilli(at).toString())
-            .joinToString(",") { CsvUtil.escape(it) } + "\n")
+        writer.write(CsvUtil.escape(key))
+        writer.write(','.code)
+        writer.write(amount.toString())
+        writer.write(','.code)
+        writer.write(Instant.ofEpochMilli(at).toString())
+        writer.write("\n")
     }
 
     private fun writeMetadata(
@@ -180,12 +184,19 @@ object DataExporter {
                 null, null, null, null, "timestamp_ms ASC, id ASC"
             ).use { cursor ->
                 while (cursor.moveToNext()) {
-                    writer.write(listOf(
-                        cursor.getLong(0).toString(), cursor.getDouble(1).toString(),
-                        cursor.getDouble(2).toString(), cursor.getFloat(3).toString(),
-                        cursor.getFloat(4).toString(), cursor.getFloat(5).toString(),
-                        Instant.ofEpochMilli(cursor.getLong(6)).toString()
-                    ).joinToString(","))
+                    writer.write(cursor.getLong(0).toString())
+                    writer.write(','.code)
+                    writer.write(cursor.getDouble(1).toString())
+                    writer.write(','.code)
+                    writer.write(cursor.getDouble(2).toString())
+                    writer.write(','.code)
+                    writer.write(cursor.getFloat(3).toString())
+                    writer.write(','.code)
+                    writer.write(cursor.getFloat(4).toString())
+                    writer.write(','.code)
+                    writer.write(cursor.getFloat(5).toString())
+                    writer.write(','.code)
+                    writer.write(Instant.ofEpochMilli(cursor.getLong(6)).toString())
                     writer.write("\n")
                 }
             }
