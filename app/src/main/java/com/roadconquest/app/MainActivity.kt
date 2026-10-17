@@ -248,6 +248,10 @@ class MainActivity : Activity() {
         mapView = findViewById(R.id.mapView)
         enableButton = findViewById(R.id.enableButton)
         statusText = findViewById(R.id.statusText)
+        findViewById<TextView>(R.id.locationIqCredit).apply {
+            movementMethod = android.text.method.LinkMovementMethod.getInstance()
+            visibility = if (BuildConfig.MAP_GATEWAY_URL.isBlank()) View.GONE else View.VISIBLE
+        }
         statsText = findViewById(R.id.statsText)
         pointsText = findViewById(R.id.pointsText)
         pointsText.setOnClickListener { startActivity(Intent(this, ShopActivity::class.java)) }
