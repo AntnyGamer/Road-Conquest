@@ -264,12 +264,12 @@ class TripHistoryActivity : Activity() {
         shareButton = Button(this, null, 0, R.style.RoadConquest_SettingsAction).apply {
             text = "Share trip summary · VIP"
             setOnClickListener { shareSelectedTrip() }
-            root.addView(this)
+            root.addView(this, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
         }
         gpxButton = Button(this, null, 0, R.style.RoadConquest_SettingsAction).apply {
             text = "Save trip as GPX · VIP"
             setOnClickListener { selectGpxPrivacy() }
-            root.addView(this)
+            root.addView(this, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8); bottomMargin = dp(8) })
         }
         refreshVipControls()
         val column = LinearLayout(this).apply {

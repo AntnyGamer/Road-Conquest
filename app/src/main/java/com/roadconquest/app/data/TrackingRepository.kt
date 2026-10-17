@@ -102,27 +102,35 @@ class TrackingRepository(context: Context) {
         }
     }
 
-    /** One indexed read for the nearby 5×5 grid, including date-line wrapping. */
-    fun nearbyExploration(latitude: Double, longitude: Double): Pair<Int, Int> =
-        synchronized(dbHelper.historyLock) {
-            val origin = FogGrid.cell(latitude, longitude) ?: return@synchronized 0 to 0
-            val cells = FogGrid.neighbors(origin)
-            // Neighbors form complete rows, even when latitude clips the first
-            // or last row. Keep wrapped columns as discrete values rather than
-            // using BETWEEN, which would incorrectly include most of the world.
-            val columns = cells.takeWhile { it.row == cells.first().row }.map { it.column }
-            val placeholders = List(columns.size) { "?" }.joinToString(",")
-            val args = (listOf(cells.first().row, cells.last().row) + columns)
-                .map(Int::toString).toTypedArray()
-            val explored = dbHelper.readableDatabase.rawQuery(
-                "SELECT COUNT(*) FROM explored_grid WHERE grid_row BETWEEN ? AND ? " +
-                    "AND grid_col IN ($placeholders)", args
-            ).use { cursor ->
-                check(cursor.moveToFirst())
-                cursor.getInt(0)
+    /** The exact nearby mile cells, queried locally using the existing composite key. */
+    internal fun nearbyExplorationTiles(
+        latitude: Double, longitude: Double
+    ): List<Pair<FogGrid.Cell, Boolean>> = synchronized(dbHelper.historyLock) {
+        val origin = FogGrid.cell(latitude, longitude) ?: return@synchronized emptyList()
+        val cells = FogGrid.neighbors(origin)
+        if (cells.isEmpty()) return@synchronized emptyList()
+        // IN handles longitude wrapping at ±180°, including a neighborhood that
+        // straddles the date line. Only 25 possible keys are ever inspected.
+        val columns = cells.map { it.column }.distinct()
+        val placeholders = List(columns.size) { "?" }.joinToString(",")
+        val args = (listOf(cells.first().row, cells.last().row) + columns)
+            .map(Int::toString).toTypedArray()
+        val visited = HashSet<Long>()
+        dbHelper.readableDatabase.rawQuery(
+            "SELECT grid_row, grid_col FROM explored_grid WHERE grid_row BETWEEN ? AND ? " +
+                "AND grid_col IN ($placeholders)", args
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                visited += FogGrid.Cell(cursor.getInt(0), cursor.getInt(1)).key
             }
-            explored to cells.size
         }
+        cells.map { it to (it.key in visited) }
+    }
+
+    fun nearbyExploration(latitude: Double, longitude: Double): Pair<Int, Int> {
+        val tiles = nearbyExplorationTiles(latitude, longitude)
+        return tiles.count { it.second } to tiles.size
+    }
 
     /**
      * A live tracking badge concerns recent driving, not a permanently unresolved

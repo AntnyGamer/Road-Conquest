@@ -20,7 +20,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [31], manifest = Config.NONE)
+@Config(sdk = [31], manifest = Config.NONE, shadows = [PosixAtomicFileShadow::class])
 class PlaceOverlayTest {
     @Test fun parserKeepsPolygonPopulationAndComputesArea() {
         val place = PlaceDiscovery(
@@ -701,6 +701,29 @@ class PlaceOverlayTest {
             }]
         """.trimIndent()
         assertNotNull(PlaceOverlayClient.parseResponse(place, polygon))
+    }
+
+    @Test fun localizedMunicipalNamesRequireEnglishAliasAndMatchingCountryCode() {
+        val town = PlaceDiscovery(PlaceKind.TOWN, "de|bavaria|munich", "Munich",
+            "Bavaria", "Germany", 1L, 48.137, 11.575)
+        fun result(alias: String, countryCode: String) = """
+          [{"name":"München","category":"boundary","type":"administrative",
+            "osm_type":"relation","addresstype":"city",
+            "lat":"48.137","lon":"11.575",
+            "extratags":{"admin_level":"8"},
+            "namedetails":{"name:en":"$alias"},
+            "address":{"city":"München","state":"Bavaria",
+                "country":"Deutschland","country_code":"$countryCode"},
+            "geojson":{"type":"Polygon","coordinates":[[
+                [11.56,48.12],[11.59,48.12],[11.59,48.15],
+                [11.56,48.15],[11.56,48.12]
+            ]]}}]
+        """.trimIndent()
+        assertNotNull(PlaceOverlayClient.parseResponse(town, result("Munich", "de")))
+        assertNull(PlaceOverlayClient.parseResponse(town, result("Berlin", "de")))
+        assertNull(PlaceOverlayClient.parseResponse(town, result("Munich", "fr")))
+        assertNull(PlaceOverlayClient.parseResponse(town.copy(latitude = 49.0),
+            result("Munich", "de")))
     }
 
     @Test fun worldwideTownOverlayAcceptsOnlyAppropriateAdministrativeLevel() {

@@ -56,6 +56,50 @@ class MapLayoutTest {
         assertTrue("The existing points chip must remain tappable for Garage", garageChipFound)
     }
 
+    @Test fun homeScreenKeepsMapFullSizeAndAccessibleCompactProviderAttribution() {
+        val context = Robolectric.buildActivity(MainActivity::class.java).get()
+        val parser = context.resources.getLayout(R.layout.activity_main)
+        val ns = "http://schemas.android.com/apk/res/android"
+        val mapNs = "http://schemas.android.com/apk/res-auto"
+        var foundMap = false
+        var foundPanel = false
+        var visibleCreditCount = 0
+        try {
+            while (parser.eventType != org.xmlpull.v1.XmlPullParser.END_DOCUMENT) {
+                if (parser.eventType == org.xmlpull.v1.XmlPullParser.START_TAG) {
+                    when (parser.getAttributeResourceValue(ns, "id", 0)) {
+                        R.id.mapView -> {
+                            foundMap = true
+                            assertEquals(-1, parser.getAttributeIntValue(ns, "layout_width", 0))
+                            assertEquals(-1, parser.getAttributeIntValue(ns, "layout_height", 0))
+                            assertNull("Let MapLibre use native device resolution",
+                                parser.getAttributeValue(mapNs, "maplibre_pixelRatio"))
+                        }
+                        R.id.controlPanel -> foundPanel = true
+                        R.id.locationIqCredit -> {
+                            visibleCreditCount++
+                            assertEquals(R.string.locationiq_credit,
+                                parser.getAttributeResourceValue(ns, "text", 0))
+                            val attributes = context.obtainStyledAttributes(parser,
+                                intArrayOf(android.R.attr.minHeight))
+                            try {
+                                assertEquals(48f * context.resources.displayMetrics.density,
+                                    attributes.getDimension(0, 0f), 0.01f)
+                            } finally { attributes.recycle() }
+                        }
+                    }
+                }
+                parser.next()
+            }
+        } finally {
+            parser.close()
+        }
+        assertTrue(foundMap)
+        assertTrue(foundPanel)
+        assertEquals("A single compact, clickable LocationIQ credit stays on the home screen",
+            1, visibleCreditCount)
+    }
+
     @Test fun identicalInsetsAndRepeatedLayoutsDoNotRescheduleTheStatsCard() {
         // Test the real safe-area listener without loading MapLibre's desktop-incompatible GPU view.
         val activity = Robolectric.buildActivity(MainActivity::class.java).get()

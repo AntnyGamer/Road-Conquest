@@ -21,6 +21,7 @@ import com.roadconquest.app.data.MatchedRoad
 import com.roadconquest.app.data.TrackingRepository
 import com.roadconquest.app.map.MapMode
 import com.roadconquest.app.map.MapRenderer
+import com.roadconquest.app.map.PlaceOverlayMode
 import com.roadconquest.app.map.LiveLocation
 import com.roadconquest.app.util.Prefs
 import org.junit.Assert.*
@@ -91,6 +92,10 @@ class MapRenderingDeviceTest {
                     }
                 }
                 assertTrue(whiteReady.await(30, TimeUnit.SECONDS))
+                scenario.onActivity {
+                    assertNotNull("Native overview fog must exist independently of camera callbacks",
+                        map.style?.getLayer("roadconquest-world-fog-overview-raster"))
+                }
                 fun move(target: LatLng, zoom: Double, bearing: Double = 0.0) {
                     val idle = CountDownLatch(1)
                     val listener = MapLibreMap.OnCameraIdleListener { idle.countDown() }
@@ -608,6 +613,9 @@ class MapRenderingDeviceTest {
         Prefs.setBackgroundPromptShown(app, true)
         Prefs.setFogEnabled(app, true)
         Prefs.setMapMode(app, MapMode.STREETS)
+        // This projection fixture owns its GeoJSON source. A previous test's
+        // saved town-overlay mode must not start a loader that replaces it.
+        Prefs.setPlaceOverlayMode(app, PlaceOverlayMode.NONE)
         val roadPoint = LatLng(37.7749, -122.4191)
         TrackingRepository(app).apply {
             readableDatabase().execSQL("DELETE FROM roads")
@@ -660,30 +668,34 @@ class MapRenderingDeviceTest {
                 val deadline = SystemClock.elapsedRealtime() + 10_000L
                 var screen = android.graphics.PointF()
                 var found = false
-                while (!found && SystemClock.elapsedRealtime() < deadline) {
+                var overlayFound = false
+                // Separate native sources finish loading independently. A road
+                // frame alone is not proof that the polygon has reached the renderer.
+                while ((!found || !overlayFound) && SystemClock.elapsedRealtime() < deadline) {
                     scenario.onActivity {
                         screen = map.projection.toScreenLocation(roadPoint)
+                        assertTrue("Projection fixture remains inside the map viewport",
+                            screen.x >= 0f && screen.x < view.width && screen.y >= 0f && screen.y < view.height)
                         found = map.queryRenderedFeatures(
                             screen,
                             "roadconquest-traveled-roads-line"
                         ).isNotEmpty()
+                        overlayFound = map.queryRenderedFeatures(
+                            screen,
+                            "roadconquest-town-overlays-fill"
+                        ).isNotEmpty()
                     }
-                    if (!found) SystemClock.sleep(50)
+                    if (!found || !overlayFound) SystemClock.sleep(50)
                 }
                 assertTrue("Traveled road stays rendered at its projected geographic point", found)
-                var overlayFound = false
-                scenario.onActivity {
-                    overlayFound = map.queryRenderedFeatures(
-                        map.projection.toScreenLocation(roadPoint),
-                        "roadconquest-town-overlays-fill"
-                    ).isNotEmpty()
-                }
                 assertTrue("Place overlay stays anchored to its geographic polygon", overlayFound)
                 return screen
             }
 
             val first = moveAndAssert(LatLng(37.7749, -122.4194), 18.0, 0.0)
-            val second = moveAndAssert(LatLng(37.77505, -122.41955), 20.0, 55.0)
+            // At zoom 20 the old ~40 m offset could move the point offscreen.
+            // Query actual rendered geometry inside the viewport at every zoom.
+            val second = moveAndAssert(LatLng(37.77493, -122.41916), 20.0, 55.0)
             val third = moveAndAssert(LatLng(37.77475, -122.4190), 19.0, 125.0)
             assertTrue("Camera changes actually move the tested road on screen",
                 kotlin.math.hypot((first.x - second.x).toDouble(), (first.y - second.y).toDouble()) > 20.0)
@@ -692,6 +704,137 @@ class MapRenderingDeviceTest {
             }
         } finally {
             TrackingRepository(app).readableDatabase().execSQL("DELETE FROM roads")
+        }
+    }
+
+    @Test fun exploreNearbyRendersLocalVisitedAndUnvisitedNumberedTiles() {
+        val app = InstrumentationRegistry.getInstrumentation().targetContext
+        Prefs.setManualOnly(app, true)
+        Prefs.setAccountPromptShown(app, true)
+        Prefs.setBackgroundPromptShown(app, true)
+        val repository = TrackingRepository(app)
+        repository.readableDatabase().execSQL("DELETE FROM explored_grid")
+        val visited = Location("gps").apply {
+            latitude = 40.0
+            longitude = -74.0
+            accuracy = 5f
+            time = System.currentTimeMillis()
+        }
+        assertTrue(repository.recordExploredGridCell(visited))
+        val cellCenter = repository.readableDatabase().rawQuery(
+            "SELECT latitude, longitude FROM explored_grid LIMIT 1", null
+        ).use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            LatLng(cursor.getDouble(0), cursor.getDouble(1))
+        }
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                val styleReady = CountDownLatch(1)
+                scenario.onActivity { activity ->
+                    MainActivity::class.java.getDeclaredMethod("stopPreviewLocation")
+                        .apply { isAccessible = true }.invoke(activity)
+                    activity.findViewById<MapView>(R.id.mapView).getMapAsync { map ->
+                        map.getStyle { styleReady.countDown() }
+                    }
+                }
+                assertTrue("Native map style initializes", styleReady.await(30, TimeUnit.SECONDS))
+                val readyDeadline = SystemClock.elapsedRealtime() + 10_000L
+                var overlayLayerReady = false
+                while (!overlayLayerReady && SystemClock.elapsedRealtime() < readyDeadline) {
+                    scenario.onActivity { activity ->
+                        val map = MainActivity::class.java.getDeclaredField("activeMap")
+                            .apply { isAccessible = true }.get(activity) as? MapLibreMap
+                        overlayLayerReady = map?.style?.getLayer("roadconquest-nearby-visited-fill") != null
+                    }
+                    if (!overlayLayerReady) SystemClock.sleep(50)
+                }
+                assertTrue("Renderer installs the nearby map layers", overlayLayerReady)
+                val nearbyReady = CountDownLatch(1)
+                var failed = false
+                lateinit var renderer: MapRenderer
+                scenario.onActivity { activity ->
+                    renderer = MainActivity::class.java.getDeclaredField("renderer")
+                        .apply { isAccessible = true }.get(activity) as MapRenderer
+                    renderer.showNearbyExploration(40.0, -74.0,
+                        onShown = { explored, total ->
+                            if (explored != 1 || total != 25) failed = true
+                            nearbyReady.countDown()
+                        },
+                        onError = { failed = true; nearbyReady.countDown() }
+                    )
+                }
+                assertTrue("The local grid query completes", nearbyReady.await(30, TimeUnit.SECONDS))
+                assertFalse("Correct local tile count with no network", failed)
+                // A source existing in the style is not enough: ensure its fill is
+                // actually rendered at the visited GPS cell after fitting the camera.
+                val renderDeadline = SystemClock.elapsedRealtime() + 10_000L
+                var tileVisible = false
+                while (!tileVisible && SystemClock.elapsedRealtime() < renderDeadline) {
+                    scenario.onActivity { activity ->
+                        val map = MainActivity::class.java.getDeclaredField("activeMap")
+                            .apply { isAccessible = true }.get(activity) as MapLibreMap
+                        val screen = map.projection.toScreenLocation(LatLng(40.0, -74.0))
+                        tileVisible = map.queryRenderedFeatures(
+                            screen, "roadconquest-nearby-visited-fill"
+                        ).isNotEmpty()
+                    }
+                    if (!tileVisible) SystemClock.sleep(100)
+                }
+                assertTrue("A visited tile must really draw on the native map", tileVisible)
+                val markerDeadline = SystemClock.elapsedRealtime() + 10_000L
+                var markerVisible = false
+                while (!markerVisible && SystemClock.elapsedRealtime() < markerDeadline) {
+                    scenario.onActivity { activity ->
+                        val map = MainActivity::class.java.getDeclaredField("activeMap")
+                            .apply { isAccessible = true }.get(activity) as MapLibreMap
+                        markerVisible = map.queryRenderedFeatures(
+                            map.projection.toScreenLocation(cellCenter),
+                            "roadconquest-nearby-number-labels"
+                        ).isNotEmpty()
+                    }
+                    if (!markerVisible) SystemClock.sleep(100)
+                }
+                assertTrue("Number marker must render at the visited tile center", markerVisible)
+                // More than a single central marker should be usable: verify
+                // every nearby tile center fits between the floating controls
+                // and the bottom sheet on the default portrait device.
+                scenario.onActivity { activity ->
+                    val map = MainActivity::class.java.getDeclaredField("activeMap")
+                        .apply { isAccessible = true }.get(activity) as MapLibreMap
+                    val view = activity.findViewById<MapView>(R.id.mapView)
+                    val panelTop = activity.findViewById<View>(R.id.controlPanel).top
+                    val topControlsBottom = maxOf(
+                        activity.findViewById<View>(R.id.overlayButton).bottom,
+                        activity.findViewById<View>(R.id.pointsText).bottom
+                    )
+                    val sourceCenter = com.roadconquest.app.map.FogGrid.cell(40.0, -74.0)!!
+                    val centers = com.roadconquest.app.map.FogGrid.neighbors(sourceCenter)
+                    assertEquals(25, centers.size)
+                    for (cell in centers) {
+                        val (lat, lon) = com.roadconquest.app.map.FogGrid.center(cell)
+                        val pixel = map.projection.toScreenLocation(LatLng(lat, lon))
+                        assertTrue("Nearby marker at $cell stays inside unobstructed map: $pixel",
+                            pixel.x >= 0f && pixel.x <= view.width &&
+                            pixel.y >= topControlsBottom && pixel.y <= panelTop)
+                    }
+                }
+                scenario.onActivity { activity ->
+                    assertTrue(renderer.isNearbyExplorationVisible())
+                    val map = activity.findViewById<MapView>(R.id.mapView)
+                    val ready = MainActivity::class.java.getDeclaredField("activeMap")
+                        .apply { isAccessible = true }.get(activity) as MapLibreMap
+                    val style = ready.style!!
+                    assertNotNull(style.getLayer("roadconquest-nearby-visited-fill"))
+                    assertNotNull(style.getLayer("roadconquest-nearby-unvisited-fill"))
+                    assertNotNull(style.getLayer("roadconquest-nearby-number-labels"))
+                    assertNotNull(style.getSource("roadconquest-nearby-numbers"))
+                    assertTrue("The map remains sized", map.width > 0 && map.height > 0)
+                    renderer.hideNearbyExploration()
+                    assertFalse(renderer.isNearbyExplorationVisible())
+                }
+            }
+        } finally {
+            repository.readableDatabase().execSQL("DELETE FROM explored_grid")
         }
     }
 

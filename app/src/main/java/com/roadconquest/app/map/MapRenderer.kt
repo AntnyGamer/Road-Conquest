@@ -2,7 +2,10 @@ package com.roadconquest.app.map
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Typeface
 import android.graphics.PointF
 import android.os.Handler
 import android.os.Looper
@@ -10,6 +13,7 @@ import android.os.SystemClock
 import android.util.Log
 import android.view.View
 import com.roadconquest.app.progression.Cosmetics
+import com.roadconquest.app.R
 import com.roadconquest.app.data.TrackingRepository
 import com.roadconquest.app.data.ProgressionRepository
 import com.roadconquest.app.data.PlaceKind
@@ -17,10 +21,12 @@ import com.roadconquest.app.util.Prefs
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
+import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.geometry.LatLngQuad
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
+import org.maplibre.android.style.expressions.Expression
 import org.maplibre.android.style.layers.FillLayer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
@@ -31,8 +37,6 @@ import org.maplibre.android.style.layers.PropertyFactory.fillAntialias
 import org.maplibre.android.style.layers.PropertyFactory.fillColor
 import org.maplibre.android.style.layers.PropertyFactory.fillOpacity
 import org.maplibre.android.style.layers.PropertyFactory.fillOutlineColor
-import org.maplibre.android.style.layers.PropertyFactory.iconAllowOverlap
-import org.maplibre.android.style.layers.PropertyFactory.iconIgnorePlacement
 import org.maplibre.android.style.layers.PropertyFactory.iconImage
 import org.maplibre.android.style.layers.PropertyFactory.iconRotate
 import org.maplibre.android.style.layers.PropertyFactory.iconRotationAlignment
@@ -43,6 +47,8 @@ import org.maplibre.android.style.layers.PropertyFactory.lineOpacity
 import org.maplibre.android.style.layers.PropertyFactory.lineWidth
 import org.maplibre.android.style.layers.PropertyFactory.rasterFadeDuration
 import org.maplibre.android.style.layers.PropertyFactory.rasterOpacity
+import org.maplibre.android.style.layers.PropertyFactory.iconAllowOverlap
+import org.maplibre.android.style.layers.PropertyFactory.iconIgnorePlacement
 import org.maplibre.android.style.sources.GeoJsonSource
 import org.maplibre.android.style.sources.ImageSource
 import org.maplibre.geojson.Feature
@@ -101,6 +107,13 @@ class MapRenderer(
     private var appliedRoadColor = ""
     private var fogEnabled = Prefs.isFogEnabled(context)
     private var overlayMode = Prefs.placeOverlayMode(context)
+    private var nearbyExplorationRequested = false
+    private var nearbyCenter: Pair<Double, Double>? = null
+    private var nearbyExplorationRevision = 0
+    private var nearbyVisitedFeatures = EMPTY_FEATURES.toJson()
+    private var nearbyUnvisitedFeatures = EMPTY_FEATURES.toJson()
+    private var nearbyNumberFeatures = EMPTY_FEATURES.toJson()
+    private val nearbyMarkerImages = HashMap<String, Bitmap>()
     @Volatile private var shownOverlayKeys = emptyList<String>()
     @Volatile private var shownOverlayCacheGeneration = -1L
     private val overlayClient = PlaceOverlayClient()
@@ -130,6 +143,7 @@ class MapRenderer(
     private val fogCoverageScreen = DoubleArray(8)
     private var showingDetailedFog = false
     private var showingRegionalFog = false
+    private var showingOverviewWorldFog = false
     private var activeDetailedFogAlternate = false
     private var lastFogRenderAt = 0L
     private var minimumZoom = Double.NaN
@@ -219,6 +233,200 @@ class MapRenderer(
         Prefs.setPlaceOverlayMode(context, mode)
         clearPlaceOverlaySources()
         refreshPlaceOverlays()
+    }
+
+    /** Only locally recorded mile cells are used; exploring never calls the map API. */
+    fun isNearbyExplorationVisible(): Boolean = nearbyExplorationRequested
+
+    fun hideNearbyExploration() {
+        nearbyExplorationRequested = false
+        nearbyCenter = null
+        nearbyExplorationRevision++
+        nearbyVisitedFeatures = EMPTY_FEATURES.toJson()
+        nearbyUnvisitedFeatures = EMPTY_FEATURES.toJson()
+        nearbyNumberFeatures = EMPTY_FEATURES.toJson()
+        applyNearbyExploration()
+    }
+
+    fun showNearbyExploration(
+        latitude: Double, longitude: Double,
+        onShown: (Int, Int) -> Unit, onError: () -> Unit,
+        fitCamera: Boolean = true
+    ) {
+        if (destroyed) return
+        nearbyExplorationRequested = true
+        nearbyCenter = latitude to longitude
+        val revision = ++nearbyExplorationRevision
+        val initialViewportRevision = viewportRevision
+        overlayExecutor.execute {
+            val result = runCatching {
+                val cells = repository.nearbyExplorationTiles(latitude, longitude)
+                val visited = JSONArray()
+                val unvisited = JSONArray()
+                val labels = JSONArray()
+                cells.forEachIndexed { index, (cell, explored) ->
+                    val (lat, lon) = FogGrid.center(cell)
+                    val corners = FogGrid.nearLongitude(FogGrid.corners(lat, lon), longitude)
+                    val ring = JSONArray()
+                    for (i in 0..4) {
+                        val corner = i % 4
+                        ring.put(JSONArray().put(corners[corner * 2 + 1]).put(corners[corner * 2]))
+                    }
+                    val polygon = JSONObject().put("type", "Feature")
+                        .put("geometry", JSONObject().put("type", "Polygon")
+                            .put("coordinates", JSONArray().put(ring)))
+                        .put("properties", JSONObject())
+                    (if (explored) visited else unvisited).put(polygon)
+                    labels.put(JSONObject().put("type", "Feature")
+                        .put("geometry", JSONObject().put("type", "Point").put("coordinates",
+                            JSONArray().put((corners[1] + corners[3]) / 2.0).put(lat)))
+                        .put("properties", JSONObject().put("icon", nearbyMarkerId(index + 1, explored))))
+                }
+                fun collection(features: JSONArray): String = JSONObject()
+                    .put("type", "FeatureCollection").put("features", features).toString()
+                NearbyOverlaySnapshot(collection(visited), collection(unvisited),
+                    collection(labels), cells.map { it.second }, visited.length())
+            }
+            mainHandler.post {
+                if (destroyed || revision != nearbyExplorationRevision ||
+                    !nearbyExplorationRequested) return@post
+                result.fold({ snapshot ->
+                    nearbyVisitedFeatures = snapshot.visited
+                    nearbyUnvisitedFeatures = snapshot.unvisited
+                    nearbyNumberFeatures = snapshot.markers
+                    ensureNearbyMarkerImages(snapshot.states)
+                    applyNearbyExploration()
+                    // Never snap the camera back if the user panned while the
+                    // local query was waiting behind another overlay operation.
+                    if (fitCamera && initialViewportRevision == viewportRevision) {
+                        fitNearbyExploration(latitude, longitude)
+                    }
+                    onShown(snapshot.exploredCount, snapshot.states.size)
+                }, { error ->
+                    Log.w("RoadConquest", "Could not load nearby cells", error)
+                    hideNearbyExploration()
+                    onError()
+                })
+            }
+        }
+    }
+
+    /** Fit the 25-cell neighborhood into the visible map area, not under the bottom sheet. */
+    private fun fitNearbyExploration(latitude: Double, longitude: Double) {
+        val origin = FogGrid.cell(latitude, longitude) ?: return
+        val cells = FogGrid.neighbors(origin)
+        if (cells.isEmpty() || mapView.width <= 0 || mapView.height <= 0) return
+        val corners = cells.flatMap { cell ->
+            val (lat, lon) = FogGrid.center(cell)
+            FogGrid.corners(lat, lon).toList().chunked(2)
+                .map { (cornerLat, cornerLon) -> cornerLat to cornerLon }
+        }
+        // MapLibre's ordinary LatLngBounds does not wrap across the date line.
+        // Use a compact centered view there instead of zooming out to the world.
+        if (corners.any { (_, lon) -> lon !in -180.0..180.0 } ||
+            corners.maxOf { it.second } - corners.minOf { it.second } > 180.0) {
+            map.moveCamera(CameraUpdateFactory.newCameraPosition(
+                CameraPosition.Builder(map.cameraPosition).target(LatLng(latitude, longitude))
+                    .zoom(11.0).build()
+            ))
+            return
+        }
+        val bounds = LatLngBounds.Builder().apply {
+            corners.forEach { (lat, lon) -> include(LatLng(lat, lon)) }
+        }.build()
+        // Use measured screen obstructions, not fixed heights: the tracking
+        // sheet and text chips can grow with font scale, device insets and locale.
+        // Keep at least 120dp of the map available on shorter/landscape screens.
+        val density = context.resources.displayMetrics.density
+        val root = mapView.rootView
+        val controlsTop = listOf(R.id.overlayButton, R.id.pointsText).maxOf { id ->
+            root.findViewById<View>(id)?.bottom ?: 0
+        } + (8 * density).toInt()
+        val panelTop = root.findViewById<View>(R.id.controlPanel)?.top ?: 0
+        val measuredTop = controlsTop.takeIf { it > 0 } ?: (52 * density).toInt()
+        val measuredBottom = if (panelTop > 0) mapView.height - panelTop + (12 * density).toInt()
+            else (166 * density).toInt()
+        val maxInsets = (mapView.height - 120 * density).coerceAtLeast(0f)
+        val combined = (measuredTop + measuredBottom).toFloat()
+        val scale = if (combined > maxInsets && combined > 0f) maxInsets / combined else 1f
+        val top = (measuredTop * scale).toInt()
+        val bottom = (measuredBottom * scale).toInt()
+        val side = (24 * density).toInt().coerceAtMost(mapView.width / 6)
+        map.getCameraForLatLngBounds(bounds, intArrayOf(side, top, side, bottom))?.let {
+            map.moveCamera(CameraUpdateFactory.newCameraPosition(
+                CameraPosition.Builder(it).padding(0.0, 0.0, 0.0, 0.0).build()
+            ))
+        }
+    }
+
+    /** Update only the tile colors and numbers after saved exploration changes. */
+    fun refreshNearbyExploration() {
+        if (!nearbyExplorationRequested) return
+        val (latitude, longitude) = nearbyCenter ?: return
+        showNearbyExploration(latitude, longitude, { _, _ -> }, {}, fitCamera = false)
+    }
+
+    private fun applyNearbyExploration() {
+        val style = map.style ?: return
+        (style.getSource(NEARBY_VISITED_SOURCE_ID) as? GeoJsonSource)?.setGeoJson(nearbyVisitedFeatures)
+        (style.getSource(NEARBY_UNVISITED_SOURCE_ID) as? GeoJsonSource)?.setGeoJson(nearbyUnvisitedFeatures)
+        (style.getSource(NEARBY_NUMBERS_SOURCE_ID) as? GeoJsonSource)?.setGeoJson(nearbyNumberFeatures)
+    }
+
+    private data class NearbyOverlaySnapshot(
+        val visited: String, val unvisited: String, val markers: String,
+        val states: List<Boolean>, val exploredCount: Int
+    )
+
+    private fun nearbyMarkerId(number: Int, explored: Boolean): String =
+        "roadconquest-nearby-$number-${if (explored) "visited" else "new"}"
+
+    private fun ensureNearbyMarkerImages(states: List<Boolean>) {
+        states.forEachIndexed { index, explored ->
+            val id = nearbyMarkerId(index + 1, explored)
+            if (id !in nearbyMarkerImages) {
+                val image = Bitmap.createBitmap(40, 40, Bitmap.Config.ARGB_8888)
+                val canvas = Canvas(image)
+                val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = if (explored) 0xFF147A58.toInt() else 0xFF946015.toInt()
+                }
+                canvas.drawCircle(20f, 20f, 19f, paint)
+                paint.color = Color.WHITE
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = 1.5f
+                canvas.drawCircle(20f, 20f, 18f, paint)
+                paint.style = Paint.Style.FILL
+                paint.typeface = Typeface.DEFAULT_BOLD
+                paint.textAlign = Paint.Align.CENTER
+                paint.textSize = if (index < 9) 19f else 17f
+                canvas.drawText("${index + 1}", 20f,
+                    20f - (paint.ascent() + paint.descent()) / 2f, paint)
+                nearbyMarkerImages[id] = image
+                map.style?.addImage(id, image)
+            }
+        }
+    }
+
+    private fun installNearbyExploration(style: Style) {
+        style.addSource(GeoJsonSource(NEARBY_VISITED_SOURCE_ID, nearbyVisitedFeatures))
+        style.addSource(GeoJsonSource(NEARBY_UNVISITED_SOURCE_ID, nearbyUnvisitedFeatures))
+        style.addSource(GeoJsonSource(NEARBY_NUMBERS_SOURCE_ID, nearbyNumberFeatures))
+        // Local bitmap numbers work even with the offline fallback style, which
+        // intentionally has no glyph endpoint or text-font network requests.
+        nearbyMarkerImages.forEach { (id, image) -> style.addImage(id, image) }
+        style.addLayer(FillLayer(NEARBY_UNVISITED_LAYER_ID, NEARBY_UNVISITED_SOURCE_ID)
+            .withProperties(fillColor(0xFFE4A42D.toInt()), fillOpacity(0.38f),
+                fillOutlineColor(0xFFFFD271.toInt())))
+        style.addLayer(FillLayer(NEARBY_VISITED_LAYER_ID, NEARBY_VISITED_SOURCE_ID)
+            .withProperties(fillColor(0xFF149F72.toInt()), fillOpacity(0.38f),
+                fillOutlineColor(0xFF7FE2AE.toInt())))
+    }
+
+    /** Numbers belong above confirmed roads; tinted tiles belong below them. */
+    private fun installNearbyMarkerLayer(style: Style) {
+        style.addLayer(SymbolLayer(NEARBY_NUMBERS_LAYER_ID, NEARBY_NUMBERS_SOURCE_ID)
+            .withProperties(iconImage(Expression.image(Expression.get("icon"))),
+                iconAllowOverlap(true), iconIgnorePlacement(true)))
     }
 
     private fun captureTownViewport(): OverlayViewport? {
@@ -391,13 +599,19 @@ class MapRenderer(
             if (destroyed || generation != styleGeneration) return@setStyle
             installPlaceOverlayLayers(style)
             installFogLayer(style)
+            installNearbyExploration(style)
             installRecordedRouteLayer(style)
             installRoadLayer(style)
+            installNearbyMarkerLayer(style)
             installCarLayer(style)
             updateCarLayer()
+            // Initialize the camera from a fresh cached fix before the first
+            // viewport/bitmap query. Otherwise first launch briefly loads a
+            // world-scale fog and unrelated default-world tiles, then replaces
+            // them in visible chunks after centering on the car.
+            initialStyleReady?.let { ready -> initialStyleReady = null; ready() }
             refreshViewport()
             scheduleFogRender()
-            initialStyleReady?.let { ready -> initialStyleReady = null; ready() }
             onReady()
         }
     }
@@ -440,12 +654,15 @@ class MapRenderer(
             }
         }
         if (!centeredOnce) {
-            centeredOnce = true
-            centerOnCar()
+            // Initial centering must finish before the first fog/road viewport query.
+            // Animating the startup camera loads an unnecessary intermediate area.
+            centerOnCar(animated = false)
         }
     }
 
-    fun centerOnCar(): Boolean {
+    fun centerOnCar(): Boolean = centerOnCar(animated = true)
+
+    private fun centerOnCar(animated: Boolean): Boolean {
         if (destroyed) return false
         val fix = liveLocation.current(SystemClock.elapsedRealtime()) ?: return false
         centeredOnce = true
@@ -455,7 +672,8 @@ class MapRenderer(
             .zoom(currentCamera.zoom.coerceIn(FogBitmapRenderer.CENTER_ZOOM, FogBitmapRenderer.MAX_ZOOM))
             .tilt(0.0)
             .build()
-        map.animateCamera(CameraUpdateFactory.newCameraPosition(camera))
+        val change = CameraUpdateFactory.newCameraPosition(camera)
+        if (animated) map.animateCamera(change) else map.moveCamera(change)
         return true
     }
 
@@ -553,11 +771,15 @@ class MapRenderer(
         }
         resumeVisibilityCheck = awaitVisible
         mainHandler.post(awaitVisible)
+        // Unlocks recorded while the activity was stopped do not reach its
+        // broadcast receiver; refresh the visible local tile overlay on return.
+        refreshNearbyExploration()
     }
 
     fun refreshExploration() {
         loadedPlaceBounds = null
         refreshViewport(loadRoads = false)
+        refreshNearbyExploration()
     }
 
     fun refreshTracking() = refreshViewport(loadRoads = false)
@@ -965,11 +1187,21 @@ class MapRenderer(
         regionalFogCoordinates = null
         showingDetailedFog = false
         showingRegionalFog = false
+        showingOverviewWorldFog = false
         installedRegionalFogKey = null
         // Keep a ready native world layer behind the detailed viewport. A fast pinch can
         // outrun even a padded bitmap; it must never reveal an unrendered rectangle.
         installFogRaster(style, WORLD_FOG_SOURCE_ID, WORLD_FOG_LAYER_ID, worldFogQuad(), overviewFog,
-            if (fogEnabled) 1f else 0f)
+            if (fogEnabled && map.cameraPosition.zoom >= FogBitmapRenderer.MIN_FOG_REVEAL_ZOOM) 1f else 0f)
+        // A native zoom-limited world layer stays present through animated zooms.
+        // Unlike a Java camera callback, its visibility follows each rendered zoom
+        // frame and cannot lag the transition to a world-scale view.
+        style.addLayer(RasterLayer(WORLD_OVERVIEW_FOG_LAYER_ID, WORLD_FOG_SOURCE_ID)
+            .withProperties(rasterOpacity(if (fogEnabled) 1f else 0f), rasterFadeDuration(0f))
+            .apply {
+                setMaxZoom(FogBitmapRenderer.MIN_FOG_REVEAL_ZOOM.toFloat())
+                setRasterOpacityTransition(TransitionOptions(0L, 0L))
+            })
         val transparent = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888)
         // Kept at a broader map scale while idle. Only one fog raster is visible:
         // stacking world/regional/detail would darken the unexplored map and cover holes.
@@ -1058,7 +1290,9 @@ class MapRenderer(
                 )
             }
         val regional = regionalReady && (preferRegional || !detailed)
-        val changed = detailed != showingDetailedFog || regional != showingRegionalFog
+        val overview = fogEnabled && cameraPosition.zoom < FogBitmapRenderer.MIN_FOG_REVEAL_ZOOM
+        val changed = detailed != showingDetailedFog || regional != showingRegionalFog ||
+            overview != showingOverviewWorldFog
         if (!force && !changed) return
         val detail = map.style?.getLayer(
             if (activeDetailedFogAlternate) FOG_ALT_LAYER_ID else FOG_LAYER_ID
@@ -1067,9 +1301,12 @@ class MapRenderer(
             if (activeDetailedFogAlternate) FOG_LAYER_ID else FOG_ALT_LAYER_ID
         ) as? RasterLayer
         val worldLayer = map.style?.getLayer(WORLD_FOG_LAYER_ID) as? RasterLayer
+        val overviewLayer = map.style?.getLayer(WORLD_OVERVIEW_FOG_LAYER_ID) as? RasterLayer
         val regionalLayer = map.style?.getLayer(REGIONAL_FOG_LAYER_ID) as? RasterLayer
         showingDetailedFog = detailed
         showingRegionalFog = regional
+        showingOverviewWorldFog = overview
+        overviewLayer?.setProperties(rasterOpacity(if (fogEnabled) 1f else 0f))
         // MapLibre submits each native property change separately. Revealing the
         // replacement *before* hiding the old raster prevents one uncovered frame
         // during rapid animated zooms (observed on Android 12). All raster fade
@@ -1091,7 +1328,9 @@ class MapRenderer(
             inactive?.setProperties(rasterOpacity(0f))
             worldLayer?.setProperties(rasterOpacity(0f))
         } else {
-            worldLayer?.setProperties(rasterOpacity(1f))
+            // Below the reveal threshold the native overview is already active.
+            // Do not double-darken it with the regular fallback world raster.
+            worldLayer?.setProperties(rasterOpacity(if (overview) 0f else 1f))
             detail?.setProperties(rasterOpacity(0f))
             inactive?.setProperties(rasterOpacity(0f))
             regionalLayer?.setProperties(rasterOpacity(0f))
@@ -1484,6 +1723,8 @@ class MapRenderer(
         reusableRegionalFogBitmap = null
         carIconBitmap?.recycle()
         carIconBitmap = null
+        nearbyMarkerImages.values.forEach { it.recycle() }
+        nearbyMarkerImages.clear()
         overlayGeneration++
         // The overlay collections are owned by overlayExecutor. Do not clear
         // its HashMap on this UI thread while an in-flight polygon conversion
@@ -1506,6 +1747,12 @@ class MapRenderer(
         private const val COUNTRY_OVERLAY_BOUNDARY_LAYER_ID = "roadconquest-country-overlays-outline"
         private const val STATE_OVERLAY_BOUNDARY_LAYER_ID = "roadconquest-state-overlays-outline"
         private const val TOWN_OVERLAY_BOUNDARY_LAYER_ID = "roadconquest-town-overlays-outline"
+        private const val NEARBY_VISITED_SOURCE_ID = "roadconquest-nearby-visited"
+        private const val NEARBY_UNVISITED_SOURCE_ID = "roadconquest-nearby-unvisited"
+        private const val NEARBY_NUMBERS_SOURCE_ID = "roadconquest-nearby-numbers"
+        private const val NEARBY_VISITED_LAYER_ID = "roadconquest-nearby-visited-fill"
+        private const val NEARBY_UNVISITED_LAYER_ID = "roadconquest-nearby-unvisited-fill"
+        private const val NEARBY_NUMBERS_LAYER_ID = "roadconquest-nearby-number-labels"
         private const val ROAD_SOURCE_ID = "roadconquest-traveled-roads"
         private const val PENDING_ROUTE_SOURCE_ID = "roadconquest-recorded-route"
         private const val PENDING_ROUTE_LAYER_ID = "roadconquest-recorded-route-line"
@@ -1516,6 +1763,7 @@ class MapRenderer(
         private const val FOG_ALT_LAYER_ID = "roadconquest-fog-buffer-raster"
         private const val WORLD_FOG_SOURCE_ID = "roadconquest-world-fog"
         private const val WORLD_FOG_LAYER_ID = "roadconquest-world-fog-raster"
+        private const val WORLD_OVERVIEW_FOG_LAYER_ID = "roadconquest-world-fog-overview-raster"
         private const val REGIONAL_FOG_SOURCE_ID = "roadconquest-regional-fog"
         private const val REGIONAL_FOG_LAYER_ID = "roadconquest-regional-fog-raster"
         private const val REGIONAL_FOG_DIMENSION = 768

@@ -84,13 +84,13 @@ class RestoreActivity : Activity() {
                     }, REQUEST_IMPORT)
                 } catch (_: ActivityNotFoundException) { status.text = "Android's file picker is unavailable." }
             }
-            root.addView(this)
+            root.addView(this, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (14 * dp).toInt() })
         }
         recovery = Button(this, null, 0, R.style.RoadConquest_SettingsAction).apply {
             text = "Restore progress from before last import"
             isEnabled = DataImporter.previousBackup(this@RestoreActivity).isFile
             setOnClickListener { validate { DataImporter.previousBackup(applicationContext).inputStream() } }
-            root.addView(this)
+            root.addView(this, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (10 * dp).toInt() })
         }
         status = TextView(this).apply {
             textSize = 15f

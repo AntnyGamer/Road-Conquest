@@ -20,19 +20,15 @@ class LocationIqMatcher(
         private set
     private val providerId = "matching:locationiq:$origin"
     private val validator = RoadGeometryValidator()
+    override var lastCallUsedNetwork = false
+        private set
     private var cachedRequest: String? = null
     private var cachedBody: String? = null
     private var cachedAt = 0L
     override fun rateLimitRemainingMs() = health.remaining(providerId)
 
-    @Synchronized override fun match(points: List<TrackPoint>): MatchResult? {
-        unavailable = false
-        if (points.size !in 2..maxPoints || points.any {
-                !it.latitude.isFinite() || it.latitude !in -90.0..90.0 ||
-                !it.longitude.isFinite() || it.longitude !in -180.0..180.0 ||
-                !it.accuracyMeters.isFinite() || it.accuracyMeters <= 0f || it.accuracyMeters > 1000f
-            }) return null
-        val payload = JSONObject().put("mode", "drive").put("waypoints", JSONArray().apply {
+    private fun payload(points: List<TrackPoint>): String {
+        return JSONObject().put("mode", "drive").put("waypoints", JSONArray().apply {
             var previous = Long.MIN_VALUE
             points.forEach { point ->
                 val time = if (previous == Long.MIN_VALUE) point.timestampMillis else maxOf(point.timestampMillis, previous + 1000L)
@@ -41,6 +37,25 @@ class LocationIqMatcher(
                     .put("timestamp", Instant.ofEpochMilli(time).toString()).put("accuracyMeters", point.accuracyMeters))
             }
         }).toString()
+    }
+
+    @Synchronized override fun cachedMatch(points: List<TrackPoint>): MatchResult? {
+        lastCallUsedNetwork = false
+        val request = cachedRequest ?: return null
+        if (points.size !in 2..maxPoints || System.currentTimeMillis() - cachedAt !in 0L..900_000L) return null
+        if (request != payload(points)) return null
+        return runCatching { parse(requireNotNull(cachedBody), points) }.getOrNull()
+    }
+
+    @Synchronized override fun match(points: List<TrackPoint>): MatchResult? {
+        unavailable = false
+        lastCallUsedNetwork = false
+        if (points.size !in 2..maxPoints || points.any {
+                !it.latitude.isFinite() || it.latitude !in -90.0..90.0 ||
+                !it.longitude.isFinite() || it.longitude !in -180.0..180.0 ||
+                !it.accuracyMeters.isFinite() || it.accuracyMeters <= 0f || it.accuracyMeters > 1000f
+            }) return null
+        val payload = payload(points)
         if (cachedRequest == payload && System.currentTimeMillis() - cachedAt in 0L..900_000L) {
             return runCatching { parse(requireNotNull(cachedBody), points) }.getOrNull()
         }
@@ -52,17 +67,22 @@ class LocationIqMatcher(
                 requestMethod = "POST"
                 instanceFollowRedirects = false
                 connectTimeout = 8000
-                readTimeout = 20000
+                // Gateway may queue for 10 s before its bounded 20 s provider request.
+                readTimeout = 35_000
                 doOutput = true
                 setRequestProperty("Content-Type", "application/json")
                 setRequestProperty("Accept", "application/json")
                 setFixedLengthStreamingMode(payloadBytes.size)
             }
+            lastCallUsedNetwork = true
             connection.outputStream.use { it.write(payloadBytes) }
             val status = connection.responseCode
             if (status !in 200..299) {
-                unavailable = status in listOf(401, 403, 429) || status >= 500 || status in 300..399
-                if (unavailable) health.failed(providerId, status, connection.getHeaderField("Retry-After"))
+                val errorCode = connection.getHeaderField("X-RoadConquest-Error")
+                unavailable = status in listOf(401, 403, 429) || status >= 500 || status in 300..399 ||
+                    (status == 409 && errorCode == "budget_conflict")
+                if (unavailable) health.failed(providerId, status, connection.getHeaderField("Retry-After"),
+                    errorCode)
                 return null
             }
             val body = connection.inputStream.use { readBounded(it, 4 * 1024 * 1024) }.toString(Charsets.UTF_8)

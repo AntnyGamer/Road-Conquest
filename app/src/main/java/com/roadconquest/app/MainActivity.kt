@@ -844,36 +844,29 @@ class MainActivity : Activity() {
                 }
                 dialog.dismiss()
             }
-            .setNeutralButton("Explore nearby") { _, _ -> showNearbyExploration() }
+            .setNeutralButton(if (renderer?.isNearbyExplorationVisible() == true) "Hide nearby" else "Explore nearby") { _, _ -> showNearbyExploration() }
             .setNegativeButton("Cancel", null)
             .create()
         dialog.show()
     }
 
-    /** On-demand exploration goals, centered on the visible map, no extra GPS or network. */
+    /** A numbered, georeferenced 5×5 mile-cell overlay, computed entirely on device. */
     private fun showNearbyExploration() {
-        val center = activeMap?.cameraPosition?.target ?: return
-        summaryExecutor.execute {
-            val result = runCatching { repository.nearbyExploration(center.latitude, center.longitude) }
-            runOnUiThread {
-                if (isDestroyed) return@runOnUiThread
-                result.fold({ (explored, total) ->
-                    val remaining = total - explored
-                    val percent = if (total == 0) 0 else explored * 100 / total
-                    AlertDialog.Builder(this)
-                        .setTitle("Explore nearby")
-                        .setMessage(
-                            "In the 5 × 5 mile-grid area around the map center:\n" +
-                                "Explored: $explored of $total tiles ($percent%)\n" +
-                                "Unexplored: $remaining tiles\n\n" +
-                                "Move the map to explore a different area. This estimate uses saved cells only, without route planning, additional GPS, or server requests. Walking can reveal tiles; only driving unlocks roads."
-                        )
-                        .setPositiveButton("Close", null).show()
-                }, {
-                    Toast.makeText(this, "Could not load nearby exploration.", Toast.LENGTH_SHORT).show()
-                })
-            }
+        val active = renderer ?: return
+        if (active.isNearbyExplorationVisible()) {
+            active.hideNearbyExploration()
+            return
         }
+        val center = activeMap?.cameraPosition?.target ?: return
+        active.showNearbyExploration(center.latitude, center.longitude,
+            onShown = { explored, total ->
+                Toast.makeText(this,
+                    "$explored of $total tiles explored. Green is visited, gold is unvisited. Use Layers to hide.",
+                    Toast.LENGTH_LONG).show()
+            },
+            onError = {
+                Toast.makeText(this, "Could not load nearby exploration.", Toast.LENGTH_SHORT).show()
+            })
     }
 
     private fun showOverlayInfo(info: PlaceOverlayInfo) {
@@ -986,7 +979,7 @@ class MainActivity : Activity() {
         val sideMargin = dpToPx(12f)
 
         fun updateMargins() {
-            val fallbackBottom = dpToPx(170f)
+            val fallbackBottom = dpToPx(150f)
             val occupiedBottom = if (mapView.height > 0 && controlPanel.top > 0) {
                 (mapView.height - controlPanel.top + dpToPx(8f)).coerceAtLeast(dpToPx(24f))
             } else {

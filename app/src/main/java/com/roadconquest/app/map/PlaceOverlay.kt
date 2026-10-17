@@ -363,6 +363,10 @@ class PlaceOverlayClient(
             .appendQueryParameter("q", query(place))
             .appendQueryParameter("addressdetails", "1")
             .appendQueryParameter("extratags", "1")
+            .appendQueryParameter("namedetails", "1")
+            // Android's English geocoder and the OSM search should use the same
+            // label language for countries, regions and municipality aliases.
+            .appendQueryParameter("accept-language", "en")
             .appendQueryParameter("polygon_geojson", "1")
             .appendQueryParameter("polygon_threshold", threshold)
             .appendQueryParameter("limit", "8")
@@ -461,7 +465,7 @@ class PlaceOverlayClient(
             while (true) {
                 val count = reader.read(buffer)
                 if (count < 0) break
-                if (builder.length + count > limit) error("Place boundary response is too large")
+                if (builder.length + count > limit) throw IOException("Place boundary response is too large")
                 builder.append(buffer, 0, count)
             }
         }
@@ -560,15 +564,21 @@ class PlaceOverlayClient(
                     // A boundary can contain the GPS point but still represent a
                     // different nearby town or county. Require the actual name
                     // and available parent jurisdiction to agree before rewarding.
-                    if (!sameMunicipalityName(candidate.optString("name"), place.displayName)) continue
+                    if (!sameMunicipalityName(candidate.optString("name"), place.displayName) &&
+                        !englishMunicipalityAlias(candidate, place.displayName)) continue
                     val address = candidate.optJSONObject("address") ?: continue
                     val state = canonical(address.optString("state"))
                     val country = canonical(address.optString("country"))
+                    val countryCode = canonical(address.optString("country_code"))
+                    val expectedCode = canonical(place.key.substringBefore('|'))
+                    val verifiedCountryCode = expectedCode.length == 2 && countryCode == expectedCode
+                    if (countryCode.isNotBlank() && expectedCode.length == 2 &&
+                        !verifiedCountryCode) continue
                     if (state.isNotBlank() && canonical(place.parentName).isNotBlank() &&
                         state != canonical(place.parentName)
                     ) continue
                     if (country.isNotBlank() && canonical(place.countryName).isNotBlank() &&
-                        country != canonical(place.countryName)
+                        country != canonical(place.countryName) && !verifiedCountryCode
                     ) continue
                 }
                 // A name or nearby postal address is not evidence of entering a town.
@@ -617,7 +627,8 @@ class PlaceOverlayClient(
             })
             val resultName = canonical(candidate.optString("name"))
             val addressType = canonical(candidate.optString("addresstype"))
-            var score = if (resultName == expectedName) 3 else 0
+            var score = if (resultName == expectedName ||
+                (place.kind == PlaceKind.TOWN && englishMunicipalityAlias(candidate, place.displayName))) 3 else 0
             when (place.kind) {
                 PlaceKind.COUNTRY -> {
                     if (canonical(address.optString("country")) == expectedName) score += 7
@@ -735,6 +746,14 @@ class PlaceOverlayClient(
                 sine1 = sin(lat2)
             }
             return sum * EARTH_RADIUS_M * EARTH_RADIUS_M / 2.0
+        }
+
+        /** Match the Geocoder's English city name to the same OSM boundary's English aliases. */
+        private fun englishMunicipalityAlias(candidate: JSONObject, expected: String): Boolean {
+            val names = candidate.optJSONObject("namedetails") ?: return false
+            return listOf("name:en", "official_name:en", "short_name:en").any {
+                sameMunicipalityName(names.optString(it), expected)
+            }
         }
 
         private fun sameMunicipalityName(first: String, second: String): Boolean {

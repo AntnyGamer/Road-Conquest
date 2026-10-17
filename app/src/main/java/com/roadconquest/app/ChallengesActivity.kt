@@ -147,7 +147,7 @@ class ChallengesActivity : Activity() {
                     if (socialExpanded) refresh()
                 }
             }
-            root.addView(toggle)
+            root.addView(toggle, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
             root.addView(social)
         }
     }
