@@ -49,6 +49,28 @@ class ProviderFallbackTest {
         assertNotNull(FallbackRoadMatcher(listOf(primary, secondary)).match(points))
         assertEquals(0, secondary.calls)
     }
+    @Test fun incompleteCacheDuringPrimaryCooldownStillTriesReadyBackup() {
+        val result = MatchResult(emptyList(), emptyMap())
+        val backup = Fake(result)
+        for (cache in listOf(
+            MatchResult(emptyList(), emptyMap(), explicitNoMatch = true),
+            requireNotNull(GeoapifyMatcher("https://unused.example").parse(example, points))
+                .copy(matchedPointConfidences = mapOf(1L to 0.9))
+        )) {
+            val primary = object : RoadMatcher {
+                override val unavailable = true
+                override fun rateLimitRemainingMs() = 60_000L
+                override fun cachedMatch(points: List<TrackPoint>) = cache
+                override fun match(points: List<TrackPoint>): MatchResult? =
+                    error("Cooldown must prevent primary network calls")
+            }
+            val router = FallbackRoadMatcher(listOf(primary, backup))
+            assertEquals(result, router.match(points))
+            assertFalse(router.unavailable)
+        }
+        assertEquals(2, backup.calls)
+    }
+
     @Test fun allExhaustedProvidersKeepTheTracePendingUntilEarliestRecovery() {
         val matcher = FallbackRoadMatcher(listOf(Fake(cooldown = 2000), Fake(cooldown = 9000)))
         assertNull(matcher.match(points)); assertTrue(matcher.unavailable)
