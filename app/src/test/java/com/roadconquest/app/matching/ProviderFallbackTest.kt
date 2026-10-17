@@ -73,6 +73,10 @@ class ProviderFallbackTest {
         val result = requireNotNull(matcher.match(input))
         assertEquals(input.take(25), submitted)
         assertEquals((1L..25L).toSet(), result.matchedPointConfidences.keys)
+        // Primary remains technically ready despite its failed response.
+        // Dynamic maxPoints may report 200, but only 25 points were submitted.
+        assertEquals(200, matcher.maxPoints)
+        assertEquals(25, matcher.lastUsedProviderPointLimit)
         primary.cooldown = 1000L
         assertEquals(25, matcher.maxPoints)
         primary.cooldown = 0L
