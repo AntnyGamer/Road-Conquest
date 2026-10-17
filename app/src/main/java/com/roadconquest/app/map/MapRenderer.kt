@@ -322,11 +322,21 @@ class MapRenderer(
         val bounds = LatLngBounds.Builder().apply {
             corners.forEach { (lat, lon) -> include(LatLng(lat, lon)) }
         }.build()
-        // The panel overlaps the lower map. Uniform padding also prevents marker
-        // numbers being obscured by top floating controls on compact displays.
-        val padding = minOf(mapView.width / 5, mapView.height / 5)
-            .coerceAtLeast((32 * context.resources.displayMetrics.density).toInt())
-        map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, padding))
+        // Account for the bottom tracking sheet, and leave side icons unobstructed.
+        // Fit calculations use temporary insets; preserve the map's normal unpadded
+        // camera for subsequent tracking/recenter gestures.
+        val density = context.resources.displayMetrics.density
+        val side = (24 * density).toInt()
+        val top = (52 * density).toInt()
+        val bottom = (166 * density).toInt()
+        val room = (mapView.height - top - bottom).coerceAtLeast(1)
+        val insetTop = if (room > 0) top else 0
+        val insetBottom = if (room > 0) bottom else 0
+        map.getCameraForLatLngBounds(bounds, arrayOf(side, insetTop, side, insetBottom))?.let {
+            map.moveCamera(CameraUpdateFactory.newCameraPosition(
+                CameraPosition.Builder(it).padding(0.0, 0.0, 0.0, 0.0).build()
+            ))
+        }
     }
 
     private fun applyNearbyExploration() {
