@@ -24,6 +24,15 @@ internal object UnitedStatesMunicipalityAtPoint {
     private const val MAX_RESPONSE_CHARS = 16 * 1024 * 1024
     private val WHITESPACE_RE = Regex("\\s+")
 
+    private fun censusConnection(request: String, geoJson: Boolean): HttpURLConnection =
+        (URL(request).openConnection() as HttpURLConnection).apply {
+            connectTimeout = 8_000
+            readTimeout = 20_000
+            setRequestProperty("User-Agent",
+                "RoadConquest/${BuildConfig.VERSION_NAME} (+https://github.com/AntnyGamer/RoadConquest-Beta)")
+            if (geoJson) setRequestProperty("Accept", "application/geo+json, application/json")
+        }
+
     /**
      * US fallback for devices without a working Android Geocoder. The official
      * Census States layer identifies the state directly from the recorded GPS
@@ -46,12 +55,7 @@ internal object UnitedStatesMunicipalityAtPoint {
             .appendQueryParameter("returnGeometry", "false")
             .appendQueryParameter("f", "json")
             .build().toString()
-        val connection = (URL(request).openConnection() as HttpURLConnection).apply {
-            connectTimeout = 8_000
-            readTimeout = 20_000
-            setRequestProperty("User-Agent",
-                "RoadConquest/${BuildConfig.VERSION_NAME} (+https://github.com/AntnyGamer/RoadConquest-Beta)")
-        }
+        val connection = censusConnection(request, geoJson = false)
         return try {
             if (connection.responseCode !in 200..299) {
                 throw IOException("Census state lookup HTTP ${connection.responseCode}")
@@ -115,13 +119,7 @@ internal object UnitedStatesMunicipalityAtPoint {
                 .appendQueryParameter("resultRecordCount", "20")
                 .appendQueryParameter("f", "geojson")
                 .build().toString()
-            val connection = (URL(request).openConnection() as HttpURLConnection).apply {
-                connectTimeout = 8_000
-                readTimeout = 20_000
-                setRequestProperty("User-Agent",
-                    "RoadConquest/${BuildConfig.VERSION_NAME} (+https://github.com/AntnyGamer/RoadConquest-Beta)")
-                setRequestProperty("Accept", "application/geo+json, application/json")
-            }
+            val connection = censusConnection(request, geoJson = true)
             val body = try {
                 if (connection.responseCode !in 200..299) {
                     throw IOException("Census municipality service HTTP ${connection.responseCode}")
