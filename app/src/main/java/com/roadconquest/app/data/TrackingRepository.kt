@@ -1698,12 +1698,7 @@ class TrackingRepository(context: Context) {
         val incomingKey = canonicalGeometryKey(coordinates)
         val normalizedName = name.trim().lowercase(Locale.US).ifBlank { "unnamed road" }
         fun alternateId(): String {
-            val digest = MessageDigest.getInstance("SHA-256")
-                .digest("$normalizedName|$incomingKey".toByteArray(Charsets.UTF_8))
-            return "g" + String(CharArray(31) { i ->
-                val byte = digest[i / 2].toInt() and 0xff
-                "0123456789abcdef"[if (i % 2 == 0) byte ushr 4 else byte and 0x0f]
-            })
+            return "g" + roadHashPrefix("$normalizedName|$incomingKey", 31)
         }
 
         val storedGeometry = db.query(
@@ -1733,6 +1728,14 @@ class TrackingRepository(context: Context) {
         return primary
     }
 
+    private fun roadHashPrefix(value: String, chars: Int): String {
+        val digest = MessageDigest.getInstance("SHA-256").digest(value.toByteArray(Charsets.UTF_8))
+        return String(CharArray(chars) { i ->
+            val byte = digest[i / 2].toInt() and 0xff
+            "0123456789abcdef"[if (i % 2 == 0) byte ushr 4 else byte and 0x0f]
+        })
+    }
+
     private fun canonicalGeometryKey(coordinates: JSONArray): String {
         val rounded = ArrayList<String>(coordinates.length())
         for (i in 0 until coordinates.length()) {
@@ -1759,11 +1762,7 @@ class TrackingRepository(context: Context) {
         val endpoints = if (first <= last) "$first|$last" else "$last|$first"
         val normalizedName = name.trim().lowercase(Locale.US).ifBlank { "unnamed road" }
         val normalized = "$normalizedName|$endpoints"
-        val digest = MessageDigest.getInstance("SHA-256").digest(normalized.toByteArray(Charsets.UTF_8))
-        return String(CharArray(24) { i ->
-            val byte = digest[i / 2].toInt() and 0xff
-            "0123456789abcdef"[if (i % 2 == 0) byte ushr 4 else byte and 0x0f]
-        })
+        return roadHashPrefix(normalized, 24)
     }
 
     private data class RoadBounds(
