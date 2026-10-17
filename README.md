@@ -7,7 +7,7 @@ cloud-textured fog map.
 [Source and issues](https://github.com/AntnyGamer/RoadConquest-Beta) ·
 [GNU AGPL v3 license](LICENSE)
 
-Beta 54 explicitly declares the Advertising ID permission used by AdMob and adds a release check for both the Play bundle and APK. It also fixes unnecessary cooldowns when a map provider is intentionally disabled, lets the map recover when cached provider settings expire, and avoids reparsing the map gateway address on each tile request. Invalid coordinates are now safely rejected by both matching adapters, including cached lookups; valid GPS matching, rewards and saved history are unchanged.
+Beta 54 explicitly declares the Advertising ID permission used by AdMob and adds a release check for both the Play bundle and APK. It also fixes unnecessary cooldowns when a map provider is intentionally disabled, lets the map recover when cached provider settings expire, and avoids reparsing the map gateway address on each tile request. Invalid coordinates are now safely rejected by both matching adapters, including cached lookups; valid GPS matching, rewards and saved history are unchanged. Oversized malformed backup ZIP directories are rejected before unnecessary allocation, without changing valid restores.
 
 Beta 53 improves continuity of driven roads at regional zoom, shows a bounded first-load cover while the map settles, reduces duplicate LocationIQ credits while retaining a visible attribution link, coalesces redundant provider refreshes and reduces unnecessary retries, and makes Gold/Regular launcher icon changes safer. Saved roads and tracking data are unchanged.
 
