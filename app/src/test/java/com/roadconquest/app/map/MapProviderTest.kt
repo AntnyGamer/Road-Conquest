@@ -42,7 +42,7 @@ class MapProviderTest {
         }
     }
     @Test fun preferredMapDoesNotDuplicateTheVisibleLocationIqCredit() {
-        val app = Application()
+        val app = org.robolectric.RuntimeEnvironment.getApplication()
         for (mode in MapMode.entries) {
             val style = BaseMapProviders.style(app, mode, "openfreemap")
             assertFalse(style.contains("locationiq.com"))
