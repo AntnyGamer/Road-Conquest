@@ -123,6 +123,7 @@ internal class GeoapifyAsyncBacklog(
         if (newestLiveFixAt > now - OLD_TRACE_AGE_MS || now < prefs.getLong("nextTry", 0L))
             return null
         prefs.edit().putLong("nextTry", now + ATTEMPT_INTERVAL_MS).apply()
+        if (!enabledByGateway(now)) return null
         val cap = repository.lastPointIdBefore(now - OLD_TRACE_AGE_MS) ?: return null
         val windows = ArrayList<TrackingRepository.MatchingWindow>(BATCH_WINDOWS)
         var highestId = cap
@@ -202,6 +203,17 @@ internal class GeoapifyAsyncBacklog(
         // unresolved samples become eligible for the unchanged sync fallback.
         prefs.edit().remove("job").remove("deferred").apply()
         repository.deferMatching(job.windows.flatMap { it.markableIds }, 0L)
+    }
+
+    /** Skip database scans and uploads when the server has not enabled the batch feature. */
+    private fun enabledByGateway(now: Long): Boolean {
+        if (now < prefs.getLong("featureExpiresAt", 0L))
+            return prefs.getBoolean("featureEnabled", false)
+        val enabled = request("GET", "/v1/config", null)?.json?.optBoolean("asyncBatchEnabled", false) == true
+        prefs.edit().putBoolean("featureEnabled", enabled)
+            .putLong("featureExpiresAt", now + if (enabled) 60 * 60_000L else 24 * 60 * 60_000L)
+            .apply()
+        return enabled
     }
 
     private fun request(method: String, path: String, body: String?, token: String? = null): ResponseData? {
