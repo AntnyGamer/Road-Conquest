@@ -47,8 +47,11 @@ internal object RoadGrouping {
      * Removing punctuation makes common formatting variants (I-295 / I 295) compare equally
      * without applying risky language-specific street-name abbreviation rules.
      */
-    fun normalizeReferences(reference: String): Set<String> =
-        reference.splitToSequence(';')
+    fun normalizeReferences(reference: String): Set<String> {
+        // Unnamed/unsigned fragments are common. An empty reference always
+        // normalized to the empty set; skip split and Unicode normalization.
+        if (reference.isEmpty()) return emptySet()
+        return reference.splitToSequence(';')
             .map {
                 Normalizer.normalize(it.trim(), Normalizer.Form.NFKC)
                     .uppercase(Locale.ROOT)
@@ -56,6 +59,7 @@ internal object RoadGrouping {
             }
             .filter { it.isNotEmpty() }
             .toCollection(linkedSetOf())
+    }
 
     fun isUnnamed(nameKey: String): Boolean =
         nameKey.isEmpty() || nameKey == "unnamed road"
