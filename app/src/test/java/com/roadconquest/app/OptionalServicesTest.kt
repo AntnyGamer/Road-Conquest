@@ -79,6 +79,35 @@ class OptionalServicesTest {
         assertNull(prefs.getString("session_binding", null))
         assertNotEquals(first, OptionalNotifications.prepareBinding(app, "first-login"))
     }
+    @Test fun unchangedDeviceRegistrationSkipsRedundantServerWritesButRefreshesSafely() {
+        val now = 1_800_000_000_000L
+        val id = "same-id-sha256"
+        val binding = "same-session-binding"
+        fun due(savedId: String?, savedBinding: String?, savedAt: Long, currentId: String = id,
+                currentBinding: String = binding, currentTime: Long = now) =
+            OptionalNotifications.needsDeviceRegistration(
+                savedId, savedBinding, savedAt, currentId, currentBinding, currentTime)
+        assertTrue(due(null, null, 0L))
+        assertFalse(due(id, binding, now - 30_000L))
+        assertFalse(due(id, binding, now - 5 * 60 * 60_000L))
+        assertTrue(due(id, binding, now - 6 * 60 * 60_000L))
+        assertTrue(due(id, binding, now, currentId = "rotated-id-sha256"))
+        assertTrue(due(id, binding, now, currentBinding = "new-login"))
+        assertTrue(due(id, binding, now + 60_000L)) // Clock moved backward.
+    }
+
+    @Test fun disablingNotificationsClearsOnlySuccessfulDeviceRegistrationCache() {
+        val app = RuntimeEnvironment.getApplication()
+        val settings = app.getSharedPreferences("roadconquest_notifications", 0)
+        settings.edit().putString("registered_id_hash", "hash")
+            .putString("registered_binding", "binding").putLong("registered_at", 123L).commit()
+        OptionalNotifications.disableLocal(app)
+        assertNull(settings.getString("registered_id_hash", null))
+        assertNull(settings.getString("registered_binding", null))
+        assertFalse(settings.contains("registered_at"))
+        assertTrue(OptionalNotifications.friendsEnabled(app))
+    }
+
     @Test fun queuedMessagesCannotDisplayAfterConsentOrAccountIsCleared() {
         val app = RuntimeEnvironment.getApplication()
         val prefs = app.getSharedPreferences("roadconquest_notifications", 0)
