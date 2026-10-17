@@ -75,11 +75,13 @@ class MapLayoutTest {
                             foundStartupCover = true
                             assertEquals(-1, parser.getAttributeIntValue(ns, "layout_width", 0))
                             assertEquals(-1, parser.getAttributeIntValue(ns, "layout_height", 0))
-                            val attributes = context.obtainStyledAttributes(parser,
-                                intArrayOf(android.R.attr.visibility))
-                            try {
-                                assertEquals(View.GONE, attributes.getInt(0, View.VISIBLE))
-                            } finally { attributes.recycle() }
+                            // Robolectric's unattached layout parser does not resolve
+                            // visibility via obtainStyledAttributes reliably. Read the
+                            // XML attribute itself instead of the themed View default.
+                            val rawVisibility = parser.getAttributeValue(ns, "visibility")
+                            assertTrue("The startup cover defaults to gone",
+                                rawVisibility == "gone" ||
+                                    parser.getAttributeIntValue(ns, "visibility", -1) == View.GONE)
                         }
                         R.id.locationIqCredit -> {
                             visibleCreditCount++
