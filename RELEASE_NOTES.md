@@ -1,4 +1,19 @@
-# Road Conquest 1.0 Beta 50
+# Road Conquest 1.0 Beta 51
+
+## What's new since Beta 50
+
+- **More usable map:** Reduce bottom-sheet and floating-control space, improve navigation icon spacing, and show numbered green/gold nearby 5×5 explored/unexplored map tiles instead of a text-only popup.
+- **Smoother initial map:** Initialize the camera before drawing the first GPS-dependent map layers and keep a ready native world-fog overlay during rapid zoom changes.
+- **More efficient matching:** Pack the Geoapify primary into 100-point, one-credit batches, keep sparse traces eligible, and avoid additional provider requests for complete, exact cached match evidence. Existing confidence and road-acceptance checks remain.
+- **Safer outages and accounting:** Ensure partial/negative cached answers do not bypass a healthy backup provider. Protect a currently leased provider-recovery probe against late failures from other requests; conserve free provider allowances during cancellation and retry.
+- **Better international place discovery:** Preserve countries reported by ISO code alone, prevent nearby cross-border address results from mixing jurisdictions, and recognize English aliases of valid foreign municipal polygons without relaxing geographic containment or administrative classification.
+- **International limitations:** GPS and road-history coordinates are worldwide. Actual road and municipal boundary coverage varies by provider. The default public Nominatim service is subject to an application-wide request limit, so international town discoveries are not guaranteed at large scale. See [international support](INTERNATIONAL_SUPPORT.md).
+- **Preserve compatibility:** Android 12+, same app ID, no reset of local progress or purchases, versionCode **77**. Public verified leaderboards remain disabled by default; production verified scoring needs a separately configured server allowlist that includes 77.
+- **Release gates:** Android unit/lint/build, Android 12/15/17 map integration, account-server tests, and minified-release cold starts must pass before publishing a signed APK/AAB.
+
+---
+
+# Road Conquest 1.0 Beta 50 (previous release)
 
 ## What's new since Beta 49
 
