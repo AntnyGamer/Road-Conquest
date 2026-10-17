@@ -325,7 +325,7 @@ PLAY_SERVICE_ACCOUNT_JSON=<service-account JSON stored as a secret env var>
 # or PLAY_SERVICE_ACCOUNT_FILE=/run/secrets/play-integrity.json
 PLAY_CLOUD_PROJECT_NUMBER=<numeric linked Google Cloud project>
 PLAY_CERTIFICATES=<base64url SHA256 Play app-signing certificate without padding>
-PLAY_VERSION_CODES=71,72,73,74,75,76,77,78
+PLAY_VERSION_CODES=71,72,73,74,75,76,77,78,79
 ```
 
 Apply `schema.sql` as the database owner. Restricted API roles need
