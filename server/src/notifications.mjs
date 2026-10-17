@@ -50,7 +50,7 @@ export function createFcmSender(raw, fetcher = fetch, now = Date.now) {
 
 export function createNotifications(pool, { pepper, sender, deliveryLimit }) {
   const key = createHmac('sha256', pepper).update('roadconquest-fcm-token-encryption-v1').digest();
-  const aad = aad;
+  const aad = Buffer.from('roadconquest-fcm-token-v1');
   const digest = token => createHash('sha256').update(token).digest();
   const seal = token => {
     const iv = randomBytes(12);
