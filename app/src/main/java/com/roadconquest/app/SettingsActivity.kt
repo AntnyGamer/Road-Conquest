@@ -170,10 +170,6 @@ class SettingsActivity : Activity() {
         }
 
         findViewById<Button>(R.id.privacyPolicyButton).setOnClickListener { openAccountPage("/privacy") }
-        findViewById<TextView>(R.id.settingsLocationIqCredit).apply {
-            movementMethod = android.text.method.LinkMovementMethod.getInstance()
-            visibility = if (BuildConfig.MAP_GATEWAY_URL.isBlank()) View.GONE else View.VISIBLE
-        }
         findViewById<Switch>(R.id.crashReportingSwitch).apply {
             isChecked = com.roadconquest.app.diagnostics.CrashReporting.enabled(this@SettingsActivity)
             setOnCheckedChangeListener { _, checked ->
