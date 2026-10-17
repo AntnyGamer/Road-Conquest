@@ -535,6 +535,35 @@ class TrackingRepository(context: Context) {
     }
 
     /**
+     * Read exact saved inputs when a delayed provider job completes. Never trust
+     * an asynchronously returned geometry if the underlying GPS was deleted,
+     * replaced, or belongs to a different history generation.
+     */
+    @Synchronized
+    fun savedMatchingPoints(ids: List<Long>): List<TrackPoint> {
+        if (!isHistoryCurrent() || ids.size !in 2..200 || ids.size != ids.toSet().size) return emptyList()
+        val placeholders = ids.joinToString(",") { "?" }
+        val found = HashMap<Long, TrackPoint>(ids.size)
+        dbHelper.readableDatabase.query(
+            "track_points", TRACK_COLUMNS, "id IN ($placeholders)",
+            ids.map(Long::toString).toTypedArray(), null, null, null
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                val point = cursor.toTrackPoint()
+                found[point.id] = point
+            }
+        }
+        return ids.mapNotNull(found::get).takeIf { it.size == ids.size } ?: emptyList()
+    }
+
+    @Synchronized
+    fun lastPointIdBefore(timestampMillis: Long): Long? =
+        dbHelper.readableDatabase.rawQuery(
+            "SELECT MAX(id) FROM track_points WHERE timestamp_ms <= ?",
+            arrayOf(timestampMillis.toString())
+        ).use { if (it.moveToFirst() && !it.isNull(0)) it.getLong(0) else null }
+
+    /**
      * A finalization event (for example Android Location being switched off) is new information:
      * no additional GPS fixes are coming right now. Let deferred turn holes retry immediately
      * instead of leaving visible provisional gaps for a stale 30 s / 5 min backoff.
