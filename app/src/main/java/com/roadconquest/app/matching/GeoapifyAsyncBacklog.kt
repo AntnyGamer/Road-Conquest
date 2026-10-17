@@ -21,6 +21,7 @@ internal class GeoapifyAsyncBacklog(
 ) {
     private val prefs = context.getSharedPreferences("mapmatching-async-v1", Context.MODE_PRIVATE)
     private val parser = GeoapifyMatcher(origin)
+    private var validatedJobId: String? = null
 
     private data class Window(val ids: List<Long>, val markableIds: Set<Long>, val fingerprint: String) {
         fun toJson() = JSONObject().put("ids", JSONArray(ids)).put("pending", JSONArray(markableIds.toList()))
@@ -87,6 +88,20 @@ internal class GeoapifyAsyncBacklog(
             if (job == null) {
                 prefs.edit().remove("job").remove("deferred").apply()
                 return null // Previously deferred GPS expires independently in SQLite.
+            }
+            // Verify all original GPS samples once per process before any
+            // deferral. Import/clear may have replaced the local history while a
+            // remote job was pending; never freeze an unrelated new journey.
+            if (validatedJobId != job.id) {
+                val sameHistory = job.windows.all { window ->
+                    val points = repository.savedMatchingPoints(window.ids)
+                    points.size == window.ids.size && fingerprint(points) == window.fingerprint
+                }
+                if (!sameHistory) {
+                    prefs.edit().remove("job").remove("deferred").apply()
+                    return null
+                }
+                validatedJobId = job.id
             }
             if (now - job.submittedAt >= MAX_JOB_AGE_MS) {
                 release(repository, job)
