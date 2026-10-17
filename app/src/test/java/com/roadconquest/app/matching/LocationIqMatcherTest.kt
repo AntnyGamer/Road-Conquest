@@ -80,6 +80,23 @@ class LocationIqMatcherTest {
         }
     }
 
+    @Test fun exactTwoMinuteOldResponseDoesNotConsumeAnotherLocationIqRequest() {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody(example))
+            server.enqueue(MockResponse().setBody(example))
+            server.start()
+            val matcher = LocationIqMatcher(server.url("/").toString(), ProviderHealth())
+            assertNotNull(matcher.match(points))
+            val storedAt = LocationIqMatcher::class.java.getDeclaredField("cachedAt").apply { isAccessible = true }
+            storedAt.setLong(matcher, System.currentTimeMillis() - 2 * 60_000L)
+            assertNotNull(matcher.match(points))
+            assertEquals(1, server.requestCount)
+            storedAt.setLong(matcher, System.currentTimeMillis() - 16 * 60_000L)
+            assertNotNull(matcher.match(points))
+            assertEquals(2, server.requestCount)
+        }
+    }
+
     @Test fun phonePostsOnlyToGatewayAndCachedResponseReparsesCurrentPointIds() {
         MockWebServer().use { server ->
             server.start()
