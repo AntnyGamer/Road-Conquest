@@ -106,6 +106,7 @@ class MapRenderer(
     private var fogEnabled = Prefs.isFogEnabled(context)
     private var overlayMode = Prefs.placeOverlayMode(context)
     private var nearbyExplorationRequested = false
+    private var nearbyCenter: Pair<Double, Double>? = null
     private var nearbyExplorationRevision = 0
     private var nearbyVisitedFeatures = EMPTY_FEATURES.toJson()
     private var nearbyUnvisitedFeatures = EMPTY_FEATURES.toJson()
@@ -236,6 +237,7 @@ class MapRenderer(
 
     fun hideNearbyExploration() {
         nearbyExplorationRequested = false
+        nearbyCenter = null
         nearbyExplorationRevision++
         nearbyVisitedFeatures = EMPTY_FEATURES.toJson()
         nearbyUnvisitedFeatures = EMPTY_FEATURES.toJson()
@@ -245,10 +247,12 @@ class MapRenderer(
 
     fun showNearbyExploration(
         latitude: Double, longitude: Double,
-        onShown: (Int, Int) -> Unit, onError: () -> Unit
+        onShown: (Int, Int) -> Unit, onError: () -> Unit,
+        fitCamera: Boolean = true
     ) {
         if (destroyed) return
         nearbyExplorationRequested = true
+        nearbyCenter = latitude to longitude
         val revision = ++nearbyExplorationRevision
         overlayExecutor.execute {
             val result = runCatching {
@@ -288,7 +292,7 @@ class MapRenderer(
                     nearbyNumberFeatures = snapshot.markers
                     ensureNearbyMarkerImages(snapshot.states)
                     applyNearbyExploration()
-                    fitNearbyExploration(latitude, longitude)
+                    if (fitCamera) fitNearbyExploration(latitude, longitude)
                     onShown(snapshot.exploredCount, snapshot.states.size)
                 }, { error ->
                     Log.w("RoadConquest", "Could not load nearby cells", error)
@@ -337,6 +341,13 @@ class MapRenderer(
                 CameraPosition.Builder(it).padding(0.0, 0.0, 0.0, 0.0).build()
             ))
         }
+    }
+
+    /** Update only the tile colors and numbers after saved exploration changes. */
+    fun refreshNearbyExploration() {
+        if (!nearbyExplorationRequested) return
+        val (latitude, longitude) = nearbyCenter ?: return
+        showNearbyExploration(latitude, longitude, {}, {}, fitCamera = false)
     }
 
     private fun applyNearbyExploration() {
@@ -739,6 +750,7 @@ class MapRenderer(
     fun refreshExploration() {
         loadedPlaceBounds = null
         refreshViewport(loadRoads = false)
+        refreshNearbyExploration()
     }
 
     fun refreshTracking() = refreshViewport(loadRoads = false)
