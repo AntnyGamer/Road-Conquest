@@ -341,7 +341,12 @@ class ProviderFallbackTest {
             val result = runCatching { GeoapifyMatcher("https://maps.example").parse(root.toString(), points) }.getOrNull()
             assertTrue(result == null || result.matchedPointConfidences.isEmpty())
         }
-        assertNull(runCatching { GeoapifyMatcher("https://maps.example").parse(example, points.map { it.copy(longitude = -74.0) }) }.getOrNull())
+        // A response tied to different original GPS locations must earn no roads or fixes.
+        // A valid but fully unmatched response may be represented as an empty MatchResult.
+        val rejected = runCatching {
+            GeoapifyMatcher("https://maps.example").parse(example, points.map { it.copy(longitude = -74.0) })
+        }.getOrNull()
+        assertTrue(rejected == null || (rejected.roads.isEmpty() && rejected.matchedPointConfidences.isEmpty()))
     }
     @Test fun quotaResponseHonorsRetryAfterAndSkipsProviderWhileCoolingDown() {
         MockWebServer().use { server ->
