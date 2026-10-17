@@ -255,9 +255,14 @@ object PlaceResolver {
         // Never borrow a locality or region from a different reported country.
         val preferredCountryCode = addresses.asSequence().mapNotNull { it.countryCode }
             .map(String::trim).firstOrNull(String::isNotBlank)
-        val sameCountryAddresses = if (preferredCountryCode == null) addresses else addresses.filter {
-            it.countryCode.isNullOrBlank() || it.countryCode.equals(preferredCountryCode, ignoreCase = true)
-        }
+        val sameCountryAddresses = if (preferredCountryCode == null) addresses else addresses
+            .filter {
+                it.countryCode.isNullOrBlank() ||
+                    it.countryCode.trim().equals(preferredCountryCode, ignoreCase = true)
+            }
+            // Prefer jurisdiction fields from an address whose country code is
+            // explicit. A nearby code-less postal result may be across the border.
+            .sortedBy { it.countryCode.isNullOrBlank() }
         fun firstValue(selector: (android.location.Address) -> String?): String =
             sameCountryAddresses.asSequence().mapNotNull(selector).map(String::trim)
                 .firstOrNull(String::isNotBlank).orEmpty()
@@ -265,8 +270,17 @@ object PlaceResolver {
         // Reverse geocoders sometimes return a road/address result first with incomplete
         // administrative fields. Combine only results for this same coordinate rather than
         // letting one sparse result permanently omit the zero-point state/town.
-        val reportedCountryName = firstValue { it.countryName }
         val reportedCountryCode = firstValue { it.countryCode }
+        val namedCountryFromCodedAddress = sameCountryAddresses.asSequence()
+            .filter { it.countryCode?.trim()?.equals(reportedCountryCode, ignoreCase = true) == true }
+            .mapNotNull { it.countryName?.trim() }
+            .firstOrNull(String::isNotBlank).orEmpty()
+        // A code-less adjacent-country result is not an authoritative label for
+        // a different ISO-coded country. The existing ISO fallback supplies it.
+        val reportedCountryName = namedCountryFromCodedAddress.ifBlank {
+            if (reportedCountryCode.uppercase(Locale.ROOT) in ISO_COUNTRY_CODES) ""
+            else firstValue { it.countryName }
+        }
         val isUnitedStates = reportedCountryCode.equals("US", ignoreCase = true) ||
             canonical(reportedCountryName) in setOf(
                 "us", "usa", "united states", "united states of america"

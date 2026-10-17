@@ -6,10 +6,11 @@
 - **Smoother initial map:** Initialize the camera before drawing the first GPS-dependent map layers and keep a ready native world-fog overlay during rapid zoom changes.
 - **More efficient matching:** Pack the Geoapify primary into 100-point, one-credit batches, keep sparse traces eligible, and avoid additional provider requests for complete, exact cached match evidence. Existing confidence and road-acceptance checks remain.
 - **Safer outages and accounting:** Ensure partial/negative cached answers do not bypass a healthy backup provider. Protect a currently leased provider-recovery probe against late failures from other requests; conserve free provider allowances during cancellation and retry.
-- **Better international place discovery:** Preserve countries reported by ISO code alone, prevent nearby cross-border address results from mixing jurisdictions, and recognize English aliases of valid foreign municipal polygons without relaxing geographic containment or administrative classification.
+- **Better international place discovery:** Preserve countries reported by ISO code alone, prioritize fully country-coded results over adjacent code-less postal addresses, prevent cross-border address results from mixing jurisdictions, and recognize English aliases of valid foreign municipal polygons without relaxing geographic containment or administrative classification.
 - **International limitations:** GPS and road-history coordinates are worldwide. Actual road and municipal boundary coverage varies by provider. The default public Nominatim service is subject to an application-wide request limit, so international town discoveries are not guaranteed at large scale. See [international support](INTERNATIONAL_SUPPORT.md).
 - **Preserve compatibility:** Android 12+, same app ID, no reset of local progress or purchases, versionCode **77**. Public verified leaderboards remain disabled by default; production verified scoring needs a separately configured server allowlist that includes 77.
 - **Release gates:** Android unit/lint/build, Android 12/15/17 map integration, account-server tests, and minified-release cold starts must pass before publishing a signed APK/AAB.
+- **Native map test reliability:** Remove two unstable assertions that sampled transient TextureView frames during camera animations. Retain settled overview/rotation, polar/date-line, saved-clearing, native road visibility, and all map/release-startup tests. Animation-frame fog quality still requires manual GPU/device testing.
 
 ---
 

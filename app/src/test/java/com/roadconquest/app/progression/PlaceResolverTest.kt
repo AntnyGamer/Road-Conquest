@@ -78,6 +78,36 @@ class PlaceResolverTest {
         assertFalse(places.any { it.kind == PlaceKind.TOWN })
     }
 
+    @Test fun codeLessAddressAcrossBorderDoesNotOverrideIsoCountryOrLocality() {
+        val crossBorderPostal = Address(Locale.FRANCE).apply {
+            countryName = "France"
+            adminArea = "Grand Est"
+            locality = "Strasbourg"
+        }
+        val actualGermanFix = Address(Locale.GERMANY).apply {
+            countryCode = "DE"
+            countryName = null
+            adminArea = "Bavaria"
+            locality = "Munich"
+        }
+        val places = PlaceResolver.resolveAddresses(
+            candidate, listOf(crossBorderPostal, actualGermanFix)
+        )
+        assertEquals(listOf("de", "de|bavaria", "de|bavaria|munich"), places.map { it.key })
+        assertEquals("Germany", places.single { it.kind == PlaceKind.COUNTRY }.displayName)
+    }
+
+    @Test fun foreignPartialAddressStillSuppliesMissingRegionWithinSameCountry() {
+        val codedCountry = Address(Locale.UK).apply {
+            countryCode = "GB"; countryName = "United Kingdom"
+        }
+        val partial = Address(Locale.UK).apply {
+            adminArea = "England"; locality = "York"
+        }
+        val places = PlaceResolver.resolveAddresses(candidate, listOf(partial, codedCountry))
+        assertEquals(listOf("gb", "gb|england", "gb|england|york"), places.map { it.key })
+    }
+
     @Test fun officialFallbackNeverOverwritesAKnownNonUsCountry() {
         val context = org.robolectric.RuntimeEnvironment.getApplication()
         val french = Address(Locale.FRANCE).apply { countryCode = "FR"; countryName = "France" }
