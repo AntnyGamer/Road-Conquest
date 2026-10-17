@@ -16,7 +16,10 @@ test("maintenance shares initialization and cleanup across requests and does no 
   await Promise.all(Array.from({ length: 100 }, () => prepare()));
   assert.equal(initialized, 1);
   assert.equal(queries, 7, "One cleanup, rather than one for every concurrent request");
-  time += 15 * 60 * 1000 - 1;
+  time += 15 * 60 * 1000;
+  await prepare();
+  assert.equal(queries, 7, "Expired rows can safely wait while access checks enforce deadlines");
+  time += 45 * 60 * 1000 - 1;
   await prepare();
   assert.equal(queries, 7);
   time += 1;
