@@ -21,12 +21,17 @@ import org.maplibre.android.geometry.LatLngQuad
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
+import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.FillLayer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.RasterLayer
 import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.layers.TransitionOptions
+import org.maplibre.android.style.layers.PropertyFactory.circleColor
+import org.maplibre.android.style.layers.PropertyFactory.circleRadius
+import org.maplibre.android.style.layers.PropertyFactory.circleStrokeColor
+import org.maplibre.android.style.layers.PropertyFactory.circleStrokeWidth
 import org.maplibre.android.style.layers.PropertyFactory.fillAntialias
 import org.maplibre.android.style.layers.PropertyFactory.fillColor
 import org.maplibre.android.style.layers.PropertyFactory.fillOpacity
@@ -43,6 +48,13 @@ import org.maplibre.android.style.layers.PropertyFactory.lineOpacity
 import org.maplibre.android.style.layers.PropertyFactory.lineWidth
 import org.maplibre.android.style.layers.PropertyFactory.rasterFadeDuration
 import org.maplibre.android.style.layers.PropertyFactory.rasterOpacity
+import org.maplibre.android.style.layers.PropertyFactory.textAllowOverlap
+import org.maplibre.android.style.layers.PropertyFactory.textColor
+import org.maplibre.android.style.layers.PropertyFactory.textField
+import org.maplibre.android.style.layers.PropertyFactory.textHaloColor
+import org.maplibre.android.style.layers.PropertyFactory.textHaloWidth
+import org.maplibre.android.style.layers.PropertyFactory.textIgnorePlacement
+import org.maplibre.android.style.layers.PropertyFactory.textSize
 import org.maplibre.android.style.sources.GeoJsonSource
 import org.maplibre.android.style.sources.ImageSource
 import org.maplibre.geojson.Feature
@@ -101,6 +113,11 @@ class MapRenderer(
     private var appliedRoadColor = ""
     private var fogEnabled = Prefs.isFogEnabled(context)
     private var overlayMode = Prefs.placeOverlayMode(context)
+    private var nearbyExplorationRequested = false
+    private var nearbyExplorationRevision = 0
+    private var nearbyVisitedFeatures = EMPTY_FEATURES.toJson()
+    private var nearbyUnvisitedFeatures = EMPTY_FEATURES.toJson()
+    private var nearbyNumberFeatures = EMPTY_FEATURES.toJson()
     @Volatile private var shownOverlayKeys = emptyList<String>()
     @Volatile private var shownOverlayCacheGeneration = -1L
     private val overlayClient = PlaceOverlayClient()
@@ -219,6 +236,100 @@ class MapRenderer(
         Prefs.setPlaceOverlayMode(context, mode)
         clearPlaceOverlaySources()
         refreshPlaceOverlays()
+    }
+
+    /** Only locally recorded mile cells are used; exploring never calls the map API. */
+    fun isNearbyExplorationVisible(): Boolean = nearbyExplorationRequested
+
+    fun hideNearbyExploration() {
+        nearbyExplorationRequested = false
+        nearbyExplorationRevision++
+        nearbyVisitedFeatures = EMPTY_FEATURES.toJson()
+        nearbyUnvisitedFeatures = EMPTY_FEATURES.toJson()
+        nearbyNumberFeatures = EMPTY_FEATURES.toJson()
+        applyNearbyExploration()
+    }
+
+    fun showNearbyExploration(
+        latitude: Double, longitude: Double,
+        onShown: (Int, Int) -> Unit, onError: () -> Unit
+    ) {
+        if (destroyed) return
+        nearbyExplorationRequested = true
+        val revision = ++nearbyExplorationRevision
+        overlayExecutor.execute {
+            val result = runCatching {
+                val cells = repository.nearbyExplorationTiles(latitude, longitude)
+                val visited = JSONArray()
+                val unvisited = JSONArray()
+                val labels = JSONArray()
+                cells.forEachIndexed { index, (cell, explored) ->
+                    val (lat, lon) = FogGrid.center(cell)
+                    val corners = FogGrid.nearLongitude(FogGrid.corners(lat, lon), longitude)
+                    val ring = JSONArray()
+                    for (i in 0..4) {
+                        val corner = i % 4
+                        ring.put(JSONArray().put(corners[corner * 2 + 1]).put(corners[corner * 2]))
+                    }
+                    val polygon = JSONObject().put("type", "Feature")
+                        .put("geometry", JSONObject().put("type", "Polygon")
+                            .put("coordinates", JSONArray().put(ring)))
+                        .put("properties", JSONObject())
+                    (if (explored) visited else unvisited).put(polygon)
+                    labels.put(JSONObject().put("type", "Feature")
+                        .put("geometry", JSONObject().put("type", "Point").put("coordinates",
+                            JSONArray().put((corners[1] + corners[3]) / 2.0).put(lat)))
+                        .put("properties", JSONObject().put("label",
+                            if (explored) "✓${index + 1}" else "${index + 1}")))
+                }
+                fun collection(features: JSONArray): String = JSONObject()
+                    .put("type", "FeatureCollection").put("features", features).toString()
+                Triple(collection(visited), collection(unvisited), collection(labels)) to
+                    (visited.length() to cells.size)
+            }
+            mainHandler.post {
+                if (destroyed || revision != nearbyExplorationRevision ||
+                    !nearbyExplorationRequested) return@post
+                result.fold({ (collections, totals) ->
+                    nearbyVisitedFeatures = collections.first
+                    nearbyUnvisitedFeatures = collections.second
+                    nearbyNumberFeatures = collections.third
+                    applyNearbyExploration()
+                    onShown(totals.first, totals.second)
+                }, { error ->
+                    Log.w("RoadConquest", "Could not load nearby cells", error)
+                    hideNearbyExploration()
+                    onError()
+                })
+            }
+        }
+    }
+
+    private fun applyNearbyExploration() {
+        val style = map.style ?: return
+        (style.getSource(NEARBY_VISITED_SOURCE_ID) as? GeoJsonSource)?.setGeoJson(nearbyVisitedFeatures)
+        (style.getSource(NEARBY_UNVISITED_SOURCE_ID) as? GeoJsonSource)?.setGeoJson(nearbyUnvisitedFeatures)
+        (style.getSource(NEARBY_NUMBERS_SOURCE_ID) as? GeoJsonSource)?.setGeoJson(nearbyNumberFeatures)
+    }
+
+    private fun installNearbyExploration(style: Style) {
+        style.addSource(GeoJsonSource(NEARBY_VISITED_SOURCE_ID, nearbyVisitedFeatures))
+        style.addSource(GeoJsonSource(NEARBY_UNVISITED_SOURCE_ID, nearbyUnvisitedFeatures))
+        style.addSource(GeoJsonSource(NEARBY_NUMBERS_SOURCE_ID, nearbyNumberFeatures))
+        style.addLayer(FillLayer(NEARBY_UNVISITED_LAYER_ID, NEARBY_UNVISITED_SOURCE_ID)
+            .withProperties(fillColor(0xFFE4A42D.toInt()), fillOpacity(0.38f),
+                fillOutlineColor(0xFFFFD271.toInt())))
+        style.addLayer(FillLayer(NEARBY_VISITED_LAYER_ID, NEARBY_VISITED_SOURCE_ID)
+            .withProperties(fillColor(0xFF149F72.toInt()), fillOpacity(0.38f),
+                fillOutlineColor(0xFF7FE2AE.toInt())))
+        // Number chips are drawn above the fog and stay anchored to each mile tile.
+        style.addLayer(CircleLayer(NEARBY_MARKERS_LAYER_ID, NEARBY_NUMBERS_SOURCE_ID)
+            .withProperties(circleColor(0xFF172333.toInt()), circleRadius(14f),
+                circleStrokeColor(Color.WHITE), circleStrokeWidth(1f)))
+        style.addLayer(SymbolLayer(NEARBY_NUMBERS_LAYER_ID, NEARBY_NUMBERS_SOURCE_ID)
+            .withProperties(textField("{label}"), textColor(Color.WHITE), textSize(12f),
+                textHaloColor(0xFF172333.toInt()), textHaloWidth(1f),
+                textAllowOverlap(true), textIgnorePlacement(true)))
     }
 
     private fun captureTownViewport(): OverlayViewport? {
@@ -391,6 +502,7 @@ class MapRenderer(
             if (destroyed || generation != styleGeneration) return@setStyle
             installPlaceOverlayLayers(style)
             installFogLayer(style)
+            installNearbyExploration(style)
             installRecordedRouteLayer(style)
             installRoadLayer(style)
             installCarLayer(style)
@@ -1506,6 +1618,13 @@ class MapRenderer(
         private const val COUNTRY_OVERLAY_BOUNDARY_LAYER_ID = "roadconquest-country-overlays-outline"
         private const val STATE_OVERLAY_BOUNDARY_LAYER_ID = "roadconquest-state-overlays-outline"
         private const val TOWN_OVERLAY_BOUNDARY_LAYER_ID = "roadconquest-town-overlays-outline"
+        private const val NEARBY_VISITED_SOURCE_ID = "roadconquest-nearby-visited"
+        private const val NEARBY_UNVISITED_SOURCE_ID = "roadconquest-nearby-unvisited"
+        private const val NEARBY_NUMBERS_SOURCE_ID = "roadconquest-nearby-numbers"
+        private const val NEARBY_VISITED_LAYER_ID = "roadconquest-nearby-visited-fill"
+        private const val NEARBY_UNVISITED_LAYER_ID = "roadconquest-nearby-unvisited-fill"
+        private const val NEARBY_MARKERS_LAYER_ID = "roadconquest-nearby-number-markers"
+        private const val NEARBY_NUMBERS_LAYER_ID = "roadconquest-nearby-number-labels"
         private const val ROAD_SOURCE_ID = "roadconquest-traveled-roads"
         private const val PENDING_ROUTE_SOURCE_ID = "roadconquest-recorded-route"
         private const val PENDING_ROUTE_LAYER_ID = "roadconquest-recorded-route-line"
