@@ -13,6 +13,7 @@ import android.os.SystemClock
 import android.util.Log
 import android.view.View
 import com.roadconquest.app.progression.Cosmetics
+import com.roadconquest.app.R
 import com.roadconquest.app.data.TrackingRepository
 import com.roadconquest.app.data.ProgressionRepository
 import com.roadconquest.app.data.PlaceKind
@@ -326,17 +327,25 @@ class MapRenderer(
         val bounds = LatLngBounds.Builder().apply {
             corners.forEach { (lat, lon) -> include(LatLng(lat, lon)) }
         }.build()
-        // Account for the bottom tracking sheet, and leave side icons unobstructed.
-        // Fit calculations use temporary insets; preserve the map's normal unpadded
-        // camera for subsequent tracking/recenter gestures.
+        // Use measured screen obstructions, not fixed heights: the tracking
+        // sheet and text chips can grow with font scale, device insets and locale.
+        // Keep at least 120dp of the map available on shorter/landscape screens.
         val density = context.resources.displayMetrics.density
-        val side = (24 * density).toInt()
-        val top = (52 * density).toInt()
-        val bottom = (166 * density).toInt()
-        val enoughRoom = mapView.height - top - bottom > (80 * density).toInt()
-        val insetTop = if (enoughRoom) top else 0
-        val insetBottom = if (enoughRoom) bottom else 0
-        map.getCameraForLatLngBounds(bounds, intArrayOf(side, insetTop, side, insetBottom))?.let {
+        val root = mapView.rootView
+        val controlsTop = listOf(R.id.overlayButton, R.id.pointsText).maxOf { id ->
+            root.findViewById<View>(id)?.bottom ?: 0
+        } + (8 * density).toInt()
+        val panelTop = root.findViewById<View>(R.id.controlPanel)?.top ?: 0
+        val measuredTop = controlsTop.takeIf { it > 0 } ?: (52 * density).toInt()
+        val measuredBottom = if (panelTop > 0) mapView.height - panelTop + (12 * density).toInt()
+            else (166 * density).toInt()
+        val maxInsets = (mapView.height - 120 * density).coerceAtLeast(0f)
+        val combined = (measuredTop + measuredBottom).toFloat()
+        val scale = if (combined > maxInsets && combined > 0f) maxInsets / combined else 1f
+        val top = (measuredTop * scale).toInt()
+        val bottom = (measuredBottom * scale).toInt()
+        val side = (24 * density).toInt().coerceAtMost(mapView.width / 6)
+        map.getCameraForLatLngBounds(bounds, intArrayOf(side, top, side, bottom))?.let {
             map.moveCamera(CameraUpdateFactory.newCameraPosition(
                 CameraPosition.Builder(it).padding(0.0, 0.0, 0.0, 0.0).build()
             ))
