@@ -52,21 +52,31 @@ class TrackingRepository(context: Context) {
         }
     }
 
-    @Synchronized
-    fun getExploredPlacesInBounds(north: Double, east: Double, south: Double, west: Double): DoubleArray {
-        val longitudeSelection = if (east >= west) "longitude BETWEEN ? AND ?" else "(longitude >= ? OR longitude <= ?)"
-        dbHelper.readableDatabase.query("explored_places", arrayOf("latitude", "longitude"),
+    /** Reuse the same indexed viewport scan for 50 m samples and mile-cell centers. */
+    private fun exploredCoordinatesInBounds(
+        table: String, north: Double, east: Double, south: Double, west: Double
+    ): DoubleArray {
+        val longitudeSelection = if (east >= west) "longitude BETWEEN ? AND ?" else
+            "(longitude >= ? OR longitude <= ?)"
+        return dbHelper.readableDatabase.query(
+            table, arrayOf("latitude", "longitude"),
             "latitude BETWEEN ? AND ? AND $longitudeSelection",
-            arrayOf(south.toString(), north.toString(), west.toString(), east.toString()), null, null, null).use { cursor ->
+            arrayOf(south.toString(), north.toString(), west.toString(), east.toString()),
+            null, null, null
+        ).use { cursor ->
             val coordinates = DoubleArray(cursor.count * 2)
             var index = 0
             while (cursor.moveToNext()) {
                 coordinates[index++] = cursor.getDouble(0)
                 coordinates[index++] = cursor.getDouble(1)
             }
-            return coordinates
+            coordinates
         }
     }
+
+    @Synchronized
+    fun getExploredPlacesInBounds(north: Double, east: Double, south: Double, west: Double): DoubleArray =
+        exploredCoordinatesInBounds("explored_places", north, east, south, west)
 
     /**
      * Authoritative persisted mile-cell unlock. This is independent of 50 m legacy
@@ -130,24 +140,8 @@ class TrackingRepository(context: Context) {
 
     /** Read the authoritative mile cells (as centers) with a padded viewport query. */
     @Synchronized
-    fun getExploredGridInBounds(north: Double, east: Double, south: Double, west: Double): DoubleArray {
-        val longitudeSelection = if (east >= west) "longitude BETWEEN ? AND ?" else
-            "(longitude >= ? OR longitude <= ?)"
-        dbHelper.readableDatabase.query(
-            "explored_grid", arrayOf("latitude", "longitude"),
-            "latitude BETWEEN ? AND ? AND $longitudeSelection",
-            arrayOf(south.toString(), north.toString(), west.toString(), east.toString()),
-            null, null, null
-        ).use { cursor ->
-            val result = DoubleArray(cursor.count * 2)
-            var offset = 0
-            while (cursor.moveToNext()) {
-                result[offset++] = cursor.getDouble(0)
-                result[offset++] = cursor.getDouble(1)
-            }
-            return result
-        }
-    }
+    fun getExploredGridInBounds(north: Double, east: Double, south: Double, west: Double): DoubleArray =
+        exploredCoordinatesInBounds("explored_grid", north, east, south, west)
 
     /**
      * Recover the final compressed point when Android killed tracking without onDestroy.
@@ -1531,6 +1525,19 @@ class TrackingRepository(context: Context) {
         timesDrivenExact = getInt(10) != 0
     )
 
+    private fun nearbyRoadCandidates(latitude: Double, longitude: Double, radiusMeters: Double): List<RoadRecord> {
+        val latitudePad = radiusMeters / METERS_PER_DEGREE
+        val longitudePad = (radiusMeters /
+            (METERS_PER_DEGREE * cos(Math.toRadians(latitude)).coerceAtLeast(0.01))).coerceAtMost(180.0)
+        return getRoadsInBounds(
+            (latitude + latitudePad).coerceAtMost(90.0),
+            wrap(longitude + longitudePad),
+            (latitude - latitudePad).coerceAtLeast(-90.0),
+            wrap(longitude - longitudePad),
+            Int.MAX_VALUE
+        )
+    }
+
     /**
      * Fail closed when another saved road is nearby. An ambiguous junction or
      * parallel road must be verified online rather than credited as a local re-drive.
@@ -1544,16 +1551,7 @@ class TrackingRepository(context: Context) {
             latitude !in -90.0..90.0 || longitude !in -180.0..180.0 ||
             snapRadiusMeters <= 0.0 || exclusionRadiusMeters <= snapRadiusMeters
         ) return null
-        val latitudePad = exclusionRadiusMeters / METERS_PER_DEGREE
-        val longitudePad = (exclusionRadiusMeters /
-            (METERS_PER_DEGREE * cos(Math.toRadians(latitude)).coerceAtLeast(0.01))).coerceAtMost(180.0)
-        val roads = getRoadsInBounds(
-            (latitude + latitudePad).coerceAtMost(90.0),
-            wrap(longitude + longitudePad),
-            (latitude - latitudePad).coerceAtLeast(-90.0),
-            wrap(longitude - longitudePad),
-            Int.MAX_VALUE
-        )
+        val roads = nearbyRoadCandidates(latitude, longitude, exclusionRadiusMeters)
         var single: RoadRecord? = null
         var nearbyCount = 0
         for (road in roads) {
@@ -1570,16 +1568,7 @@ class TrackingRepository(context: Context) {
     @Synchronized
     fun findRoadNear(latitude: Double, longitude: Double, radiusMeters: Double): RoadRecord? {
         if (!latitude.isFinite() || !longitude.isFinite() || radiusMeters <= 0.0) return null
-        val latitudePad = radiusMeters / METERS_PER_DEGREE
-        val longitudePad = (radiusMeters /
-            (METERS_PER_DEGREE * cos(Math.toRadians(latitude)).coerceAtLeast(0.01))).coerceAtMost(180.0)
-        val candidates = getRoadsInBounds(
-            (latitude + latitudePad).coerceAtMost(90.0),
-            wrap(longitude + longitudePad),
-            (latitude - latitudePad).coerceAtLeast(-90.0),
-            wrap(longitude - longitudePad),
-            Int.MAX_VALUE
-        )
+        val candidates = nearbyRoadCandidates(latitude, longitude, radiusMeters)
         var best: RoadRecord? = null
         var bestDistance = radiusMeters
         for (road in candidates) {
