@@ -709,6 +709,12 @@ class MapRenderingDeviceTest {
             time = System.currentTimeMillis()
         }
         assertTrue(repository.recordExploredGridCell(visited))
+        val cellCenter = repository.readableDatabase().rawQuery(
+            "SELECT latitude, longitude FROM explored_grid LIMIT 1", null
+        ).use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            LatLng(cursor.getDouble(0), cursor.getDouble(1))
+        }
         try {
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
                 val styleReady = CountDownLatch(1)
@@ -763,6 +769,20 @@ class MapRenderingDeviceTest {
                     if (!tileVisible) SystemClock.sleep(100)
                 }
                 assertTrue("A visited tile must really draw on the native map", tileVisible)
+                val markerDeadline = SystemClock.elapsedRealtime() + 10_000L
+                var markerVisible = false
+                while (!markerVisible && SystemClock.elapsedRealtime() < markerDeadline) {
+                    scenario.onActivity { activity ->
+                        val map = MainActivity::class.java.getDeclaredField("activeMap")
+                            .apply { isAccessible = true }.get(activity) as MapLibreMap
+                        markerVisible = map.queryRenderedFeatures(
+                            map.projection.toScreenLocation(cellCenter),
+                            "roadconquest-nearby-number-labels"
+                        ).isNotEmpty()
+                    }
+                    if (!markerVisible) SystemClock.sleep(100)
+                }
+                assertTrue("Number marker must render at the visited tile center", markerVisible)
                 scenario.onActivity { activity ->
                     assertTrue(renderer.isNearbyExplorationVisible())
                     val map = activity.findViewById<MapView>(R.id.mapView)
