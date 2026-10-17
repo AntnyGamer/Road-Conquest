@@ -143,6 +143,7 @@ class MapRenderer(
     private val fogCoverageScreen = DoubleArray(8)
     private var showingDetailedFog = false
     private var showingRegionalFog = false
+    private var showingOverviewWorldFog = false
     private var activeDetailedFogAlternate = false
     private var lastFogRenderAt = 0L
     private var minimumZoom = Double.NaN
@@ -1186,11 +1187,21 @@ class MapRenderer(
         regionalFogCoordinates = null
         showingDetailedFog = false
         showingRegionalFog = false
+        showingOverviewWorldFog = false
         installedRegionalFogKey = null
         // Keep a ready native world layer behind the detailed viewport. A fast pinch can
         // outrun even a padded bitmap; it must never reveal an unrendered rectangle.
         installFogRaster(style, WORLD_FOG_SOURCE_ID, WORLD_FOG_LAYER_ID, worldFogQuad(), overviewFog,
-            if (fogEnabled) 1f else 0f)
+            if (fogEnabled && map.cameraPosition.zoom >= FogBitmapRenderer.MIN_FOG_REVEAL_ZOOM) 1f else 0f)
+        // A native zoom-limited world layer stays present through animated zooms.
+        // Unlike a Java camera callback, its visibility follows each rendered zoom
+        // frame and cannot lag the transition to a world-scale view.
+        style.addLayer(RasterLayer(WORLD_OVERVIEW_FOG_LAYER_ID, WORLD_FOG_SOURCE_ID)
+            .withProperties(rasterOpacity(if (fogEnabled) 1f else 0f), rasterFadeDuration(0f))
+            .apply {
+                setMaxZoom(FogBitmapRenderer.MIN_FOG_REVEAL_ZOOM.toFloat())
+                setRasterOpacityTransition(TransitionOptions(0L, 0L))
+            })
         val transparent = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888)
         // Kept at a broader map scale while idle. Only one fog raster is visible:
         // stacking world/regional/detail would darken the unexplored map and cover holes.
@@ -1279,7 +1290,9 @@ class MapRenderer(
                 )
             }
         val regional = regionalReady && (preferRegional || !detailed)
-        val changed = detailed != showingDetailedFog || regional != showingRegionalFog
+        val overview = fogEnabled && cameraPosition.zoom < FogBitmapRenderer.MIN_FOG_REVEAL_ZOOM
+        val changed = detailed != showingDetailedFog || regional != showingRegionalFog ||
+            overview != showingOverviewWorldFog
         if (!force && !changed) return
         val detail = map.style?.getLayer(
             if (activeDetailedFogAlternate) FOG_ALT_LAYER_ID else FOG_LAYER_ID
@@ -1288,9 +1301,12 @@ class MapRenderer(
             if (activeDetailedFogAlternate) FOG_LAYER_ID else FOG_ALT_LAYER_ID
         ) as? RasterLayer
         val worldLayer = map.style?.getLayer(WORLD_FOG_LAYER_ID) as? RasterLayer
+        val overviewLayer = map.style?.getLayer(WORLD_OVERVIEW_FOG_LAYER_ID) as? RasterLayer
         val regionalLayer = map.style?.getLayer(REGIONAL_FOG_LAYER_ID) as? RasterLayer
         showingDetailedFog = detailed
         showingRegionalFog = regional
+        showingOverviewWorldFog = overview
+        overviewLayer?.setProperties(rasterOpacity(if (fogEnabled) 1f else 0f))
         // MapLibre submits each native property change separately. Revealing the
         // replacement *before* hiding the old raster prevents one uncovered frame
         // during rapid animated zooms (observed on Android 12). All raster fade
@@ -1312,7 +1328,9 @@ class MapRenderer(
             inactive?.setProperties(rasterOpacity(0f))
             worldLayer?.setProperties(rasterOpacity(0f))
         } else {
-            worldLayer?.setProperties(rasterOpacity(1f))
+            // Below the reveal threshold the native overview is already active.
+            // Do not double-darken it with the regular fallback world raster.
+            worldLayer?.setProperties(rasterOpacity(if (overview) 0f else 1f))
             detail?.setProperties(rasterOpacity(0f))
             inactive?.setProperties(rasterOpacity(0f))
             regionalLayer?.setProperties(rasterOpacity(0f))
@@ -1745,6 +1763,7 @@ class MapRenderer(
         private const val FOG_ALT_LAYER_ID = "roadconquest-fog-buffer-raster"
         private const val WORLD_FOG_SOURCE_ID = "roadconquest-world-fog"
         private const val WORLD_FOG_LAYER_ID = "roadconquest-world-fog-raster"
+        private const val WORLD_OVERVIEW_FOG_LAYER_ID = "roadconquest-world-fog-overview-raster"
         private const val REGIONAL_FOG_SOURCE_ID = "roadconquest-regional-fog"
         private const val REGIONAL_FOG_LAYER_ID = "roadconquest-regional-fog-raster"
         private const val REGIONAL_FOG_DIMENSION = 768
