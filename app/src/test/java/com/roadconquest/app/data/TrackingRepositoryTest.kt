@@ -408,7 +408,8 @@ class TrackingRepositoryTest {
         repository.deferMatching(listOf(ids[5]), System.currentTimeMillis() + 60_000L)
         val window = repository.loadMatchingWindow(limit = 25)
         assertEquals(setOf(ids[8]), window.markableIds)
-        assertFalse(ids[2] in window.points.map { it.id })
+        // Older pending evidence may still appear as read-only anchor context.
+        assertFalse(ids[2] in window.markableIds)
         assertFalse(ids[5] in window.markableIds)
     }
 
@@ -417,7 +418,8 @@ class TrackingRepositoryTest {
         repository.markMatched(ids.filter { it != ids[2] && it != ids[20] })
         val window = repository.loadMatchingWindow(limit = 25)
         assertEquals(setOf(ids[20]), window.markableIds)
-        assertFalse(ids[2] in window.points.map { it.id })
+        assertTrue(window.points.size <= 25)
+        assertFalse(ids[2] in window.markableIds)
     }
 
     @Test fun tenPointBatchesDrainBacklogWithoutMissingBoundaryEdges() {
