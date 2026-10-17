@@ -557,6 +557,7 @@ class ProgressionRepositoryTest {
             accuracy = 5f
         }
         assertTrue(progression.recordPlaceCandidate(later))
+        assertNull(progression.nextPlaceCandidateAttemptMillis())
         assertTrue(progression.pendingPlaceCandidates(nowMillis = 3_000L).isEmpty())
 
         // The first good live fix is stored exactly rather than snapped to the 2 km candidate grid.
@@ -567,6 +568,7 @@ class ProgressionRepositoryTest {
             accuracy = 5f
         }
         assertTrue(progression.recordBaselineCandidate(startFix))
+        assertEquals(0L, progression.nextPlaceCandidateAttemptMillis())
         val baseline = progression.pendingPlaceCandidates(nowMillis = 4_000L).single()
         assertEquals(startFix.latitude, baseline.latitude, 0.0)
         assertEquals(startFix.longitude, baseline.longitude, 0.0)
@@ -596,8 +598,10 @@ class ProgressionRepositoryTest {
         // The ordinary candidate from before the first live baseline is deliberately removed:
         // it cannot define or inherit the zero-point starting location.
         assertTrue(progression.pendingPlaceCandidates(nowMillis = 4_000L).isEmpty())
+        assertNull(progression.nextPlaceCandidateAttemptMillis())
         later.time = 5_000L
         assertTrue(progression.recordPlaceCandidate(later))
+        assertEquals(0L, progression.nextPlaceCandidateAttemptMillis())
         val next = progression.pendingPlaceCandidates(nowMillis = 6_000L).single()
         assertEquals(
             1,
