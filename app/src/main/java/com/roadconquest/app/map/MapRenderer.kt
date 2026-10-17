@@ -255,6 +255,7 @@ class MapRenderer(
         nearbyExplorationRequested = true
         nearbyCenter = latitude to longitude
         val revision = ++nearbyExplorationRevision
+        val initialViewportRevision = viewportRevision
         overlayExecutor.execute {
             val result = runCatching {
                 val cells = repository.nearbyExplorationTiles(latitude, longitude)
@@ -293,7 +294,11 @@ class MapRenderer(
                     nearbyNumberFeatures = snapshot.markers
                     ensureNearbyMarkerImages(snapshot.states)
                     applyNearbyExploration()
-                    if (fitCamera) fitNearbyExploration(latitude, longitude)
+                    // Never snap the camera back if the user panned while the
+                    // local query was waiting behind another overlay operation.
+                    if (fitCamera && initialViewportRevision == viewportRevision) {
+                        fitNearbyExploration(latitude, longitude)
+                    }
                     onShown(snapshot.exploredCount, snapshot.states.size)
                 }, { error ->
                     Log.w("RoadConquest", "Could not load nearby cells", error)
