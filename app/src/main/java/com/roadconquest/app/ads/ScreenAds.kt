@@ -170,12 +170,7 @@ class ScreenAds(
         formPending = false
         formShowing = true
         UserMessagingPlatform.loadAndShowConsentFormIfRequired(activity) { error ->
-            if (!alive()) return@loadAndShowConsentFormIfRequired
-            formShowing = false
-            consentComplete = true
-            if (error != null && active) toast(R.string.ad_consent_error)
-            updatePrivacyButton()
-            enableAds()
+            completeConsentForm(error != null)
         }
     }
 
@@ -190,13 +185,17 @@ class ScreenAds(
         updateRewardButton()
         UserMessagingPlatform.showPrivacyOptionsForm(activity) { error ->
             privacyRevision = ++AdPrivacy.revision
-            if (!alive()) return@showPrivacyOptionsForm
-            formShowing = false
-            consentComplete = true
-            if (error != null && active) toast(R.string.ad_consent_error)
-            updatePrivacyButton()
-            enableAds()
+            completeConsentForm(error != null)
         }
+    }
+
+    private fun completeConsentForm(hadError: Boolean) {
+        if (!alive()) return
+        formShowing = false
+        consentComplete = true
+        if (hadError && active) toast(R.string.ad_consent_error)
+        updatePrivacyButton()
+        enableAds()
     }
 
     private fun updatePrivacyButton() {
