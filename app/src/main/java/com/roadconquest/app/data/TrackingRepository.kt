@@ -174,19 +174,22 @@ class TrackingRepository(context: Context) {
         true
     }
 
+    /** Common GPS columns for saved and compressed-only driving fixes. */
+    private fun drivingValues(location: Location, timestamp: Long) = ContentValues().apply {
+        put("latitude", location.latitude)
+        put("longitude", location.longitude)
+        put("accuracy_m", location.accuracy)
+        put("speed_mps", LocationProviders.reliableMeasuredSpeed(location))
+        put("bearing_deg", if (location.hasBearing() && location.bearing.isFinite()) location.bearing else 0f)
+        put("timestamp_ms", timestamp)
+    }
+
     /** Preserve accepted driving evidence omitted from the compressed online matching queue. */
     @Synchronized
     fun recordSkippedDrivingFix(location: Location) {
         synchronized(dbHelper.historyLock) {
             if (historyGeneration != dbHelper.historyGeneration) return
-            val values = ContentValues().apply {
-                put("latitude", location.latitude)
-                put("longitude", location.longitude)
-                put("accuracy_m", location.accuracy)
-                put("speed_mps", LocationProviders.reliableMeasuredSpeed(location))
-                put("bearing_deg", if (location.hasBearing() && location.bearing.isFinite()) location.bearing else 0f)
-                put("timestamp_ms", location.time.takeIf { it > 0L } ?: System.currentTimeMillis())
-            }
+            val values = drivingValues(location, location.time.takeIf { it > 0L } ?: System.currentTimeMillis())
             dbHelper.writableDatabase.insertOrThrow("skipped_driving_fixes", null, values)
         }
     }
@@ -326,13 +329,7 @@ class TrackingRepository(context: Context) {
                 )
             }
         }
-        val values = ContentValues().apply {
-            put("latitude", location.latitude)
-            put("longitude", location.longitude)
-            put("accuracy_m", location.accuracy)
-            put("speed_mps", LocationProviders.reliableMeasuredSpeed(location))
-            put("bearing_deg", if (location.hasBearing() && location.bearing.isFinite()) location.bearing else 0f)
-            put("timestamp_ms", timestamp)
+        val values = drivingValues(location, timestamp).apply {
             put("matched", 0)
             put("distance_m", distance)
         }
