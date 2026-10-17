@@ -128,23 +128,16 @@ class TripHistoryActivity : Activity() {
             isAppearanceLightNavigationBars = lightSystemBars
         }
         MapLibre.getInstance(this)
-        // On short screens, a fixed map plus player could leave the trip list
-        // with zero space. Allow the whole screen to scroll in that case.
-        val compact = resources.displayMetrics.heightPixels / resources.displayMetrics.density < 600f ||
-            resources.configuration.fontScale > 1.25f
+        // Keep the entire replay and trip list scrollable at every screen size.
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(20), dp(18), dp(12))
         }
-        if (compact) {
-            setContentView(ScrollView(this).apply {
-                isFillViewport = true
-                addView(root, FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-            })
-        } else {
-            setContentView(root)
-        }
+        setContentView(ScrollView(this).apply {
+            isFillViewport = true
+            addView(root, FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        })
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val safe = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
             view.setPadding(dp(18) + safe.left, dp(20) + safe.top, dp(18) + safe.right, dp(12) + safe.bottom)
@@ -181,14 +174,12 @@ class TripHistoryActivity : Activity() {
         val screenHeightDp = resources.displayMetrics.heightPixels / resources.displayMetrics.density
         val mapHeightDp = (screenHeightDp * 0.27f).toInt().coerceIn(120, 250)
         mapView = MapView(this).also { view ->
-            if (compact) {
-                // Map gestures take priority over the surrounding scroll view.
-                view.setOnTouchListener { target, event ->
-                    target.parent?.requestDisallowInterceptTouchEvent(
-                        event.actionMasked != MotionEvent.ACTION_UP &&
-                            event.actionMasked != MotionEvent.ACTION_CANCEL)
-                    false
-                }
+            // Map gestures take priority only when the user is touching the map.
+            view.setOnTouchListener { target, event ->
+                target.parent?.requestDisallowInterceptTouchEvent(
+                    event.actionMasked != MotionEvent.ACTION_UP &&
+                        event.actionMasked != MotionEvent.ACTION_CANCEL)
+                false
             }
             root.addView(view, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(mapHeightDp)).apply { bottomMargin = dp(10) })
@@ -275,15 +266,10 @@ class TripHistoryActivity : Activity() {
         val column = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
         }
-        if (compact) {
-            root.addView(column, LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        } else {
-            root.addView(ScrollView(this).apply {
-                addView(column)
-            }, LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-        }
+        // A single outer scroller prevents the fixed-height replay controls
+        // from trapping the trip list when content extends below the viewport.
+        root.addView(column, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         tripList = column
         refreshTripList()
     }

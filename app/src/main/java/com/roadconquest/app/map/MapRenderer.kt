@@ -49,6 +49,7 @@ import org.maplibre.android.style.layers.PropertyFactory.rasterFadeDuration
 import org.maplibre.android.style.layers.PropertyFactory.rasterOpacity
 import org.maplibre.android.style.layers.PropertyFactory.iconAllowOverlap
 import org.maplibre.android.style.layers.PropertyFactory.iconIgnorePlacement
+import org.maplibre.android.style.sources.GeoJsonOptions
 import org.maplibre.android.style.sources.GeoJsonSource
 import org.maplibre.android.style.sources.ImageSource
 import org.maplibre.geojson.Feature
@@ -479,7 +480,7 @@ class MapRenderer(
                     PlaceOverlayCache.readOfficialUs(context, place)
                 } else PlaceOverlayCache.read(context, place)
                 if (!cached.cached) missing += place
-                cached.data?.let(loaded::add)
+                cached.data?.takeIf { it.containsRecordedVisit(place) }?.let(loaded::add)
             }
             loadedOverlayData = loaded
             loadedOverlayGeneration = generation
@@ -520,7 +521,7 @@ class MapRenderer(
                     if (us) PlaceOverlayCache.readOfficialUs(context, place).data
                     else PlaceOverlayCache.read(context, place).data
                 } else data
-                if (resolved != null) {
+                if (resolved != null && resolved.containsRecordedVisit(place)) {
                     loaded += resolved
                     changesSincePost++
                     val now = SystemClock.elapsedRealtime()
@@ -1157,12 +1158,20 @@ class MapRenderer(
     }
 
     private fun installRoadLayer(style: Style) {
-        style.addSource(GeoJsonSource(ROAD_SOURCE_ID, displayedRoadFeatures))
+        // Preserve all snapped turns in low-zoom GeoJSON tiles. The default 0.375
+        // pixel simplification can reduce short curves to disconnected-looking dots.
+        style.addSource(GeoJsonSource(ROAD_SOURCE_ID, displayedRoadFeatures,
+            GeoJsonOptions().withTolerance(0f)))
         appliedRoadColor = Prefs.roadColor(context)
         val layer = LineLayer(ROAD_LAYER_ID, ROAD_SOURCE_ID).withProperties(
             lineColor(Cosmetics.roadColor(context).argb),
             lineOpacity(242f / 255f),
-            lineWidth(4f),
+            // At regional scales a 4px round cap dominates a subpixel segment
+            // and looks like a large dot. Use thinner lines until individual
+            // roads occupy enough pixels to render at their normal 4px width.
+            lineWidth(Expression.interpolate(Expression.linear(), Expression.zoom(),
+                Expression.stop(6f, 1.5f), Expression.stop(9f, 2.5f),
+                Expression.stop(12f, 4f))),
             lineCap(Property.LINE_CAP_ROUND),
             lineJoin(Property.LINE_JOIN_ROUND)
         )

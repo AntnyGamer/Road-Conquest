@@ -22,6 +22,20 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31], manifest = Config.NONE, shadows = [PosixAtomicFileShadow::class])
 class PlaceOverlayTest {
+    @Test fun townFillRequiresSavedFixInsideActualMunicipalPolygon() {
+        val town = PlaceDiscovery(PlaceKind.TOWN, "us|new jersey|pennsauken",
+            "Pennsauken Township", "New Jersey", "United States",
+            visitedAt = 1L, latitude = 39.95, longitude = -75.03)
+        val data = PlaceOverlayData(town.key, town.displayName, PlaceKind.TOWN, null, 12.0,
+            """{"type":"Polygon","coordinates":[[[-75.1,39.9],[-75.0,39.9],[-75.0,40.0],[-75.1,40.0],[-75.1,39.9]]]}""")
+        assertTrue(data.containsRecordedVisit(town))
+        assertFalse(data.containsRecordedVisit(town.copy(latitude = 40.2)))
+        assertFalse(data.copy(geometryJson = "invalid").containsRecordedVisit(town))
+        // The same containment gate also applies to imported or non-US town histories.
+        assertFalse(data.containsRecordedVisit(town.copy(key = "gb|england|pennsauken",
+            latitude = 40.2)))
+    }
+
     @Test fun parserKeepsPolygonPopulationAndComputesArea() {
         val place = PlaceDiscovery(
             PlaceKind.COUNTRY, "us", "United States",
