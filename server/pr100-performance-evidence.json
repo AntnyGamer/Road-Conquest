@@ -1,0 +1,242 @@
+{
+  "baseline_commit": "c208d09bbdecf4655d6ed492bac399acf1d4ef21",
+  "measured_at": "2026-10-17T19:10:16.992Z",
+  "verified_batches": {
+    "baseline": "c208d09bbdecf4655d6ed492bac399acf1d4ef21",
+    "measuredAt": "2026-10-17T19:10:16.992Z",
+    "function_sha256": {
+      "before": "5879410ab4025b12c2ce451d7d5e6d27048480755251c0ce5c890a678baa2fc6",
+      "after": "f609d1926ec6eaddfed22b3d9d66d91cec07aea7c12926b9a59478c2e31acc7a"
+    },
+    "fixture": "200 synthetic accounts and 20,000 existing retry receipts per variant per round; local PostgreSQL 17.11; 3 interleaved rounds; pool max 5; Google mocked; wire bytes exclude TLS/HTTP/handshakes; count includes BEGIN/COMMIT, excludes HTTP auth and throttles",
+    "checks": 2400,
+    "results": [
+      {
+        "round": 0,
+        "name": "before",
+        "users": 200,
+        "totals": {
+          "start": {
+            "queries": 200,
+            "bytes": 7400,
+            "ms": 106.77679999999884
+          },
+          "new": {
+            "queries": 2400,
+            "bytes": 223750,
+            "ms": 666.5503000000016
+          },
+          "zero": {
+            "queries": 2400,
+            "bytes": 296561,
+            "ms": 622.7160000000015
+          },
+          "retry": {
+            "queries": 400,
+            "bytes": 81200,
+            "ms": 95.36150000000237
+          }
+        }
+      },
+      {
+        "round": 0,
+        "name": "after",
+        "users": 200,
+        "totals": {
+          "start": {
+            "queries": 200,
+            "bytes": 7400,
+            "ms": 92.01060000000234
+          },
+          "new": {
+            "queries": 2000,
+            "bytes": 208754,
+            "ms": 545.3656999999994
+          },
+          "zero": {
+            "queries": 2000,
+            "bytes": 281562,
+            "ms": 529.611100000001
+          },
+          "retry": {
+            "queries": 200,
+            "bytes": 78400,
+            "ms": 88.91679999999769
+          }
+        }
+      },
+      {
+        "round": 1,
+        "name": "after",
+        "users": 200,
+        "totals": {
+          "start": {
+            "queries": 200,
+            "bytes": 7400,
+            "ms": 98.79209999999694
+          },
+          "new": {
+            "queries": 2000,
+            "bytes": 208752,
+            "ms": 560.0845999999974
+          },
+          "zero": {
+            "queries": 2000,
+            "bytes": 281564,
+            "ms": 528.8196999999927
+          },
+          "retry": {
+            "queries": 200,
+            "bytes": 78400,
+            "ms": 90.04909999999836
+          }
+        }
+      },
+      {
+        "round": 1,
+        "name": "before",
+        "users": 200,
+        "totals": {
+          "start": {
+            "queries": 200,
+            "bytes": 7400,
+            "ms": 93.94950000000699
+          },
+          "new": {
+            "queries": 2400,
+            "bytes": 223756,
+            "ms": 584.5756000000029
+          },
+          "zero": {
+            "queries": 2400,
+            "bytes": 296552,
+            "ms": 579.9561999999969
+          },
+          "retry": {
+            "queries": 400,
+            "bytes": 81200,
+            "ms": 83.71499999999833
+          }
+        }
+      },
+      {
+        "round": 2,
+        "name": "before",
+        "users": 200,
+        "totals": {
+          "start": {
+            "queries": 200,
+            "bytes": 7400,
+            "ms": 97.38780000000406
+          },
+          "new": {
+            "queries": 2400,
+            "bytes": 223758,
+            "ms": 583.3896999999879
+          },
+          "zero": {
+            "queries": 2400,
+            "bytes": 296555,
+            "ms": 574.4637000000021
+          },
+          "retry": {
+            "queries": 400,
+            "bytes": 81200,
+            "ms": 84.14620000000468
+          }
+        }
+      },
+      {
+        "round": 2,
+        "name": "after",
+        "users": 200,
+        "totals": {
+          "start": {
+            "queries": 200,
+            "bytes": 7400,
+            "ms": 93.50530000000072
+          },
+          "new": {
+            "queries": 2000,
+            "bytes": 208770,
+            "ms": 537.1037999999899
+          },
+          "zero": {
+            "queries": 2000,
+            "bytes": 281561,
+            "ms": 539.1102000000028
+          },
+          "retry": {
+            "queries": 200,
+            "bytes": 78400,
+            "ms": 92.06689999998343
+          }
+        }
+      }
+    ]
+  },
+  "geometry_scan": {
+    "fixture": "Desktop JDK 21; actual before/after compiled distance methods; standalone org.json 20250517; 500 vertices, 120 fixes per scan, 15 scans per round; five interleaved rounds; no Android device/GPS or SQLite timing",
+    "exact_output_comparisons": 2000,
+    "before_parses_per_scan": 120,
+    "after_parses_per_scan": 1,
+    "before_ms": [
+      518.4752,
+      467.295801,
+      466.6114,
+      495.0442,
+      477.833899
+    ],
+    "after_ms": [
+      63.3757,
+      62.8728,
+      60.346299,
+      61.451,
+      59.988999
+    ],
+    "checksum": 146807.16448005958
+  },
+  "scope": [
+    "Local synthetic benchmarks only; no production accounts, GPS, pushes or provider requests.",
+    "Statements include transaction boundaries but exclude HTTP authentication/throttling; 200 starts + 200 new-credit + 200 zero-credit + 200 exact retries per variant/round.",
+    "Geometry baseline TrackingRepository source is unchanged between commit 276af0c (compiled baseline) and PR100 baseline c208d09; actual compiled distance methods compared. Desktop org.json is not the Android parser or an on-device speed test."
+  ],
+  "calculated_500_hour_example": {
+    "hours_per_day": 500,
+    "assumed_new_verified_batches_per_hour": 40,
+    "period_days": {
+      "day": 1,
+      "week": 7,
+      "30_day_month": 30,
+      "365_day_year": 365
+    },
+    "batch_statements_before": 12,
+    "batch_statements_after": 10,
+    "batch_statements_saved_per_day": 40000,
+    "driving_provider_credit_saving": 0,
+    "database_write_saving": 0,
+    "note": "Hypothetical all-hours-verified workload for query arithmetic; not a demonstrated free capacity. Google quota/compute/provider headroom must be checked separately."
+  },
+  "validation": {
+    "baseline_server_tests": 96,
+    "final_server_tests": 100,
+    "android_unit_tests": 979,
+    "android_suites": 59,
+    "focused_android_tests_included_in_total": 145,
+    "failures": 0,
+    "skips": 0,
+    "lintDebug": "passed",
+    "assembleDebug": "passed",
+    "original_pr100_changed_files_preserved_byte_for_byte": 13
+  },
+  "double_check": {
+    "slow_cancellation_regression_before_fix": "failed as expected",
+    "slow_cancellation_regression_after_fix": "passed",
+    "actual_unfinished_http_error_response_cancellation": "passed",
+    "statement_and_response_byte_medians": "recalculated and verified",
+    "period_arithmetic": "recalculated and verified",
+    "measured_competition_function_sha256": "matches current source",
+    "original_pr100_changed_files_preserved": 13,
+    "android_source_changed_in_followup": false
+  }
+}

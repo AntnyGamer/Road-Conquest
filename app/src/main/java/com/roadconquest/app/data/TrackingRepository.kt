@@ -1195,11 +1195,15 @@ class TrackingRepository(context: Context) {
                 "ORDER BY timestamp_ms",
             arrayOf(after.toString(), before.toString())
         ).use { cursor ->
-            while (cursor.moveToNext()) {
-                if (distanceToRoadMeters(cursor.getDouble(0), cursor.getDouble(1), geometry) >
+            if (!cursor.moveToFirst()) return false
+            // Every fix tests the same saved road. Reuse one decoded geometry
+            // for this scan; no cache survives a scan or a history reset.
+            val coordinates = runCatching { JSONArray(geometry) }.getOrNull()
+            do {
+                if (distanceToRoadMeters(cursor.getDouble(0), cursor.getDouble(1), coordinates) >
                     VISIT_DEPARTURE_DISTANCE_M
                 ) return true
-            }
+            } while (cursor.moveToNext())
         }
         return false
     }
@@ -1649,9 +1653,11 @@ class TrackingRepository(context: Context) {
     }
 
     private fun distanceToRoadMeters(latitude: Double, longitude: Double, geometryJson: String): Double {
-        val coordinates = runCatching { JSONArray(geometryJson) }.getOrNull()
-            ?: return Double.POSITIVE_INFINITY
-        if (coordinates.length() < 2) return Double.POSITIVE_INFINITY
+        return distanceToRoadMeters(latitude, longitude, runCatching { JSONArray(geometryJson) }.getOrNull())
+    }
+
+    private fun distanceToRoadMeters(latitude: Double, longitude: Double, coordinates: JSONArray?): Double {
+        if (coordinates == null || coordinates.length() < 2) return Double.POSITIVE_INFINITY
         val latitudeRadians = Math.toRadians(latitude)
         val cosLatitude = cos(latitudeRadians).coerceAtLeast(0.01)
         fun x(lon: Double): Double {

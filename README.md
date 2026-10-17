@@ -1,4 +1,4 @@
-# Road Conquest 1.0 Beta 51
+# Road Conquest 1.0 Beta 52
 
 Road Conquest remembers the roads you drive and the places you visit, revealing them through a
 cloud-textured fog map.
@@ -6,6 +6,8 @@ cloud-textured fog map.
 [Download the Android app](https://github.com/AntnyGamer/RoadConquest-Beta/releases) ·
 [Source and issues](https://github.com/AntnyGamer/RoadConquest-Beta) ·
 [GNU AGPL v3 license](LICENSE)
+
+Beta 52 fixes trip-replay scrolling and dark-mode button contrast, makes town shading require the correct boundary polygon, improves distant road and municipality rendering, and avoids duplicate overlapping population requests. Saved-road visit checks decode each road once per scan. The included account-server artifact reduces repeated verified-driving database requests and reports verification outages without waiting for slow response cleanup; activating server changes requires a separate deployment.
 
 Beta 51 makes the map controls more compact, adds a numbered Explore Nearby tile overlay, and improves matching allowance accounting and outage recovery. International town discovery handles ISO-only country addresses, cross-border address conflicts, and English aliases of native municipality names. GPS recording and explored tiles are worldwide; external road and boundary coverage is best-effort, and the public Nominatim service cannot support unlimited concurrent discovery traffic (see [international support](INTERNATIONAL_SUPPORT.md)). Existing progress and purchases remain intact; competitive rankings and verification uploads remain hidden by default.
 See [backup and challenges details](BACKUP_AND_CHALLENGES.md). Previously unlocked roads, exploration, purchases, and scoring are
@@ -30,11 +32,11 @@ Grant Precise location. For automatic background tracking, choose Allow all the 
 location settings and allow background battery use. Settings includes shortcuts to the relevant
 Android screens. Allow notifications to see the tracking notification and its Stop tracking control.
 
-The new release builds **Beta 51** with Android application ID
-`com.roadconquest.app` and internal version code **77**. Beta 50 used code 76, Beta 49 used code 75,
+The new release builds **Beta 52** with Android application ID
+`com.roadconquest.app` and internal version code **78**. Beta 51 used code 77, Beta 50 used code 76, Beta 49 used code 75,
 and Beta 48 used code 74. Google Play permanently reserves uploaded version codes,
-including drafts and testing tracks. Before uploading a **signed Beta 51 release bundle**,
-confirm that code 77 is still available in Play Console. The unsigned CI bundle cannot be uploaded.
+including drafts and testing tracks. Before uploading a **signed Beta 52 release bundle**,
+confirm that code 78 is still available in Play Console. The unsigned CI bundle cannot be uploaded.
 Do not confuse a locally tested development build with an already-published signed release.
 The app shows its exact version in Settings → About. Treat the application ID as permanent once
 the Google Play listing is created; changing it later would create a different app.

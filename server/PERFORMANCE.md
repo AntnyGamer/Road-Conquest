@@ -403,3 +403,93 @@ for behavior, extra bookkeeping costs, free-limit headroom and conditional drivi
 hour estimates. Android and gateway changes each need their own build/deployment.
 The earlier sections describe their original passes; this work does not deploy
 services, raise provider caps or migrate the account database.
+
+
+## Further server and driving work in PR #100 - October 17, 2026
+
+This pass starts at `c208d09`, the consolidated PR #100 head. It preserves that
+PR's replay, contrast, town-polygon proof, rendering, population-locking changes
+and test cleanup. Earlier optimizations already merged into main remain in place.
+
+- A verified batch combines account eligibility, an exact retry receipt and the
+  active challenge in one indexed read instead of three database round trips.
+  Receipts skip challenge lookup. Malformed evidence retains the eligibility-first
+  error. Account locking, a second receipt check under the lock, live challenge
+  expiry, Google attestation, continuity checks, scoring and atomic writes remain.
+  An expired/missing challenge still rechecks for a receipt committed after the
+  preflight snapshot. Neither identity nor eligibility is cached.
+- A saved-road departure scan decodes the same road geometry once per scan,
+  reusing it for every GPS fix in that scan. It adds no lasting cache and retains
+  every distance calculation, invalid-geometry rejection and early exit. The
+  scan still examines all accurate fixes, including departures beyond fix 120.
+- Rejected Google OAuth/Integrity responses cancel their unread body streams
+  before returning the same retryable error. This releases response resources
+  promptly during an outage without adding requests or changing verification.
+
+| Measured work | PR #100 baseline | This pass |
+|---|---:|---:|
+| New-credit verified batch, statements including BEGIN/COMMIT | 12 | 10 |
+| Zero-credit verified batch, same transaction guarantees | 12 | 10 |
+| Exact committed retry, including live eligibility | 2 | 1 |
+| 200 starts + 200 new + 200 zero + 200 exact retries, statements | 5,400 | 4,400 |
+| Same mixed work, median database response bytes, three rounds | 608,911 | 576,116 |
+| Geometry decodes in a 120-fix scan fixture | 120 | 1 |
+| Geometry output comparisons with exact equality | - | 2,000 passed |
+
+The database fixture uses 200 synthetic accounts, 20,000 existing receipts,
+PostgreSQL 17.11 and pool maximum five, with three interleaved before/after rounds.
+Each variant submits 1,800 batches across those rounds. Google is mocked. Counts
+exclude HTTP authentication/throttles; bytes include PostgreSQL result metadata
+but exclude TLS, HTTP and connection handshakes. Mixed statements decrease
+18.5% and result bytes decrease
+5.4%. Database writes and provider credits
+are unchanged. Desktop timing is mixed: new/zero batches improved slightly, while
+exact retries were slightly slower locally despite fewer round trips. These are
+work reductions, not a promised production response-time percentage.
+
+The geometry comparison invokes actual compiled before/after distance methods.
+The baseline file is unchanged between compiled commit `276af0c` and `c208d09`.
+Its desktop JDK 21 / standalone org.json fixture has 500 vertices and 120 fixes,
+15 scans per round and five interleaved rounds. Median calculation time was
+477.83 ms versus 61.45 ms for those 15 scans. This measures that narrow loop,
+not Android parser/device speed, battery life, SQLite time or additional driving
+hours. The existing API 31/37 repository tests cover real SQLite visit behavior.
+
+At a **hypothetical** 500 hours/day with 40 new verified batches/hour, two saved
+reads per batch remove 40,000 database round trips/day, 280,000/week,
+1,200,000 per 30-day month and 14,600,000/year. This is arithmetic, not tested free
+capacity. Optional verified competition remains disabled by default. Personal
+road matching uses separate map-provider allowances, which this pass does not
+increase. Google currently documents a default 10,000 server token decryptions
+per day; 20,000 verified batches/day would need fewer genuinely new-cell batches
+or an approved higher quota. Its separate token-request bucket covers classic
+requests and standard preparations, not every standard token request.
+See [official quota details](https://developer.android.com/google/play/integrity/setup#understand_api_usage_limits).
+No attestation gate is relaxed to avoid this quota.
+
+All 100 server tests and all 979 Android unit tests (including the 145 focused
+repository/reuse tests) passed with no failures or skips. `lintDebug` and
+`assembleDebug` passed. Regression coverage includes concurrent scoring,
+moderation during attestation, account deletion, stale exact retries, old scoring
+policies, altered evidence, transaction rollback, late receipts, oversized sequence
+values on ineligible accounts, and cancellation of failed upstream streams.
+[Raw measurements and assumptions](pr100-performance-evidence.json) accompany this
+pass. No schema, new service, paid dependency, production configuration or
+provider-cap change is introduced. Nothing is merged, released or deployed.
+
+
+### Double-check follow-up
+
+A controlled slow-cancellation test found that awaiting error-stream cleanup
+could postpone the 503 response. Cleanup now starts without waiting for its
+completion; rejected cleanup is still caught. The regression test failed before
+the fix and passes afterward. A second test uses an actual local HTTP server
+that sends error headers but never finishes its body, and confirms cancellation
+closes that upstream response. All 100 server tests pass. The Android source is
+unchanged from the passing 979-test run.
+
+The measured competition function's SHA-256 still matches the benchmarked
+implementation. Raw statement/data totals and daily/week/month/year arithmetic
+were independently recalculated. All 13 original PR #100 files and the complete
+older performance-report prefix are unchanged. No production service was tested
+or changed, and the remaining provider-capacity caveats still apply.

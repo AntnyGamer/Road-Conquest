@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { createServer } from "node:http";
 import { competitionConfig } from "../src/competition.mjs";
 import { boundedJson, evidenceHash, parseEvidence, verifyIntegrityVerdict } from "../src/scoring.mjs";
 
@@ -75,4 +76,60 @@ test("upstream failures and oversized verification responses fail closed", async
   await assert.rejects(boundedJson(new Response("{}", { status: 500 })));
   await assert.rejects(boundedJson(new Response("x".repeat(100)), 10));
   await assert.rejects(boundedJson(new Response("not JSON")));
+});
+
+test("failed verification responses release unread streams and preserve the retryable error", async () => {
+  for (const status of [401, 403, 429, 500, 503]) {
+    let cancelled = 0;
+    const response = new Response(new ReadableStream({
+      cancel() { cancelled++; }
+    }), { status });
+    await assert.rejects(boundedJson(response), error => error.status === 503);
+    assert.equal(cancelled, 1);
+    assert.equal(response.bodyUsed, true);
+  }
+  await assert.rejects(boundedJson(new Response(new ReadableStream({
+    cancel() { throw new Error('socket already failed'); }
+  }), { status: 500 })), error => error.status === 503);
+  await assert.rejects(boundedJson(new Response(null, { status: 503 })), error => error.status === 503);
+});
+
+test("slow error-stream cleanup cannot delay reporting a verification outage", async () => {
+  let finishCleanup, cancelled = false, reported;
+  const cleanup = new Promise(resolve => { finishCleanup = resolve; });
+  const response = new Response(new ReadableStream({
+    cancel() { cancelled = true; return cleanup; }
+  }), { status: 503 });
+  const attempt = boundedJson(response).catch(error => { reported = error; });
+  try {
+    // Drain microtasks without depending on a wall-clock timing threshold.
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(cancelled, true);
+    assert.equal(reported?.status, 503, 'Return the failure while cleanup is still pending');
+  } finally {
+    finishCleanup();
+    await attempt;
+  }
+});
+
+test("failed verification cancels an actual unfinished upstream HTTP response", async () => {
+  let disconnected, timer;
+  const closed = new Promise(resolve => { disconnected = resolve; });
+  const server = createServer((_request, response) => {
+    response.once('close', disconnected);
+    response.writeHead(503, { 'Content-Type': 'application/json' });
+    response.write('{"error":'); // Headers arrive, but the upstream body never ends.
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const response = await fetch(`http://127.0.0.1:${server.address().port}/`);
+    await assert.rejects(boundedJson(response), error => error.status === 503);
+    await Promise.race([closed, new Promise((_resolve, reject) => {
+      timer = setTimeout(() => reject(new Error('Unread upstream connection remained open')), 5000);
+    })]);
+  } finally {
+    clearTimeout(timer);
+    server.closeAllConnections();
+    await new Promise(resolve => server.close(resolve));
+  }
 });

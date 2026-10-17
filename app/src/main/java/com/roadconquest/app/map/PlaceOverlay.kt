@@ -59,6 +59,18 @@ data class PlaceOverlayData(
         .put("geometry", JSONObject(geometryJson))
 }
 
+/** A saved town name alone is not proof that its recorded GPS fix was inside its polygon.
+ * Legacy entries can precede the current strict boundary verifier; never shade an
+ * entire neighboring town merely because its name has a visited-place record.
+ */
+internal fun PlaceOverlayData.containsRecordedVisit(place: PlaceDiscovery): Boolean =
+    key == place.key && kind == place.kind &&
+        (kind != PlaceKind.TOWN ||
+            (place.latitude.isFinite() && place.longitude.isFinite() &&
+                runCatching {
+                    PlaceGeometry.contains(JSONObject(geometryJson), place.latitude, place.longitude)
+                }.getOrDefault(false)))
+
 data class PlaceOverlayCacheResult(val cached: Boolean, val data: PlaceOverlayData?)
 
 object PlaceOverlayCache {

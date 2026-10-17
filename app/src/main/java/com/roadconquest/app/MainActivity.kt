@@ -847,6 +847,13 @@ class MainActivity : Activity() {
             .setNeutralButton(if (renderer?.isNearbyExplorationVisible() == true) "Hide nearby" else "Explore nearby") { _, _ -> showNearbyExploration() }
             .setNegativeButton("Cancel", null)
             .create()
+        dialog.setOnShowListener {
+            if (Appearance.isDark(this)) {
+                val lightText = Appearance.color(this, R.attr.rcTextPrimary)
+                dialog.getButton(AlertDialog.BUTTON_NEUTRAL)?.setTextColor(lightText)
+                dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(lightText)
+            }
+        }
         dialog.show()
     }
 

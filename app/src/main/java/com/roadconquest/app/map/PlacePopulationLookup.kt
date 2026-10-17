@@ -25,6 +25,28 @@ internal object PlacePopulationLookup {
     private val officialGeoid = Regex("""[|]census-(1|3|4)-([0-9]+)$""")
     private val cached = ConcurrentHashMap<String, Value>()
     private val cacheLock = Any()
+    // Register waiting callers before entering a per-place monitor. Removing
+    // the monitor when the first caller returns would let a third caller create
+    // another lock while the second caller still waits or runs.
+    private class LookupLock {
+        val monitor = Any()
+        var users = 0
+    }
+    private val lookupRegistryLock = Any()
+    private val activeLookups = HashMap<String, LookupLock>()
+
+    internal fun <T> withLookupLock(identity: String, task: () -> T): T {
+        val guard = synchronized(lookupRegistryLock) {
+            activeLookups.getOrPut(identity) { LookupLock() }.also { it.users++ }
+        }
+        try {
+            return synchronized(guard.monitor) { task() }
+        } finally {
+            synchronized(lookupRegistryLock) {
+                if (--guard.users == 0) activeLookups.remove(identity)
+            }
+        }
+    }
     @Volatile private var cacheGeneration = 0L
     internal fun generation(): Long = cacheGeneration
     private const val CENSUS_CACHE = "roadconquest_census2020_population"
@@ -113,8 +135,21 @@ internal object PlacePopulationLookup {
     }
 
     fun lookup(context: Context, info: PlaceOverlayInfo): Value? {
-        val startedAtGeneration = generation()
         if (info.population != null) return Value(info.population, "Boundary provider")
+        // Re-check memory and persistent cache after waiting for an identical
+        // in-flight lookup; the first success is shared without another request.
+        val startedAtGeneration = generation()
+        return withLookupLock("$startedAtGeneration:${key(info)}") {
+            lookupCurrent(context, info, startedAtGeneration)
+        }
+    }
+
+    private fun lookupCurrent(
+        context: Context, info: PlaceOverlayInfo, startedAtGeneration: Long
+    ): Value? {
+        // A queued request from before Delete all data must not issue a new
+        // provider request after the saved-data generation has changed.
+        if (startedAtGeneration != cacheGeneration) return null
         cached[key(info)]?.let { return it }
         savedCensus(context, info)?.let { saved ->
             // A reset can occur between reading disk and populating the memory

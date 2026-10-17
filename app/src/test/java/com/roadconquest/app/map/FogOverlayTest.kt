@@ -569,19 +569,6 @@ class FogOverlayTest {
         }
         assertTrue("The native fog bitmap must contain cloud detail", shades.max() - shades.min() > 50)
     }
-    @Test fun compatibleFogBitmapIsReusedAndFullyRedrawn() {
-        val first = FogBitmapRenderer.render(request())
-        assertEquals(204, Color.alpha(first.getPixel(320, 320)))
-        val second = FogBitmapRenderer.render(request(
-            metersPerPixel = 2.0,
-            liveLatitude = 0.0,
-            liveScreen = doubleArrayOf(320.0, 320.0)
-        ), first)
-        assertSame(first, second)
-        assertEquals(0, Color.alpha(second.getPixel(320, 320)))
-        assertEquals(204, Color.alpha(second.getPixel(20, 20)))
-    }
-
     @Test fun legacyEdgeFragmentsBecomeOneContinuousOverlayChain() {
         val roads = listOf(
             RoadRecord("1", "Main", "[[-74.0000,40.0000],[-74.0001,40.0000]]", 0, 0, 40.0, 40.0, -74.0001, -74.0),

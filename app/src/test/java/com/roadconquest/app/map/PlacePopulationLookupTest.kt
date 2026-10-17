@@ -4,6 +4,9 @@ import com.roadconquest.app.data.PlaceKind
 import org.robolectric.RuntimeEnvironment
 import org.junit.Assert.*
 import org.junit.Test
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -11,6 +14,75 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31], manifest = Config.NONE)
 class PlacePopulationLookupTest {
+    @Test fun waitingLookupKeepsSameMonitorUntilAllCallersFinish() {
+        val firstEntered = CountDownLatch(1)
+        val releaseFirst = CountDownLatch(1)
+        val secondEntered = CountDownLatch(1)
+        val releaseSecond = CountDownLatch(1)
+        val thirdEntered = CountDownLatch(1)
+        val otherPlaceEntered = CountDownLatch(1)
+        val concurrent = AtomicInteger()
+        val peak = AtomicInteger()
+        fun enter() {
+            val count = concurrent.incrementAndGet()
+            peak.updateAndGet { maxOf(it, count) }
+        }
+        val first = Thread {
+            PlacePopulationLookup.withLookupLock("same-place") {
+                enter()
+                firstEntered.countDown()
+                try { releaseFirst.await(5, TimeUnit.SECONDS) }
+                finally { concurrent.decrementAndGet() }
+            }
+        }
+        val second = Thread {
+            PlacePopulationLookup.withLookupLock("same-place") {
+                enter()
+                secondEntered.countDown()
+                try { releaseSecond.await(5, TimeUnit.SECONDS) }
+                finally { concurrent.decrementAndGet() }
+            }
+        }
+        val third = Thread {
+            PlacePopulationLookup.withLookupLock("same-place") {
+                enter()
+                thirdEntered.countDown()
+                concurrent.decrementAndGet()
+            }
+        }
+        val other = Thread {
+            PlacePopulationLookup.withLookupLock("another-place") {
+                otherPlaceEntered.countDown()
+            }
+        }
+        val threads = listOf(first, second, third, other)
+        first.start()
+        try {
+            assertTrue(firstEntered.await(5, TimeUnit.SECONDS))
+            second.start()
+            other.start()
+            assertTrue("Unrelated places remain independent",
+                otherPlaceEntered.await(5, TimeUnit.SECONDS))
+            assertFalse("Second lookup must wait", secondEntered.await(100, TimeUnit.MILLISECONDS))
+            // The first monitor is still reserved by the second caller when
+            // first exits, even though the first request is already complete.
+            releaseFirst.countDown()
+            assertTrue(secondEntered.await(5, TimeUnit.SECONDS))
+            first.join(5_000)
+            assertFalse(first.isAlive)
+            third.start()
+            assertFalse("Third lookup must not bypass waiting second",
+                thirdEntered.await(100, TimeUnit.MILLISECONDS))
+        } finally {
+            releaseFirst.countDown()
+            releaseSecond.countDown()
+            threads.filter { it.state != Thread.State.NEW }.forEach { it.join(5_000) }
+        }
+        assertEquals(1, peak.get())
+        assertEquals(0L, thirdEntered.count)
+        assertTrue(threads.none(Thread::isAlive))
+    }
+
     @Test fun officialPlaceUsesExactGeoidFrom2020Census() {
         val info = PlaceOverlayInfo("us|new jersey|census-4-3428800", "Haddon Heights borough",
             PlaceKind.TOWN, null, 3.0)
