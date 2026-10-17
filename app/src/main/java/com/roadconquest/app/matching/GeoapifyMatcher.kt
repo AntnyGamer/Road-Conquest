@@ -43,7 +43,7 @@ class GeoapifyMatcher(
                     .put("timestamp", Instant.ofEpochMilli(time).toString()))
             }
         }).toString()
-        if (cachedRequest == payload && System.currentTimeMillis() - cachedAt in 0L..60_000L) {
+        if (cachedRequest == payload && System.currentTimeMillis() - cachedAt in 0L..900_000L) {
             return runCatching { parse(requireNotNull(cachedBody), points) }.getOrNull()
         }
         if (rateLimitRemainingMs() > 0) { unavailable = true; return null }
