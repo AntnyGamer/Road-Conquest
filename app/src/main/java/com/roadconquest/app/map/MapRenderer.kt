@@ -1191,14 +1191,14 @@ class MapRenderer(
         appliedRoadColor = Prefs.roadColor(context)
         val color = Cosmetics.roadColor(context).argb
 
-        // At regional zoom a short road is less than one pixel long: rounded
-        // caps render it as a dot. Butt caps and a legible minimum width keep
-        // the existing geometry visible without inventing connecting roads.
+        // At regional zoom, very short confirmed roads can shrink below a
+        // pixel. Square caps preserve a visible footprint, unlike butt caps,
+        // without introducing circular dot artifacts or changing GPS geometry.
         val regional = LineLayer(REGIONAL_ROAD_LAYER_ID, ROAD_SOURCE_ID).withProperties(
             lineColor(color), lineOpacity(242f / 255f),
             lineWidth(Expression.interpolate(Expression.linear(), Expression.zoom(),
                 Expression.stop(6f, 2f), Expression.stop(9f, 2.75f))),
-            lineCap(Property.LINE_CAP_BUTT), lineJoin(Property.LINE_JOIN_ROUND)
+            lineCap(Property.LINE_CAP_SQUARE), lineJoin(Property.LINE_JOIN_ROUND)
         )
         regional.setMinZoom(FogBitmapRenderer.MIN_ROAD_ZOOM.toFloat())
         regional.setMaxZoom(9f)
