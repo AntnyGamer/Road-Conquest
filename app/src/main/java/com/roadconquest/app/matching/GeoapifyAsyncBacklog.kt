@@ -81,12 +81,18 @@ internal class GeoapifyAsyncBacklog(context: Context, private val origin: String
         if (old != null) {
             val job = runCatching { Job.fromJson(old) }.getOrNull()
             if (job == null) {
-                prefs.edit().remove("job").apply()
+                prefs.edit().remove("job").remove("deferred").apply()
                 return null // Previously deferred GPS expires independently in SQLite.
             }
             if (now - job.submittedAt >= MAX_JOB_AGE_MS) {
                 release(repository, job)
                 return null
+            }
+            // A crash can happen after saving job metadata but before deferring
+            // its GPS. Repeat that one durable step at startup only if needed.
+            if (!prefs.getBoolean("deferred", false)) {
+                repository.deferMatching(job.windows.flatMap { it.markableIds }, job.submittedAt + MAX_JOB_AGE_MS)
+                prefs.edit().putBoolean("deferred", true).apply()
             }
             if (now < job.nextPollAt) return job.nextPollAt - now
             val answer = request("GET", "/v1/batch/mapmatching?id=" + job.id, null, job.token)
@@ -143,9 +149,11 @@ internal class GeoapifyAsyncBacklog(context: Context, private val origin: String
         // process dies between these operations, startup re-defers the job.
         val job = Job(id, token, now, now + FIRST_POLL_MS,
             windows.map { Window(it.points.map(TrackPoint::id), it.markableIds, fingerprint(it.points)) })
-        prefs.edit().putString("job", job.toJson()).commit()
+        if (!prefs.edit().putString("job", job.toJson()).putBoolean("deferred", false).commit())
+            return null
         val pending = job.windows.flatMap { it.markableIds }
         repository.deferMatching(pending, now + MAX_JOB_AGE_MS)
+        prefs.edit().putBoolean("deferred", true).apply()
         if (answer.code == 200 && answer.json.optJSONArray("results") != null) {
             applyResults(repository, job, answer.json.getJSONArray("results"))
             release(repository, job)
@@ -178,7 +186,7 @@ internal class GeoapifyAsyncBacklog(context: Context, private val origin: String
     private fun release(repository: TrackingRepository, job: Job) {
         // Whether the job succeeded, expired or returned partial matches,
         // unresolved samples become eligible for the unchanged sync fallback.
-        prefs.edit().remove("job").apply()
+        prefs.edit().remove("job").remove("deferred").apply()
         repository.deferMatching(job.windows.flatMap { it.markableIds }, 0L)
     }
 
