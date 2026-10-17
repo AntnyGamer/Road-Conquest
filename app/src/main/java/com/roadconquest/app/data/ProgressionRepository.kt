@@ -306,6 +306,11 @@ class ProgressionRepository(context: Context) {
         ) != -1L
     }
 
+    private fun candidateFromCursor(cursor: android.database.Cursor) = PendingPlaceCandidate(
+        cursor.getLong(0), cursor.getLong(1), cursor.getDouble(2),
+        cursor.getDouble(3), cursor.getLong(4), cursor.getInt(5)
+    )
+
     fun pendingPlaceCandidates(
         limit: Int = 8,
         nowMillis: Long = System.currentTimeMillis()
@@ -333,14 +338,7 @@ class ProgressionRepository(context: Context) {
             null,
             "1"
         ).use { cursor ->
-            if (!cursor.moveToFirst()) null else PendingPlaceCandidate(
-                cursor.getLong(0),
-                cursor.getLong(1),
-                cursor.getDouble(2),
-                cursor.getDouble(3),
-                cursor.getLong(4),
-                cursor.getInt(5)
-            ) to cursor.getLong(6)
+            if (!cursor.moveToFirst()) null else candidateFromCursor(cursor) to cursor.getLong(6)
         }
         if (baseline != null) {
             return baseline.takeIf { it.second <= nowMillis }?.let { listOf(it.first) }.orEmpty()
@@ -363,14 +361,7 @@ class ProgressionRepository(context: Context) {
             limit.toString()
         ).use { cursor ->
             while (cursor.moveToNext()) {
-                result += PendingPlaceCandidate(
-                    cursor.getLong(0),
-                    cursor.getLong(1),
-                    cursor.getDouble(2),
-                    cursor.getDouble(3),
-                    cursor.getLong(4),
-                    cursor.getInt(5)
-                )
+                result += candidateFromCursor(cursor)
             }
         }
         return result
