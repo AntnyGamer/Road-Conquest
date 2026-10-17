@@ -73,6 +73,7 @@ class MainActivity : Activity() {
     private lateinit var mapView: MapView
     private var startupFrameListener: MapView.OnDidFinishRenderingFrameListener? = null
     private var startupCoverTimeout: Runnable? = null
+    private var startupWaitingForStartingLocation = false
     private lateinit var enableButton: Button
     private lateinit var statusText: TextView
     private lateinit var statsText: TextView
@@ -322,7 +323,7 @@ class MainActivity : Activity() {
                     showFreshCachedOrStartingLocation()
                     if (findViewById<View>(R.id.mapStartupCover).visibility == View.VISIBLE) {
                         val listener = MapView.OnDidFinishRenderingFrameListener { fully, _, _ ->
-                            if (fully) revealStartupMap()
+                            if (fully && !startupWaitingForStartingLocation) revealStartupMap()
                         }
                         startupFrameListener = listener
                         mapView.addOnDidFinishRenderingFrameListener(listener)
@@ -1192,6 +1193,11 @@ class MainActivity : Activity() {
         // then leave the camera alone so normal panning is not constantly undone.
         if (!::locationManager.isInitialized || locationManager.isLocationEnabled || startingFallbackApplied) return
         startingFallbackApplied = true
+        // A fully rendered *world* frame is not ready if the saved starting
+        // camera is still being read from disk. Let that move happen first.
+        if (findViewById<View>(R.id.mapStartupCover).visibility == View.VISIBLE) {
+            startupWaitingForStartingLocation = true
+        }
 
         summaryExecutor.execute {
             val starting = runCatching {
@@ -1201,13 +1207,19 @@ class MainActivity : Activity() {
                 if (isDestroyed) return@runOnUiThread
                 if (starting == null || locationManager.isLocationEnabled || renderer !== activeRenderer) {
                     startingFallbackApplied = false
-                    return@runOnUiThread
+                } else {
+                    activeRenderer.centerOnStartingLocation(
+                        starting.latitude,
+                        starting.longitude,
+                        force = true
+                    )
                 }
-                activeRenderer.centerOnStartingLocation(
-                    starting.latitude,
-                    starting.longitude,
-                    force = true
-                )
+                startupWaitingForStartingLocation = false
+                // A previous fully-rendered frame may have been the transient
+                // world camera. Repaint after the new camera is chosen.
+                if (findViewById<View>(R.id.mapStartupCover).visibility == View.VISIBLE) {
+                    activeMap?.triggerRepaint()
+                }
             }
         }
     }
