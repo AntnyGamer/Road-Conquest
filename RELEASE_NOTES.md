@@ -8,6 +8,8 @@
 - **Safer matching input handling:** Reject non-finite and out-of-range Geoapify coordinates before creating JSON or sending requests; apply LocationIQ's existing validation to cached responses too. Valid driving coordinates and road acceptance thresholds are unchanged.
 - **Lower map tile processing overhead:** Cache the immutable map-gateway hostname rather than reparsing its address for every MapLibre HTTP request.
 - **Less map-tile overhead:** Avoid allocating a status-code list for each intercepted HTTP tile response and avoid retry timers for explicitly disabled providers. Service-config change notifications still restore an enabled provider.
+- **Less allocation in road grouping:** Empty road names and route references no longer go through Unicode normalization and tokenization, preserving all nonempty grouping rules.
+- **More efficient Explore Nearby camera framing:** Convert the already-ordered tile corner coordinates directly rather than creating nested temporary lists; zoom, map bounds and anti-meridian handling stay unchanged.
 - **Less work when refreshing rewarded-ad controls:** Reuse a single consent/availability check for each reward-button update; ad gating and earnings behavior are unchanged.
 - **More efficient backup exports:** Write skipped GPS fixes and progression CSV rows directly to the buffered ZIP output, avoiding temporary row lists/strings while keeping the exact CSV escape rules and backup format.
 - **Safer backup imports:** Stop enumerating malformed ZIP archives as soon as their entry count exceeds the fixed RoadConquest backup schema, avoiding needless memory growth. Valid backups are unchanged.
