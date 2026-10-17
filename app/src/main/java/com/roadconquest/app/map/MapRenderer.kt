@@ -1231,12 +1231,7 @@ class MapRenderer(
                         }
                         if (!capture.world && source != null) {
                             activeDetailedFogAlternate = nextAlternate
-                            detailedFogCoordinates = doubleArrayOf(
-                                capture.quad.topLeft.latitude, capture.quad.topLeft.longitude,
-                                capture.quad.topRight.latitude, capture.quad.topRight.longitude,
-                                capture.quad.bottomRight.latitude, capture.quad.bottomRight.longitude,
-                                capture.quad.bottomLeft.latitude, capture.quad.bottomLeft.longitude
-                            )
+                            detailedFogCoordinates = fogQuadCoordinates(capture.quad)
                         }
                         updateFogCoverage(force = true)
                     }
@@ -1288,12 +1283,7 @@ class MapRenderer(
                         source?.setImage(rendered)
                         if (source != null) {
                             installedRegionalFogKey = capture.key
-                            regionalFogCoordinates = doubleArrayOf(
-                                capture.quad.topLeft.latitude, capture.quad.topLeft.longitude,
-                                capture.quad.topRight.latitude, capture.quad.topRight.longitude,
-                                capture.quad.bottomRight.latitude, capture.quad.bottomRight.longitude,
-                                capture.quad.bottomLeft.latitude, capture.quad.bottomLeft.longitude
-                            )
+                            regionalFogCoordinates = fogQuadCoordinates(capture.quad)
                             updateFogCoverage(force = true)
                         }
                     }
@@ -1302,6 +1292,13 @@ class MapRenderer(
             }
         }
     }
+
+    private fun fogQuadCoordinates(quad: LatLngQuad) = doubleArrayOf(
+        quad.topLeft.latitude, quad.topLeft.longitude,
+        quad.topRight.latitude, quad.topRight.longitude,
+        quad.bottomRight.latitude, quad.bottomRight.longitude,
+        quad.bottomLeft.latitude, quad.bottomLeft.longitude
+    )
 
     private fun captureFog(regional: Boolean = false): FogCaptureResult? {
         if (mapView.width <= 0 || mapView.height <= 0 || map.style == null) return null
