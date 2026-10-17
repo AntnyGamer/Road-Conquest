@@ -212,6 +212,24 @@ class TrackingRepositoryTest {
             retryGapStartId = ids[100]).markableIds.containsAll(ids.subList(100, 106)))
     }
 
+    @Test fun anchorBatchStillSkipsUncertainNewerGapBeforeChoosingOlderSafeTurn() {
+        val ids = (0..30).map { i ->
+            point(1_000_000L + i * 2_000L, lat = 40.0 + i * 0.00007)
+        }
+        val pending = (5..8).toSet() + (19..22).toSet()
+        repository.markMatched(ids.filterIndexed { index, _ -> index !in pending })
+        // An already-resolved but inaccurate GPS anchor cannot validate a turn.
+        repository.readableDatabase().execSQL(
+            "UPDATE track_points SET accuracy_m = 30 WHERE id = ?", arrayOf(ids[23])
+        )
+        assertEquals(ids[5], repository.newestEligibleAnchoredGapStartId())
+        repository.readableDatabase().execSQL(
+            "UPDATE track_points SET accuracy_m = 5 WHERE id = ?", arrayOf(ids[23])
+        )
+        assertEquals(ids[19], repository.newestEligibleAnchoredGapStartId())
+        assertEquals(ids[5], repository.newestEligibleAnchoredGapStartId(beforeId = ids[19]))
+    }
+
     @Test fun prioritizationNeverIncludesOpenEndedOrUnanchoredOldGps() {
         val ids = (0..12).map { i ->
             point(1_000_000L + i * 2_000L, lat = 40.0 + i * 0.00007)
