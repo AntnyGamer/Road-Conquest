@@ -71,6 +71,8 @@ class MainActivity : Activity() {
     }
 
     private lateinit var mapView: MapView
+    private var startupFrameListener: MapView.OnDidFinishRenderingFrameListener? = null
+    private var startupCoverTimeout: Runnable? = null
     private lateinit var enableButton: Button
     private lateinit var statusText: TextView
     private lateinit var statsText: TextView
@@ -256,6 +258,16 @@ class MainActivity : Activity() {
         pointsText = findViewById(R.id.pointsText)
         pointsText.setOnClickListener { startActivity(Intent(this, ShopActivity::class.java)) }
         mapView.onCreate(savedInstanceState)
+        // A one-time cover prevents a freshly installed/upgraded build from
+        // exposing the low-detail overview while preferred vector tiles arrive.
+        // Never block the map indefinitely if offline or a tile provider stalls.
+        if (getSharedPreferences("roadconquest_map_startup", MODE_PRIVATE)
+                .getInt("shown_version", -1) != BuildConfig.VERSION_CODE) {
+            findViewById<View>(R.id.mapStartupCover).visibility = View.VISIBLE
+            startupCoverTimeout = Runnable { revealStartupMap() }.also {
+                mapView.postDelayed(it, 3_000L)
+            }
+        }
 
         val settingsButton = findViewById<ImageButton>(R.id.settingsButton)
         val centerButton = findViewById<ImageButton>(R.id.centerCarButton)
@@ -306,10 +318,34 @@ class MainActivity : Activity() {
                 }
             }
             renderer = MapRenderer(this, map, repository, mapView, mapWasCentered).also { renderer ->
-                renderer.initialize { showFreshCachedOrStartingLocation() }
+                renderer.initialize {
+                    showFreshCachedOrStartingLocation()
+                    if (findViewById<View>(R.id.mapStartupCover).visibility == View.VISIBLE) {
+                        val listener = MapView.OnDidFinishRenderingFrameListener { fully, _, _ ->
+                            if (fully) revealStartupMap()
+                        }
+                        startupFrameListener = listener
+                        mapView.addOnDidFinishRenderingFrameListener(listener)
+                        map.triggerRepaint()
+                    }
+                }
                 if (!started) renderer.pauseViewport()
             }
         }
+    }
+
+    private fun revealStartupMap() {
+        startupFrameListener?.let(mapView::removeOnDidFinishRenderingFrameListener)
+        startupFrameListener = null
+        startupCoverTimeout?.let(mapView::removeCallbacks)
+        startupCoverTimeout = null
+        val cover = findViewById<View>(R.id.mapStartupCover)
+        if (cover.visibility != View.VISIBLE) return
+        getSharedPreferences("roadconquest_map_startup", MODE_PRIVATE)
+            .edit().putInt("shown_version", BuildConfig.VERSION_CODE).apply()
+        cover.animate().alpha(0f).setDuration(150L).withEndAction {
+            cover.visibility = View.GONE
+        }.start()
     }
 
     override fun onStart() {
@@ -526,6 +562,10 @@ class MainActivity : Activity() {
         populationExecutor.shutdownNow()
         discoveryExecutor.shutdownNow()
         renderer?.destroy()
+        startupFrameListener?.let(mapView::removeOnDidFinishRenderingFrameListener)
+        startupFrameListener = null
+        startupCoverTimeout?.let(mapView::removeCallbacks)
+        startupCoverTimeout = null
         mapView.onDestroy()
         super.onDestroy()
     }
