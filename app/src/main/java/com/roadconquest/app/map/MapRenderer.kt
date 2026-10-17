@@ -2,7 +2,10 @@ package com.roadconquest.app.map
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Typeface
 import android.graphics.PointF
 import android.os.Handler
 import android.os.Looper
@@ -21,23 +24,16 @@ import org.maplibre.android.geometry.LatLngQuad
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
-import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.FillLayer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.RasterLayer
 import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.layers.TransitionOptions
-import org.maplibre.android.style.layers.PropertyFactory.circleColor
-import org.maplibre.android.style.layers.PropertyFactory.circleRadius
-import org.maplibre.android.style.layers.PropertyFactory.circleStrokeColor
-import org.maplibre.android.style.layers.PropertyFactory.circleStrokeWidth
 import org.maplibre.android.style.layers.PropertyFactory.fillAntialias
 import org.maplibre.android.style.layers.PropertyFactory.fillColor
 import org.maplibre.android.style.layers.PropertyFactory.fillOpacity
 import org.maplibre.android.style.layers.PropertyFactory.fillOutlineColor
-import org.maplibre.android.style.layers.PropertyFactory.iconAllowOverlap
-import org.maplibre.android.style.layers.PropertyFactory.iconIgnorePlacement
 import org.maplibre.android.style.layers.PropertyFactory.iconImage
 import org.maplibre.android.style.layers.PropertyFactory.iconRotate
 import org.maplibre.android.style.layers.PropertyFactory.iconRotationAlignment
@@ -48,13 +44,8 @@ import org.maplibre.android.style.layers.PropertyFactory.lineOpacity
 import org.maplibre.android.style.layers.PropertyFactory.lineWidth
 import org.maplibre.android.style.layers.PropertyFactory.rasterFadeDuration
 import org.maplibre.android.style.layers.PropertyFactory.rasterOpacity
-import org.maplibre.android.style.layers.PropertyFactory.textAllowOverlap
-import org.maplibre.android.style.layers.PropertyFactory.textColor
-import org.maplibre.android.style.layers.PropertyFactory.textField
-import org.maplibre.android.style.layers.PropertyFactory.textHaloColor
-import org.maplibre.android.style.layers.PropertyFactory.textHaloWidth
-import org.maplibre.android.style.layers.PropertyFactory.textIgnorePlacement
-import org.maplibre.android.style.layers.PropertyFactory.textSize
+import org.maplibre.android.style.layers.PropertyFactory.iconAllowOverlap
+import org.maplibre.android.style.layers.PropertyFactory.iconIgnorePlacement
 import org.maplibre.android.style.sources.GeoJsonSource
 import org.maplibre.android.style.sources.ImageSource
 import org.maplibre.geojson.Feature
@@ -118,6 +109,7 @@ class MapRenderer(
     private var nearbyVisitedFeatures = EMPTY_FEATURES.toJson()
     private var nearbyUnvisitedFeatures = EMPTY_FEATURES.toJson()
     private var nearbyNumberFeatures = EMPTY_FEATURES.toJson()
+    private val nearbyMarkerImages = HashMap<String, Bitmap>()
     @Volatile private var shownOverlayKeys = emptyList<String>()
     @Volatile private var shownOverlayCacheGeneration = -1L
     private val overlayClient = PlaceOverlayClient()
@@ -279,23 +271,23 @@ class MapRenderer(
                     labels.put(JSONObject().put("type", "Feature")
                         .put("geometry", JSONObject().put("type", "Point").put("coordinates",
                             JSONArray().put((corners[1] + corners[3]) / 2.0).put(lat)))
-                        .put("properties", JSONObject().put("label",
-                            if (explored) "✓${index + 1}" else "${index + 1}")))
+                        .put("properties", JSONObject().put("icon", nearbyMarkerId(index + 1, explored))))
                 }
                 fun collection(features: JSONArray): String = JSONObject()
                     .put("type", "FeatureCollection").put("features", features).toString()
-                Triple(collection(visited), collection(unvisited), collection(labels)) to
-                    (visited.length() to cells.size)
+                NearbyOverlaySnapshot(collection(visited), collection(unvisited),
+                    collection(labels), cells.map { it.second }, visited.length())
             }
             mainHandler.post {
                 if (destroyed || revision != nearbyExplorationRevision ||
                     !nearbyExplorationRequested) return@post
-                result.fold({ (collections, totals) ->
-                    nearbyVisitedFeatures = collections.first
-                    nearbyUnvisitedFeatures = collections.second
-                    nearbyNumberFeatures = collections.third
+                result.fold({ snapshot ->
+                    nearbyVisitedFeatures = snapshot.visited
+                    nearbyUnvisitedFeatures = snapshot.unvisited
+                    nearbyNumberFeatures = snapshot.markers
+                    ensureNearbyMarkerImages(snapshot.states)
                     applyNearbyExploration()
-                    onShown(totals.first, totals.second)
+                    onShown(snapshot.exploredCount, snapshot.states.size)
                 }, { error ->
                     Log.w("RoadConquest", "Could not load nearby cells", error)
                     hideNearbyExploration()
@@ -312,24 +304,55 @@ class MapRenderer(
         (style.getSource(NEARBY_NUMBERS_SOURCE_ID) as? GeoJsonSource)?.setGeoJson(nearbyNumberFeatures)
     }
 
+    private data class NearbyOverlaySnapshot(
+        val visited: String, val unvisited: String, val markers: String,
+        val states: List<Boolean>, val exploredCount: Int
+    )
+
+    private fun nearbyMarkerId(number: Int, explored: Boolean): String =
+        "roadconquest-nearby-$number-${if (explored) "visited" else "new"}"
+
+    private fun ensureNearbyMarkerImages(states: List<Boolean>) {
+        states.forEachIndexed { index, explored ->
+            val id = nearbyMarkerId(index + 1, explored)
+            if (id !in nearbyMarkerImages) {
+                val image = Bitmap.createBitmap(40, 40, Bitmap.Config.ARGB_8888)
+                val canvas = Canvas(image)
+                val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = if (explored) 0xFF147A58.toInt() else 0xFF946015.toInt()
+                }
+                canvas.drawCircle(20f, 20f, 19f, paint)
+                paint.color = Color.WHITE
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = 1.5f
+                canvas.drawCircle(20f, 20f, 18f, paint)
+                paint.style = Paint.Style.FILL
+                paint.typeface = Typeface.DEFAULT_BOLD
+                paint.textAlign = Paint.Align.CENTER
+                paint.textSize = if (index < 9) 19f else 17f
+                canvas.drawText("${index + 1}", 20f,
+                    20f - (paint.ascent() + paint.descent()) / 2f, paint)
+                nearbyMarkerImages[id] = image
+                map.style?.addImage(id, image)
+            }
+        }
+    }
+
     private fun installNearbyExploration(style: Style) {
         style.addSource(GeoJsonSource(NEARBY_VISITED_SOURCE_ID, nearbyVisitedFeatures))
         style.addSource(GeoJsonSource(NEARBY_UNVISITED_SOURCE_ID, nearbyUnvisitedFeatures))
         style.addSource(GeoJsonSource(NEARBY_NUMBERS_SOURCE_ID, nearbyNumberFeatures))
+        // Local bitmap numbers work even with the offline fallback style, which
+        // intentionally has no glyph endpoint or text-font network requests.
+        nearbyMarkerImages.forEach { (id, image) -> style.addImage(id, image) }
         style.addLayer(FillLayer(NEARBY_UNVISITED_LAYER_ID, NEARBY_UNVISITED_SOURCE_ID)
             .withProperties(fillColor(0xFFE4A42D.toInt()), fillOpacity(0.38f),
                 fillOutlineColor(0xFFFFD271.toInt())))
         style.addLayer(FillLayer(NEARBY_VISITED_LAYER_ID, NEARBY_VISITED_SOURCE_ID)
             .withProperties(fillColor(0xFF149F72.toInt()), fillOpacity(0.38f),
                 fillOutlineColor(0xFF7FE2AE.toInt())))
-        // Number chips are drawn above the fog and stay anchored to each mile tile.
-        style.addLayer(CircleLayer(NEARBY_MARKERS_LAYER_ID, NEARBY_NUMBERS_SOURCE_ID)
-            .withProperties(circleColor(0xFF172333.toInt()), circleRadius(14f),
-                circleStrokeColor(Color.WHITE), circleStrokeWidth(1f)))
         style.addLayer(SymbolLayer(NEARBY_NUMBERS_LAYER_ID, NEARBY_NUMBERS_SOURCE_ID)
-            .withProperties(textField("{label}"), textColor(Color.WHITE), textSize(12f),
-                textHaloColor(0xFF172333.toInt()), textHaloWidth(1f),
-                textAllowOverlap(true), textIgnorePlacement(true)))
+            .withProperties(iconImage("{icon}"), iconAllowOverlap(true), iconIgnorePlacement(true)))
     }
 
     private fun captureTownViewport(): OverlayViewport? {
@@ -1596,6 +1619,8 @@ class MapRenderer(
         reusableRegionalFogBitmap = null
         carIconBitmap?.recycle()
         carIconBitmap = null
+        nearbyMarkerImages.values.forEach { it.recycle() }
+        nearbyMarkerImages.clear()
         overlayGeneration++
         // The overlay collections are owned by overlayExecutor. Do not clear
         // its HashMap on this UI thread while an in-flight polygon conversion
@@ -1623,7 +1648,6 @@ class MapRenderer(
         private const val NEARBY_NUMBERS_SOURCE_ID = "roadconquest-nearby-numbers"
         private const val NEARBY_VISITED_LAYER_ID = "roadconquest-nearby-visited-fill"
         private const val NEARBY_UNVISITED_LAYER_ID = "roadconquest-nearby-unvisited-fill"
-        private const val NEARBY_MARKERS_LAYER_ID = "roadconquest-nearby-number-markers"
         private const val NEARBY_NUMBERS_LAYER_ID = "roadconquest-nearby-number-labels"
         private const val ROAD_SOURCE_ID = "roadconquest-traveled-roads"
         private const val PENDING_ROUTE_SOURCE_ID = "roadconquest-recorded-route"
