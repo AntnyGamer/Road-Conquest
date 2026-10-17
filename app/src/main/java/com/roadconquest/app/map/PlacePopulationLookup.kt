@@ -25,6 +25,18 @@ internal object PlacePopulationLookup {
     private val officialGeoid = Regex("""[|]census-(1|3|4)-([0-9]+)$""")
     private val cached = ConcurrentHashMap<String, Value>()
     private val cacheLock = Any()
+    // Only simultaneous lookups for the *same* place wait on each other.
+    // Keep network I/O outside cacheLock so unrelated cards never block.
+    private val activeLookups = ConcurrentHashMap<String, Any>()
+
+    internal fun <T> withLookupLock(identity: String, task: () -> T): T {
+        val guard = activeLookups.computeIfAbsent(identity) { Any() }
+        try {
+            return synchronized(guard) { task() }
+        } finally {
+            activeLookups.remove(identity, guard)
+        }
+    }
     @Volatile private var cacheGeneration = 0L
     internal fun generation(): Long = cacheGeneration
     private const val CENSUS_CACHE = "roadconquest_census2020_population"
@@ -113,8 +125,18 @@ internal object PlacePopulationLookup {
     }
 
     fun lookup(context: Context, info: PlaceOverlayInfo): Value? {
-        val startedAtGeneration = generation()
         if (info.population != null) return Value(info.population, "Boundary provider")
+        // Re-check memory and persistent cache after waiting for an identical
+        // in-flight lookup; the first success is shared without another request.
+        val startedAtGeneration = generation()
+        return withLookupLock("$startedAtGeneration:${key(info)}") {
+            lookupCurrent(context, info, startedAtGeneration)
+        }
+    }
+
+    private fun lookupCurrent(
+        context: Context, info: PlaceOverlayInfo, startedAtGeneration: Long
+    ): Value? {
         cached[key(info)]?.let { return it }
         savedCensus(context, info)?.let { saved ->
             // A reset can occur between reading disk and populating the memory
