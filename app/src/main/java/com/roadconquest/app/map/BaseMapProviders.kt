@@ -42,8 +42,10 @@ object BaseMapProviders {
                 }
                 try {
                     val response = chain.proceed(request)
-                    if (provider != null && (response.code in listOf(401, 403, 429) || response.code >= 500 || response.code in 300..399)) {
-                        health.failed(provider, response.code, response.header("Retry-After"))
+                    val status = response.code
+                    if (provider != null && (status == 401 || status == 403 || status == 429 ||
+                            status >= 500 || status in 300..399)) {
+                        health.failed(provider, status, response.header("Retry-After"))
                         listeners.forEach { it() }
                     }
                     response
@@ -70,6 +72,7 @@ object BaseMapProviders {
     // waking the map every 30 seconds while an intentionally disabled provider
     // remains unavailable.
     fun retryInMs(): Long? = listOf("openfreemap", "geoapify-tiles", "esri-imagery")
+        .filter(ServiceConfig::enabled)
         .map { health.remaining(it) }.filter { it > 0 }.minOrNull()
     fun style(context: Context, mode: MapMode, provider: String): String {
         if (provider.startsWith("openfreemap")) {
