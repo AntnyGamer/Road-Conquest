@@ -56,14 +56,14 @@ class MapLayoutTest {
         assertTrue("The existing points chip must remain tappable for Garage", garageChipFound)
     }
 
-    @Test fun homeScreenKeepsMapFullSizeWithoutDuplicateAttributionOrForcedLowResolution() {
+    @Test fun homeScreenKeepsMapFullSizeAndAccessibleCompactProviderAttribution() {
         val context = Robolectric.buildActivity(MainActivity::class.java).get()
         val parser = context.resources.getLayout(R.layout.activity_main)
         val ns = "http://schemas.android.com/apk/res/android"
         val mapNs = "http://schemas.android.com/apk/res-auto"
         var foundMap = false
         var foundPanel = false
-        var foundDuplicateCredit = false
+        var visibleCreditCount = 0
         try {
             while (parser.eventType != org.xmlpull.v1.XmlPullParser.END_DOCUMENT) {
                 if (parser.eventType == org.xmlpull.v1.XmlPullParser.START_TAG) {
@@ -76,8 +76,13 @@ class MapLayoutTest {
                                 parser.getAttributeValue(mapNs, "maplibre_pixelRatio"))
                         }
                         R.id.controlPanel -> foundPanel = true
-                        else -> if (parser.getAttributeResourceValue(ns, "text", 0) ==
-                            R.string.locationiq_credit) foundDuplicateCredit = true
+                        R.id.locationIqCredit -> {
+                            visibleCreditCount++
+                            assertEquals(R.string.locationiq_credit,
+                                parser.getAttributeResourceValue(ns, "text", 0))
+                            assertEquals(48f, parser.getAttributeValue(ns, "minHeight")
+                                .removeSuffix("dp").toFloat(), 0f)
+                        }
                     }
                 }
                 parser.next()
@@ -87,8 +92,8 @@ class MapLayoutTest {
         }
         assertTrue(foundMap)
         assertTrue(foundPanel)
-        assertFalse("Credits belong in map attribution and Settings, not a full-height row",
-            foundDuplicateCredit)
+        assertEquals("A single compact, clickable LocationIQ credit stays on the home screen",
+            1, visibleCreditCount)
     }
 
     @Test fun identicalInsetsAndRepeatedLayoutsDoNotRescheduleTheStatsCard() {
