@@ -95,6 +95,14 @@ class MapRenderingDeviceTest {
                 scenario.onActivity {
                     assertNotNull("Native overview fog must exist independently of camera callbacks",
                         map.style?.getLayer("roadconquest-world-fog-overview-raster"))
+                    val regional = map.style?.getLayer("roadconquest-traveled-roads-line-regional") as? LineLayer
+                    val detailed = map.style?.getLayer("roadconquest-traveled-roads-line") as? LineLayer
+                    assertNotNull("Regional roads must have their own visible style", regional)
+                    assertNotNull("Detailed roads must remain visible", detailed)
+                    assertEquals(org.maplibre.android.style.layers.Property.LINE_CAP_SQUARE,
+                        regional!!.lineCap.value)
+                    assertEquals(9f, regional.maxZoom, 0.01f)
+                    assertEquals(9f, detailed!!.minZoom, 0.01f)
                 }
                 fun move(target: LatLng, zoom: Double, bearing: Double = 0.0) {
                     val idle = CountDownLatch(1)
@@ -196,7 +204,10 @@ class MapRenderingDeviceTest {
                         }
                     }
                 }
-                for ((zoom, bearing) in listOf(8.0 to 0.0, 9.0 to 30.0, 11.0 to 60.0)) {
+                for ((zoom, bearing) in listOf(
+                    6.5 to 0.0, 7.5 to 0.0, 8.0 to 0.0,
+                    8.95 to 0.0, 9.05 to 0.0, 9.0 to 30.0, 11.0 to 60.0
+                )) {
                     move(LatLng(0.0, 0.0), zoom, bearing)
                     awaitPixels("Blue road pixels remain visible above fog at zoom $zoom") { bitmap ->
                         val point = map.projection.toScreenLocation(LatLng(0.0, 0.0))

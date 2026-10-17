@@ -50,6 +50,7 @@ import org.maplibre.android.style.layers.PropertyFactory.rasterOpacity
 import org.maplibre.android.style.layers.PropertyFactory.iconAllowOverlap
 import org.maplibre.android.style.layers.PropertyFactory.iconIgnorePlacement
 import org.maplibre.android.style.sources.GeoJsonSource
+import org.maplibre.android.style.sources.GeoJsonOptions
 import org.maplibre.android.style.sources.ImageSource
 import org.maplibre.geojson.Feature
 import org.maplibre.geojson.FeatureCollection
@@ -58,6 +59,7 @@ import org.maplibre.geojson.Point
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.*
 
 class MapRenderer(
@@ -78,7 +80,17 @@ class MapRenderer(
     private var baseProvider = ""
     private var initialStyleReady: (() -> Unit)? = null
     private val retryBaseProvider = Runnable { refreshBaseProvider() }
-    private val providerListener: () -> Unit = { mainHandler.post { refreshBaseProvider() } }
+    // A failed map load can fail dozens of tiles at once. One provider refresh
+    // observes the shared up-to-date health state; queue at most one per burst.
+    private val providerRefreshQueued = AtomicBoolean(false)
+    private val providerListener: () -> Unit = {
+        if (providerRefreshQueued.compareAndSet(false, true)) {
+            mainHandler.post {
+                providerRefreshQueued.set(false)
+                refreshBaseProvider()
+            }
+        }
+    }
     private var queryRunning = false
     private var queryAgain = false
     private var queryRoadsAgain = false
@@ -568,6 +580,7 @@ class MapRenderer(
         if (road != appliedRoadColor) {
             val color = Cosmetics.roadColor(context).argb
             (style.getLayer(ROAD_LAYER_ID) as? LineLayer)?.setProperties(lineColor(color))
+            (style.getLayer(REGIONAL_ROAD_LAYER_ID) as? LineLayer)?.setProperties(lineColor(color))
             (style.getLayer(PENDING_ROUTE_LAYER_ID) as? LineLayer)?.setProperties(lineColor(color))
             appliedRoadColor = road
         }
@@ -594,7 +607,9 @@ class MapRenderer(
         }
         val styleJson = BaseMapProviders.style(context, mapMode, baseProvider)
         mainHandler.removeCallbacks(retryBaseProvider)
-        if (baseProvider != "openfreemap") mainHandler.postDelayed(retryBaseProvider, BaseMapProviders.retryInMs())
+        if (baseProvider != "openfreemap") BaseMapProviders.retryInMs()?.let {
+            mainHandler.postDelayed(retryBaseProvider, it)
+        }
         map.setStyle(Style.Builder().fromJson(styleJson)) { style ->
             if (destroyed || generation != styleGeneration) return@setStyle
             installPlaceOverlayLayers(style)
@@ -622,7 +637,7 @@ class MapRenderer(
         if (baseProvider != BaseMapProviders.preferred(mapMode)) loadStyle { }
         else if (baseProvider != "openfreemap") {
             mainHandler.removeCallbacks(retryBaseProvider)
-            mainHandler.postDelayed(retryBaseProvider, BaseMapProviders.retryInMs())
+            BaseMapProviders.retryInMs()?.let { mainHandler.postDelayed(retryBaseProvider, it) }
         }
     }
 
@@ -1167,25 +1182,36 @@ class MapRenderer(
     }
 
     private fun installRoadLayer(style: Style) {
-        // Keep MapLibre's efficient default GeoJSON tiling. Short roads appear
-        // as dots at regional zoom mainly when their round caps dominate their
-        // subpixel projected length, which the zoom-scaled stroke addresses.
-        style.addSource(GeoJsonSource(ROAD_SOURCE_ID, displayedRoadFeatures))
+        // Reduce native simplification from the default 0.375 just enough to
+        // preserve small road shapes at regional zoom without retaining every
+        // subpixel bend. This affects display only, never saved road evidence.
+        style.addSource(GeoJsonSource(
+            ROAD_SOURCE_ID, displayedRoadFeatures, GeoJsonOptions().withTolerance(0.125f)
+        ))
         appliedRoadColor = Prefs.roadColor(context)
-        val layer = LineLayer(ROAD_LAYER_ID, ROAD_SOURCE_ID).withProperties(
-            lineColor(Cosmetics.roadColor(context).argb),
-            lineOpacity(242f / 255f),
-            // At regional scales a 4px round cap dominates a subpixel segment
-            // and looks like a large dot. Use thinner lines until individual
-            // roads occupy enough pixels to render at their normal 4px width.
+        val color = Cosmetics.roadColor(context).argb
+
+        // At regional zoom, very short confirmed roads can shrink below a
+        // pixel. Square caps preserve a visible footprint, unlike butt caps,
+        // without introducing circular dot artifacts or changing GPS geometry.
+        val regional = LineLayer(REGIONAL_ROAD_LAYER_ID, ROAD_SOURCE_ID).withProperties(
+            lineColor(color), lineOpacity(242f / 255f),
             lineWidth(Expression.interpolate(Expression.linear(), Expression.zoom(),
-                Expression.stop(6f, 1.5f), Expression.stop(9f, 2.5f),
-                Expression.stop(12f, 4f))),
-            lineCap(Property.LINE_CAP_ROUND),
-            lineJoin(Property.LINE_JOIN_ROUND)
+                Expression.stop(6f, 2f), Expression.stop(9f, 2.75f))),
+            lineCap(Property.LINE_CAP_SQUARE), lineJoin(Property.LINE_JOIN_ROUND)
         )
-        layer.setMinZoom(FogBitmapRenderer.MIN_ROAD_ZOOM.toFloat())
-        style.addLayer(layer)
+        regional.setMinZoom(FogBitmapRenderer.MIN_ROAD_ZOOM.toFloat())
+        regional.setMaxZoom(9f)
+        style.addLayer(regional)
+
+        val detailed = LineLayer(ROAD_LAYER_ID, ROAD_SOURCE_ID).withProperties(
+            lineColor(color), lineOpacity(242f / 255f),
+            lineWidth(Expression.interpolate(Expression.linear(), Expression.zoom(),
+                Expression.stop(9f, 2.75f), Expression.stop(12f, 4f))),
+            lineCap(Property.LINE_CAP_ROUND), lineJoin(Property.LINE_JOIN_ROUND)
+        )
+        detailed.setMinZoom(9f)
+        style.addLayer(detailed)
     }
 
     private fun installFogRaster(
@@ -1775,6 +1801,7 @@ class MapRenderer(
         private const val PENDING_ROUTE_SOURCE_ID = "roadconquest-recorded-route"
         private const val PENDING_ROUTE_LAYER_ID = "roadconquest-recorded-route-line"
         private const val ROAD_LAYER_ID = "roadconquest-traveled-roads-line"
+        private const val REGIONAL_ROAD_LAYER_ID = "roadconquest-traveled-roads-line-regional"
         private const val FOG_SOURCE_ID = "roadconquest-fog"
         private const val FOG_LAYER_ID = "roadconquest-fog-raster"
         private const val FOG_ALT_SOURCE_ID = "roadconquest-fog-buffer"

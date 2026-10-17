@@ -71,6 +71,9 @@ class MainActivity : Activity() {
     }
 
     private lateinit var mapView: MapView
+    private var startupFrameListener: MapView.OnDidFinishRenderingFrameListener? = null
+    private var startupCoverTimeout: Runnable? = null
+    private var startupWaitingForStartingLocation = false
     private lateinit var enableButton: Button
     private lateinit var statusText: TextView
     private lateinit var statsText: TextView
@@ -256,6 +259,16 @@ class MainActivity : Activity() {
         pointsText = findViewById(R.id.pointsText)
         pointsText.setOnClickListener { startActivity(Intent(this, ShopActivity::class.java)) }
         mapView.onCreate(savedInstanceState)
+        // A one-time cover prevents a freshly installed/upgraded build from
+        // exposing the low-detail overview while preferred vector tiles arrive.
+        // Never block the map indefinitely if offline or a tile provider stalls.
+        if (getSharedPreferences("roadconquest_map_startup", MODE_PRIVATE)
+                .getInt("shown_version", -1) != BuildConfig.VERSION_CODE) {
+            findViewById<View>(R.id.mapStartupCover).visibility = View.VISIBLE
+            startupCoverTimeout = Runnable { revealStartupMap() }.also {
+                mapView.postDelayed(it, 3_000L)
+            }
+        }
 
         val settingsButton = findViewById<ImageButton>(R.id.settingsButton)
         val centerButton = findViewById<ImageButton>(R.id.centerCarButton)
@@ -306,10 +319,34 @@ class MainActivity : Activity() {
                 }
             }
             renderer = MapRenderer(this, map, repository, mapView, mapWasCentered).also { renderer ->
-                renderer.initialize { showFreshCachedOrStartingLocation() }
+                renderer.initialize {
+                    showFreshCachedOrStartingLocation()
+                    if (findViewById<View>(R.id.mapStartupCover).visibility == View.VISIBLE) {
+                        val listener = MapView.OnDidFinishRenderingFrameListener { fully, _, _ ->
+                            if (fully && !startupWaitingForStartingLocation) revealStartupMap()
+                        }
+                        startupFrameListener = listener
+                        mapView.addOnDidFinishRenderingFrameListener(listener)
+                        map.triggerRepaint()
+                    }
+                }
                 if (!started) renderer.pauseViewport()
             }
         }
+    }
+
+    private fun revealStartupMap() {
+        startupFrameListener?.let(mapView::removeOnDidFinishRenderingFrameListener)
+        startupFrameListener = null
+        startupCoverTimeout?.let(mapView::removeCallbacks)
+        startupCoverTimeout = null
+        val cover = findViewById<View>(R.id.mapStartupCover)
+        if (cover.visibility != View.VISIBLE) return
+        getSharedPreferences("roadconquest_map_startup", MODE_PRIVATE)
+            .edit().putInt("shown_version", BuildConfig.VERSION_CODE).apply()
+        cover.animate().alpha(0f).setDuration(150L).withEndAction {
+            cover.visibility = View.GONE
+        }.start()
     }
 
     override fun onStart() {
@@ -526,6 +563,10 @@ class MainActivity : Activity() {
         populationExecutor.shutdownNow()
         discoveryExecutor.shutdownNow()
         renderer?.destroy()
+        startupFrameListener?.let(mapView::removeOnDidFinishRenderingFrameListener)
+        startupFrameListener = null
+        startupCoverTimeout?.let(mapView::removeCallbacks)
+        startupCoverTimeout = null
         mapView.onDestroy()
         super.onDestroy()
     }
@@ -1152,6 +1193,11 @@ class MainActivity : Activity() {
         // then leave the camera alone so normal panning is not constantly undone.
         if (!::locationManager.isInitialized || locationManager.isLocationEnabled || startingFallbackApplied) return
         startingFallbackApplied = true
+        // A fully rendered *world* frame is not ready if the saved starting
+        // camera is still being read from disk. Let that move happen first.
+        if (findViewById<View>(R.id.mapStartupCover).visibility == View.VISIBLE) {
+            startupWaitingForStartingLocation = true
+        }
 
         summaryExecutor.execute {
             val starting = runCatching {
@@ -1161,13 +1207,19 @@ class MainActivity : Activity() {
                 if (isDestroyed) return@runOnUiThread
                 if (starting == null || locationManager.isLocationEnabled || renderer !== activeRenderer) {
                     startingFallbackApplied = false
-                    return@runOnUiThread
+                } else {
+                    activeRenderer.centerOnStartingLocation(
+                        starting.latitude,
+                        starting.longitude,
+                        force = true
+                    )
                 }
-                activeRenderer.centerOnStartingLocation(
-                    starting.latitude,
-                    starting.longitude,
-                    force = true
-                )
+                startupWaitingForStartingLocation = false
+                // A previous fully-rendered frame may have been the transient
+                // world camera. Repaint after the new camera is chosen.
+                if (findViewById<View>(R.id.mapStartupCover).visibility == View.VISIBLE) {
+                    activeMap?.triggerRepaint()
+                }
             }
         }
     }

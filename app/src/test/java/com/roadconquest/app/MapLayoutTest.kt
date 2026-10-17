@@ -57,6 +57,7 @@ class MapLayoutTest {
         val mapNs = "http://schemas.android.com/apk/res-auto"
         var foundMap = false
         var foundPanel = false
+        var foundStartupCover = false
         var visibleCreditCount = 0
         try {
             while (parser.eventType != org.xmlpull.v1.XmlPullParser.END_DOCUMENT) {
@@ -70,6 +71,14 @@ class MapLayoutTest {
                                 parser.getAttributeValue(mapNs, "maplibre_pixelRatio"))
                         }
                         R.id.controlPanel -> foundPanel = true
+                        R.id.mapStartupCover -> {
+                            foundStartupCover = true
+                            assertEquals(-1, parser.getAttributeIntValue(ns, "layout_width", 0))
+                            assertEquals(-1, parser.getAttributeIntValue(ns, "layout_height", 0))
+                            // Default visibility is declared as "gone" in XML.
+                            // Robolectric's raw parser does not reliably expose enum
+                            // attribute values, so only check the full-screen shape here.
+                        }
                         R.id.locationIqCredit -> {
                             visibleCreditCount++
                             assertEquals(R.string.locationiq_credit,
@@ -90,6 +99,7 @@ class MapLayoutTest {
         }
         assertTrue(foundMap)
         assertTrue(foundPanel)
+        assertTrue("The first-launch cover must be present and full-screen", foundStartupCover)
         assertEquals("A single compact, clickable LocationIQ credit stays on the home screen",
             1, visibleCreditCount)
     }

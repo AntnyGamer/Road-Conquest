@@ -1,3 +1,19 @@
+# Road Conquest 1.0 Beta 53
+
+## What's new since Beta 52
+
+- **More consistent blue roads when zooming out:** Reduce display-only GeoJSON simplification at regional scales and use a legible regional stroke with square caps, keeping short saved roads visible without rendering every tiny bend. Detailed road appearance is preserved and custom road colors apply at both zoom ranges. No driving records, map matching, unlocks, or rewards are changed.
+- **Cleaner first launch after install/update:** Briefly cover the partially loaded base map until the first complete rendered frame. Resolve the saved starting position first when device location is off; use a three-second timeout so poor connectivity cannot trap the user on a loading screen.
+- **Less map-renderer busywork:** Combine repeated map-provider failure refresh notifications and avoid periodic provider retry tasks when no service is in a cooldown. Retain provider fallbacks and normal recovery when service status changes.
+- **Less intrusive provider credits:** Remove duplicated LocationIQ links from Settings and map-style attribution while retaining the visible, clickable attribution on the home map required for commercial use.
+- **Smoother Gold/Regular appearance switching:** Skip redundant launcher-icon updates and change both launcher aliases together on Android 13+ using the don't-kill-app flag. Screen themes still rebuild safely as needed; Android/launcher implementations may control the process lifecycle.
+- **Compatibility:** Android 12+, versionCode **79**, same app ID and signing identity. Existing locally saved progress and purchases stay intact when updating a compatible installation. Any separately deployed verified-driving server must allow version 79 before verified leaderboard uploads are enabled.
+- **Release validation:** Account-server tests, Android unit tests/lint/build checks, native MapLibre integration on Android 12/15/17 and minified-release cold-start checks must pass before the workflow publishes signed APK/AAB assets.
+
+Install the signed GitHub APK over compatible GitHub-installed versions. Google Play installations must update through Play using the signed release AAB. This GitHub release does not deploy the account service or publish to Google Play.
+
+---
+
 # Road Conquest 1.0 Beta 52
 
 ## What's new since Beta 51

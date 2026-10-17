@@ -13,6 +13,19 @@
         maplibre:maplibre_cameraZoomMax="20.0"
         maplibre:maplibre_renderTextureMode="true" />
 
+    <!-- On first launch after an install/update, avoid exposing partially loaded
+         low-detail tiles. MainActivity removes this when rendering completes or times out. -->
+    <TextView
+        android:id="@+id/mapStartupCover"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="?attr/rcScreenBg"
+        android:gravity="center"
+        android:text="Loading map…"
+        android:textColor="?attr/rcTextSecondary"
+        android:textSize="14sp"
+        android:visibility="gone" />
+
     <TextView
         android:id="@+id/statsText"
         android:layout_width="wrap_content"

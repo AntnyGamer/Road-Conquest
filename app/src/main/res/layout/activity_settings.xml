@@ -491,16 +491,6 @@
                 android:layout_marginTop="12dp"
                 android:text="Licenses and map credits" />
 
-            <TextView
-                android:id="@+id/settingsLocationIqCredit"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:minHeight="48dp"
-                android:gravity="center_vertical"
-                android:text="@string/locationiq_credit"
-                android:textColorLink="?attr/rcAccent"
-                android:textSize="14sp" />
-
             <Button
                 android:id="@+id/githubButton"
                 style="@style/RoadConquest.SettingsAction"
