@@ -936,7 +936,7 @@ class TrackingService : Service(), LocationListener {
                     // actual provider evidence immediately restores the normal retry.
                     val usualDelay = if (points.size >= 20) LONG_MATCH_RETRY_AFTER_PARTIAL_MS
                         else MATCH_RETRY_AFTER_PARTIAL_MS
-                    val delay = if (result.roads.isEmpty() && result.matchedPointConfidences.isEmpty()) {
+                    val delay = if (result.explicitNoMatch && result.roads.isEmpty() && result.matchedPointConfidences.isEmpty()) {
                         noMatchBackoff.delayAfterNoMatch(submittedPointIds, unresolvedIds, usualDelay)
                     } else {
                         noMatchBackoff.clear(unresolvedIds)
