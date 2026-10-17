@@ -446,97 +446,6 @@ class RoadGeometryValidator {
     private fun bearingDifferenceDegrees(a: Double, b: Double): Double =
         kotlin.math.abs(((a - b + 540.0) % 360.0) - 180.0)
 
-    private fun supportedTurnGap(points: List<TrackPoint>): IntRange? {
-        // A retry window may include another, unrelated unmatched fix immediately before
-        // the turn. Check each contiguous pending island independently instead of treating
-        // the first and last pending fix in the entire window as one giant gap.
-        // Prefer the longest eligible turn when multiple gaps have confirmed anchors.
-        var best: IntRange? = null
-        var first = 0
-        while (first < points.size) {
-            if (points[first].matched) {
-                first++
-                continue
-            }
-            var last = first
-            while (last + 1 < points.size && !points[last + 1].matched) last++
-            if (isSupportedTurnGap(points, first, last) &&
-                (best == null || last - first > best.last - best.first)
-            ) best = first..last
-            first = last + 1
-        }
-        return best
-    }
-
-    private fun isSupportedTurnGap(points: List<TrackPoint>, first: Int, last: Int): Boolean {
-        val length = last - first + 1
-        if (first < 1 || last >= points.lastIndex ||
-            length > MAX_SUPPORTED_TURN_GAP_POINTS ||
-            !points[first - 1].matched || !points[last + 1].matched
-        ) return false
-
-        if (length <= 3) {
-            // Preserve the established two-independent-fix anchor evidence for
-            // short gaps, which are far more common than extended missing turns.
-            if (first < 2 || last >= points.size - 2) return false
-            val approachFrom = points[first - 2]
-            val approachTo = points[first - 1]
-            val exitFrom = points[last + 1]
-            val exitTo = points[last + 2]
-            if (pointDistanceMeters(approachFrom, approachTo) < MIN_BEARING_EVIDENCE_DISTANCE_M ||
-                pointDistanceMeters(exitFrom, exitTo) < MIN_BEARING_EVIDENCE_DISTANCE_M
-            ) return false
-            val change = bearingDifferenceDegrees(
-                initialBearingDegrees(approachFrom, approachTo),
-                initialBearingDegrees(exitFrom, exitTo)
-            )
-            if (change >= SHARP_TURN_DEGREES) return true
-            // Some valid junction transitions bend only 25-44 degrees. The
-            // independent GPS fixes on both sides still warrant a no-bearing
-            // provider retry, but only across a short and accurate sampled gap.
-            return change >= MODERATE_TURN_DEGREES &&
-                (first - 1..last + 1).all { index ->
-                    points[index].accuracyMeters.isFinite() &&
-                        points[index].accuracyMeters in 0.01f..MAX_LONG_TURN_ACCURACY_M
-                } &&
-                (first - 1 until last + 1).all { index ->
-                    val elapsed = points[index + 1].timestampMillis - points[index].timestampMillis
-                    elapsed in 1..MAX_LONG_TURN_SAMPLE_GAP_MS &&
-                        pointDistanceMeters(points[index], points[index + 1]) <= MAX_LONG_TURN_JUMP_M
-                }
-        }
-
-        // Long holes require precise, continuous GPS and actual turn geometry.
-        // Neither elapsed time nor a nearby road alone proves the driven path.
-        if (points[last].timestampMillis - points[first].timestampMillis !in 1..MAX_LONG_TURN_GAP_MS ||
-            (first - 1..last + 1).any { i ->
-                !points[i].accuracyMeters.isFinite() ||
-                    points[i].accuracyMeters > MAX_LONG_TURN_ACCURACY_M ||
-                    points[i].accuracyMeters < 0f
-            } ||
-            (first - 1 until last + 1).any { i ->
-                val elapsed = points[i + 1].timestampMillis - points[i].timestampMillis
-                elapsed !in 1..MAX_LONG_TURN_SAMPLE_GAP_MS ||
-                    pointDistanceMeters(points[i], points[i + 1]) > MAX_LONG_TURN_JUMP_M
-            }
-        ) return false
-
-        val approachFrom = points[first - 1]
-        val approachTo = points[first]
-        val exitFrom = points[last]
-        val exitTo = points[last + 1]
-        val approachDistance = pointDistanceMeters(approachFrom, approachTo)
-        val exitDistance = pointDistanceMeters(exitFrom, exitTo)
-        val cornerCourse = (first..last).any { isSharpTurn(points, it) } ||
-            (approachDistance >= MIN_BEARING_EVIDENCE_DISTANCE_M &&
-                exitDistance >= MIN_BEARING_EVIDENCE_DISTANCE_M &&
-                bearingDifferenceDegrees(
-                    initialBearingDegrees(approachFrom, approachTo),
-                    initialBearingDegrees(exitFrom, exitTo)
-                ) >= SHARP_TURN_DEGREES)
-        return cornerCourse
-    }
-
     private fun isSharpTurn(points: List<TrackPoint>, index: Int): Boolean {
         if (index == 0 || index == points.lastIndex) return false
         val incoming = points[index - 1]
@@ -732,12 +641,6 @@ class RoadGeometryValidator {
         // degrees is broad enough for ordinary curves while still excluding the opposite road.
         private const val BEARING_GUIDANCE_RANGE_DEGREES = 65
         private const val SHARP_TURN_DEGREES = 45.0
-        private const val MODERATE_TURN_DEGREES = 25.0
-        private const val MAX_SUPPORTED_TURN_GAP_POINTS = 8
-        private const val MAX_LONG_TURN_GAP_MS = 30_000L
-        private const val MAX_LONG_TURN_SAMPLE_GAP_MS = 15_000L
-        private const val MAX_LONG_TURN_JUMP_M = 100.0
-        private const val MAX_LONG_TURN_ACCURACY_M = 12f
         private const val MIN_ALTERNATE_SNAP_CONFIDENCE = 0.75
         private const val EARTH_RADIUS_M = 6_371_008.8
         private const val MIN_GEOMETRY_LENGTH_M = 0.001
