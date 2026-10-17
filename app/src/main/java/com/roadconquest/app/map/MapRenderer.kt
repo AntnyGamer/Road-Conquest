@@ -958,10 +958,17 @@ class MapRenderer(
                 PlaceOverlayMode.TOWN -> 0xFF176B3D.toInt()
                 PlaceOverlayMode.NONE -> Color.TRANSPARENT
             }
+            // At country/region zoom levels many municipal shapes become broad
+            // patches of color. Keep visited-town geography identifiable without
+            // washing out streets and labels beneath the green fills.
+            val townFillOpacity = if (mode == PlaceOverlayMode.TOWN) {
+                fillOpacity(Expression.interpolate(Expression.linear(), Expression.zoom(),
+                    Expression.stop(5f, 0.12f), Expression.stop(11f, 0.30f)))
+            } else fillOpacity(0.30f)
             style.addLayer(
                 FillLayer(overlayLayerId(mode), overlaySourceId(mode)).withProperties(
                     fillColor(color),
-                    fillOpacity(0.30f),
+                    townFillOpacity,
                     // Keep the built-in antialiased edge subtle; the dedicated 1.25 px line
                     // below supplies the visible separator without making borders look heavy.
                     fillOutlineColor(color),
@@ -976,7 +983,10 @@ class MapRenderer(
             style.addLayer(
                 LineLayer(overlayBoundaryLayerId(mode), overlayBoundarySourceId(mode)).withProperties(
                     lineColor(outline),
-                    lineOpacity(0.90f),
+                    if (mode == PlaceOverlayMode.TOWN) {
+                        lineOpacity(Expression.interpolate(Expression.linear(), Expression.zoom(),
+                            Expression.stop(5f, 0.56f), Expression.stop(11f, 0.90f)))
+                    } else lineOpacity(0.90f),
                     lineWidth(1.25f),
                     lineCap(Property.LINE_CAP_ROUND),
                     lineJoin(Property.LINE_JOIN_ROUND)
