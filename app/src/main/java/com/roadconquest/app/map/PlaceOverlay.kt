@@ -64,11 +64,12 @@ data class PlaceOverlayData(
  * entire neighboring town merely because its name has a visited-place record.
  */
 internal fun PlaceOverlayData.containsRecordedVisit(place: PlaceDiscovery): Boolean =
-    kind != PlaceKind.TOWN || (place.kind == PlaceKind.TOWN &&
-        place.latitude.isFinite() && place.longitude.isFinite() &&
-        runCatching {
-            PlaceGeometry.contains(JSONObject(geometryJson), place.latitude, place.longitude)
-        }.getOrDefault(false))
+    key == place.key && kind == place.kind &&
+        (kind != PlaceKind.TOWN ||
+            (place.latitude.isFinite() && place.longitude.isFinite() &&
+                runCatching {
+                    PlaceGeometry.contains(JSONObject(geometryJson), place.latitude, place.longitude)
+                }.getOrDefault(false)))
 
 data class PlaceOverlayCacheResult(val cached: Boolean, val data: PlaceOverlayData?)
 

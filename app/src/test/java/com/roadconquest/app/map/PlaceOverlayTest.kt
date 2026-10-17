@@ -31,6 +31,8 @@ class PlaceOverlayTest {
         assertTrue(data.containsRecordedVisit(town))
         assertFalse(data.containsRecordedVisit(town.copy(latitude = 40.2)))
         assertFalse(data.copy(geometryJson = "invalid").containsRecordedVisit(town))
+        assertFalse(data.copy(key = "us|new jersey|different-town").containsRecordedVisit(town))
+        assertFalse(data.copy(kind = PlaceKind.STATE).containsRecordedVisit(town))
         // The same containment gate also applies to imported or non-US town histories.
         assertFalse(data.containsRecordedVisit(town.copy(key = "gb|england|pennsauken",
             latitude = 40.2)))
