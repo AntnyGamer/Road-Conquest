@@ -607,7 +607,9 @@ class MapRenderer(
         }
         val styleJson = BaseMapProviders.style(context, mapMode, baseProvider)
         mainHandler.removeCallbacks(retryBaseProvider)
-        if (baseProvider != "openfreemap") mainHandler.postDelayed(retryBaseProvider, BaseMapProviders.retryInMs())
+        if (baseProvider != "openfreemap") BaseMapProviders.retryInMs()?.let {
+            mainHandler.postDelayed(retryBaseProvider, it)
+        }
         map.setStyle(Style.Builder().fromJson(styleJson)) { style ->
             if (destroyed || generation != styleGeneration) return@setStyle
             installPlaceOverlayLayers(style)
@@ -635,7 +637,7 @@ class MapRenderer(
         if (baseProvider != BaseMapProviders.preferred(mapMode)) loadStyle { }
         else if (baseProvider != "openfreemap") {
             mainHandler.removeCallbacks(retryBaseProvider)
-            mainHandler.postDelayed(retryBaseProvider, BaseMapProviders.retryInMs())
+            BaseMapProviders.retryInMs()?.let { mainHandler.postDelayed(retryBaseProvider, it) }
         }
     }
 
