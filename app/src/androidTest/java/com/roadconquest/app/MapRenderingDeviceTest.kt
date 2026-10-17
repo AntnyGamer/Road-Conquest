@@ -713,11 +713,24 @@ class MapRenderingDeviceTest {
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
                 val styleReady = CountDownLatch(1)
                 scenario.onActivity { activity ->
+                    MainActivity::class.java.getDeclaredMethod("stopPreviewLocation")
+                        .apply { isAccessible = true }.invoke(activity)
                     activity.findViewById<MapView>(R.id.mapView).getMapAsync { map ->
                         map.getStyle { styleReady.countDown() }
                     }
                 }
                 assertTrue("Native map style initializes", styleReady.await(30, TimeUnit.SECONDS))
+                val readyDeadline = SystemClock.elapsedRealtime() + 10_000L
+                var overlayLayerReady = false
+                while (!overlayLayerReady && SystemClock.elapsedRealtime() < readyDeadline) {
+                    scenario.onActivity { activity ->
+                        val map = MainActivity::class.java.getDeclaredField("activeMap")
+                            .apply { isAccessible = true }.get(activity) as? MapLibreMap
+                        overlayLayerReady = map?.style?.getLayer("roadconquest-nearby-visited-fill") != null
+                    }
+                    if (!overlayLayerReady) SystemClock.sleep(50)
+                }
+                assertTrue("Renderer installs the nearby map layers", overlayLayerReady)
                 val nearbyReady = CountDownLatch(1)
                 var failed = false
                 lateinit var renderer: MapRenderer
