@@ -49,7 +49,6 @@ import org.maplibre.android.style.layers.PropertyFactory.rasterFadeDuration
 import org.maplibre.android.style.layers.PropertyFactory.rasterOpacity
 import org.maplibre.android.style.layers.PropertyFactory.iconAllowOverlap
 import org.maplibre.android.style.layers.PropertyFactory.iconIgnorePlacement
-import org.maplibre.android.style.sources.GeoJsonOptions
 import org.maplibre.android.style.sources.GeoJsonSource
 import org.maplibre.android.style.sources.ImageSource
 import org.maplibre.geojson.Feature
@@ -1168,10 +1167,10 @@ class MapRenderer(
     }
 
     private fun installRoadLayer(style: Style) {
-        // Preserve all snapped turns in low-zoom GeoJSON tiles. The default 0.375
-        // pixel simplification can reduce short curves to disconnected-looking dots.
-        style.addSource(GeoJsonSource(ROAD_SOURCE_ID, displayedRoadFeatures,
-            GeoJsonOptions().withTolerance(0f)))
+        // Keep MapLibre's efficient default GeoJSON tiling. Short roads appear
+        // as dots at regional zoom mainly when their round caps dominate their
+        // subpixel projected length, which the zoom-scaled stroke addresses.
+        style.addSource(GeoJsonSource(ROAD_SOURCE_ID, displayedRoadFeatures))
         appliedRoadColor = Prefs.roadColor(context)
         val layer = LineLayer(ROAD_LAYER_ID, ROAD_SOURCE_ID).withProperties(
             lineColor(Cosmetics.roadColor(context).argb),
