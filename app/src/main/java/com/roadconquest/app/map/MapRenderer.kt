@@ -1182,11 +1182,11 @@ class MapRenderer(
     }
 
     private fun installRoadLayer(style: Style) {
-        // Native GeoJSON tiling otherwise discards short bends at regional zoom
-        // (default tolerance 0.375), leaving real driven segments as dots or gaps.
-        // Keep original saved coordinates; this affects drawing only, never scoring.
+        // Reduce native simplification from the default 0.375 just enough to
+        // preserve small road shapes at regional zoom without retaining every
+        // subpixel bend. This affects display only, never saved road evidence.
         style.addSource(GeoJsonSource(
-            ROAD_SOURCE_ID, displayedRoadFeatures, GeoJsonOptions().withTolerance(0f)
+            ROAD_SOURCE_ID, displayedRoadFeatures, GeoJsonOptions().withTolerance(0.125f)
         ))
         appliedRoadColor = Prefs.roadColor(context)
         val color = Cosmetics.roadColor(context).argb
