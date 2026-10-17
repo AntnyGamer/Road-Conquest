@@ -55,7 +55,7 @@ class TrackingRepositoryTest {
         val tiles = repository.nearbyExplorationTiles(40.0, 179.999)
         assertEquals(nearby, tiles.map { it.first })
         assertEquals(setOf(origin, acrossDateLine), tiles.filter { it.second }.map { it.first }.toSet())
-        assertTrue(tiles.first { it.first == outside }.second == false)
+        assertTrue(tiles.none { it.first == outside })
         assertTrue(repository.nearbyExplorationTiles(Double.NaN, 0.0).isEmpty())
         // An invalid position must never report arbitrary unlocked cells.
         assertEquals(0 to 0, repository.nearbyExploration(Double.NaN, 0.0))
