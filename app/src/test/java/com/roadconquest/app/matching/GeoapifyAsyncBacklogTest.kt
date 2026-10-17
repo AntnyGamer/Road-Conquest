@@ -58,12 +58,15 @@ class GeoapifyAsyncBacklogTest {
 
     @Test fun onlyLargeOldBacklogSubmitsOneDiscountedJobAndPersistsItsExactIds() {
         seedOldContinuousHistory()
+        server.enqueue(MockResponse().setResponseCode(200).setHeader("Content-Type", "application/json")
+            .setBody("""{"version":1,"providers":{},"asyncBatchEnabled":true}"""))
         server.enqueue(MockResponse().setResponseCode(202).setHeader("Content-Type", "application/json")
             .setBody("""{"id":"${"a".repeat(32)}","token":"${"b".repeat(64)}","status":"pending"}"""))
         val gateway = GeoapifyAsyncBacklog(context, server.url("/").toString().trimEnd('/'))
         val due = gateway.tick(repository)
         assertNotNull("Eight large old windows should qualify", due)
         assertTrue(requireNotNull(due) >= 60 * 60_000L - 10_000L)
+        assertEquals("/v1/config", server.takeRequest().path)
         val request = server.takeRequest()
         assertEquals("/v1/batch/mapmatching", request.path)
         val submitted = JSONObject(request.body.readUtf8())
@@ -79,14 +82,18 @@ class GeoapifyAsyncBacklogTest {
         // No network request or duplicate charge until the saved poll deadline.
         assertNotNull(GeoapifyAsyncBacklog(context, server.url("/").toString().trimEnd('/'))
             .tick(repository))
-        assertEquals(1, server.requestCount)
+        assertEquals(2, server.requestCount)
     }
 
     @Test fun liveGpsAndSmallBacklogsNeverUseSlowBatchMatching() {
         seedOldContinuousHistory(250)
+        server.enqueue(MockResponse().setResponseCode(200).setHeader("Content-Type", "application/json")
+            .setBody("""{"version":1,"providers":{},"asyncBatchEnabled":true}"""))
         val gateway = GeoapifyAsyncBacklog(context, server.url("/").toString().trimEnd('/'))
-        assertNull(gateway.tick(repository))
+        assertNull(gateway.tick(repository, newestLiveFixAt = System.currentTimeMillis()))
         assertEquals(0, server.requestCount)
+        assertNull(gateway.tick(repository))
+        assertEquals(1, server.requestCount)
         assertNull(GeoapifyAsyncBacklog(context, "").tick(repository))
     }
 }
