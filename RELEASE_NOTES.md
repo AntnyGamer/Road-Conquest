@@ -1,3 +1,21 @@
+# Road Conquest 1.0 Beta 52
+
+## What's new since Beta 51
+
+- **Trip replay:** Scroll the whole replay page on smaller screens while retaining map gestures.
+- **Clearer controls:** Improve Explore nearby, Hide nearby and Cancel button contrast in dark mode, and remove the requested extra VIP purchase-description sentence.
+- **More accurate town shading:** Color a saved town green only when its saved visit coordinate is inside the actual matching town boundary. Existing discoveries, rewards and history remain intact.
+- **Cleaner map overview:** Scale confirmed-road width with zoom to reduce distant round-cap dots, and soften municipal fills and boundaries at low zoom. Keep the existing map provider, efficient tiling and Minimal map style.
+- **Fewer duplicate population requests:** Share overlapping Census/REST Countries lookups for the same place, including waiting callers. A data reset still invalidates older queued work, and unrelated places remain independent.
+- **Less repeated road-check work:** Decode a saved road's geometry once per departure scan instead of once per GPS fix. Preserve all distance checks, including departures late in a long scan; no lasting geometry cache is added.
+- **Included account-server improvements:** The attached server bundle reduces normal verified batches from 12 to 10 database statements and exact retries from two to one. Rejected Google responses begin cleanup without delaying the original error. Eligibility, device checks, scoring and safe retries remain enforced. These backend improvements require a separate server deployment; public verified leaderboards remain hidden by default.
+- **Compatibility:** Android 12+, versionCode **78**, same package ID and permanent signing identity. Updating a compatible installation preserves local progress and purchases. A separately deployed verified-scoring server must include 78 in its version allowlist.
+- **Release checks:** Account-server tests, Android unit/lint/build checks, native map tests on Android 12/15/17, and minified-release cold starts must pass before publishing the signed APK/AAB. Obsolete implementation assertions were pruned while saved-data, scoring, road-matching and startup coverage remains.
+
+Install the signed GitHub APK over a compatible GitHub-installed beta. Update Play installations through Google Play; the signed AAB is the Play upload file. No production-service deployment or Google Play publication is performed by this GitHub release.
+
+---
+
 # Road Conquest 1.0 Beta 51
 
 ## What's new since Beta 50
