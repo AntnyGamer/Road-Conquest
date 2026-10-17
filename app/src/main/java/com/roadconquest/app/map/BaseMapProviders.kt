@@ -17,6 +17,10 @@ object BaseMapProviders {
     private val health = ProviderHealth.shared
     private val listeners = CopyOnWriteArraySet<() -> Unit>()
     private var installed = false
+    // BuildConfig endpoint is immutable for an installed build. Avoid reparsing
+    // its URI for every native map tile request.
+    private val gatewayHost = BuildConfig.MAP_GATEWAY_URL.takeIf { it.isNotBlank() }
+        ?.let { java.net.URI(it).host }
     @Synchronized fun install() {
         if (installed) return
         installed = true
@@ -29,11 +33,14 @@ object BaseMapProviders {
                 val provider = when (request.url.host) {
                     "tiles.openfreemap.org" -> "openfreemap"
                     "services.arcgisonline.com" -> "esri-imagery"
-                    else -> if (BuildConfig.MAP_GATEWAY_URL.isNotBlank() &&
-                        request.url.host == java.net.URI(BuildConfig.MAP_GATEWAY_URL).host) "geoapify-tiles" else null
+                    else -> if (gatewayHost != null && request.url.host == gatewayHost) "geoapify-tiles" else null
+                }
+                // An intentionally disabled service did not fail a network
+                // request: do not mark it unhealthy or prolong recovery.
+                if (provider != null && !ServiceConfig.enabled(provider)) {
+                    throw IOException("Map provider temporarily disabled")
                 }
                 try {
-                    if (provider != null && !ServiceConfig.enabled(provider)) throw IOException("Map provider temporarily disabled")
                     val response = chain.proceed(request)
                     if (provider != null && (response.code in listOf(401, 403, 429) || response.code >= 500 || response.code in 300..399)) {
                         health.failed(provider, response.code, response.header("Retry-After"))
