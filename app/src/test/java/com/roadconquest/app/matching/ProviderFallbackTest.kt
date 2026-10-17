@@ -82,6 +82,17 @@ class ProviderFallbackTest {
         primary.cooldown = 0L
         assertEquals(200, matcher.maxPoints)
     }
+    @Test fun explicitNoMatchIsDistinctFromAmbiguousUnmatchedGeometry() {
+        val primary = GeoapifyMatcher("https://maps.example")
+        val backup = LocationIqMatcher("https://maps.example")
+        assertTrue(requireNotNull(primary.parse("""{"type":"FeatureCollection","features":[]}""", points)).explicitNoMatch)
+        assertTrue(requireNotNull(backup.parse("""{"code":"NoMatch"}""", points)).explicitNoMatch)
+        assertTrue(requireNotNull(backup.parse("""{"code":"NoSegment"}""", points)).explicitNoMatch)
+        // Geometry that has not met the strict confidence gates is NOT proof
+        // that the provider cannot match this road later with fresh context.
+        assertFalse(MatchResult(emptyList(), emptyMap()).explicitNoMatch)
+    }
+
     @Test fun realGeoapifyPublicExamplePassesExistingGeometryAndSnapValidation() {
         val result = requireNotNull(GeoapifyMatcher("https://maps.example").parse(example, points))
         assertTrue(result.roads.isNotEmpty())
