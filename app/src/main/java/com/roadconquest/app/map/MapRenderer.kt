@@ -419,8 +419,13 @@ class MapRenderer(
         style.addLayer(FillLayer(NEARBY_VISITED_LAYER_ID, NEARBY_VISITED_SOURCE_ID)
             .withProperties(fillColor(0xFF149F72.toInt()), fillOpacity(0.38f),
                 fillOutlineColor(0xFF7FE2AE.toInt())))
+    }
+
+    /** Numbers belong above confirmed roads; tinted tiles belong below them. */
+    private fun installNearbyMarkerLayer(style: Style) {
         style.addLayer(SymbolLayer(NEARBY_NUMBERS_LAYER_ID, NEARBY_NUMBERS_SOURCE_ID)
-            .withProperties(iconImage(Expression.image(Expression.get("icon"))), iconAllowOverlap(true), iconIgnorePlacement(true)))
+            .withProperties(iconImage(Expression.image(Expression.get("icon"))),
+                iconAllowOverlap(true), iconIgnorePlacement(true)))
     }
 
     private fun captureTownViewport(): OverlayViewport? {
@@ -596,6 +601,7 @@ class MapRenderer(
             installNearbyExploration(style)
             installRecordedRouteLayer(style)
             installRoadLayer(style)
+            installNearbyMarkerLayer(style)
             installCarLayer(style)
             updateCarLayer()
             // Initialize the camera from a fresh cached fix before the first
