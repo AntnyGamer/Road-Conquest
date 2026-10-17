@@ -56,6 +56,40 @@ class MapLayoutTest {
         assertTrue("The existing points chip must remain tappable for Garage", garageChipFound)
     }
 
+    @Test fun homeScreenKeepsMapFullSizeWithoutDuplicateAttributionOrForcedLowResolution() {
+        val context = Robolectric.buildActivity(MainActivity::class.java).get()
+        val parser = context.resources.getLayout(R.layout.activity_main)
+        val ns = "http://schemas.android.com/apk/res/android"
+        val mapNs = "http://schemas.android.com/apk/res-auto"
+        var foundMap = false
+        var foundPanel = false
+        var foundDuplicateCredit = false
+        try {
+            while (parser.eventType != org.xmlpull.v1.XmlPullParser.END_DOCUMENT) {
+                if (parser.eventType == org.xmlpull.v1.XmlPullParser.START_TAG) {
+                    when (parser.getAttributeResourceValue(ns, "id", 0)) {
+                        R.id.mapView -> {
+                            foundMap = true
+                            assertEquals("match_parent", parser.getAttributeValue(ns, "layout_width"))
+                            assertEquals("match_parent", parser.getAttributeValue(ns, "layout_height"))
+                            assertNull("Let MapLibre use native device resolution",
+                                parser.getAttributeValue(mapNs, "maplibre_pixelRatio"))
+                        }
+                        R.id.controlPanel -> foundPanel = true
+                        R.id.locationIqCredit -> foundDuplicateCredit = true
+                    }
+                }
+                parser.next()
+            }
+        } finally {
+            parser.close()
+        }
+        assertTrue(foundMap)
+        assertTrue(foundPanel)
+        assertFalse("Credits belong in map attribution and Settings, not a full-height row",
+            foundDuplicateCredit)
+    }
+
     @Test fun identicalInsetsAndRepeatedLayoutsDoNotRescheduleTheStatsCard() {
         // Test the real safe-area listener without loading MapLibre's desktop-incompatible GPU view.
         val activity = Robolectric.buildActivity(MainActivity::class.java).get()
