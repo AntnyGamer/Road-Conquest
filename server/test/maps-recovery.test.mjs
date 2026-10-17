@@ -196,6 +196,29 @@ test('only one recovery probe is admitted across object restarts; abandoned prob
   await s.call('cancel',probe);assert.equal(s.used(),16);
 });
 
+test('late failure from an older request does not cancel an active recovery probe lease', async t => {
+  const s = store(); t.after(() => s.db.close());
+  const first = s.args(), late = s.args();
+  await s.call('reserve', first);
+  await s.call('dispatch', first);
+  await s.call('reserve', late);
+  await s.call('dispatch', late);
+  await s.call('failure', { ...first, status: 503 });
+  s.advance(2_000);
+  const probe = s.args();
+  const reservation = await (await s.call('reserve', probe)).json();
+  assert.equal(reservation.probe, true);
+  await s.call('dispatch', probe);
+  // An older in-flight request failed after this probe was admitted.
+  await s.call('failure', { ...late, status: 503 });
+  s.advance(2_000);
+  const blocked = await s.call('reserve', s.args());
+  assert.equal(blocked.status, 503, 'only the leased recovery probe may reach the supplier');
+  assert.equal(s.db.prepare('SELECT probe_id FROM map_health').get().probe_id, probe.attemptId);
+  await s.call('success', probe);
+  assert.equal((await s.call('reserve', s.args())).status, 200);
+});
+
 test('a stale healthy permit cannot dispatch after its bounded lease', async t => {
   const s=store();t.after(()=>s.db.close());const args=s.args();
   await s.call('reserve',args);s.advance(35_001);
