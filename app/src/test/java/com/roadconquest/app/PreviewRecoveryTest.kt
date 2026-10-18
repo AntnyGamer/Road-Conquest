@@ -62,7 +62,7 @@ class PreviewRecoveryTest {
             assertTrue(listener in shadow.getLocationUpdateListeners("gps"))
             shadow.setLocationEnabled(false)
             receiver.onReceive(activity, Intent(LocationManager.MODE_CHANGED_ACTION))
-            assertEquals("Location is off", (field("statusText").get(activity) as TextView).text.toString())
+            assertEquals("Location off", (field("statusText").get(activity) as TextView).text.toString())
             assertTrue(listener in shadow.getLocationUpdateListeners("gps"))
             shadow.setLocationEnabled(true)
             receiver.onReceive(activity, Intent(LocationManager.MODE_CHANGED_ACTION))
