@@ -47,6 +47,10 @@ class MapProviderTest {
         assertNull(BaseMapProviders.configuredGatewayHost(""))
         assertNull(BaseMapProviders.configuredGatewayHost("not a valid url"))
         assertNull(BaseMapProviders.configuredGatewayHost("https://bad host/"))
+        assertNull(BaseMapProviders.configuredGatewayHost("ftp://maps.example"))
+        assertNull(BaseMapProviders.configuredGatewayHost("https://user:password@maps.example"))
+        assertNull(BaseMapProviders.configuredGatewayHost("https://maps.example?apiKey=secret"))
+        assertNull(BaseMapProviders.configuredGatewayHost("https://maps.example#fragment"))
     }
 
     @Test fun backupAndLocalStylesDoNotDependOnTheFailedProvider() {
