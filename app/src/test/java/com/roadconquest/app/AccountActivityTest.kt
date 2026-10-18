@@ -5,6 +5,7 @@ import android.location.Location
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.Switch
 import android.widget.TextView
 import com.roadconquest.app.account.AccountClient
@@ -219,6 +220,27 @@ class AccountActivityTest {
             assertFalse(texts.contains("New roads"))
             assertFalse(texts.contains("Miles"))
             assertFalse(texts.any { it.contains("verified", ignoreCase = true) })
+        } finally {
+            controller.destroy()
+        }
+    }
+
+    @Test fun accountFormHasSeparateFieldsAndActions() {
+        val controller = Robolectric.buildActivity(AccountActivity::class.java).create()
+        try {
+            val activity = controller.get()
+            val density = activity.resources.displayMetrics.density
+            fun minDp(dp: Int) = (dp * density + 0.5f).toInt()
+            fun topMargin(view: View) = (view.layoutParams as LinearLayout.LayoutParams).topMargin
+
+            val passwordRow = activity.findViewById<View>(R.id.accountPassword).parent as View
+            val confirmRow = activity.findViewById<View>(R.id.accountConfirmPassword).parent as View
+            assertTrue(topMargin(passwordRow) >= minDp(10))
+            assertTrue(topMargin(confirmRow) >= minDp(10))
+            assertTrue(topMargin(activity.findViewById(R.id.accountSignupButton)) >= minDp(16))
+            assertTrue(topMargin(activity.findViewById(R.id.accountLoginButton)) >= minDp(18))
+            assertTrue(topMargin(activity.findViewById(R.id.accountLogoutButton)) >= minDp(18))
+            assertTrue(topMargin(activity.findViewById(R.id.accountDeleteButton)) >= minDp(18))
         } finally {
             controller.destroy()
         }

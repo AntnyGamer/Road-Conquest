@@ -255,7 +255,12 @@ class AccountActivity : Activity() {
         }
         val password = passwordField()
         val error = TextView(this)
-        fields.addView(username); fields.addView(password); fields.addView(error)
+        fields.addView(username)
+        fields.addView(password, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { topMargin = (10 * resources.displayMetrics.density).toInt() })
+        fields.addView(error)
         val dialog = AlertDialog.Builder(this).setTitle("Change username").setView(fields)
             .setNegativeButton("Cancel", null).setPositiveButton("Save", null).create()
         dialog.setOnDismissListener { password.text.clear() }
