@@ -42,7 +42,8 @@ internal data class OverlayViewport(
 
         internal fun ofGeometry(geometryJson: String): OverlayViewport? = runCatching {
             val geometry = JSONObject(geometryJson)
-            if (geometry.optString("type") !in setOf("Polygon", "MultiPolygon")) return@runCatching null
+            val type = geometry.optString("type")
+            if (type != "Polygon" && type != "MultiPolygon") return@runCatching null
             val coordinates = geometry.optJSONArray("coordinates") ?: return@runCatching null
             var west = Double.POSITIVE_INFINITY
             var east = Double.NEGATIVE_INFINITY
