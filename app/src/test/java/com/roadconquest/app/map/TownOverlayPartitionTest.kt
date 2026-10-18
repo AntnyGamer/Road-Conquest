@@ -31,6 +31,18 @@ class TownOverlayPartitionTest {
         }
     }
 
+    @Test fun overlayViewportAcceptsOnlyTheSamePolygonGeometryTypes() {
+        val polygon = square(-74.5, 39.8, -74.0, 40.2)
+        assertEquals(OverlayViewport(-74.5, -74.0, 39.8, 40.2),
+            OverlayViewport.ofGeometry(polygon))
+        val multi = """{"type":"MultiPolygon","coordinates":[[[
+            [-74.5,39.8],[-74.0,39.8],[-74.0,40.2],[-74.5,40.2]
+        ]]]}"""
+        assertEquals(OverlayViewport(-74.5, -74.0, 39.8, 40.2),
+            OverlayViewport.ofGeometry(multi))
+        assertEquals(null, OverlayViewport.ofGeometry(polygon.replace("Polygon", "LineString")))
+    }
+
     @Test fun officialIncorporatedCityTakesPrecedenceOverOverlappingSubdivision() {
         val result = TownOverlayPartition.renderOfficialUs(listOf(
             town("County Township", "us|pa|census-1-4200100001", 4.0,

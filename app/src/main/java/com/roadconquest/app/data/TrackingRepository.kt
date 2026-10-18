@@ -1499,9 +1499,10 @@ class TrackingRepository(context: Context) {
                     }
                     destination.execSQL(createSql)
                     source.query(table, null, null, null, null, null, null).use { cursor ->
+                        val columnNames = cursor.columnNames
                         while (cursor.moveToNext()) {
-                            val row = ContentValues(cursor.columnCount)
-                            cursor.columnNames.forEachIndexed { index, name ->
+                            val row = ContentValues(columnNames.size)
+                            columnNames.forEachIndexed { index, name ->
                                 when (cursor.getType(index)) {
                                     Cursor.FIELD_TYPE_NULL -> row.putNull(name)
                                     Cursor.FIELD_TYPE_INTEGER -> row.put(name, cursor.getLong(index))

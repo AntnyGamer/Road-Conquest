@@ -27,6 +27,13 @@ class LocationIqMatcher(
     private var cachedAt = 0L
     override fun rateLimitRemainingMs() = health.remaining(providerId)
 
+    private fun validPoints(points: List<TrackPoint>): Boolean =
+        points.size in 2..maxPoints && points.none {
+            !it.latitude.isFinite() || it.latitude !in -90.0..90.0 ||
+                !it.longitude.isFinite() || it.longitude !in -180.0..180.0 ||
+                !it.accuracyMeters.isFinite() || it.accuracyMeters <= 0f || it.accuracyMeters > 1000f
+        }
+
     private fun payload(points: List<TrackPoint>): String {
         return JSONObject().put("mode", "drive").put("waypoints", JSONArray().apply {
             var previous = Long.MIN_VALUE
@@ -42,7 +49,7 @@ class LocationIqMatcher(
     @Synchronized override fun cachedMatch(points: List<TrackPoint>): MatchResult? {
         lastCallUsedNetwork = false
         val request = cachedRequest ?: return null
-        if (points.size !in 2..maxPoints || System.currentTimeMillis() - cachedAt !in 0L..900_000L) return null
+        if (!validPoints(points) || System.currentTimeMillis() - cachedAt !in 0L..900_000L) return null
         if (request != payload(points)) return null
         return runCatching { parse(requireNotNull(cachedBody), points) }.getOrNull()
     }
@@ -50,11 +57,7 @@ class LocationIqMatcher(
     @Synchronized override fun match(points: List<TrackPoint>): MatchResult? {
         unavailable = false
         lastCallUsedNetwork = false
-        if (points.size !in 2..maxPoints || points.any {
-                !it.latitude.isFinite() || it.latitude !in -90.0..90.0 ||
-                !it.longitude.isFinite() || it.longitude !in -180.0..180.0 ||
-                !it.accuracyMeters.isFinite() || it.accuracyMeters <= 0f || it.accuracyMeters > 1000f
-            }) return null
+        if (!validPoints(points)) return null
         val payload = payload(points)
         if (cachedRequest == payload && System.currentTimeMillis() - cachedAt in 0L..900_000L) {
             return runCatching { parse(requireNotNull(cachedBody), points) }.getOrNull()
@@ -79,7 +82,8 @@ class LocationIqMatcher(
             val status = connection.responseCode
             if (status !in 200..299) {
                 val errorCode = connection.getHeaderField("X-RoadConquest-Error")
-                unavailable = status in listOf(401, 403, 429) || status >= 500 || status in 300..399 ||
+                unavailable = status == 401 || status == 403 || status == 429 ||
+                    status >= 500 || status in 300..399 ||
                     (status == 409 && errorCode == "budget_conflict")
                 if (unavailable) health.failed(providerId, status, connection.getHeaderField("Retry-After"),
                     errorCode)

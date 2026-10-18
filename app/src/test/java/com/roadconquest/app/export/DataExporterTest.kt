@@ -79,6 +79,22 @@ class DataExporterTest {
         assertTrue(entries.getValue("track_points.csv").lineSequence().first().endsWith(",distance_m"))
         assertEquals(2, entries.getValue("track_points.csv").lineSequence().filter { it.isNotEmpty() }.count())
         assertEquals(2, entries.getValue("skipped_driving_fixes.csv").lineSequence().filter { it.isNotEmpty() }.count())
+        // The streaming serializer must preserve the old list/join CSV bytes.
+        val originalSkippedRow = repository.readableDatabase().rawQuery(
+            "SELECT id,latitude,longitude,accuracy_m,speed_mps,bearing_deg,timestamp_ms FROM skipped_driving_fixes", null
+        ).use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            listOf(
+                cursor.getLong(0).toString(), cursor.getDouble(1).toString(),
+                cursor.getDouble(2).toString(), cursor.getFloat(3).toString(),
+                cursor.getFloat(4).toString(), cursor.getFloat(5).toString(),
+                java.time.Instant.ofEpochMilli(cursor.getLong(6)).toString()
+            ).joinToString(",")
+        }
+        assertEquals(
+            "id,latitude,longitude,accuracy_m,speed_mps,bearing_deg,timestamp_utc\n$originalSkippedRow\n",
+            entries.getValue("skipped_driving_fixes.csv")
+        )
         assertTrue(entries.getValue("roads.csv").contains(",'=1+1,"))
         assertTrue(entries.getValue("roads.csv").lineSequence().first().contains("road_group_id"))
         assertTrue(entries.getValue("roads.csv").lineSequence().first().contains("times_driven"))

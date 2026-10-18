@@ -328,10 +328,12 @@ class MapRenderer(
         val origin = FogGrid.cell(latitude, longitude) ?: return
         val cells = FogGrid.neighbors(origin)
         if (cells.isEmpty() || mapView.width <= 0 || mapView.height <= 0) return
-        val corners = cells.flatMap { cell ->
-            val (lat, lon) = FogGrid.center(cell)
-            FogGrid.corners(lat, lon).toList().chunked(2)
-                .map { (cornerLat, cornerLon) -> cornerLat to cornerLon }
+        val corners = buildList(cells.size * 4) {
+            for (cell in cells) {
+                val (lat, lon) = FogGrid.center(cell)
+                val coordinates = FogGrid.corners(lat, lon)
+                for (i in coordinates.indices step 2) add(coordinates[i] to coordinates[i + 1])
+            }
         }
         // MapLibre's ordinary LatLngBounds does not wrap across the date line.
         // Use a compact centered view there instead of zooming out to the world.

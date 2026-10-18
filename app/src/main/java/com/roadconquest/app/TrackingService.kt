@@ -386,8 +386,8 @@ class TrackingService : Service(), LocationListener {
         // Only omit redundant high-quality straight-line *stored* fixes; retain every
         // uncertain fix and directional change so junctions can still be matched.
         val anchor = lastAccepted
-        val importantSkipped = if (anchor != null) skippedSinceRetained.filter {
-            skippedFixCarriesGeometry(anchor, it, accepted)
+        val importantSkipped = if (anchor != null && skippedSinceRetained.isNotEmpty()) {
+            skippedSinceRetained.filter { skippedFixCarriesGeometry(anchor, it, accepted) }
         } else emptyList()
         // Restore genuine bends before the route can be approximated by a straight chord.
         val skipStraightFix = importantSkipped.isEmpty() &&
@@ -422,13 +422,17 @@ class TrackingService : Service(), LocationListener {
         lastAccepted = accepted
         storageExecutor.execute {
             try {
-                val fixes = buildList {
-                    if (startAnchor != null) add(startAnchor)
-                    addAll(importantSkipped)
-                    add(accepted)
+                // A normal saved fix needs no temporary list. Preserve the
+                // exact batched ordering when an initial anchor or bend exists.
+                if (startAnchor == null && importantSkipped.isEmpty()) {
+                    repository.insertLocation(accepted)
+                } else {
+                    repository.insertLocations(buildList {
+                        if (startAnchor != null) add(startAnchor)
+                        addAll(importantSkipped)
+                        add(accepted)
+                    })
                 }
-                if (fixes.size == 1) repository.insertLocation(accepted)
-                else repository.insertLocations(fixes)
                 if (placeCandidate != null && ::progressionRepository.isInitialized) {
                     try {
                         if (progressionRepository.recordPlaceCandidate(placeCandidate)) {

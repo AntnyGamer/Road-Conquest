@@ -25,6 +25,36 @@ class MapProviderTest {
         health.failed("main", 403)
         assertEquals(86_400_000L, health.remaining("main"))
     }
+    @Test fun numericAndHttpDateRetryAfterHeadersKeepIdenticalCooldowns() {
+        val now = 1_000_000L
+        val health = ProviderHealth { now }
+        val date = java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME.format(
+            java.time.Instant.ofEpochMilli(now + 180_000L).atZone(java.time.ZoneOffset.UTC)
+        )
+        health.failed("seconds", 429, "120")
+        health.failed("date", 429, date)
+        health.failed("capped", 429, "999999")
+        health.failed("invalid", 429, "not-a-date")
+        assertEquals(120_000L, health.remaining("seconds"))
+        assertEquals(180_000L, health.remaining("date"))
+        assertEquals(86_400_000L, health.remaining("capped"))
+        assertEquals(60_000L, health.remaining("invalid"))
+    }
+
+    @Test fun configuredGatewayHostHandlesInvalidUrlsWithoutBreakingLocalMaps() {
+        assertEquals("maps.example", BaseMapProviders.configuredGatewayHost("https://maps.example:443/"))
+        assertEquals("maps.example", BaseMapProviders.configuredGatewayHost("HTTPS://maps.example/"))
+        assertEquals("maps.example", BaseMapProviders.configuredGatewayHost("HTTPS://MAPS.EXAMPLE/"))
+        assertEquals("10.0.2.2", BaseMapProviders.configuredGatewayHost("http://10.0.2.2:8787"))
+        assertNull(BaseMapProviders.configuredGatewayHost(""))
+        assertNull(BaseMapProviders.configuredGatewayHost("not a valid url"))
+        assertNull(BaseMapProviders.configuredGatewayHost("https://bad host/"))
+        assertNull(BaseMapProviders.configuredGatewayHost("ftp://maps.example"))
+        assertNull(BaseMapProviders.configuredGatewayHost("https://user:password@maps.example"))
+        assertNull(BaseMapProviders.configuredGatewayHost("https://maps.example?apiKey=secret"))
+        assertNull(BaseMapProviders.configuredGatewayHost("https://maps.example#fragment"))
+    }
+
     @Test fun backupAndLocalStylesDoNotDependOnTheFailedProvider() {
         for (mode in MapMode.entries) {
             val backup = BaseMapProviders.fallbackStyle(mode, "https://maps.example")

@@ -133,4 +133,13 @@ class OptionalServicesTest {
         assertFalse(parsed.containsKey("url"))
         assertTrue(runCatching { ServiceConfig.parse("""{"version":2,"providers":{}}""") }.isFailure)
     }
+
+    @Test fun expiredCorruptOrFutureDatedProviderCacheFailsOpen() {
+        val disabled = """{"version":1,"providers":{"openfreemap":false}}"""
+        assertEquals(false, ServiceConfig.cachedValues(disabled, 86_400_000L)["openfreemap"])
+        assertTrue(ServiceConfig.cachedValues(disabled, 86_400_001L).isEmpty())
+        assertTrue(ServiceConfig.cachedValues(disabled, -1L).isEmpty())
+        assertTrue(ServiceConfig.cachedValues("{invalid", 30_000L).isEmpty())
+        assertTrue(ServiceConfig.cachedValues(null, 30_000L).isEmpty())
+    }
 }

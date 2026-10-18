@@ -1,6 +1,8 @@
 import { serviceSwitches } from './config.mjs';
 import { createHmacSigner } from '../worker/hmac.mjs';
 const STYLES = new Set(['osm-liberty', 'positron', 'dark-matter']);
+// Allocate once per Worker instance instead of rebuilding a collection for every upstream failure.
+const PROVIDER_OUTAGE_STATUS = new Set([401, 403, 429, 500, 502, 503, 504]);
 const DAY = 86_400_000;
 const json = (body, status = 200, extra = {}) => Response.json(body, {
   status, headers: { 'Cache-Control': 'no-store', ...extra }
@@ -54,7 +56,7 @@ export function createMapsGateway(fetchUpstream = fetch, { wait = waitForSlot, u
     if (!secret) return json({ error: 'Map service is not configured' }, 503);
     let target;
     let payload;
-    if (['/v1/mapmatching', '/v1/locationiq/mapmatching'].includes(url.pathname) && request.method === 'POST') {
+    if ((url.pathname === '/v1/mapmatching' || locationiq) && request.method === 'POST') {
       if (Number(request.headers.get('Content-Length')) > 32_768) return json({ error: 'Request too large' }, 413);
       const reader = request.body?.getReader();
       if (!reader) return json({ error: 'Missing trace' }, 400);
@@ -142,7 +144,8 @@ export function createMapsGateway(fetchUpstream = fetch, { wait = waitForSlot, u
         ...(post ? { body: JSON.stringify(payload) } : {}),
         signal: AbortSignal.any([request.signal, AbortSignal.timeout(upstreamTimeoutMs)]) });
       if (!response.ok) {
-        if ([401,403,429,500,502,503,504].includes(response.status))
+        const upstreamOutage = PROVIDER_OUTAGE_STATUS.has(response.status);
+        if (upstreamOutage)
           await report('failure', { status: response.status, retryAfterMs: retryDelay(response.headers.get('Retry-After')) }).catch(() => {});
         // LocationIQ documents valid NoMatch/NoSegment as HTTP 404. Do not
         // turn that into a provider outage or expose the upstream error text.
@@ -165,7 +168,7 @@ export function createMapsGateway(fetchUpstream = fetch, { wait = waitForSlot, u
             }
           } catch { /* An unknown 404 is an upstream failure. */ }
         } else await response.body?.cancel();
-        if (![401,403,429,500,502,503,504].includes(response.status)) await healthy();
+        if (!upstreamOutage) await healthy();
         const retry = response.headers.get('Retry-After');
         // Provider errors never echo URLs, keys, traces or upstream error bodies.
         return json({ error: 'Map provider unavailable' }, response.status === 429 ? 429 : response.status === 401 || response.status === 403 ? 403 : 502,

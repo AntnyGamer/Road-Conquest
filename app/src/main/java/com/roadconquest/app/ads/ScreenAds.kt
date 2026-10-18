@@ -301,12 +301,13 @@ class ScreenAds(
 
     private fun updateRewardButton() {
         rewardButton?.apply {
+            val adsAvailable = permitted() && sdkReady
             visibility = if (VipEntitlement.isActive(activity)) View.GONE else View.VISIBLE
-            isEnabled = permitted() && sdkReady && !loadingReward && !showingReward
+            isEnabled = adsAvailable && !loadingReward && !showingReward
             text = when {
                 showingReward -> activity.getString(R.string.ad_showing)
                 loadingReward -> activity.getString(R.string.ad_loading)
-                !permitted() || !sdkReady -> activity.getString(R.string.ad_unavailable)
+                !adsAvailable -> activity.getString(R.string.ad_unavailable)
                 rewarded != null -> activity.getString(R.string.ad_watch, rewarded!!.rewardItem.amount)
                 else -> activity.getString(R.string.ad_load)
             }

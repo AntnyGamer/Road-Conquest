@@ -38,17 +38,22 @@ internal object RoadGrouping {
         val coordinates: DoubleArray? by lazy(LazyThreadSafetyMode.NONE) { parseCoordinates(geometryJson) }
     }
 
-    fun normalizeName(name: String): String =
-        Normalizer.normalize(name, Normalizer.Form.NFKC).trim().lowercase(Locale.ROOT)
+    fun normalizeName(name: String): String {
+        if (name.isEmpty()) return ""
+        return Normalizer.normalize(name, Normalizer.Form.NFKC).trim().lowercase(Locale.ROOT)
             .replace(WHITESPACE_RE, " ").let { if (it == "unnamed road") "" else it }
+    }
 
     /**
      * OSRM refs can contain several concurrent route numbers separated by semicolons.
      * Removing punctuation makes common formatting variants (I-295 / I 295) compare equally
      * without applying risky language-specific street-name abbreviation rules.
      */
-    fun normalizeReferences(reference: String): Set<String> =
-        reference.splitToSequence(';')
+    fun normalizeReferences(reference: String): Set<String> {
+        // Unnamed/unsigned fragments are common. An empty reference always
+        // normalized to the empty set; skip split and Unicode normalization.
+        if (reference.isEmpty()) return emptySet()
+        return reference.splitToSequence(';')
             .map {
                 Normalizer.normalize(it.trim(), Normalizer.Form.NFKC)
                     .uppercase(Locale.ROOT)
@@ -56,6 +61,7 @@ internal object RoadGrouping {
             }
             .filter { it.isNotEmpty() }
             .toCollection(linkedSetOf())
+    }
 
     fun isUnnamed(nameKey: String): Boolean =
         nameKey.isEmpty() || nameKey == "unnamed road"

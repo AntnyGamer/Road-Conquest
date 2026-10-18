@@ -17,6 +17,16 @@ object BaseMapProviders {
     private val health = ProviderHealth.shared
     private val listeners = CopyOnWriteArraySet<() -> Unit>()
     private var installed = false
+    // BuildConfig endpoint is immutable for an installed build. Avoid reparsing
+    // its URI for every native map tile request.
+    internal fun configuredGatewayHost(url: String): String? = url.takeIf { it.isNotBlank() }
+        ?.let { runCatching {
+            val uri = java.net.URI(it)
+            if ((uri.scheme.equals("https", ignoreCase = true) || uri.scheme.equals("http", ignoreCase = true)) &&
+                uri.userInfo == null && uri.rawQuery == null && uri.rawFragment == null
+            ) uri.host?.lowercase(java.util.Locale.ROOT) else null
+        }.getOrNull() }
+    private val gatewayHost = configuredGatewayHost(BuildConfig.MAP_GATEWAY_URL)
     @Synchronized fun install() {
         if (installed) return
         installed = true
@@ -29,14 +39,19 @@ object BaseMapProviders {
                 val provider = when (request.url.host) {
                     "tiles.openfreemap.org" -> "openfreemap"
                     "services.arcgisonline.com" -> "esri-imagery"
-                    else -> if (BuildConfig.MAP_GATEWAY_URL.isNotBlank() &&
-                        request.url.host == java.net.URI(BuildConfig.MAP_GATEWAY_URL).host) "geoapify-tiles" else null
+                    else -> if (gatewayHost != null && request.url.host == gatewayHost) "geoapify-tiles" else null
+                }
+                // An intentionally disabled service did not fail a network
+                // request: do not mark it unhealthy or prolong recovery.
+                if (provider != null && !ServiceConfig.enabled(provider)) {
+                    throw IOException("Map provider temporarily disabled")
                 }
                 try {
-                    if (provider != null && !ServiceConfig.enabled(provider)) throw IOException("Map provider temporarily disabled")
                     val response = chain.proceed(request)
-                    if (provider != null && (response.code in listOf(401, 403, 429) || response.code >= 500 || response.code in 300..399)) {
-                        health.failed(provider, response.code, response.header("Retry-After"))
+                    val status = response.code
+                    if (provider != null && (status == 401 || status == 403 || status == 429 ||
+                            status >= 500 || status in 300..399)) {
+                        health.failed(provider, status, response.header("Retry-After"))
                         listeners.forEach { it() }
                     }
                     response
@@ -55,7 +70,7 @@ object BaseMapProviders {
     fun preferred(mode: MapMode): String = when {
         available("openfreemap") && mode == MapMode.TERRAIN && !available("esri-imagery") -> "openfreemap-streets"
         available("openfreemap") -> "openfreemap"
-        BuildConfig.MAP_GATEWAY_URL.isNotBlank() && available("geoapify-tiles") -> "geoapify-tiles"
+        gatewayHost != null && available("geoapify-tiles") -> "geoapify-tiles"
         else -> "local"
     }
     // No cooldown means there is nothing to retry. ServiceConfig listeners
@@ -63,6 +78,7 @@ object BaseMapProviders {
     // waking the map every 30 seconds while an intentionally disabled provider
     // remains unavailable.
     fun retryInMs(): Long? = listOf("openfreemap", "geoapify-tiles", "esri-imagery")
+        .filter(ServiceConfig::enabled)
         .map { health.remaining(it) }.filter { it > 0 }.minOrNull()
     fun style(context: Context, mode: MapMode, provider: String): String {
         if (provider.startsWith("openfreemap")) {
@@ -70,12 +86,12 @@ object BaseMapProviders {
                 if (provider == "openfreemap-streets") MapMode.STREETS.styleAsset else mode.styleAsset
             ).bufferedReader().use { it.readText() })
             val source = root.getJSONObject("sources").getJSONObject("openmaptiles")
-            val extra = (if (BuildConfig.MAP_GATEWAY_URL.isNotBlank()) " | <a href=\"https://www.geoapify.com/\">Geoapify</a>" else "") +
+            val extra = (if (gatewayHost != null) " | <a href=\"https://www.geoapify.com/\">Geoapify</a>" else "") +
                 " | <a href=\"https://www.geoboundaries.org/\">geoBoundaries</a>"
             source.put("attribution", source.optString("attribution") + extra)
             return root.toString()
         }
-        return fallbackStyle(mode, BuildConfig.MAP_GATEWAY_URL.takeIf { provider == "geoapify-tiles" })
+        return fallbackStyle(mode, BuildConfig.MAP_GATEWAY_URL.takeIf { provider == "geoapify-tiles" && gatewayHost != null })
     }
     internal fun fallbackStyle(mode: MapMode, gateway: String?): String {
         val sources = JSONObject()

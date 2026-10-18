@@ -42,6 +42,19 @@ class RoadGeometryTurnTest {
             1_000_000L + index * 3_000L, false)
     }
 
+    @Test fun bearingGuidancePreservesExactEntriesAndBlankTurnSlots() {
+        val matcher = RoadGeometryValidator()
+        val start = TrackPoint(1L, 40.0, -74.0, 3f, 12f, 0f, 1_000_000L, false)
+        val east = start.copy(id = 2L, longitude = -73.9997, timestampMillis = 1_003_000L)
+        val north = east.copy(id = 3L, latitude = 40.00025, timestampMillis = 1_006_000L)
+        assertNull(matcher.buildBearingGuidance(emptyList()))
+        assertNull(matcher.buildBearingGuidance(listOf(start)))
+        assertEquals("90,65;90,65", matcher.buildBearingGuidance(listOf(start, east)))
+        assertEquals("90,65;;0,65", matcher.buildBearingGuidance(listOf(start, east, north)))
+        val stationary = start.copy(id = 4L, timestampMillis = 1_003_000L)
+        assertNull(matcher.buildBearingGuidance(listOf(start, stationary)))
+    }
+
     @Test fun ambiguousTurnHeadIsNotSavedAndRetryFillsTheJunctionFromBothSides() {
         val repo = TrackingRepository(RuntimeEnvironment.getApplication())
         repo.readableDatabase().execSQL("DELETE FROM track_points")

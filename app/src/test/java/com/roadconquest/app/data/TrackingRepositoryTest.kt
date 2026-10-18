@@ -836,6 +836,16 @@ class TrackingRepositoryTest {
         assertTrue(expected > TravelDistance.between(a.latitude, a.longitude, a.time, b.latitude, b.longitude, b.time) + 5.0)
     }
 
+    @Test fun emptySignedRoadReferenceRequiresNoNormalization() {
+        assertEquals("", RoadGrouping.normalizeName(""))
+        assertEquals("", RoadGrouping.normalizeName("Unnamed Road"))
+        assertEquals("main street", RoadGrouping.normalizeName("Main  Street"))
+        assertTrue(RoadGrouping.normalizeReferences("").isEmpty())
+        assertTrue(RoadGrouping.normalizeReferences(" ; ").isEmpty())
+        assertEquals(linkedSetOf("I295", "US322"),
+            RoadGrouping.normalizeReferences("I-295; US 322; I-295"))
+    }
+
     @Test fun curvedRoadGroupingPreservesConnectedAndDisconnectedDecisions() {
         fun road(id: String, vertices: String) = RoadGrouping.Road(
             segmentId = id, name = "Example Road", geometryJson = vertices,

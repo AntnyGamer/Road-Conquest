@@ -81,6 +81,10 @@ object DataImporter {
                 }
             }
             ZipFile(zipPath).use { zip ->
+                // A valid backup has only the supported tables and metadata.
+                // Check ZipFile's entry count before allocating an application
+                // list, rather than enumerating thousands of invalid extras.
+                require(zip.size() <= tables.size + 1) { "Unexpected backup entries" }
                 val entries = zip.entries().toList()
                 val names = entries.mapTo(HashSet(entries.size)) { it.name }
                 require(entries.none { it.isDirectory || it.size < 0 } &&
@@ -228,10 +232,11 @@ object DataImporter {
                     // cannot prevent the user from recording their next drive.
                     live.delete("sqlite_sequence", "name = ?", arrayOf("track_points"))
                     for (table in tables) source.query(table, null, null, null, null, null, null).use { cursor ->
+                        val columnNames = cursor.columnNames
                         while (cursor.moveToNext()) {
                             check(!Thread.currentThread().isInterrupted) { "Restore cancelled" }
                             val values = ContentValues()
-                            cursor.columnNames.forEachIndexed { i, column -> when (cursor.getType(i)) {
+                            columnNames.forEachIndexed { i, column -> when (cursor.getType(i)) {
                                 Cursor.FIELD_TYPE_INTEGER -> values.put(column, cursor.getLong(i))
                                 Cursor.FIELD_TYPE_FLOAT -> values.put(column, cursor.getDouble(i))
                                 Cursor.FIELD_TYPE_STRING -> values.put(column, cursor.getString(i))
