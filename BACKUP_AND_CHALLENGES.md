@@ -18,7 +18,7 @@ All ten history/progression tables change in one SQLite transaction; failed writ
 back, and pre-restore asynchronous writers cannot repopulate the new history. Restoring
 stops tracking and disables verified-drive sharing. It does not import account credentials,
 VIP ownership, permissions or upload old GPS for leaderboard credit. Google Play restores
-VIP separately. Delete all data removes the private recovery backup too.
+VIP separately. Delete local data removes the private recovery backup too.
 
 **Goals → Weekly challenges and friends** shows four stacking local goals in this branch:
 five newly unlocked roads (75 points), 25 newly unlocked roads (250 points),

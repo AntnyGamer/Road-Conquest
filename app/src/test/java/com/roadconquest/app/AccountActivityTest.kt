@@ -323,7 +323,7 @@ class AccountActivityTest {
         }
     }
 
-    @Test fun deleteAllDataUsesLocalTypedConfirmationWithoutRequiringAnAccount() {
+    @Test fun deletingLocalDataRequiresTypedConfirmationButNotAnAccount() {
         val context = RuntimeEnvironment.getApplication()
         AccountClient.endpointOverrideForTests = "https://example.com"
         AccountStore.clear(context)
@@ -333,7 +333,7 @@ class AccountActivityTest {
         try {
             val activity = controller.get()
             val control = activity.findViewById<Button>(R.id.deleteDeviceDataButton)
-            assertEquals("Delete all data", control.text.toString())
+            assertEquals("Delete local data", control.text.toString())
             assertTrue("Local deletion must remain available while signed out", control.isEnabled)
             assertEquals(
                 "I confirm I want to delete all of my local data.",
