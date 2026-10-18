@@ -25,14 +25,6 @@
             android:layout_marginBottom="8dp"
             android:text="← Back" />
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="YOUR ROAD CONQUEST"
-            android:letterSpacing="0.14"
-            android:fontFamily="sans-serif-medium"
-            android:textColor="?attr/rcAccent"
-            android:textSize="12sp" />
 
         <TextView
             android:layout_width="wrap_content"
@@ -44,13 +36,6 @@
             android:textSize="30sp"
             android:textStyle="bold" />
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="Appearance, tracking, account, progress, data and privacy."
-            android:textColor="?attr/rcTextSecondary"
-            android:textSize="14sp" />
 
         <LinearLayout
             android:id="@+id/mapSettingsCard"
@@ -70,13 +55,6 @@
                 android:textSize="19sp"
                 android:textStyle="bold" />
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="3dp"
-                android:text="Change how Road Conquest looks without affecting saved progress."
-                android:textColor="?attr/rcTextSecondary"
-                android:textSize="13sp" />
 
             <Button
                 android:id="@+id/mapStyleButton"
@@ -111,7 +89,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="7dp"
-                android:text="Hiding fog changes only the map view; tracking and saved progress continue normally."
+                android:text="Hiding fog does not erase progress."
                 android:textColor="?attr/rcTextSecondary"
                 android:textSize="12sp" />
         </LinearLayout>
@@ -134,13 +112,6 @@
                 android:textSize="19sp"
                 android:textStyle="bold" />
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="3dp"
-                android:text="Control automatic tracking and Android permissions."
-                android:textColor="?attr/rcTextSecondary"
-                android:textSize="13sp" />
 
             <Switch
                 android:id="@+id/manualOnlySwitch"
@@ -159,7 +130,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="7dp"
-                android:text="When automatic tracking is on, precise location and unrestricted background use give the most reliable results."
+                android:text="Precise location and unrestricted battery use improve tracking."
                 android:textColor="?attr/rcTextSecondary"
                 android:textSize="12sp" />
 
@@ -185,7 +156,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="Road Conquest notifications" />
+                android:text="Notification settings" />
 
             <Button
                 android:id="@+id/batterySettingsButton"
@@ -193,7 +164,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="Battery and background use" />
+                android:text="Battery settings" />
         </LinearLayout>
 
         <LinearLayout
@@ -299,13 +270,6 @@
                 android:textSize="19sp"
                 android:textStyle="bold" />
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="3dp"
-                android:text="Achievements, cosmetics, points and exploration totals."
-                android:textColor="?attr/rcTextSecondary"
-                android:textSize="13sp" />
 
             <Button
                 android:id="@+id/achievementsButton"
@@ -321,7 +285,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="Garage and points shop" />
+                android:text="Garage &amp; Shop" />
 
             <Button
                 android:id="@+id/tripHistoryButton"
@@ -329,12 +293,12 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="Trip history and replay" />
+                android:text="Trip history" />
 
             <Button android:id="@+id/challengesButton"
                 style="@style/RoadConquest.SettingsAction"
                 android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:layout_marginTop="8dp" android:text="Weekly goals and optional friends" />
+                android:layout_marginTop="8dp" android:text="Weekly goals &amp; friends" />
 
             <TextView
                 android:id="@+id/dataSummaryText"
@@ -365,13 +329,6 @@
                 android:textSize="19sp"
                 android:textStyle="bold" />
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="3dp"
-                android:text="Export your history and review how Road Conquest handles driving data."
-                android:textColor="?attr/rcTextSecondary"
-                android:textSize="13sp" />
 
             <Switch
                 android:id="@+id/friendNotificationsSwitch"
@@ -379,7 +336,7 @@
                 android:text="Friend request notifications" android:textColor="?attr/rcTextPrimary" />
             <TextView
                 android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:text="On by default; you can turn it off. Requires sign-in and Android notification permission. Shares a Firebase Installation ID with Road Conquest and Google Firebase. No routes or account credentials are sent to Firebase."
+                android:text="Requires sign-in and notification permission. Uses a Firebase Installation ID; no routes or account credentials are sent to Firebase."
                 android:textColor="?attr/rcTextSecondary" android:textSize="13sp" />
             <Switch
                 android:id="@+id/weeklyRemindersSwitch"
@@ -387,7 +344,7 @@
                 android:text="Weekly challenge reminders" android:textColor="?attr/rcTextPrimary" />
             <TextView
                 android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:text="On by default; you can turn it off. Requires Android notification permission. Reminds you around Monday at 6 PM on this phone. Android may delay it to save battery."
+                android:text="Reminds you around Monday at 6 PM. Requires notification permission; Android may delay delivery."
                 android:textColor="?attr/rcTextSecondary" android:textSize="13sp" />
             <Switch
                 android:id="@+id/crashReportingSwitch"
@@ -399,7 +356,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Optional diagnostics include crash details and device information. Your saved routes and account details are not attached."
+                android:text="Shares crash and device details, not saved routes or account information."
                 android:textColor="?attr/rcTextSecondary"
                 android:textSize="13sp" />
             <Button
@@ -416,12 +373,12 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:text="Export my data (.zip)" />
+                android:text="Export data (.zip)" />
 
             <Button android:id="@+id/importButton"
                 style="@style/RoadConquest.SettingsAction"
                 android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:layout_marginTop="8dp" android:text="Import and restore progress" />
+                android:layout_marginTop="8dp" android:text="Restore progress" />
 
             <Button
                 android:id="@+id/deleteDeviceDataButton"
@@ -435,7 +392,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="7dp"
-                android:text="Permanently deletes this phone’s trips, mileage, roads, explored places, points, purchases and cosmetics. Your cloud account stays. You must type the exact confirmation phrase shown before deletion."
+                android:text="Permanently deletes progress on this phone, not your cloud account. Confirmation is required."
                 android:textColor="?attr/rcTextSecondary"
                 android:textSize="12sp" />
 
@@ -443,7 +400,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
-                android:text="Drive history stays on this device unless you export it. Enabling a place overlay sends discovered place names to the configured boundary service and caches returned public boundaries locally. Road matching sends GPS batches to OSRM. Verified scoring sends live GPS and app-integrity evidence only when enabled."
+                android:text="Saved trips stay on this phone unless exported. Place overlays request boundaries by name; road matching sends GPS points to matching providers. Verified scoring sends live GPS and integrity evidence only when enabled."
                 android:textColor="?attr/rcTextSecondary"
                 android:textSize="12sp" />
         </LinearLayout>

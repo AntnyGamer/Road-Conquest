@@ -19,14 +19,6 @@
             android:layout_marginBottom="8dp"
             android:text="← Back" />
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="YOUR PROFILE"
-            android:letterSpacing="0.14"
-            android:textSize="12sp"
-            android:fontFamily="sans-serif-medium"
-            android:textColor="?attr/rcAccent" />
 
         <TextView
             android:layout_width="wrap_content"
@@ -141,7 +133,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
-                android:text="Confirm your password when creating an account; it is not needed to sign in."
+                android:text="Confirm password is only needed when creating an account."
                 android:textColor="?attr/rcTextSecondary"
                 android:textSize="12sp" />
 
@@ -149,7 +141,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
-                android:text="Usernames are unique regardless of capitalization. Passwords must be 8-128 characters."
+                android:text="Usernames ignore capitalization. Passwords: 8–128 characters."
                 android:textColor="?attr/rcTextSecondary"
                 android:textSize="13sp" />
 
@@ -191,7 +183,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
-                android:text="Competitive scores count server-verified exploration cells only. Local points and restored history never count toward rankings. Sharing live driving evidence requires your consent."
+                android:text="Rankings count verified live exploration only; imports and local points do not count. Sharing live GPS requires consent."
                 android:textColor="?attr/rcTextSecondary"
                 android:textSize="13sp" />
 

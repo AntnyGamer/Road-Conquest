@@ -20,14 +20,6 @@
             android:layout_marginBottom="8dp"
             android:text="← Back" />
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="YOUR MILESTONES"
-            android:letterSpacing="0.14"
-            android:textSize="12sp"
-            android:fontFamily="sans-serif-medium"
-            android:textColor="?attr/rcAccent" />
 
         <TextView
             android:layout_width="wrap_content"
@@ -39,13 +31,6 @@
             android:textSize="28sp"
             android:textStyle="bold" />
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="Earn bonus points from roads, map tiles, mileage, places, and optional challenges."
-            android:textColor="?attr/rcTextSecondary"
-            android:textSize="13sp" />
 
         <TextView
             android:id="@+id/achievementPointsText"

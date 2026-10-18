@@ -203,7 +203,7 @@ class AccountActivityTest {
                 texts.contains("Add friend by username"))
             val optionalFriends = mutableListOf<Button>()
             fun findOptionalFriends(view: View) {
-                if (view is Button && view.text.toString() == "Manage friends (optional)") {
+                if (view is Button && view.text.toString() == "Manage friends") {
                     optionalFriends.add(view)
                 }
                 if (view is android.view.ViewGroup) for (index in 0 until view.childCount) {

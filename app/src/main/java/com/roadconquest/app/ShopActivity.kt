@@ -179,7 +179,7 @@ class ShopActivity : Activity() {
             setTextColor(Appearance.color(this@ShopActivity, R.attr.rcTextPrimary))
         })
         card.addView(TextView(this).apply {
-            text = "One-time Google Play purchase. Remove banners and rewarded-ad offers, unlock Gold car, Gold roads and Golden UI, plus VIP trip extras: browse up to 500 drives, share summaries and export GPX routes."
+            text = "One-time Google Play purchase. No ads, Gold car, roads and theme, up to 500 drives, shareable trip summaries and GPX export."
             textSize = 13f
             setTextColor(Appearance.color(this@ShopActivity, R.attr.rcTextSecondary))
             setPadding(0, dp(8), 0, dp(8))
@@ -198,7 +198,7 @@ class ShopActivity : Activity() {
         if (!vip && (vipMessage != null || vipOffer == null)) {
             card.addView(TextView(this).apply {
                 text = vipMessage ?: if (vipChecked) {
-                    "Purchase unavailable until vip_lifetime is activated in Google Play Console."
+                    "VIP purchases are not available yet."
                 } else "Connecting to Google Play…"
                 textSize = 12f
                 setTextColor(Appearance.color(this@ShopActivity, R.attr.rcTextSecondary))
