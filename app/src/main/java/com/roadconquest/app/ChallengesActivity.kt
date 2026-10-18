@@ -102,7 +102,7 @@ class ChallengesActivity : Activity() {
             setBackgroundResource(R.drawable.settings_card_background)
             setPadding(dp(16), dp(16), dp(16), dp(16))
         }
-        status = label("")
+        status = label("").apply { setPadding(0, 0, 0, 0) }
         invite = Button(this).apply {
             text = "Add friend by username"
             setOnClickListener {
