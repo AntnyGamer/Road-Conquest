@@ -1,6 +1,8 @@
 import { serviceSwitches } from './config.mjs';
 import { createHmacSigner } from '../worker/hmac.mjs';
 const STYLES = new Set(['osm-liberty', 'positron', 'dark-matter']);
+// Allocate once per Worker instance instead of rebuilding a collection for every upstream failure.
+const PROVIDER_OUTAGE_STATUS = new Set([401, 403, 429, 500, 502, 503, 504]);
 const DAY = 86_400_000;
 const json = (body, status = 200, extra = {}) => Response.json(body, {
   status, headers: { 'Cache-Control': 'no-store', ...extra }
@@ -142,9 +144,7 @@ export function createMapsGateway(fetchUpstream = fetch, { wait = waitForSlot, u
         ...(post ? { body: JSON.stringify(payload) } : {}),
         signal: AbortSignal.any([request.signal, AbortSignal.timeout(upstreamTimeoutMs)]) });
       if (!response.ok) {
-        const upstreamOutage = response.status === 401 || response.status === 403 ||
-          response.status === 429 || response.status === 500 || response.status === 502 ||
-          response.status === 503 || response.status === 504;
+        const upstreamOutage = PROVIDER_OUTAGE_STATUS.has(response.status);
         if (upstreamOutage)
           await report('failure', { status: response.status, retryAfterMs: retryDelay(response.headers.get('Retry-After')) }).catch(() => {});
         // LocationIQ documents valid NoMatch/NoSegment as HTTP 404. Do not
