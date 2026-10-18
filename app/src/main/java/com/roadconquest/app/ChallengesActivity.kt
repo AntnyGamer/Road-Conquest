@@ -93,7 +93,7 @@ class ChallengesActivity : Activity() {
         }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
         val socialStart = root.childCount
         label("Friends", 22f)
-        label("Friend requests must be accepted by both people.")
+        label("Add friends by username. Requests need approval.")
         if (FeatureFlags.LEADERBOARDS_VISIBLE) {
             label("Compete on this week's newly verified exploration cells. Each cell counts once. Hidden profiles do not appear. Imported history never earns competitive credit.")
         }

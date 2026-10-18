@@ -330,7 +330,7 @@
                 android:text="Friend request notifications" android:textColor="?attr/rcTextPrimary" />
             <TextView
                 android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:text="On by default. Requires sign-in and notification permission. Uses a Firebase Installation ID; routes and account credentials are not shared."
+                android:text="On by default. Requires sign-in and notification permission. Firebase receives an installation ID, but not your routes or account credentials."
                 android:textColor="?attr/rcTextSecondary" android:textSize="13sp" />
             <Switch
                 android:id="@+id/weeklyRemindersSwitch"
@@ -386,7 +386,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="7dp"
-                android:text="Permanently deletes this phone’s trips, roads, mileage, points and point-bought items. Your cloud account and Google Play VIP remain. Confirmation is required."
+                android:text="Permanently deletes all local progress, including trips, roads, explored places, fog, points and cosmetics bought with points. Your cloud account and Google Play VIP remain. Confirmation is required."
                 android:textColor="?attr/rcTextSecondary"
                 android:textSize="12sp" />
 
@@ -394,7 +394,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
-                android:text="Saved trips stay on this phone unless exported. Place overlays request boundaries by name; road matching sends GPS points to matching providers. Verified scoring sends live GPS and integrity evidence only when enabled."
+                android:text="Saved trips stay on your phone unless exported. Place overlays request boundaries by name. Road matching sends GPS data through Road Conquest’s map service to Geoapify or LocationIQ. Verified scoring sends live GPS and integrity evidence only when enabled."
                 android:textColor="?attr/rcTextSecondary"
                 android:textSize="12sp" />
         </LinearLayout>
