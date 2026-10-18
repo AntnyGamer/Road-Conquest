@@ -60,7 +60,7 @@ class RestoreActivity : Activity() {
             setPadding(0, 0, 0, (12 * dp).toInt())
         })
         root.addView(TextView(this).apply {
-            text = "Choose a Road Conquest backup ZIP to restore trips, roads, fog, points and garage items.\n\nThe file is checked before confirmation, and your current progress is backed up. Tracking and verified sharing remain off afterward.\n\nAccount sign-in and VIP restoration are separate. Imported trips do not count toward verified rankings."
+            text = "Choose a Road Conquest backup ZIP to restore trips, roads, mileage, fog, discoveries, points and garage items.\n\nThe file is checked before confirmation, and your current progress is backed up. Tracking and verified sharing remain off afterward.\n\nSign in and restore Google Play VIP separately. Imported trips do not count toward verified rankings."
             textSize = 15f
             setTextColor(Appearance.color(this@RestoreActivity, R.attr.rcTextSecondary))
             setBackgroundResource(R.drawable.settings_card_background)
@@ -81,7 +81,7 @@ class RestoreActivity : Activity() {
             root.addView(this, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (14 * dp).toInt() })
         }
         recovery = Button(this, null, 0, R.style.RoadConquest_SettingsAction).apply {
-            text = "Restore previous progress"
+            text = "Restore progress before last import"
             isEnabled = DataImporter.previousBackup(this@RestoreActivity).isFile
             setOnClickListener { validate { DataImporter.previousBackup(applicationContext).inputStream() } }
             root.addView(this, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (10 * dp).toInt() })

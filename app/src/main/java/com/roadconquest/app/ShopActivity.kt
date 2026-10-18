@@ -179,7 +179,7 @@ class ShopActivity : Activity() {
             setTextColor(Appearance.color(this@ShopActivity, R.attr.rcTextPrimary))
         })
         card.addView(TextView(this).apply {
-            text = "One-time Google Play purchase. No ads, Gold car, roads and theme, up to 500 drives, shareable trip summaries and GPX export."
+            text = "One-time Google Play purchase. Remove banners and rewarded-ad offers; unlock Gold car, Gold roads and Golden UI, up to 500 drives, trip-summary sharing and GPX export."
             textSize = 13f
             setTextColor(Appearance.color(this@ShopActivity, R.attr.rcTextSecondary))
             setPadding(0, dp(8), 0, dp(8))

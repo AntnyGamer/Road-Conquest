@@ -26,6 +26,15 @@
             android:text="← Back" />
 
         <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="CUSTOMIZE YOUR JOURNEY"
+            android:letterSpacing="0.14"
+            android:textSize="12sp"
+            android:fontFamily="sans-serif-medium"
+            android:textColor="?attr/rcAccent" />
+
+        <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"

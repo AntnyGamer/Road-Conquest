@@ -74,8 +74,12 @@ class ChallengesActivity : Activity() {
             text = "← Back"
             setOnClickListener { finish() }
         }, LinearLayout.LayoutParams(dp(110), dp(48)).apply { bottomMargin = dp(8) })
+        label("YOUR WEEK", 12f).apply {
+            setTextColor(Appearance.color(this@ChallengesActivity, R.attr.rcAccent))
+            letterSpacing = 0.14f
+        }
         label("Weekly challenges", 28f).apply { isAccessibilityHeading = true }
-        label("Resets Monday at 00:00 UTC. Discover new roads and towns to earn points automatically.")
+        label("Discover new roads and towns to earn points automatically. Goals reset Monday at 00:00 UTC.")
         local = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundResource(R.drawable.settings_card_background)
@@ -89,6 +93,7 @@ class ChallengesActivity : Activity() {
         }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
         val socialStart = root.childCount
         label("Friends", 22f)
+        label("Friend requests must be accepted by both people.")
         if (FeatureFlags.LEADERBOARDS_VISIBLE) {
             label("Compete on this week's newly verified exploration cells. Each cell counts once. Hidden profiles do not appear. Imported history never earns competitive credit.")
         }

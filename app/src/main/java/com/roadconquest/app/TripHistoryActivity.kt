@@ -277,7 +277,7 @@ class TripHistoryActivity : Activity() {
         if (VipEntitlement.isActive(this)) return true
         AlertDialog.Builder(this)
             .setTitle("VIP trip extras")
-            .setMessage("Lifetime VIP unlocks up to 500 drives, trip-summary sharing and GPX export.")
+            .setMessage("Lifetime VIP unlocks up to 500 drives, trip-summary sharing and GPX export. Basic trip history and replays stay free.")
             .setNegativeButton("Not now", null)
             .setPositiveButton("Open Garage") { _, _ ->
                 startActivity(Intent(this, ShopActivity::class.java))
@@ -293,7 +293,7 @@ class TripHistoryActivity : Activity() {
         val listGeneration = ++tripListGeneration
         column.removeAllViews()
         column.addView(TextView(this).apply {
-            text = if (vip) "Recent drives (up to 500)" else "Recent drives (up to 100)"
+            text = if (vip) "Recent drives (up to 500)" else "Recent drives (up to 100) • VIP: up to 500"
             textSize = 13f
             setTextColor(Appearance.color(this@TripHistoryActivity, R.attr.rcTextSecondary))
         })
@@ -306,7 +306,7 @@ class TripHistoryActivity : Activity() {
                 result.fold({ trips ->
                     if (trips.isEmpty()) {
                         column.addView(TextView(this@TripHistoryActivity).apply {
-                            text = "No saved drives yet."
+                            text = "No drives yet. Recorded trips will appear here."
                         })
                     }
                     // Inflate only visible-sized batches. 500 Buttons at once
@@ -488,7 +488,7 @@ class TripHistoryActivity : Activity() {
                 if (isDestroyed || expected != generation) return@runOnUiThread
                 result.fold({ (loaded, insights) ->
                     insightsText?.text = String.format(Locale.getDefault(),
-                        "New roads (est.): %,d • Towns: %,d • Tiles: %,d\n%,d GPS points awaiting matching.",
+                        "New roads (est.): %,d • Towns: %,d • Tiles: %,d\n%,d GPS points awaiting matching. Older tiles without visit dates are excluded.",
                         insights.newRoadGroups, insights.newTowns, insights.newTiles, insights.pendingFixes
                     )
                     shareSummaryReady = loaded.size >= 2

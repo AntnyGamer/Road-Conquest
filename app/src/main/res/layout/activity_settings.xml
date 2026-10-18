@@ -86,7 +86,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="7dp"
-                android:text="Hiding fog does not erase progress."
+                android:text="Fog only changes the map view; tracking and progress continue."
                 android:textColor="?attr/rcTextSecondary"
                 android:textSize="12sp" />
         </LinearLayout>
@@ -330,7 +330,7 @@
                 android:text="Friend request notifications" android:textColor="?attr/rcTextPrimary" />
             <TextView
                 android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:text="Requires sign-in and notification permission. Uses a Firebase Installation ID; no routes or account credentials are sent to Firebase."
+                android:text="On by default. Requires sign-in and notification permission. Shares a Firebase Installation ID with Firebase; no routes or account credentials."
                 android:textColor="?attr/rcTextSecondary" android:textSize="13sp" />
             <Switch
                 android:id="@+id/weeklyRemindersSwitch"
@@ -338,7 +338,7 @@
                 android:text="Weekly challenge reminders" android:textColor="?attr/rcTextPrimary" />
             <TextView
                 android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:text="Reminds you around Monday at 6 PM. Requires notification permission; Android may delay delivery."
+                android:text="On by default. Reminds you around Monday at 6 PM with notification permission; Android may delay it."
                 android:textColor="?attr/rcTextSecondary" android:textSize="13sp" />
             <Switch
                 android:id="@+id/crashReportingSwitch"
@@ -350,7 +350,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Shares crash and device details, not saved routes or account information."
+                android:text="Optional crash and device diagnostics; saved routes and account details are not attached."
                 android:textColor="?attr/rcTextSecondary"
                 android:textSize="13sp" />
             <Button
@@ -386,7 +386,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="7dp"
-                android:text="Permanently deletes progress on this phone, not your cloud account. Confirmation is required."
+                android:text="Permanently deletes this phone’s trips, roads, mileage, points and point-bought items. Your cloud account and Google Play VIP remain. Confirmation is required."
                 android:textColor="?attr/rcTextSecondary"
                 android:textSize="12sp" />
 
