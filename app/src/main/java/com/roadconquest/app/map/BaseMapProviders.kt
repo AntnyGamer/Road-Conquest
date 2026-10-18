@@ -22,9 +22,9 @@ object BaseMapProviders {
     internal fun configuredGatewayHost(url: String): String? = url.takeIf { it.isNotBlank() }
         ?.let { runCatching {
             val uri = java.net.URI(it)
-            uri.host?.takeIf { _ ->
-                uri.scheme == "https" || uri.scheme == "http"
-            }?.takeIf { uri.userInfo == null && uri.rawQuery == null && uri.rawFragment == null }
+            if ((uri.scheme == "https" || uri.scheme == "http") &&
+                uri.userInfo == null && uri.rawQuery == null && uri.rawFragment == null
+            ) uri.host else null
         }.getOrNull() }
     private val gatewayHost = configuredGatewayHost(BuildConfig.MAP_GATEWAY_URL)
     @Synchronized fun install() {
