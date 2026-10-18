@@ -1,3 +1,23 @@
+# Road Conquest 1.0 Beta 55
+
+## What's new since Beta 54
+
+- **Cleaner home map:** Show a compact “Tracking” status while recording and shorter location/paused messages. Remove the no-longer-needed database query for a pending-road-matching status badge; saved GPS and the matching pipeline are unchanged.
+- **More usable account screen:** Separate username, password, account creation, sign-in and account-management controls with clear spacing; show valid username/password requirements; hide unused leaderboard guidance when competitive features are disabled.
+- **Simpler Settings with clearer privacy:** Remove redundant descriptions, keep essential provider and sharing disclosures, and name the destructive button “Delete local data” to distinguish it from deleting a cloud account.
+- **Clearer goals and friends:** Simplify weekly-goal guidance and use action-specific confirmation buttons for friend removals and requests.
+- **Cleaner trip history and restores:** Reduce redundant explanatory text, reclaim empty replay-label space, keep the replay scroller intact, and preserve the distinction between free progress/replays and VIP extras.
+- **Clearer VIP and achievements:** Improve lifetime VIP descriptions and make achievement category touch targets at least 48dp tall.
+- **Regression protection:** Update account-spacing and renamed-label tests. All existing road matching, trip backup/restore, in-app purchases and saved-progress behavior remain unchanged by this UI-oriented update.
+- **Compatibility:** Android 12+, versionCode **81**, versionName **1.0-beta.55**, unchanged application ID and permanent signing key. Saved GPS, roads, points, purchases, account information and backups are preserved when updating a compatible installation.
+- **Release verification:** Android unit tests and lint, account-server checks, device map tests, minified-release startup tests, Play bundle checks, advertising-ID permission and 16 KB native-library compatibility must pass before release publication.
+
+The separately deployed verified-scoring server must allow versionCode 81 before it accepts verified submissions. Its production `PLAY_VERSION_CODES` setting is **not** changed merely by updating the server documentation.
+
+The GitHub release will include a signed APK and a signed AAB. Upload the new versionCode **81** AAB to Google Play separately; merging this PR does **not** publish to Play or deploy backend services.
+
+---
+
 # Road Conquest 1.0 Beta 54
 
 ## What's new since Beta 53
