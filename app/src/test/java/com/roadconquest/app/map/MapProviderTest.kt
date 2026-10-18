@@ -25,6 +25,22 @@ class MapProviderTest {
         health.failed("main", 403)
         assertEquals(86_400_000L, health.remaining("main"))
     }
+    @Test fun numericAndHttpDateRetryAfterHeadersKeepIdenticalCooldowns() {
+        val now = 1_000_000L
+        val health = ProviderHealth { now }
+        val date = java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME.format(
+            java.time.Instant.ofEpochMilli(now + 180_000L).atZone(java.time.ZoneOffset.UTC)
+        )
+        health.failed("seconds", 429, "120")
+        health.failed("date", 429, date)
+        health.failed("capped", 429, "999999")
+        health.failed("invalid", 429, "not-a-date")
+        assertEquals(120_000L, health.remaining("seconds"))
+        assertEquals(180_000L, health.remaining("date"))
+        assertEquals(86_400_000L, health.remaining("capped"))
+        assertEquals(60_000L, health.remaining("invalid"))
+    }
+
     @Test fun backupAndLocalStylesDoNotDependOnTheFailedProvider() {
         for (mode in MapMode.entries) {
             val backup = BaseMapProviders.fallbackStyle(mode, "https://maps.example")
