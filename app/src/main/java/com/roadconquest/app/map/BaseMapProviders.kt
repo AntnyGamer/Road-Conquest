@@ -22,7 +22,7 @@ object BaseMapProviders {
     internal fun configuredGatewayHost(url: String): String? = url.takeIf { it.isNotBlank() }
         ?.let { runCatching {
             val uri = java.net.URI(it)
-            if ((uri.scheme == "https" || uri.scheme == "http") &&
+            if ((uri.scheme.equals("https", ignoreCase = true) || uri.scheme.equals("http", ignoreCase = true)) &&
                 uri.userInfo == null && uri.rawQuery == null && uri.rawFragment == null
             ) uri.host else null
         }.getOrNull() }
