@@ -812,10 +812,9 @@ class MainActivity : Activity() {
                             if (statusText.text.toString() != matchingStatus) statusText.text = matchingStatus
                         }
                         statsText.text = StatsText.mapOverview(this, value, progression.tilesUnlocked)
-                        pointsText.text = String.format(Locale.getDefault(), "Garage · ⚔ %,d", progression.balance)
-                        pointsText.contentDescription = String.format(
-                            Locale.getDefault(), "Garage and shop. %,d points. Double tap to open.", progression.balance
-                        )
+                        val points = String.format(Locale.getDefault(), "%,d", progression.balance)
+                        pointsText.text = "Garage · ⚔ $points"
+                        pointsText.contentDescription = "Garage and shop. $points points. Double tap to open."
                         if (unlocked.isNotEmpty()) {
                             val reward = unlocked.sumOf { it.rewardPoints }
                             val message = if (unlocked.size == 1) {
