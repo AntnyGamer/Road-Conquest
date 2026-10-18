@@ -123,6 +123,23 @@ test("accidentally pointing an ingress at itself fails closed without issuing fe
   assert.equal(calls, 0);
 });
 
+test("canonical upstream URL and self-loop detection share the same parsed host", async () => {
+  const destinations = [];
+  const proxy = createAccountIngress(async request => {
+    destinations.push(request.url);
+    return new Response("{}");
+  });
+  const request = new Request("https://roadconquest.workers.dev/v1/me?source=test");
+  assert.equal((await proxy(request, {
+    ...env, API_ORIGIN: "https://ROADCONQUEST.NEON.TECH:443/"
+  })).status, 200);
+  assert.deepEqual(destinations, ["https://roadconquest.neon.tech/v1/me?source=test"]);
+  assert.equal((await proxy(request, {
+    ...env, API_ORIGIN: "https://ROADCONQUEST.WORKERS.DEV:443/"
+  })).status, 503);
+  assert.equal(destinations.length, 1);
+});
+
 test("misconfigured upstream and HTTP never forward credentials", async () => {
   let requests = 0;
   const proxy = createAccountIngress(async () => { requests++; return new Response("{}", { status: 200 }); });
