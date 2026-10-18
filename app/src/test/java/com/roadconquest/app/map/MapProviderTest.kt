@@ -41,6 +41,14 @@ class MapProviderTest {
         assertEquals(60_000L, health.remaining("invalid"))
     }
 
+    @Test fun configuredGatewayHostHandlesInvalidUrlsWithoutBreakingLocalMaps() {
+        assertEquals("maps.example", BaseMapProviders.configuredGatewayHost("https://maps.example:443/"))
+        assertEquals("10.0.2.2", BaseMapProviders.configuredGatewayHost("http://10.0.2.2:8787"))
+        assertNull(BaseMapProviders.configuredGatewayHost(""))
+        assertNull(BaseMapProviders.configuredGatewayHost("not a valid url"))
+        assertNull(BaseMapProviders.configuredGatewayHost("https://bad host/"))
+    }
+
     @Test fun backupAndLocalStylesDoNotDependOnTheFailedProvider() {
         for (mode in MapMode.entries) {
             val backup = BaseMapProviders.fallbackStyle(mode, "https://maps.example")
