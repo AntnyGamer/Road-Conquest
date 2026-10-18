@@ -12,7 +12,8 @@ class ProviderHealth(private val now: () -> Long = System::currentTimeMillis) {
             runCatching { ZonedDateTime.parse(it, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant().toEpochMilli() - now() }.getOrNull()
         }
         val retry = retryAfter?.toLongOrNull()?.coerceIn(0L, 86_400L)?.times(1000L) ?: date ?: 0L
-        val default = if (errorCode in setOf("queue_busy", "provider_cooldown", "budget_conflict")) 1_000L
+        val default = if (errorCode == "queue_busy" || errorCode == "provider_cooldown" ||
+            errorCode == "budget_conflict") 1_000L
             else when (status) { 401, 403 -> 86_400_000L; 429 -> 60_000L; else -> 30_000L }
         until[id] = maxOf(until[id] ?: 0L, now() + maxOf(default, retry).coerceAtMost(86_400_000L))
     }
