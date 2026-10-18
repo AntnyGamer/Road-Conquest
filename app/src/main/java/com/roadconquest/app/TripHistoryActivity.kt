@@ -277,7 +277,7 @@ class TripHistoryActivity : Activity() {
         if (VipEntitlement.isActive(this)) return true
         AlertDialog.Builder(this)
             .setTitle("VIP trip extras")
-            .setMessage("Lifetime VIP unlocks up to 500 drives, trip-summary sharing and GPX export. Basic trip history and replays stay free.")
+            .setMessage("Lifetime VIP unlocks up to 500 recent drives, trip-summary sharing and GPX export. Basic trip history, replays and progress backups stay free.")
             .setNegativeButton("Not now", null)
             .setPositiveButton("Open Garage") { _, _ ->
                 startActivity(Intent(this, ShopActivity::class.java))
