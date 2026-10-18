@@ -24,7 +24,7 @@ object BaseMapProviders {
             val uri = java.net.URI(it)
             if ((uri.scheme.equals("https", ignoreCase = true) || uri.scheme.equals("http", ignoreCase = true)) &&
                 uri.userInfo == null && uri.rawQuery == null && uri.rawFragment == null
-            ) uri.host else null
+            ) uri.host?.lowercase(java.util.Locale.ROOT) else null
         }.getOrNull() }
     private val gatewayHost = configuredGatewayHost(BuildConfig.MAP_GATEWAY_URL)
     @Synchronized fun install() {
