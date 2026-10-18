@@ -227,7 +227,7 @@ class ChallengesActivity : Activity() {
                             setOnClickListener {
                                 AlertDialog.Builder(this@ChallengesActivity).setTitle("${text} $username?")
                                     .setNegativeButton("Keep", null)
-                                    .setPositiveButton("Confirm") { _, _ -> changeFriend(username, "remove") }.show()
+                                    .setPositiveButton(text) { _, _ -> changeFriend(username, "remove") }.show()
                             }
                         }, LinearLayout.LayoutParams(0, -2, 1f).apply {
                             if (relation == "incoming") marginStart = dp(8)

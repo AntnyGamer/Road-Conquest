@@ -11,8 +11,11 @@ import com.roadconquest.app.billing.VipEntitlement
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.text.Editable
+import android.text.TextWatcher
 import android.text.format.DateUtils
 import android.view.MotionEvent
+import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.FrameLayout
@@ -104,6 +107,18 @@ class TripHistoryActivity : Activity() {
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density + .5f).toInt()
+
+    /** Hide blank replay details without leaving behind their vertical padding. */
+    private fun TextView.collapseWhenEmpty() {
+        visibility = if (text.isEmpty()) View.GONE else View.VISIBLE
+        addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                visibility = if (s.isNullOrEmpty()) View.GONE else View.VISIBLE
+            }
+            override fun afterTextChanged(s: Editable?) {}
+        })
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         setTheme(Appearance.themeRes(this))
@@ -216,6 +231,7 @@ class TripHistoryActivity : Activity() {
             textSize = 13f
             setTextColor(Appearance.color(this@TripHistoryActivity, R.attr.rcTextSecondary))
             setPadding(0, 0, 0, dp(8))
+            collapseWhenEmpty()
             root.addView(this)
         }
         playButton = Button(this).apply {
@@ -239,6 +255,7 @@ class TripHistoryActivity : Activity() {
             textSize = 14f
             setTextColor(Appearance.color(this@TripHistoryActivity, R.attr.rcTextSecondary))
             setPadding(0, 0, 0, dp(12))
+            collapseWhenEmpty()
             root.addView(this)
         }
         shareButton = Button(this, null, 0, R.style.RoadConquest_SettingsAction).apply {
