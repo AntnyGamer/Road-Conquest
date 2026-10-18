@@ -330,7 +330,7 @@
                 android:text="Friend request notifications" android:textColor="?attr/rcTextPrimary" />
             <TextView
                 android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:text="On by default. Requires sign-in and notification permission. Shares a Firebase Installation ID with Firebase; no routes or account credentials."
+                android:text="On by default. Requires sign-in and notification permission. Uses a Firebase Installation ID; routes and account credentials are not shared."
                 android:textColor="?attr/rcTextSecondary" android:textSize="13sp" />
             <Switch
                 android:id="@+id/weeklyRemindersSwitch"
