@@ -9,6 +9,9 @@
 - **Lower map tile processing overhead:** Cache the immutable map-gateway hostname rather than reparsing its address for every MapLibre HTTP request.
 - **Less map-tile overhead:** Avoid allocating a status-code list for each intercepted HTTP tile response and avoid retry timers for explicitly disabled providers. Service-config change notifications still restore an enabled provider.
 - **Less provider-failure overhead:** Use the same direct HTTP status/error-code checks in Geoapify, LocationIQ and shared cooldown handling, without allocating a temporary collection on failure.
+- **Faster rate-limit recovery parsing:** Numeric `Retry-After` headers bypass RFC-date parsing and its exception path; supported seconds and HTTP-date cooldowns remain unchanged.
+- **Less live-GPS battery work:** Ordinary saved GPS fixes go straight to the single-fix database path without assembling a throwaway list. Multi-fix start anchors and turns preserve the original batch ordering.
+- **Less map gateway processing per request:** Use direct route and provider-outage comparisons instead of constructing temporary status/path arrays in the Cloudflare Worker.
 - **Faster matching request preparation:** Stream compass guidance into one buffer rather than constructing a separate string/pair for every GPS fix; exact compass values and blank sharp-turn positions remain unchanged.
 - **Less map-overlay work:** Check the same Polygon/MultiPolygon types directly instead of allocating a temporary set when calculating viewport bounds.
 - **Lower account-ingress overhead:** Reuse the validated URL's hostname to detect accidental self-proxying, avoiding a second URL parse for each Cloudflare Worker request.
