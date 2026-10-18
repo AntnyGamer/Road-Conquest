@@ -19,8 +19,9 @@ object BaseMapProviders {
     private var installed = false
     // BuildConfig endpoint is immutable for an installed build. Avoid reparsing
     // its URI for every native map tile request.
-    private val gatewayHost = BuildConfig.MAP_GATEWAY_URL.takeIf { it.isNotBlank() }
+    internal fun configuredGatewayHost(url: String): String? = url.takeIf { it.isNotBlank() }
         ?.let { runCatching { java.net.URI(it).host }.getOrNull() }
+    private val gatewayHost = configuredGatewayHost(BuildConfig.MAP_GATEWAY_URL)
     @Synchronized fun install() {
         if (installed) return
         installed = true
