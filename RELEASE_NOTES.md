@@ -6,12 +6,12 @@
 - **Faster map-provider recovery:** A deliberate remote provider-disable decision no longer counts as a network failure or adds an unnecessary cooldown. Automatic fallback behavior and recovery checks remain in place.
 - **Provider settings recover on cache expiry:** Notify map renderers when a cached service configuration expires or becomes corrupt, instead of silently reverting to defaults while leaving the current fallback map unchanged.
 - **Safer matching input handling:** Reject non-finite and out-of-range Geoapify coordinates before creating JSON or sending requests; apply LocationIQ's existing validation to cached responses too. Valid driving coordinates and road acceptance thresholds are unchanged.
-- **Lower map tile processing overhead:** Cache the immutable map-gateway hostname rather than reparsing its address for every MapLibre HTTP request.
+- **Lower map tile processing overhead:** Cache the map-gateway hostname rather than reparsing its address for every MapLibre HTTP request, with safe handling for an invalid configured URL.
 - **Less map-tile overhead:** Avoid allocating a status-code list for each intercepted HTTP tile response and avoid retry timers for explicitly disabled providers. Service-config change notifications still restore an enabled provider.
 - **Less provider-failure overhead:** Use the same direct HTTP status/error-code checks in Geoapify, LocationIQ and shared cooldown handling, without allocating a temporary collection on failure.
 - **Faster rate-limit recovery parsing:** Numeric `Retry-After` headers bypass RFC-date parsing and its exception path; supported seconds and HTTP-date cooldowns remain unchanged.
 - **Less live-GPS battery work:** Ordinary saved GPS fixes go straight to the single-fix database path without assembling a throwaway list. Multi-fix start anchors and turns preserve the original batch ordering.
-- **Less map gateway processing per request:** Use direct route and provider-outage comparisons instead of constructing temporary status/path arrays in the Cloudflare Worker.
+- **Less map gateway processing per request:** Use direct route checks and a shared set of upstream failure codes rather than rebuilding temporary status/path arrays in the Cloudflare Worker.
 - **Faster matching request preparation:** Stream compass guidance into one buffer rather than constructing a separate string/pair for every GPS fix; exact compass values and blank sharp-turn positions remain unchanged.
 - **Less map-overlay work:** Check the same Polygon/MultiPolygon types directly instead of allocating a temporary set when calculating viewport bounds.
 - **Lower account-ingress overhead:** Reuse the validated URL's hostname to detect accidental self-proxying, avoiding a second URL parse for each Cloudflare Worker request.
@@ -21,7 +21,7 @@
 - **Less work when refreshing rewarded-ad controls:** Reuse a single consent/availability check for each reward-button update; ad gating and earnings behavior are unchanged.
 - **More efficient backup exports:** Write skipped GPS fixes and progression CSV rows directly to the buffered ZIP output, avoiding temporary row lists/strings while keeping the exact CSV escape rules and backup format.
 - **Faster large-history backup copies and restores:** Read each SQLite cursor's unchanging column-name array once per table rather than once for every GPS/road/progression row; the exported and restored data remain identical.
-- **Safer backup imports:** Stop enumerating malformed ZIP archives as soon as their entry count exceeds the fixed RoadConquest backup schema, avoiding needless memory growth. Valid backups are unchanged.
+- **Safer backup imports:** Check the fixed RoadConquest backup entry limit before enumerating ZIP entries, avoiding an unnecessary application-level list for malformed archives. The ZIP library still validates/indexes the archive itself; valid backups are unchanged.
 - **Documentation cleanup:** Fix a visible paragraph-formatting error introduced into the Beta 53 README.
 - **Compatibility:** Android 12+, versionCode **80**, unchanged package name and permanent release signing identity; saved roads, matching, account data, points and purchases are unaffected. Any separately deployed verified-scoring server must accept version 80 before verified submissions can be enabled.
 - **Release validation:** Android unit tests, lint, native map tests, minified-release cold starts, and explicit packaged APK/AAB Advertising ID permission checks must pass before publishing signed files.
