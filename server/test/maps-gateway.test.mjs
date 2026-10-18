@@ -66,7 +66,7 @@ test('exhausted allowance or budget failure cannot fall through to upstream', as
   assert.equal(response.headers.get('Retry-After'), '3600');
 });
 test('upstream failures and redirects never disclose provider bodies or keys', async () => {
-  for (const status of [302, 401, 403, 429, 500]) {
+  for (const status of [302, 401, 403, 429, 500, 502, 503, 504]) {
     const worker = createMapsGateway(async () => new Response('secret upstream details', { status, headers: { Location: 'https://evil.example', 'Retry-After': '90' } }));
     const response = await worker.fetch(request(), env());
     assert.equal(response.status, status === 429 ? 429 : [401, 403].includes(status) ? 403 : 502);
@@ -232,7 +232,7 @@ test('documented LocationIQ NoMatch is valid while unknown errors remain secret-
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { code });
   }
-  for (const status of [302, 401, 403, 404, 429, 500]) {
+  for (const status of [302, 401, 403, 404, 429, 500, 502, 503, 504]) {
     const worker = createMapsGateway(async () => new Response('private upstream key', { status,
       headers: { Location: 'https://evil.example', 'Retry-After': '120' } }));
     const response = await worker.fetch(request('/v1/locationiq/mapmatching', {}, fallbackBody), fallbackEnv());
