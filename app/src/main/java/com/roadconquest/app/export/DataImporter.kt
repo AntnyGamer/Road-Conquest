@@ -81,15 +81,11 @@ object DataImporter {
                 }
             }
             ZipFile(zipPath).use { zip ->
-                // A valid backup has at most one entry per supported table plus
-                // metadata. Reject extras while enumerating rather than loading
-                // a potentially enormous malformed central directory into memory.
-                val entries = ArrayList<java.util.zip.ZipEntry>(tables.size + 1)
-                val archiveEntries = zip.entries()
-                while (archiveEntries.hasMoreElements()) {
-                    require(entries.size < tables.size + 1) { "Unexpected backup entries" }
-                    entries += archiveEntries.nextElement()
-                }
+                // A valid backup has only the supported tables and metadata.
+                // Check ZipFile's entry count before allocating an application
+                // list, rather than enumerating thousands of invalid extras.
+                require(zip.size() <= tables.size + 1) { "Unexpected backup entries" }
+                val entries = zip.entries().toList()
                 val names = entries.mapTo(HashSet(entries.size)) { it.name }
                 require(entries.none { it.isDirectory || it.size < 0 } &&
                     entries.count { it.name == "metadata.json" } == 1 &&
