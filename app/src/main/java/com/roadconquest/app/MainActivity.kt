@@ -754,11 +754,11 @@ class MainActivity : Activity() {
             renderer?.clearCurrentLocation()
         }
         val statusLabel = when {
-            deletionPending -> "Finishing device data deletion…"
+            deletionPending -> "Deleting saved data…"
             trackingPaused -> getString(R.string.tracking_paused)
-            !hasPreciseLocation && hasApproximateLocation -> "Precise location required"
-            !hasPreciseLocation -> "Location permission required"
-            !locationEnabled -> if (active) "Tracking paused — Location is off" else "Location is off"
+            !hasPreciseLocation && hasApproximateLocation -> "Precise location needed"
+            !hasPreciseLocation -> "Location permission needed"
+            !locationEnabled -> if (active) "Paused • Location off" else "Location off"
             active -> "Tracking"
             else -> "Not tracking"
         }
