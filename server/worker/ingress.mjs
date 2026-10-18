@@ -18,7 +18,7 @@ function configuredOrigin(value) {
     const url = new URL(value);
     if (url.protocol !== "https:" || !url.hostname || url.username || url.password ||
         url.search || url.hash || (url.pathname !== "/" && url.pathname !== "")) return null;
-    return url.origin;
+    return { origin: url.origin, host: url.host };
   } catch {
     return null;
   }
@@ -56,20 +56,20 @@ function unavailable() {
 export function createAccountIngress(upstreamFetch = fetch, now = () => Date.now()) {
   const sign = createHmacSigner();
   return async function handle(request, env) {
-    const origin = configuredOrigin(env?.API_ORIGIN);
+    const upstream = configuredOrigin(env?.API_ORIGIN);
     const key = env?.RATE_LIMIT_IP_SIGNATURE_KEY;
-    if (!origin || typeof key !== "string" || key.length < 32) return unavailable();
+    if (!upstream || typeof key !== "string" || key.length < 32) return unavailable();
     const incoming = new URL(request.url);
     // A misconfigured Worker must never proxy into itself and loop until
     // Cloudflare exhausts subrequest limits. The real Neon origin differs.
-    if (new URL(origin).host === incoming.host) return unavailable();
+    if (upstream.host === incoming.host) return unavailable();
     if (incoming.protocol !== "https:") {
       return new Response(JSON.stringify({ error: "HTTPS required" }), {
         status: 400, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" }
       });
     }
     // Never fetch a caller-supplied host: the upstream origin is fixed by env.
-    const target = origin + incoming.pathname + incoming.search;
+    const target = upstream.origin + incoming.pathname + incoming.search;
     // Rebuilding a Request copies the caller's ORIGINAL headers. Sanitize
     // that actual forwarded request exactly once before adding signed identity.
     // Preserve the method, body, credentials and query parameters unchanged.
