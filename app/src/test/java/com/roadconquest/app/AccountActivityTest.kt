@@ -178,7 +178,7 @@ class AccountActivityTest {
     @Test fun accountHidesLeaderboardPrivacyAndItsHelp() {
         val controller = Robolectric.buildActivity(AccountActivity::class.java).create().start().resume()
         try {
-            for (id in listOf(R.id.accountLeaderboardSwitch, R.id.accountLeaderboardPrivacyHelp)) {
+            for (id in listOf(R.id.accountLeaderboardInfo, R.id.accountLeaderboardSwitch, R.id.accountLeaderboardPrivacyHelp)) {
                 assertEquals(View.GONE, controller.get().findViewById<View>(id).visibility)
             }
         } finally {

@@ -72,6 +72,7 @@ class AccountActivity : Activity() {
         leaderboardSwitch = findViewById(R.id.accountLeaderboardSwitch)
         val competitionVisibility = if (com.roadconquest.app.util.FeatureFlags.LEADERBOARDS_VISIBLE) View.VISIBLE else View.GONE
         leaderboardSwitch.visibility = competitionVisibility
+        findViewById<View>(R.id.accountLeaderboardInfo).visibility = competitionVisibility
         findViewById<View>(R.id.accountLeaderboardPrivacyHelp).visibility = competitionVisibility
         logoutButton = findViewById(R.id.accountLogoutButton)
         changeUsernameButton = findViewById(R.id.accountChangeUsernameButton)
