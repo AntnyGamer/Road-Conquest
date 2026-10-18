@@ -81,7 +81,7 @@ class RestoreActivity : Activity() {
             root.addView(this, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (14 * dp).toInt() })
         }
         recovery = Button(this, null, 0, R.style.RoadConquest_SettingsAction).apply {
-            text = "Undo last import"
+            text = "Restore previous progress"
             isEnabled = DataImporter.previousBackup(this@RestoreActivity).isFile
             setOnClickListener { validate { DataImporter.previousBackup(applicationContext).inputStream() } }
             root.addView(this, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (10 * dp).toInt() })

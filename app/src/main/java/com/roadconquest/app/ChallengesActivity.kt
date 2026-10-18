@@ -221,7 +221,7 @@ class ChallengesActivity : Activity() {
                             isEnabled = !changingFriend
                             setOnClickListener {
                                 AlertDialog.Builder(this@ChallengesActivity).setTitle("${text} $username?")
-                                                .setNegativeButton("Keep", null)
+                                    .setNegativeButton("Keep", null)
                                     .setPositiveButton("Confirm") { _, _ -> changeFriend(username, "remove") }.show()
                             }
                         }, LinearLayout.LayoutParams(0, -2, 1f).apply {
