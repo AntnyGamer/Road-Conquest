@@ -44,6 +44,7 @@ class MapProviderTest {
     @Test fun configuredGatewayHostHandlesInvalidUrlsWithoutBreakingLocalMaps() {
         assertEquals("maps.example", BaseMapProviders.configuredGatewayHost("https://maps.example:443/"))
         assertEquals("maps.example", BaseMapProviders.configuredGatewayHost("HTTPS://maps.example/"))
+        assertEquals("maps.example", BaseMapProviders.configuredGatewayHost("HTTPS://MAPS.EXAMPLE/"))
         assertEquals("10.0.2.2", BaseMapProviders.configuredGatewayHost("http://10.0.2.2:8787"))
         assertNull(BaseMapProviders.configuredGatewayHost(""))
         assertNull(BaseMapProviders.configuredGatewayHost("not a valid url"))
