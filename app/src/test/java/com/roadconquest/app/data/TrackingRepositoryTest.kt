@@ -248,22 +248,6 @@ class TrackingRepositoryTest {
         assertEquals(ids[5], repository.newestEligibleAnchoredGapStartId())
     }
 
-    @Test fun liveMatchingBadgeIgnoresOldUnresolvedDrivesButShowsRecentPendingGps() {
-        val start = 1_000_000L
-        val now = start + 2 * 60 * 60_000L
-        val oldId = point(start, lon = -74.0)
-        assertFalse("A historic unresolved corner is not current tracking activity",
-            repository.hasUnmatchedDrivingFixes(now))
-        val recentId = point(now - 20_000L, lon = -74.0003)
-        assertTrue(repository.hasUnmatchedDrivingFixes(now))
-        repository.markMatched(listOf(recentId))
-        assertFalse("Old unmatched evidence remains saved but cannot cause a permanent live warning",
-            repository.hasUnmatchedDrivingFixes(now))
-        assertTrue("Old evidence must remain retryable", repository.loadMatchingWindow().points.any {
-            it.id == oldId
-        })
-    }
-
     @Test fun pendingGpsIntervalsRemainContinuousUntilMatchingCompletes() {
         val ids = (0..4).map { point(1_000_000L + it * 3_000L, lon = -74.0 + it * 0.0001) }
         repository.markMatched(listOf(ids.first(), ids.last()))

@@ -11,8 +11,11 @@ import com.roadconquest.app.billing.VipEntitlement
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.text.Editable
+import android.text.TextWatcher
 import android.text.format.DateUtils
 import android.view.MotionEvent
+import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.FrameLayout
@@ -105,6 +108,18 @@ class TripHistoryActivity : Activity() {
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density + .5f).toInt()
 
+    /** Hide blank replay details without leaving behind their vertical padding. */
+    private fun TextView.collapseWhenEmpty() {
+        visibility = if (text.isEmpty()) View.GONE else View.VISIBLE
+        addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                visibility = if (s.isNullOrEmpty()) View.GONE else View.VISIBLE
+            }
+            override fun afterTextChanged(s: Editable?) {}
+        })
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         setTheme(Appearance.themeRes(this))
         super.onCreate(savedInstanceState)
@@ -148,18 +163,12 @@ class TripHistoryActivity : Activity() {
             setOnClickListener { finish() }
         }, LinearLayout.LayoutParams(dp(110), dp(48)).apply { bottomMargin = dp(8) })
         root.addView(TextView(this).apply {
-            text = "YOUR JOURNEYS"
-            textSize = 12f
-            letterSpacing = 0.14f
-            setTextColor(Appearance.color(this@TripHistoryActivity, R.attr.rcAccent))
-        })
-        root.addView(TextView(this).apply {
             text = "Trip history"
             isAccessibilityHeading = true
             textSize = 28f
             setTypeface(typeface, android.graphics.Typeface.BOLD)
             setTextColor(Appearance.color(this@TripHistoryActivity, R.attr.rcTextPrimary))
-            setPadding(0, dp(8), 0, dp(8))
+            setPadding(0, 0, 0, dp(8))
         })
         val status = TextView(this).also {
             routeStatus = it
@@ -218,10 +227,11 @@ class TripHistoryActivity : Activity() {
             root.addView(this)
         }
         replayProgress = TextView(this).apply {
-            text = "Choose a drive to replay"
+            text = ""
             textSize = 13f
             setTextColor(Appearance.color(this@TripHistoryActivity, R.attr.rcTextSecondary))
             setPadding(0, 0, 0, dp(8))
+            collapseWhenEmpty()
             root.addView(this)
         }
         playButton = Button(this).apply {
@@ -241,17 +251,13 @@ class TripHistoryActivity : Activity() {
             })
         }
         insightsText = TextView(this).apply {
-            text = "Choose a drive for its distance, new roads and matching status."
+            text = ""
             textSize = 14f
             setTextColor(Appearance.color(this@TripHistoryActivity, R.attr.rcTextSecondary))
             setPadding(0, 0, 0, dp(12))
+            collapseWhenEmpty()
             root.addView(this)
         }
-        root.addView(TextView(this).apply {
-            text = "VIP extras: extended trip browsing, private summaries and GPX export. Basic history, replay and full progress backup remain free."
-            textSize = 12f
-            setTextColor(Appearance.color(this@TripHistoryActivity, R.attr.rcTextSecondary))
-        })
         shareButton = Button(this, null, 0, R.style.RoadConquest_SettingsAction).apply {
             text = "Share trip summary · VIP"
             setOnClickListener { shareSelectedTrip() }
@@ -288,7 +294,7 @@ class TripHistoryActivity : Activity() {
         if (VipEntitlement.isActive(this)) return true
         AlertDialog.Builder(this)
             .setTitle("VIP trip extras")
-            .setMessage("Unlock enhanced trip browsing, trip summaries for sharing and GPX export with the existing lifetime VIP purchase. Standard trip history, animated replays and your progress backups remain free.")
+            .setMessage("Lifetime VIP unlocks up to 500 recent drives, trip-summary sharing and GPX export. Basic trip history, replays and progress backups stay free.")
             .setNegativeButton("Not now", null)
             .setPositiveButton("Open Garage") { _, _ ->
                 startActivity(Intent(this, ShopActivity::class.java))
@@ -304,7 +310,7 @@ class TripHistoryActivity : Activity() {
         val listGeneration = ++tripListGeneration
         column.removeAllViews()
         column.addView(TextView(this).apply {
-            text = if (vip) "Showing up to 500 recent drives (VIP)" else "Showing up to 100 recent drives · VIP unlocks extended history"
+            text = if (vip) "Recent drives (up to 500)" else "Recent drives (up to 100) • VIP: up to 500"
             textSize = 13f
             setTextColor(Appearance.color(this@TripHistoryActivity, R.attr.rcTextSecondary))
         })
@@ -317,7 +323,7 @@ class TripHistoryActivity : Activity() {
                 result.fold({ trips ->
                     if (trips.isEmpty()) {
                         column.addView(TextView(this@TripHistoryActivity).apply {
-                            text = "No saved drives yet. Your recorded GPS history will appear here."
+                            text = "No drives yet. Recorded trips will appear here."
                         })
                     }
                     // Inflate only visible-sized batches. 500 Buttons at once
@@ -499,7 +505,7 @@ class TripHistoryActivity : Activity() {
                 if (isDestroyed || expected != generation) return@runOnUiThread
                 result.fold({ (loaded, insights) ->
                     insightsText?.text = String.format(Locale.getDefault(),
-                        "New roads: %,d (estimated) • New towns: %,d • New tiles: %,d\n%,d GPS fixes awaiting road matching. Older tiles without saved dates are excluded.",
+                        "New roads (est.): %,d • Towns: %,d • Tiles: %,d\n%,d GPS points awaiting matching. Older tiles without visit dates are excluded.",
                         insights.newRoadGroups, insights.newTowns, insights.newTiles, insights.pendingFixes
                     )
                     shareSummaryReady = loaded.size >= 2
@@ -546,7 +552,7 @@ class TripHistoryActivity : Activity() {
         if (!mapReady) return
         if (points.size < 2) {
             lastRenderedIndex = -1
-            if (points.isEmpty()) replayProgress?.text = "Choose a drive to replay"
+            if (points.isEmpty()) replayProgress?.text = ""
             map?.style?.getSourceAs<GeoJsonSource>(ROUTE)?.setGeoJson(
                 FeatureCollection.fromFeatures(emptyList())
             )
@@ -617,8 +623,8 @@ class TripHistoryActivity : Activity() {
             shareSummaryReady = false
             resetReplayDisplay()
             routeStatus?.text = "Driving history changed. Choose a saved drive."
-            replayProgress?.text = "Choose a drive to replay"
-            insightsText?.text = "Choose a drive for its distance, new roads and matching status."
+            replayProgress?.text = ""
+            insightsText?.text = ""
             refreshTripList()
         }
         vipBilling.refresh(includeOffer = false)

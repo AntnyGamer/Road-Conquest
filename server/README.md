@@ -227,7 +227,7 @@ transaction. Reauthentication verifies the password without changing account or 
 Username changes preserve the stable account ID and all scores; duplicate names return 409.
 Deletion cascades through every session, score, competitive road, live run and receipt. Other
 accounts and the shared road catalog are preserved. Device history is local: Delete account leaves
-it intact, while the separate in-app Delete all data action uses an exact typed confirmation phrase
+it intact, while the separate in-app Delete local data action uses an exact typed confirmation phrase
 and then clears device-only data without contacting or deleting the cloud account. No deletion request
 accepts a target user ID.
 
@@ -325,7 +325,7 @@ PLAY_SERVICE_ACCOUNT_JSON=<service-account JSON stored as a secret env var>
 # or PLAY_SERVICE_ACCOUNT_FILE=/run/secrets/play-integrity.json
 PLAY_CLOUD_PROJECT_NUMBER=<numeric linked Google Cloud project>
 PLAY_CERTIFICATES=<base64url SHA256 Play app-signing certificate without padding>
-PLAY_VERSION_CODES=71,72,73,74,75,76,77,78,79,80
+PLAY_VERSION_CODES=71,72,73,74,75,76,77,78,79,80,81
 ```
 
 Apply `schema.sql` as the database owner. Restricted API roles need

@@ -72,6 +72,7 @@ class AccountActivity : Activity() {
         leaderboardSwitch = findViewById(R.id.accountLeaderboardSwitch)
         val competitionVisibility = if (com.roadconquest.app.util.FeatureFlags.LEADERBOARDS_VISIBLE) View.VISIBLE else View.GONE
         leaderboardSwitch.visibility = competitionVisibility
+        findViewById<View>(R.id.accountLeaderboardInfo).visibility = competitionVisibility
         findViewById<View>(R.id.accountLeaderboardPrivacyHelp).visibility = competitionVisibility
         logoutButton = findViewById(R.id.accountLogoutButton)
         changeUsernameButton = findViewById(R.id.accountChangeUsernameButton)
@@ -255,7 +256,12 @@ class AccountActivity : Activity() {
         }
         val password = passwordField()
         val error = TextView(this)
-        fields.addView(username); fields.addView(password); fields.addView(error)
+        fields.addView(username)
+        fields.addView(password, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { topMargin = (10 * resources.displayMetrics.density).toInt() })
+        fields.addView(error)
         val dialog = AlertDialog.Builder(this).setTitle("Change username").setView(fields)
             .setNegativeButton("Cancel", null).setPositiveButton("Save", null).create()
         dialog.setOnDismissListener { password.text.clear() }
@@ -299,7 +305,7 @@ class AccountActivity : Activity() {
         val error = TextView(this)
         fields.addView(password); fields.addView(error)
         val dialog = AlertDialog.Builder(this).setTitle("Delete account?").setView(fields)
-            .setMessage("This permanently deletes your cloud account, sessions, friendships and cloud driving records. Saved driving data on this phone stays. If you want everything removed, cancel and use Settings → Data and privacy → Delete all data instead.")
+            .setMessage("This permanently deletes your cloud account, sessions, friendships and cloud driving records. Driving history saved on this phone stays. To remove both, also use Settings → Data and privacy → Delete local data. That option does not delete your cloud account.")
             .setNegativeButton("Cancel", null).setPositiveButton("Delete account", null).create()
         dialog.setOnDismissListener { password.text.clear() }
         dialog.setOnShowListener {

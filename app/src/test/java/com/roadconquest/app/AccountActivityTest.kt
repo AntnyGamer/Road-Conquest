@@ -5,6 +5,7 @@ import android.location.Location
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.Switch
 import android.widget.TextView
 import com.roadconquest.app.account.AccountClient
@@ -177,7 +178,7 @@ class AccountActivityTest {
     @Test fun accountHidesLeaderboardPrivacyAndItsHelp() {
         val controller = Robolectric.buildActivity(AccountActivity::class.java).create().start().resume()
         try {
-            for (id in listOf(R.id.accountLeaderboardSwitch, R.id.accountLeaderboardPrivacyHelp)) {
+            for (id in listOf(R.id.accountLeaderboardInfo, R.id.accountLeaderboardSwitch, R.id.accountLeaderboardPrivacyHelp)) {
                 assertEquals(View.GONE, controller.get().findViewById<View>(id).visibility)
             }
         } finally {
@@ -203,7 +204,7 @@ class AccountActivityTest {
                 texts.contains("Add friend by username"))
             val optionalFriends = mutableListOf<Button>()
             fun findOptionalFriends(view: View) {
-                if (view is Button && view.text.toString() == "Manage friends (optional)") {
+                if (view is Button && view.text.toString() == "Manage friends") {
                     optionalFriends.add(view)
                 }
                 if (view is android.view.ViewGroup) for (index in 0 until view.childCount) {
@@ -219,6 +220,27 @@ class AccountActivityTest {
             assertFalse(texts.contains("New roads"))
             assertFalse(texts.contains("Miles"))
             assertFalse(texts.any { it.contains("verified", ignoreCase = true) })
+        } finally {
+            controller.destroy()
+        }
+    }
+
+    @Test fun accountFormHasSeparateFieldsAndActions() {
+        val controller = Robolectric.buildActivity(AccountActivity::class.java).create()
+        try {
+            val activity = controller.get()
+            val density = activity.resources.displayMetrics.density
+            fun minDp(dp: Int) = (dp * density + 0.5f).toInt()
+            fun topMargin(view: View) = (view.layoutParams as LinearLayout.LayoutParams).topMargin
+
+            val passwordRow = activity.findViewById<View>(R.id.accountPassword).parent as View
+            val confirmRow = activity.findViewById<View>(R.id.accountConfirmPassword).parent as View
+            assertTrue(topMargin(passwordRow) >= minDp(10))
+            assertTrue(topMargin(confirmRow) >= minDp(10))
+            assertTrue(topMargin(activity.findViewById(R.id.accountSignupButton)) >= minDp(16))
+            assertTrue(topMargin(activity.findViewById(R.id.accountLoginButton)) >= minDp(18))
+            assertTrue(topMargin(activity.findViewById(R.id.accountLogoutButton)) >= minDp(18))
+            assertTrue(topMargin(activity.findViewById(R.id.accountDeleteButton)) >= minDp(18))
         } finally {
             controller.destroy()
         }
@@ -301,7 +323,7 @@ class AccountActivityTest {
         }
     }
 
-    @Test fun deleteAllDataUsesLocalTypedConfirmationWithoutRequiringAnAccount() {
+    @Test fun deletingLocalDataRequiresTypedConfirmationButNotAnAccount() {
         val context = RuntimeEnvironment.getApplication()
         AccountClient.endpointOverrideForTests = "https://example.com"
         AccountStore.clear(context)
@@ -311,7 +333,7 @@ class AccountActivityTest {
         try {
             val activity = controller.get()
             val control = activity.findViewById<Button>(R.id.deleteDeviceDataButton)
-            assertEquals("Delete all data", control.text.toString())
+            assertEquals("Delete local data", control.text.toString())
             assertTrue("Local deletion must remain available while signed out", control.isEnabled)
             assertEquals(
                 "I confirm I want to delete all of my local data.",

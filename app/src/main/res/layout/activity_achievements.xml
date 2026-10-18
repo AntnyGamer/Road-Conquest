@@ -43,7 +43,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:text="Earn bonus points from roads, map tiles, mileage, places, and optional challenges."
+            android:text="Earn badges and bonus points from roads, map tiles, mileage, places and optional challenges."
             android:textColor="?attr/rcTextSecondary"
             android:textSize="13sp" />
 

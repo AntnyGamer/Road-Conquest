@@ -4,7 +4,7 @@
     <string name="enable">Enable</string>
     <string name="disable">Disable</string>
     <string name="stop_tracking">Stop tracking</string>
-    <string name="tracking_paused">Stopped until you reopen Road Conquest</string>
+    <string name="tracking_paused">Paused • Tap Resume</string>
     <string name="resume_tracking">Resume tracking</string>
     <string name="settings">Settings</string>
     <string name="center_on_car">Center on your location</string>
@@ -30,20 +30,20 @@
 
     <string name="map_style_label">Map: %1$s</string>
     <string name="ui_theme_label">Appearance: %1$s</string>
-    <string name="github_button">Road Conquest on GitHub</string>
+    <string name="github_button">View on GitHub</string>
     <string name="github_repository_url" translatable="false">https://github.com/AntnyGamer/RoadConquest-Beta</string>
     <string name="github_unavailable">No app could open GitHub. Open this address in a browser: %1$s</string>
     <string name="web_page_unavailable">No app could open this page. Open this address in a browser: %1$s</string>
     <string name="app_version">Version %1$s (%2$d)</string>
     <string name="ad_banner_label">Advertisement</string>
-    <string name="ad_reward_explanation">Optional: load an ad to see its point reward, then choose whether to watch. Points are awarded only when the ad confirms completion. Google may use device identifiers, interactions, diagnostics and your IP address for ads.</string>
+    <string name="ad_reward_explanation">Optional: load an ad to see its reward before choosing to watch. Points are earned only after confirmed completion. Google may use device identifiers, ad interactions, diagnostics and your IP address.</string>
     <string name="ad_privacy_options">Ad privacy choices</string>
     <string name="ad_unavailable">Rewarded ads unavailable</string>
     <string name="ad_load">Load rewarded ad</string>
     <string name="ad_loading">Loading rewarded ad…</string>
     <string name="ad_watch">Watch ad • +%1$d points</string>
     <string name="ad_showing">Rewarded ad in progress…</string>
-    <string name="ad_no_fill">No ad available right now. You can try again later.</string>
+    <string name="ad_no_fill">No ad available right now. Try again later.</string>
     <string name="ad_consent_error">Ad privacy settings could not be updated. The shop is still available.</string>
     <string name="ad_reward_saved">+%1$d points earned</string>
     <string name="ad_reward_failed">Could not save the ad reward.</string>

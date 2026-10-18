@@ -79,7 +79,7 @@ class ChallengesActivity : Activity() {
             letterSpacing = 0.14f
         }
         label("Weekly challenges", 28f).apply { isAccessibilityHeading = true }
-        label("Weeks run Monday to Monday at 00:00 UTC. Local goals use new road and town discoveries. Points are added automatically once per goal.")
+        label("Discover new roads and towns to earn points automatically. Goals reset Monday at 00:00 UTC.")
         local = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundResource(R.drawable.settings_card_background)
@@ -93,7 +93,7 @@ class ChallengesActivity : Activity() {
         }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
         val socialStart = root.childCount
         label("Friends", 22f)
-        label("Add friends by username. Both people must accept the friendship.")
+        label("Add friends by username. Requests need approval.")
         if (FeatureFlags.LEADERBOARDS_VISIBLE) {
             label("Compete on this week's newly verified exploration cells. Each cell counts once. Hidden profiles do not appear. Imported history never earns competitive credit.")
         }
@@ -102,7 +102,7 @@ class ChallengesActivity : Activity() {
             setBackgroundResource(R.drawable.settings_card_background)
             setPadding(dp(16), dp(16), dp(16), dp(16))
         }
-        status = label("")
+        status = label("").apply { setPadding(0, 0, 0, 0) }
         invite = Button(this).apply {
             text = "Add friend by username"
             setOnClickListener {
@@ -139,11 +139,11 @@ class ChallengesActivity : Activity() {
                 social.addView(child)
             }
             val toggle = Button(this, null, 0, R.style.RoadConquest_SettingsAction).apply {
-                text = "Manage friends (optional)"
+                text = "Manage friends"
                 setOnClickListener {
                     socialExpanded = !socialExpanded
                     social.visibility = if (socialExpanded) View.VISIBLE else View.GONE
-                    text = if (socialExpanded) "Hide friends" else "Manage friends (optional)"
+                    text = if (socialExpanded) "Hide friends" else "Manage friends"
                     if (socialExpanded) refresh()
                 }
             }
@@ -226,9 +226,8 @@ class ChallengesActivity : Activity() {
                             isEnabled = !changingFriend
                             setOnClickListener {
                                 AlertDialog.Builder(this@ChallengesActivity).setTitle("${text} $username?")
-                                    .setMessage("This updates your friends list.")
                                     .setNegativeButton("Keep", null)
-                                    .setPositiveButton("Confirm") { _, _ -> changeFriend(username, "remove") }.show()
+                                    .setPositiveButton(text) { _, _ -> changeFriend(username, "remove") }.show()
                             }
                         }, LinearLayout.LayoutParams(0, -2, 1f).apply {
                             if (relation == "incoming") marginStart = dp(8)

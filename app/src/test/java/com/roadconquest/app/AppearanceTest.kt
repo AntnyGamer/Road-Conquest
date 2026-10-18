@@ -114,7 +114,7 @@ class AppearanceTest {
             val activity = controller.get()
             activity.findViewById<Button>(R.id.privacyPolicyButton).performClick()
             assertTrue(shadowOf(activity).nextStartedActivity.data.toString().endsWith("/privacy"))
-            assertEquals("Delete all data", activity.findViewById<Button>(R.id.deleteDeviceDataButton).text.toString())
+            assertEquals("Delete local data", activity.findViewById<Button>(R.id.deleteDeviceDataButton).text.toString())
         } finally { controller.pause().stop().destroy() }
     }
 

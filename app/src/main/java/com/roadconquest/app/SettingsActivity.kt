@@ -337,20 +337,20 @@ class SettingsActivity : Activity() {
             filters = arrayOf(android.text.InputFilter.LengthFilter(128))
             isSaveEnabled = false
             importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
-            contentDescription = "Delete all data confirmation phrase"
+            contentDescription = "Delete local data confirmation phrase"
         }
         val error = TextView(this)
         fields.addView(confirmation)
         fields.addView(error)
 
         val dialog = AlertDialog.Builder(this)
-            .setTitle("Delete all data?")
+            .setTitle("Delete local data?")
             .setMessage(
                 "This permanently deletes saved Road Conquest progress on this phone, including trips, mileage, roads, explored places, points and cosmetics bought with points. Your cloud account and lifetime VIP purchase in Google Play remain; VIP can be restored through Google Play if needed. Tracking stops and verified-drive sharing turns off. Exported files must be deleted separately. Deleted progress cannot be recovered without an existing backup.\n\nType exactly:\n$DELETE_LOCAL_DATA_CONFIRMATION"
             )
             .setView(fields)
             .setNegativeButton("Cancel", null)
-            .setPositiveButton("Delete all data", null)
+            .setPositiveButton("Delete local data", null)
             .create()
 
         dialog.setOnDismissListener { confirmation.text.clear() }
