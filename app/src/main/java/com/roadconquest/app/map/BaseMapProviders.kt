@@ -64,7 +64,7 @@ object BaseMapProviders {
     fun preferred(mode: MapMode): String = when {
         available("openfreemap") && mode == MapMode.TERRAIN && !available("esri-imagery") -> "openfreemap-streets"
         available("openfreemap") -> "openfreemap"
-        BuildConfig.MAP_GATEWAY_URL.isNotBlank() && available("geoapify-tiles") -> "geoapify-tiles"
+        gatewayHost != null && available("geoapify-tiles") -> "geoapify-tiles"
         else -> "local"
     }
     // No cooldown means there is nothing to retry. ServiceConfig listeners
@@ -80,12 +80,12 @@ object BaseMapProviders {
                 if (provider == "openfreemap-streets") MapMode.STREETS.styleAsset else mode.styleAsset
             ).bufferedReader().use { it.readText() })
             val source = root.getJSONObject("sources").getJSONObject("openmaptiles")
-            val extra = (if (BuildConfig.MAP_GATEWAY_URL.isNotBlank()) " | <a href=\"https://www.geoapify.com/\">Geoapify</a>" else "") +
+            val extra = (if (gatewayHost != null) " | <a href=\"https://www.geoapify.com/\">Geoapify</a>" else "") +
                 " | <a href=\"https://www.geoboundaries.org/\">geoBoundaries</a>"
             source.put("attribution", source.optString("attribution") + extra)
             return root.toString()
         }
-        return fallbackStyle(mode, BuildConfig.MAP_GATEWAY_URL.takeIf { provider == "geoapify-tiles" })
+        return fallbackStyle(mode, BuildConfig.MAP_GATEWAY_URL.takeIf { provider == "geoapify-tiles" && gatewayHost != null })
     }
     internal fun fallbackStyle(mode: MapMode, gateway: String?): String {
         val sources = JSONObject()
