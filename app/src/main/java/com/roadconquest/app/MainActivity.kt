@@ -98,9 +98,6 @@ class MainActivity : Activity() {
     private var lastPlaceBackfillElapsed = -1L
     private val queuedPlaceResolution = Runnable { if (resumed) resolvePendingPlaces() }
     @Volatile private var summaryGeneration = 0
-    // Persist the last known pending-match label between rapid UI refreshes,
-    // avoiding a transient "Tracking" / "Pending" flicker every cycle.
-    private var lastMatchingPending = false
     @Volatile private var roadDetailsGeneration = 0
     private val statsHandler = Handler(Looper.getMainLooper())
     private var statsRefreshScheduled = false
@@ -762,9 +759,7 @@ class MainActivity : Activity() {
             !hasPreciseLocation && hasApproximateLocation -> "Precise location required"
             !hasPreciseLocation -> "Location permission required"
             !locationEnabled -> if (active) "Tracking paused — Location is off" else "Location is off"
-            active -> if (lastMatchingPending)
-                "Tracking your driving • GPS saved, road matching pending"
-            else "Tracking your driving"
+            active -> "Tracking"
             else -> "Not tracking"
         }
         // Avoid repeating the same live-region announcement on each data refresh.
@@ -790,27 +785,12 @@ class MainActivity : Activity() {
                         ProgressionManager.metrics(progression)
                     )
                 }
-                // The pending-match badge is only visible during active tracking.
-                // Avoid an otherwise pointless SQLite query when the app is paused,
-                // offline, deleting local data, or not recording.
-                val checkMatching = active && !trackingPaused && hasPreciseLocation &&
-                    locationEnabled && !deletionPending
-                Triple(summary, progression, unlocked) to
-                    (checkMatching && repository.hasUnmatchedDrivingFixes())
+                Triple(summary, progression, unlocked)
             }
             runOnUiThread {
                 if (isDestroyed || generation != summaryGeneration) return@runOnUiThread
                 result.fold(
-                    onSuccess = { (summaryValues, pendingMatching) ->
-                        lastMatchingPending = pendingMatching
-                        val (value, progression, unlocked) = summaryValues
-                        if (TrackingService.isRunning && !Prefs.isTrackingPaused(this) &&
-                            statusText.text.toString().startsWith("Tracking your driving")) {
-                            val matchingStatus = if (pendingMatching)
-                                "Tracking your driving • GPS saved, road matching pending"
-                            else "Tracking your driving"
-                            if (statusText.text.toString() != matchingStatus) statusText.text = matchingStatus
-                        }
+                    onSuccess = { (value, progression, unlocked) ->
                         statsText.text = StatsText.mapOverview(this, value, progression.tilesUnlocked)
                         val points = String.format(Locale.getDefault(), "%,d", progression.balance)
                         pointsText.text = "Garage · ⚔ $points"
