@@ -41,7 +41,7 @@
         <item name="android:gravity">center</item>
         <item name="android:paddingStart">16dp</item>
         <item name="android:paddingEnd">16dp</item>
-        <item name="android:minHeight">44dp</item>
+        <item name="android:minHeight">48dp</item>
     </style>
 
     <style name="RoadConquest.DangerAction" parent="@style/RoadConquest.SettingsAction">
