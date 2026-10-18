@@ -465,15 +465,25 @@ class RoadGeometryValidator {
     }
 
     internal fun buildBearingGuidance(points: List<TrackPoint>): String? {
-        val values = points.indices.map { index ->
+        // Keep an entry for EVERY fix, including blank junction entries, while
+        // writing directly to one buffer instead of allocating a list of strings.
+        val guidance = StringBuilder(points.size * 6)
+        var hasGuidance = false
+        for (index in points.indices) {
+            if (index > 0) guidance.append(';')
             val point = points[index]
             // A forward-only course at a junction describes the exit road, not necessarily
             // the incoming road. Do not forbid provider from considering the true turn here.
-            if (isSharpTurn(points, index)) return@map ""
-            val (from, to) = if (index < points.lastIndex) {
-                point to points[index + 1]
+            if (isSharpTurn(points, index)) continue
+            val from: TrackPoint
+            val to: TrackPoint
+            if (index < points.lastIndex) {
+                from = point
+                to = points[index + 1]
             } else {
-                points.getOrNull(index - 1)?.let { it to point } ?: return@map ""
+                if (index == 0) continue
+                from = points[index - 1]
+                to = point
             }
             val distance = pointDistanceMeters(from, to)
             val fromAccuracy = from.accuracyMeters.takeIf { it.isFinite() && it >= 0f } ?: MAX_MATCH_RADIUS_M
@@ -482,7 +492,7 @@ class RoadGeometryValidator {
                 MIN_BEARING_EVIDENCE_DISTANCE_M,
                 (fromAccuracy + toAccuracy) * BEARING_ACCURACY_DISTANCE_FACTOR
             )
-            if (!distance.isFinite() || distance < minimumEvidenceDistance) return@map ""
+            if (!distance.isFinite() || distance < minimumEvidenceDistance) continue
 
             val elapsedMs = to.timestampMillis - from.timestampMillis
             val combinedAccuracy = fromAccuracy + toAccuracy
@@ -493,12 +503,14 @@ class RoadGeometryValidator {
             }
             val storedSpeed = point.speedMps.toDouble().takeIf { it.isFinite() && it >= 0.0 } ?: 0.0
             val movementSpeedMps = if (storedSpeed > 0.0) storedSpeed else inferredSpeedMps
-            if (movementSpeedMps < MIN_BEARING_GUIDANCE_SPEED_MPS) return@map ""
+            if (movementSpeedMps < MIN_BEARING_GUIDANCE_SPEED_MPS) continue
 
             val movementBearing = initialBearingDegrees(from, to)
-            "${movementBearing.roundToInt() % 360},$BEARING_GUIDANCE_RANGE_DEGREES"
+            guidance.append(movementBearing.roundToInt() % 360)
+                .append(',').append(BEARING_GUIDANCE_RANGE_DEGREES)
+            hasGuidance = true
         }
-        return values.takeIf { entries -> entries.any { it.isNotEmpty() } }?.joinToString(";")
+        return if (hasGuidance) guidance.toString() else null
     }
 
     private fun pointDistanceMeters(a: TrackPoint, b: TrackPoint): Double {
