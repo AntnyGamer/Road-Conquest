@@ -154,14 +154,19 @@ export async function createCompetition(pool, config, dependencies = {}) {
         const scope = `3:${user.id}:${config.dataset}`;
         const checkpoint = createCheckpointCodec(scope, config.checkpointKey);
         checkpoint.verify(old.rows[0].last_verified_fix, body.fixes[0], body.run);
-        const inserted = await db.query(
-          `WITH added AS (INSERT INTO competition_cells(user_id,dataset,grid_row,grid_col)
-           SELECT $1,$2,* FROM unnest($3::integer[],$4::integer[])
-           ON CONFLICT DO NOTHING RETURNING 1)
-           SELECT COUNT(*)::integer AS count FROM added HAVING COUNT(*)>0`,
-          [user.id, config.dataset, cells.map(c => c.row), cells.map(c => c.column)]
-        );
-        const newCells = inserted.rows[0]?.count || 0;
+        let newCells = 0;
+        // An empty server-derived set cannot insert or conflict with any cell.
+        // Still verify/store continuity and advance the receipt transaction below.
+        if (cells.length) {
+          const inserted = await db.query(
+            `WITH added AS (INSERT INTO competition_cells(user_id,dataset,grid_row,grid_col)
+             SELECT $1,$2,* FROM unnest($3::integer[],$4::integer[])
+             ON CONFLICT DO NOTHING RETURNING 1)
+             SELECT COUNT(*)::integer AS count FROM added HAVING COUNT(*)>0`,
+            [user.id, config.dataset, cells.map(c => c.row), cells.map(c => c.column)]
+          );
+          newCells = inserted.rows[0]?.count || 0;
+        }
         // Batches spanning Monday midnight belong to the week of their final fix.
         // The timestamp is already freshness-checked and bound by Play Integrity.
         let weekStart;

@@ -42,6 +42,20 @@ function waypointSeconds(body) {
 
 export function createMapsGateway(fetchUpstream = fetch, { wait = waitForSlot, upstreamTimeoutMs = 20_000 } = {}) {
   const sign = createHmacSigner(2); // Geoapify + LocationIQ; bounded across rotations.
+  // This fixed provider scope contains no request, IP or GPS data. Reuse its
+  // deterministic digest, while still signing each daily client bucket afresh.
+  const healthKeys = new Map();
+  const healthKeyFor = secret => {
+    let pending = healthKeys.get(secret);
+    if (!pending) {
+      pending = sign(secret, 'health:matching')
+        .then(bytes => Array.from(bytes, x => x.toString(16).padStart(2, '0')).join(''));
+      healthKeys.set(secret, pending);
+      if (healthKeys.size > 2) healthKeys.delete(healthKeys.keys().next().value);
+      pending.catch(() => { if (healthKeys.get(secret) === pending) healthKeys.delete(secret); });
+    }
+    return pending;
+  };
   return { async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname === '/health' && ['GET', 'HEAD'].includes(request.method)) {
@@ -108,8 +122,7 @@ export function createMapsGateway(fetchUpstream = fetch, { wait = waitForSlot, u
     const bytes = await sign(secret, new Date().toISOString().slice(0, 10) + '\n' + ip);
     const bucket = Array.from(bytes, x => x.toString(16).padStart(2, '0')).join('');
     // Public tiles retain their existing lightweight accounting/cache path.
-    const healthBytes = payload ? await sign(secret, 'health:matching') : null;
-    const healthKey = healthBytes && Array.from(healthBytes, x => x.toString(16).padStart(2, '0')).join('');
+    const healthKey = payload ? await healthKeyFor(secret) : null;
     const attemptId = payload ? crypto.randomUUID() : null;
     let budget, managed = Boolean(payload), dispatched = false, probing = false;
     const report = async (action, extra = {}) => {

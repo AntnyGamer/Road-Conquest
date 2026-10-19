@@ -1,0 +1,27 @@
+{
+  "baseline_commit": "8df48c77e33804cd2e1033c17236f368c4d5bfe6",
+  "gateway_fixture": {
+    "runtime": "local Cloudflare workerd via Miniflare 5.20261012.1-beta",
+    "requests": 200,
+    "providers": 2,
+    "concurrent": true,
+    "before": { "health_derivations": 200, "client_signatures": 200, "total_hmac_operations": 400, "upstream_calls": 200, "reservations": 200 },
+    "after": { "health_derivations": 2, "client_signatures": 200, "total_hmac_operations": 202, "upstream_calls": 200, "reservations": 200 },
+    "limitations": "Synthetic requests with stable keys in one warm handler. Reservations and upstream are stubbed. No actual provider credits or production traffic. Counts are not whole-request CPU, latency or capacity. Cache retains at most two fixed identities and re-derives evicted/rotated keys."
+  },
+  "verified_fixture": {
+    "runtime": "isolated local PostgreSQL",
+    "case": "Valid moving GPS near a cell edge; no server-derived qualifying cells",
+    "statements_including_transaction_boundaries": { "before": 10, "after": 9 },
+    "exact_committed_retry_statements": { "before": 1, "after": 1 },
+    "limitations": "Excludes HTTP authentication and maintenance. Saves an empty insertion statement, not an inserted row. Nonempty qualifying sets, including revisits, retain their original insertion/conflict path. Verified scoring is optional and currently disabled in the Android build."
+  },
+  "validation": {
+    "node": "v24.19.0",
+    "server_tests": 105,
+    "failures": 0,
+    "skips": 0,
+    "gateway_wrangler_dry_run": "passed with Wrangler 4.151.1"
+  },
+  "production_changes": false
+}
