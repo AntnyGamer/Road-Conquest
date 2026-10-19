@@ -60,24 +60,29 @@ class TownBorderRenderingDeviceTest {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             lateinit var map: MapLibreMap
             lateinit var view: MapView
+            val initialReady = CountDownLatch(1)
             val ready = CountDownLatch(1)
             scenario.onActivity { activity ->
                 MainActivity::class.java.getDeclaredMethod("stopPreviewLocation")
                     .apply { isAccessible = true }.invoke(activity)
                 view = activity.findViewById(R.id.mapView)
+                view.getMapAsync { loaded ->
+                    map = loaded
+                    map.getStyle { initialReady.countDown() }
+                }
+            }
+            assertTrue(initialReady.await(30, TimeUnit.SECONDS))
+            scenario.onActivity { activity ->
                 val renderer = MainActivity::class.java.getDeclaredField("renderer")
                     .apply { isAccessible = true }.get(activity) as MapRenderer
                 renderer.clearCurrentLocation()
-                view.getMapAsync { loaded ->
-                    map = loaded
-                    map.setStyle(Style.Builder().fromJson(
+                map.setStyle(Style.Builder().fromJson(
                         """{"version":8,"sources":{},"layers":[{"id":"white","type":"background","paint":{"background-color":"#ffffff"}}]}"""
-                    )) { style ->
-                        MapRenderer::class.java.getDeclaredMethod("installPlaceOverlayLayers", Style::class.java)
-                            .apply { isAccessible = true }.invoke(renderer, style)
-                        (style.getSource("roadconquest-town-overlay-boundaries") as GeoJsonSource).setGeoJson(borders)
-                        ready.countDown()
-                    }
+                )) { style ->
+                    MapRenderer::class.java.getDeclaredMethod("installPlaceOverlayLayers", Style::class.java)
+                        .apply { isAccessible = true }.invoke(renderer, style)
+                    (style.getSource("roadconquest-town-overlay-boundaries") as GeoJsonSource).setGeoJson(borders)
+                    ready.countDown()
                 }
             }
             assertTrue(ready.await(30, TimeUnit.SECONDS))
