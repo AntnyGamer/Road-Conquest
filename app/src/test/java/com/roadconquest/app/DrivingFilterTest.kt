@@ -82,6 +82,40 @@ class DrivingFilterTest {
         assertFalse(service.skippedFixCarriesGeometry(a, straight, end))
     }
 
+    @Test fun shortTurnKeepsItsActualApproachEvenInsideChordTolerance() {
+        val service = TrackingService()
+        val anchor = point(40.0, 10, 8f).apply { bearing = 90f }
+        val approach = point(40.0, 13, 8f).apply { longitude = -73.99992; bearing = 90f }
+        val end = point(40.000018, 14, 8f).apply { longitude = -73.99992; bearing = 0f }
+        assertFalse("A short approach was previously compressed away",
+            service.skippedFixCarriesGeometry(anchor, approach, end))
+        assertEquals(listOf(approach), service.skippedFixesToRetain(anchor, listOf(approach), end))
+    }
+
+    @Test fun straightIntervalDoesNotRestoreRedundantApproachSamples() {
+        val service = TrackingService()
+        val anchor = point(40.0, 10, 8f).apply { bearing = 90f }
+        val approach = point(40.0, 13, 8f).apply { longitude = -73.99992; bearing = 90f }
+        val end = point(40.0, 16, 8f).apply { longitude = -73.99984; bearing = 94f }
+        assertTrue(service.shouldPersistDrivingSample(anchor, end))
+        assertTrue(service.skippedFixesToRetain(anchor, listOf(approach), end).isEmpty())
+        anchor.bearing = 359f
+        end.bearing = 1f
+        assertTrue(service.skippedFixesToRetain(anchor, listOf(approach), end).isEmpty())
+    }
+
+    @Test fun approachRetentionIsBoundedAndDoesNotDuplicateCurveEvidence() {
+        val service = TrackingService()
+        val anchor = point(40.0, 10, 8f).apply { bearing = 90f }
+        val early = point(40.0, 11, 8f).apply { longitude = -73.99996; bearing = 90f }
+        val approach = point(40.0, 12, 8f).apply { longitude = -73.99992; bearing = 90f }
+        val end = point(40.000018, 14, 8f).apply { longitude = -73.99992; bearing = 0f }
+        assertEquals(listOf(approach), service.skippedFixesToRetain(anchor, listOf(early, approach), end))
+        end.latitude = 40.0002
+        assertEquals(listOf(early, approach), service.skippedFixesToRetain(anchor, listOf(early, approach), end))
+        assertTrue(service.skippedFixesToRetain(anchor, emptyList(), end).isEmpty())
+    }
+
     @Test fun backupCadenceScalesWithMatchingCapacity() {
         val start = 1_000_000L
         assertEquals(52_500L, TrackingService.remainingRemoteMatchingDelayMs(start, start, 25))

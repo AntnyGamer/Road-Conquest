@@ -387,7 +387,7 @@ class TrackingService : Service(), LocationListener {
         // uncertain fix and directional change so junctions can still be matched.
         val anchor = lastAccepted
         val importantSkipped = if (anchor != null && skippedSinceRetained.isNotEmpty()) {
-            skippedSinceRetained.filter { skippedFixCarriesGeometry(anchor, it, accepted) }
+            skippedFixesToRetain(anchor, skippedSinceRetained, accepted)
         } else emptyList()
         // Restore genuine bends before the route can be approximated by a straight chord.
         val skipStraightFix = importantSkipped.isEmpty() &&
@@ -689,8 +689,20 @@ class TrackingService : Service(), LocationListener {
             !previousSaved.hasSpeed() || !current.hasSpeed() ||
             previousSaved.speed < MIN_DRIVING_SPEED_MPS || current.speed < MIN_DRIVING_SPEED_MPS
         ) return true
-        val delta = kotlin.math.abs(((current.bearing - previousSaved.bearing + 540f) % 360f) - 180f)
+        val delta = bearingChangeDegrees(previousSaved, current)
         return !delta.isFinite() || delta >= MIN_RETAINED_BEND_DEGREES
+    }
+
+    private fun bearingChangeDegrees(from: Location, to: Location): Float =
+        kotlin.math.abs(((to.bearing - from.bearing + 540f) % 360f) - 180f)
+
+    /** Keep the last real approach fix even when a short turn is within the chord tolerance. */
+    internal fun skippedFixesToRetain(anchor: Location, skipped: List<Location>, end: Location): List<Location> {
+        val turned = anchor.hasBearing() && end.hasBearing() &&
+            bearingChangeDegrees(anchor, end) >= MIN_RETAINED_BEND_DEGREES
+        return skipped.filterIndexed { index, fix ->
+            (turned && index == skipped.lastIndex) || skippedFixCarriesGeometry(anchor, fix, end)
+        }
     }
 
     /** Reintroduce compressed samples whose path strays from the straight-line chord. */

@@ -2,6 +2,7 @@ package com.roadconquest.app.map
 
 import com.roadconquest.app.data.PlaceKind
 import org.json.JSONObject
+import org.json.JSONArray
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -13,6 +14,63 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31], manifest = Config.NONE)
 class TownOverlayPartitionTest {
+    @Test fun denselySharedBordersRemainContinuousInsteadOfTinySeparateStrokes() {
+        // Both towns contain the same densely sampled survey edge. Dissolving
+        // duplicates nodes every vertex; map tiling can discard those short pieces.
+        fun shape(west: Boolean): String {
+            val ring = JSONArray()
+            if (west) {
+                ring.put(JSONArray().put(-74.01).put(40.0))
+                for (i in 0..100) ring.put(JSONArray().put(-74.0).put(40.0 + i * 0.00001))
+                ring.put(JSONArray().put(-74.01).put(40.001))
+                ring.put(JSONArray().put(-74.01).put(40.0))
+            } else {
+                for (i in 100 downTo 0) ring.put(JSONArray().put(-74.0).put(40.0 + i * 0.00001))
+                ring.put(JSONArray().put(-73.99).put(40.0))
+                ring.put(JSONArray().put(-73.99).put(40.001))
+                ring.put(JSONArray().put(-74.0).put(40.001))
+            }
+            return JSONObject().put("type", "Polygon")
+                .put("coordinates", JSONArray().put(ring)).toString()
+        }
+        val towns = listOf(town("West", "west", 1.0, shape(true)),
+            town("East", "east", 1.0, shape(false)))
+        for (borders in listOf(TownOverlayPartition.authoritativeOutlines(towns),
+            TownOverlayPartition.render(towns).outlines,
+            TownOverlayPartition.renderOfficialUs(towns).outlines)) {
+            val lines = JSONObject(borders).getJSONArray("features").getJSONObject(0)
+                .getJSONObject("geometry").getJSONArray("coordinates")
+            assertEquals("Two outer arcs and one shared border", 3, lines.length())
+            val shared = (0 until lines.length()).map { lines.getJSONArray(it) }
+                .single { line -> (0 until line.length()).all {
+                    line.getJSONArray(it).getDouble(0) == -74.0
+                } }
+            assertEquals("Keep every real survey vertex", 101, shared.length())
+            val length = (0 until lines.length()).sumOf { index ->
+                val line = lines.getJSONArray(index)
+                (1 until line.length()).sumOf { i ->
+                    val a = line.getJSONArray(i - 1)
+                    val b = line.getJSONArray(i)
+                    kotlin.math.hypot(b.getDouble(0) - a.getDouble(0), b.getDouble(1) - a.getDouble(1))
+                }
+            }
+            assertEquals("Every edge once, including the shared separator", 0.043, length, 1e-10)
+        }
+    }
+
+    @Test fun nearbyDisconnectedTownsNeverGainAnInventedConnectingBorder() {
+        val borders = TownOverlayPartition.authoritativeOutlines(listOf(
+            town("West", "west", 1.0, square(0.0, 0.0, 1.0, 1.0)),
+            town("East", "east", 1.0, square(1.000000001, 0.0, 2.0, 1.0))))
+        val lines = JSONObject(borders).getJSONArray("features").getJSONObject(0)
+            .getJSONObject("geometry").getJSONArray("coordinates")
+        assertEquals(2, lines.length())
+        for (i in 0 until lines.length()) {
+            val line = lines.getJSONArray(i)
+            assertEquals(line.getJSONArray(0).toString(), line.getJSONArray(line.length() - 1).toString())
+        }
+    }
+
     private fun town(name: String, key: String, area: Double, polygon: String) =
         PlaceOverlayData(key, name, PlaceKind.TOWN, null, area, polygon)
 

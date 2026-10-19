@@ -11,6 +11,7 @@ import org.locationtech.jts.geom.LinearRing
 import org.locationtech.jts.geom.Polygon
 import org.locationtech.jts.geom.util.GeometryFixer
 import org.locationtech.jts.operation.union.UnaryUnionOp
+import org.locationtech.jts.operation.linemerge.LineMerger
 
 /**
  * Turn individually translucent, potentially overlapping town polygons into
@@ -104,7 +105,7 @@ internal object TownOverlayPartition {
         // one thin outline, not doubled/darkened boundary strokes.
         val lines = JSONArray()
         if (outlines.isNotEmpty()) {
-            runCatching { collectLines(UnaryUnionOp.union(outlines), lines) }
+            runCatching { collectContinuousBorders(outlines, lines) }
                 .onFailure { lines.removeAll(); outlines.forEach { collectLines(it, lines) } }
         }
         val boundaryFeatures = JSONArray()
@@ -125,14 +126,24 @@ internal object TownOverlayPartition {
         }
         val lines = JSONArray()
         if (edges.isNotEmpty()) {
-            runCatching { collectLines(UnaryUnionOp.union(edges), lines) }
-                .onFailure { edges.forEach { collectLines(it, lines) } }
+            runCatching { collectContinuousBorders(edges, lines) }
+                .onFailure { lines.removeAll(); edges.forEach { collectLines(it, lines) } }
         }
         val features = JSONArray()
         if (lines.length() > 0) {
             features.put(borderFeature(lines))
         }
         return collection(features)
+    }
+
+    private fun collectContinuousBorders(edges: List<Geometry>, lines: JSONArray) {
+        // Union removes duplicate strokes but also splits shared survey edges at
+        // every vertex. Those subpixel pieces can vanish independently during
+        // GeoJSON tiling. Rejoin degree-two nodes into continuous lines, retaining
+        // every coordinate and genuine junction. No snapping or gap filling.
+        val merger = LineMerger()
+        merger.add(UnaryUnionOp.union(edges))
+        for (line in merger.mergedLineStrings) collectLines(line as LineString, lines)
     }
 
     private fun decode(json: JSONObject): Geometry {
