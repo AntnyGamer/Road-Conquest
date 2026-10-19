@@ -136,3 +136,51 @@ This is a targeted removal of wasted matching work, not a measured fleet-wide
 savings percentage. Synthetic successful provider responses cannot establish
 physical-drive accuracy or ensure every gap resolves. The change requires an
 Android app build; there is no additional gateway deployment for this part.
+
+## Stop abandoned map work before reservation
+
+The gateway previously checked caller cancellation after reserving a slot.
+Already-abandoned matching requests could therefore reserve and refund credits,
+write permit/counter state, consume non-refundable attempt allowance and occupy
+provider queue slots. Tiles kept their lightweight accounting path, so an
+already-abandoned tile could consume a quarter-credit reservation even though
+the supplier was never contacted.
+
+Cancellation is now checked before reading a map request, before/after remote
+configuration and after asynchronous signing, all before starting a reservation.
+The same private `request_cancelled` response is returned. Active requests still
+perform every budget, pacing and dispatch check. Cancellation after reservation
+retains the existing cleanup; dispatched or ambiguous work is never refunded.
+No provider outage is inferred from a caller cancelling, and a shared config
+refresh can still finish for other active callers.
+
+The local Cloudflare **workerd** fixture compared `3cd4387` with this change.
+Each case sent 100 already-aborted requests to an isolated budget object, then
+one active request. The cancelled calls never contacted a provider in either
+version; the next active call succeeded in both versions.
+
+| Work caused by the 100 abandoned requests in each case | Before | After |
+|---|---:|---:|
+| Primary matching: internal budget requests | 200 | 0 |
+| Backup matching: internal budget requests | 200 | 0 |
+| Tiles: internal budget requests | 100 | 0 |
+| Combined SQLite rows written | 2,119 | 0 |
+| Primary/backup non-refundable attempts | 100 each | 0 each |
+| Tile quarter-credit units reserved | 100 | 0 |
+
+Including the three active follow-up requests, total internal calls fall from
+505 to 5 and rows written from 2,136 to 36. These totals include daily cleanup
+when it runs on the first active request instead of on an abandoned one.
+
+Eight regressions cover early cancellation without reading GPS bodies, aborts
+during body/config/client-signature/health-signature work, shared refreshes,
+subsequent active requests and a cancelled tile burst ahead of live matching.
+The full **118 server tests** pass with zero failures or skips, including the
+existing queue cancellation, lost acknowledgements, non-refundable attempt
+caps, dispatch and outage recovery tests. Wrangler accepts the gateway in a
+dry run. No production data, real provider traffic or deployment was used.
+
+This saves work only when cancellation is known before reservation begins.
+Actual savings depend on real cancellation frequency; these fixture counts are
+not a fleet-wide estimate or a claim that handling the HTTP request costs zero.
+It requires a maps-gateway deployment, with no additional Android change.

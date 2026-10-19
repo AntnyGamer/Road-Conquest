@@ -36,7 +36,7 @@
   },
   "validation": {
     "node": "v24.19.0",
-    "server_tests": 110,
+    "server_tests": 118,
     "failures": 0,
     "skips": 0,
     "gateway_wrangler_dry_run": "passed with Wrangler 4.151.1"
@@ -328,6 +328,205 @@
       ],
       "lint": "passed",
       "debug_build": "passed"
+    }
+  },
+  "cancellation_fixture": {
+    "baseline_commit": "3cd438782e553b2aef4a13bba28c909484a6c6d8",
+    "runtime": "local Cloudflare workerd via Miniflare 5.20261012.1-beta",
+    "before": {
+      "/primary": {
+        "requests": 100,
+        "abandoned": {
+          "budget": 200,
+          "upstream": 0,
+          "config": 1,
+          "statements": 805,
+          "rowsRead": 1401,
+          "rowsWritten": 907,
+          "usedUnits": 0,
+          "attempts": 100,
+          "responseCodes": {
+            "request_cancelled": 100
+          }
+        },
+        "nextActive": {
+          "status": 200,
+          "budgetCalls": 2,
+          "upstreamCalls": 1,
+          "rowsRead": 10,
+          "rowsWritten": 7,
+          "statements": 6,
+          "usedUnits": 4,
+          "attempts": 101
+        }
+      },
+      "/backup": {
+        "requests": 100,
+        "abandoned": {
+          "budget": 200,
+          "upstream": 0,
+          "config": 1,
+          "statements": 805,
+          "rowsRead": 1401,
+          "rowsWritten": 907,
+          "usedUnits": 0,
+          "attempts": 100,
+          "responseCodes": {
+            "request_cancelled": 100
+          }
+        },
+        "nextActive": {
+          "status": 200,
+          "budgetCalls": 2,
+          "upstreamCalls": 1,
+          "rowsRead": 10,
+          "rowsWritten": 7,
+          "statements": 6,
+          "usedUnits": 1,
+          "attempts": 101
+        }
+      },
+      "/tile": {
+        "requests": 100,
+        "abandoned": {
+          "budget": 100,
+          "upstream": 0,
+          "config": 1,
+          "statements": 106,
+          "rowsRead": 307,
+          "rowsWritten": 305,
+          "usedUnits": 100,
+          "attempts": 0,
+          "responseCodes": {
+            "request_cancelled": 100
+          }
+        },
+        "nextActive": {
+          "status": 200,
+          "budgetCalls": 1,
+          "upstreamCalls": 1,
+          "rowsRead": 3,
+          "rowsWritten": 3,
+          "statements": 1,
+          "usedUnits": 101,
+          "attempts": 0
+        }
+      }
+    },
+    "after": {
+      "/primary": {
+        "requests": 100,
+        "abandoned": {
+          "budget": 0,
+          "upstream": 0,
+          "config": 0,
+          "statements": 0,
+          "rowsRead": 0,
+          "rowsWritten": 0,
+          "usedUnits": 0,
+          "attempts": 0,
+          "responseCodes": {
+            "request_cancelled": 100
+          }
+        },
+        "nextActive": {
+          "status": 200,
+          "budgetCalls": 2,
+          "upstreamCalls": 1,
+          "rowsRead": 11,
+          "rowsWritten": 14,
+          "statements": 11,
+          "usedUnits": 4,
+          "attempts": 1
+        }
+      },
+      "/backup": {
+        "requests": 100,
+        "abandoned": {
+          "budget": 0,
+          "upstream": 0,
+          "config": 0,
+          "statements": 0,
+          "rowsRead": 0,
+          "rowsWritten": 0,
+          "usedUnits": 0,
+          "attempts": 0,
+          "responseCodes": {
+            "request_cancelled": 100
+          }
+        },
+        "nextActive": {
+          "status": 200,
+          "budgetCalls": 2,
+          "upstreamCalls": 1,
+          "rowsRead": 11,
+          "rowsWritten": 14,
+          "statements": 11,
+          "usedUnits": 1,
+          "attempts": 1
+        }
+      },
+      "/tile": {
+        "requests": 100,
+        "abandoned": {
+          "budget": 0,
+          "upstream": 0,
+          "config": 0,
+          "statements": 0,
+          "rowsRead": 0,
+          "rowsWritten": 0,
+          "usedUnits": 0,
+          "attempts": 0,
+          "responseCodes": {
+            "request_cancelled": 100
+          }
+        },
+        "nextActive": {
+          "status": 200,
+          "budgetCalls": 1,
+          "upstreamCalls": 1,
+          "rowsRead": 10,
+          "rowsWritten": 8,
+          "statements": 7,
+          "usedUnits": 1,
+          "attempts": 0
+        }
+      }
+    },
+    "combined_abandoned": {
+      "requests": 300,
+      "internal_budget_requests": {
+        "before": 500,
+        "after": 0
+      },
+      "sqlite_rows_written": {
+        "before": 2119,
+        "after": 0
+      },
+      "upstream_requests": {
+        "before": 0,
+        "after": 0
+      }
+    },
+    "validation": {
+      "new_regressions": 8,
+      "full_server_tests": 118,
+      "failures": 0,
+      "skips": 0,
+      "wrangler_dry_run": "passed"
+    },
+    "limitations": "100 synthetic already-aborted requests per isolated case. No real provider or production traffic. Savings apply only before reservation starts; this is not a fleet-wide estimate. Existing post-reservation cancellation/refund and conservative dispatch accounting remain.",
+    "totals_including_active_followups": {
+      "requests": 303,
+      "internal_budget_requests": {
+        "before": 505,
+        "after": 5
+      },
+      "sqlite_rows_written": {
+        "before": 2136,
+        "after": 36
+      },
+      "note": "Includes daily maintenance performed on the first active request when no abandoned request has started accounting."
     }
   }
 }
