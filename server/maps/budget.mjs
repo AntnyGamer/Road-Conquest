@@ -83,7 +83,10 @@ export class MapBudget {
       const until = Math.max(health?.until_ms || 0, health?.probe_until || 0);
       if (until > now) return denied('provider_cooldown', 'Map provider is recovering', 503, Math.ceil((until - now) / 1000));
     }
-    const keys = ['all', 'units:all', bucket, 'units:' + bucket, 'next-slot', 'attempts:all', 'attempts:' + bucket];
+    const keys = ['all', 'units:all', bucket, 'units:' + bucket, 'next-slot'];
+    // Tiles never consume matching-attempt counters. Loading their unused zero
+    // balances evicts useful client credit metadata from the same bounded cache.
+    if (attemptId) keys.push('attempts:all', 'attempts:' + bucket);
     const counters = new Map();
     const missing = [];
     for (const key of keys) {

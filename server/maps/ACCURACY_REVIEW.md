@@ -76,3 +76,20 @@ Source equality and fixture
 tests cannot prove accuracy parity on every physical drive. No matching threshold,
 GPS subscription, confidence rule, source coordinate or remote cadence is relaxed
 to obtain these savings.
+
+## Full resource follow-up review
+
+The subsequent [resource review](../RESOURCE_REVIEW.md) also rechecks all fourteen
+source invariants against the same starting commit. Its eight changes cover
+accounting metadata, duplicate exploration writes, unchanged encrypted account
+refreshes, boundary-cache retention/cleanup, obsolete overlay work, row-buffer
+reuse and compaction after explicit data deletion. None modifies driving or
+matching acceptance, schema, evidence retention or distance calculation.
+
+The complete local run passes **1,073 Android unit tests across 67 suites** with
+zero failures/errors/skips, Android lint and both debug app/test APK builds.
+All **122 server tests** pass against isolated PostgreSQL. A local workerd tile
+comparison preserves all 400 complete responses and final durable-state hashes,
+including matching-attempt enforcement after the tile workload. Device Keystore,
+native map rendering and optimized startup still require emulator CI; local
+unit tests and APK compilation are not substitutes for those checks.

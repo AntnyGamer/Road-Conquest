@@ -311,3 +311,12 @@ All **423 focused tests across 14 suites** pass with no failures, errors or skip
 including twelve new SDK-expanded cases. Android lint and the debug build pass.
 Fourteen source invariants still match the chat's starting commit, including the
 complete provider parsers, validator, distance calculator and database schema.
+
+## Broader resource review
+
+[Eight additional server/storage/phone improvements](RESOURCE_REVIEW.md) cover
+tile-accounting cache efficiency, boundary refresh eviction, unchanged profile
+writes, exploration-cache turnover, obsolete overlay work, retired cache files,
+export/restore allocations and explicit-deletion database compaction. The review
+separates measured work reduction from unmeasured battery/fleet effects and
+explains the one-time compaction tradeoff.

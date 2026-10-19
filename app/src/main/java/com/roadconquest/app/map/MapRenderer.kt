@@ -477,6 +477,8 @@ class MapRenderer(
         visibleTownViewport = if (kind == PlaceKind.TOWN) captureTownViewport() else null
         val cacheGeneration = PlaceOverlayCache.generation()
         overlayExecutor.execute {
+            if (destroyed || generation != overlayGeneration ||
+                cacheGeneration != PlaceOverlayCache.generation()) return@execute
             val places = runCatching { ProgressionRepository(context).visitedPlaces(kind) }
                 .getOrElse {
                     Log.e("RoadConquest", "Could not load discovered places for overlay", it)
@@ -489,6 +491,8 @@ class MapRenderer(
             val loaded = ArrayList<PlaceOverlayData>(places.size)
             val missing = ArrayList<com.roadconquest.app.data.PlaceDiscovery>()
             for (place in places) {
+                if (destroyed || generation != overlayGeneration ||
+                    cacheGeneration != PlaceOverlayCache.generation()) return@execute
                 val cached = if (UnitedStatesMunicipalBoundaries.applies(place)) {
                     PlaceOverlayCache.readOfficialUs(context, place)
                 } else PlaceOverlayCache.read(context, place)
@@ -1027,6 +1031,8 @@ class MapRenderer(
         data: List<PlaceOverlayData>,
         expectedCacheGeneration: Long
     ) {
+        if (destroyed || generation != overlayGeneration ||
+            expectedCacheGeneration != PlaceOverlayCache.generation()) return
         // Polygon conversion can be expensive for many visited municipalities.
         // Build immutable GeoJSON on overlayExecutor instead of blocking the map's UI thread.
         val viewport = if (kind == PlaceKind.TOWN && data.size >= 200) visibleTownViewport else null

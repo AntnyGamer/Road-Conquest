@@ -77,7 +77,11 @@ object AccountStore {
     fun updateIfToken(context: Context, token: String, update: (Session) -> Session): Session? {
         val current = load(context) ?: return null
         if (current.token != token) return null
-        return update(current).also { save(context, it) }
+        return update(current).also {
+            // An unchanged /me refresh needs no new AES-GCM ciphertext or disk
+            // write. Still decrypt/recheck the current session on every update.
+            if (it != current) save(context, it)
+        }
     }
 
     /**

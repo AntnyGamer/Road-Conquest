@@ -78,6 +78,13 @@ class AccountStoreDeviceTest {
             assertFalse(firstCiphertext.contains(session.token))
             assertEquals(session, AccountStore.load(context))
 
+            repeat(20) {
+                assertEquals(session, AccountStore.refreshIfUnchanged(context, session,
+                    session.username, session.leaderboardVisible))
+            }
+            assertEquals("Unchanged profile refreshes must not rewrite encrypted preferences",
+                firstCiphertext, prefs.getString("token", null))
+
             assertNull(AccountStore.updateIfToken(context, "an-old-session-token") { it.copy(username = "WrongDriver") })
             assertEquals(session, AccountStore.load(context))
             val renamed = AccountStore.updateIfToken(context, session.token) { it.copy(username = "NewDriver") }

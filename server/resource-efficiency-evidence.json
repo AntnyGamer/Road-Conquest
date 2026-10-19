@@ -1,0 +1,146 @@
+{
+  "baseline_commit": "503a286296a638e69b70db545a244431ce1d9e5c",
+  "scope": "Eight resource changes in the working tree based on this parent; source invariants also compare with the chat's starting commit.",
+  "tile_accounting": {
+    "runtime": "local Cloudflare workerd via Miniflare 5.20261012.1-beta",
+    "clients": 200,
+    "passes": 2,
+    "tile_reservations": 400,
+    "counter_cache_limit_before_and_after": 512,
+    "before": {
+      "counter_queries": 400,
+      "all_sql_executions": 808,
+      "sqlite_rows_read": 2409,
+      "sqlite_rows_written": 1411,
+      "cached_counter_entries": 512,
+      "durable_state_sha256": "02b6b753d180c208ce670b6b87c3ed9e6665b875923205a91504687ce7919ff4"
+    },
+    "after": {
+      "counter_queries": 200,
+      "all_sql_executions": 608,
+      "sqlite_rows_read": 1407,
+      "sqlite_rows_written": 1411,
+      "cached_counter_entries": 403,
+      "durable_state_sha256": "02b6b753d180c208ce670b6b87c3ed9e6665b875923205a91504687ce7919ff4"
+    },
+    "identical_complete_tile_responses": 400,
+    "subsequent_matching_attempt_cap_response": {
+      "identical": true,
+      "status": 429,
+      "headers": {
+        "cache-control": "no-store",
+        "content-type": "application/json",
+        "retry-after": "42600",
+        "x-roadconquest-error": "budget_attempts"
+      },
+      "body": {
+        "error": "Daily map attempt allowance exhausted",
+        "code": "budget_attempts"
+      }
+    },
+    "regression": "server/test/maps-budget-cache.test.mjs: tile-only traffic retains useful client counters without loading matching-attempt metadata",
+    "limits": "Synthetic uncached tile accounting, including initialization and maintenance. No provider credits or production traffic. Does not establish fleet capacity or whole-request CPU/latency. Admitted-request writes and quota caps are unchanged."
+  },
+  "boundary_dataset_refresh": {
+    "fixture": "Load two ADM1 datasets, expire/refresh the second, revisit the still-valid first, reject a point outside its geometry.",
+    "metadata_and_geometry_loads_before": 8,
+    "metadata_and_geometry_loads_after": 6,
+    "dataset_limit_before_and_after": 2,
+    "ttl_ms_before_and_after": 900000,
+    "regression": "app/src/test/java/com/roadconquest/app/map/MapProviderTest.kt: refreshingOneBoundaryDatasetKeepsTheOtherStillValidDataset",
+    "tested_android_sdks": [31, 37],
+    "baseline_regression_failed": true
+  },
+  "account_refresh": {
+    "change": "Reload/decrypt and check the current token, then skip encryption/preferences only when the updated Session equals the current Session.",
+    "regression": "app/src/androidTest/java/com/roadconquest/app/AccountStoreDeviceTest.kt: sessionTokenIsEncryptedByAndroidKeystoreAndRoundTrips",
+    "unchanged_refreshes_in_device_regression": 20,
+    "device_regression_local": "APK compiled; not executed locally. Emulator/device CI is required.",
+    "guards": "No plaintext cache. Actual saves retain fresh IVs; old-token and stale-profile protections remain."
+  },
+  "exploration_cache": {
+    "fixture": "Fill 4096 unique cells, add one new cell, revisit 100 recent cells.",
+    "capacity_per_cache_before_and_after": 4096,
+    "candidate_writes_including_initial_fill_before": 4197,
+    "candidate_writes_including_initial_fill_after": 4097,
+    "candidate_writes_after_initial_fill_before": 101,
+    "candidate_writes_after_initial_fill_after": 1,
+    "regression": "app/src/test/java/com/roadconquest/app/util/RecentCellCacheTest.kt",
+    "tests": 3,
+    "concurrency_fixture": "Four threads, 5000 operations per thread, capacity 64, with write-failure removal and retry.",
+    "limits": "Counts candidate submissions in the turnover fixture, not a fleet rate. Eviction never removes persisted exploration. Existing database validation and idempotence remain."
+  },
+  "overlay_cancellation": {
+    "change": "Check existing generation/destroy guards before queued SQL, between cached-place reads and before polygon conversion.",
+    "limits": "Current polygons, source coordinates and detail are unchanged. Already-running individual SQL/cache/conversion operations may still finish. No CPU/latency percentage measured."
+  },
+  "retired_overlay_cache": {
+    "retired_directories": ["place-overlays-v2", "place-overlays-v4-towns"],
+    "current_directories_preserved": ["place-overlays-v3", "place-overlays-v5-world-admin", "place-overlays-us-census-v1"],
+    "synthetic_retired_file_bytes": 65536,
+    "regression": "app/src/test/java/com/roadconquest/app/map/PlaceOverlayTest.kt",
+    "baseline_regression_failed": true,
+    "guards": "Fixture preserves a readable current polygon and unrelated file; repeats cleanup through explicit cache clearing.",
+    "limits": "Actual reclaimed storage depends on retired files present. No real-phone storage amount measured."
+  },
+  "snapshot_and_restore": {
+    "change": "Reuse one cleared ContentValues buffer per table instead of one new buffer per row.",
+    "guards": "Synchronous insert binding; every cursor column assigned on every row; transaction, schema, values and formats unchanged.",
+    "validation": "Existing export/import, CSV and roundtrip tests included in complete Android suite.",
+    "limits": "Allocation reduction follows code structure. No heap, CPU or battery percentage benchmark."
+  },
+  "explicit_deletion_compaction": {
+    "fixture_exploration_rows": 20000,
+    "regression": "app/src/test/java/com/roadconquest/app/data/DeletedStorageTest.kt",
+    "tested_android_sdks": [31, 37],
+    "assertions": [
+      "Compacted page count less than half of populated page count",
+      "Freelist count zero",
+      "Deletion marker cleared and stale repository generation invalidated",
+      "Fresh repository records new history successfully",
+      "Manual-only preference remains enabled"
+    ],
+    "tradeoff": "Explicit deletion may take longer and VACUUM can need temporary disk space. Busy/low-space compaction failure does not undo or fail committed deletion. Active snapshots can defer WAL truncation. No driving/startup/periodic compaction and no forensic flash-deletion claim.",
+    "official_references": ["https://www.sqlite.org/lang_vacuum.html", "https://www.sqlite.org/pragma.html#pragma_wal_checkpoint"]
+  },
+  "accuracy_source_audit": {
+    "baseline_commit": "137e398706c0caf591ac13c091634a3711fc15e2",
+    "identical_scopes": 14,
+    "scopes": [
+      "Complete matching/RoadGeometryValidator.kt",
+      "Complete matching/GeoapifyMatcher.kt",
+      "Complete matching/LocationIqMatcher.kt",
+      "Complete services/ProviderHealth.kt",
+      "Complete data/TravelDistance.kt",
+      "Complete data/AppDatabase.kt",
+      "KnownRoadReuse.identify and all edge checks",
+      "TrackingService.isUsableDrivingLocation acceptance overloads",
+      "TrackingService.skippedFixCarriesGeometry",
+      "TrackingService companion constants",
+      "TrackingRepository.drivingValues",
+      "TrackingRepository.insertLocation and insertLocations",
+      "TrackingRepository.insertLocationInTransaction",
+      "TrackingRepository.findUnambiguousPreviouslyDrivenRoadNear"
+    ],
+    "limits": "Source invariants and regression checks do not establish accuracy parity on every physical drive."
+  },
+  "local_validation": {
+    "android_unit_tests": 1073,
+    "android_unit_suites": 67,
+    "android_unit_failures": 0,
+    "android_unit_errors": 0,
+    "android_unit_skips": 0,
+    "android_lint_errors": 0,
+    "android_lint_warnings": 299,
+    "android_debug_app_build": "passed",
+    "android_debug_device_test_apk_build": "passed",
+    "server_tests": 122,
+    "server_failures": 0,
+    "server_skips": 0,
+    "server_runtime": "Node v24.19.0 and isolated PostgreSQL 17",
+    "gateway_dry_run": "passed with Wrangler 4.151.1"
+  },
+  "production_changes": false,
+  "provider_credits_used": false,
+  "limits": "No physical-device battery, whole-app performance, fleet DAU or driving-hours increase measured. Android and gateway changes require their respective build/deployment."
+}

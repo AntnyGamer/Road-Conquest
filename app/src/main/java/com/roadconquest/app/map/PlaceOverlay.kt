@@ -80,6 +80,8 @@ object PlaceOverlayCache {
     private const val TOWN_DIRECTORY = "place-overlays-v5-world-admin"
     // All states use one Census cache, independent of the worldwide OSM cache.
     private const val US_OFFICIAL_DIRECTORY = "place-overlays-us-census-v1"
+    // These formats were retired in Betas 9 and 37/38 and are never read now.
+    private val retiredDirectories = listOf("place-overlays-v2", "place-overlays-v4-towns")
     private const val NEGATIVE_CACHE_MS = 15L * 60L * 1000L
     private const val HEX_DIGITS = "0123456789abcdef"
     private val generation = AtomicLong()
@@ -129,9 +131,14 @@ object PlaceOverlayCache {
 
     private fun initialTrim(context: Context) {
         if (!initialTrimDone) {
+            clearRetiredCaches(context)
             trimCache(context)
             initialTrimDone = true
         }
+    }
+
+    private fun clearRetiredCaches(context: Context) {
+        for (name in retiredDirectories) File(context.applicationContext.filesDir, name).deleteRecursively()
     }
 
     private fun writeCacheFile(context: Context, target: File, json: JSONObject): Boolean {
@@ -327,6 +334,7 @@ object PlaceOverlayCache {
         initialTrimDone = false
         cacheBytes = 0L
         cacheFiles = 0
+        clearRetiredCaches(context)
         File(context.applicationContext.filesDir, DIRECTORY).deleteRecursively()
         File(context.applicationContext.filesDir, TOWN_DIRECTORY).deleteRecursively()
         File(context.applicationContext.filesDir, US_OFFICIAL_DIRECTORY).deleteRecursively()

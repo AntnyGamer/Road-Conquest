@@ -39,6 +39,26 @@ const snapshot = s => Object.fromEntries(['usage', 'map_permits', 'map_health'].
   [table, s.db.prepare('SELECT * FROM ' + table + ' ORDER BY 1,2').all()]));
 const response = async r => ({ status: r.status, body: await r.json(), headers: [...r.headers] });
 
+test('tile-only traffic retains useful client counters without loading matching-attempt metadata', async t => {
+  const s = store(); t.after(() => s.db.close());
+  s.db.prepare('INSERT INTO usage(day,bucket,used) VALUES(?,?,?)')
+    .run('2026-10-19', 'attempts:all', 2400);
+  for (let pass = 0; pass < 2; pass++) for (let client = 1; client <= 200; client++) {
+    const tile = { ...args(1, client), costUnits: 1 };
+    delete tile.attemptId; delete tile.healthKey;
+    assert.equal((await s.call('reserve', tile)).status, 200);
+    s.advance(1500);
+  }
+  assert.equal(s.queries.filter(q => q.includes('SELECT bucket,used')).length, 200,
+    'the second pass should reuse all 200 clients within the existing 512-entry bound');
+  assert.equal(s.sizes().counters, 403);
+  assert.equal(s.db.prepare("SELECT used FROM usage WHERE bucket='units:all'").get().used, 400);
+  const before = snapshot(s);
+  assert.equal((await s.call('reserve', args(1))).headers.get('X-RoadConquest-Error'), 'budget_attempts',
+    'matching must still load and enforce its durable non-refundable attempt balance');
+  assert.deepEqual(snapshot(s), before);
+});
+
 test('warm matching reuses bookkeeping reads without skipping quota or dispatch writes', async t => {
   const s = store(); t.after(() => s.db.close());
   for (let i = 1; i <= 200; i++) {

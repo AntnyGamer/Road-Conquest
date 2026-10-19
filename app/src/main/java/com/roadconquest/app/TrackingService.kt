@@ -37,12 +37,12 @@ import com.roadconquest.app.map.FogGrid
 import com.roadconquest.app.progression.ProgressionManager
 import com.roadconquest.app.util.LocationProviders
 import com.roadconquest.app.util.Prefs
+import com.roadconquest.app.util.RecentCellCache
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.ScheduledThreadPoolExecutor
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.ConcurrentHashMap
 
 class TrackingService : Service(), LocationListener {
     private lateinit var locationManager: LocationManager
@@ -129,9 +129,9 @@ class TrackingService : Service(), LocationListener {
     }
     private var lastExplored: Location? = null
     // Avoid repeatedly hitting SQLite for the same 50 m fog cell during one service session.
-    // The concurrent set also prevents duplicate queued writes before storageExecutor catches up.
-    private val exploredCellsThisSession = ConcurrentHashMap.newKeySet<Long>()
-    private val exploredMileCellsThisSession = ConcurrentHashMap.newKeySet<Long>()
+    // The thread-safe cache also prevents duplicate queued writes before storageExecutor catches up.
+    private val exploredCellsThisSession = RecentCellCache(MAX_EXPLORED_CELL_CACHE)
+    private val exploredMileCellsThisSession = RecentCellCache(MAX_EXPLORED_CELL_CACHE)
     private var lastPlaceCandidate: Location? = null
     @Volatile private var baselineCandidateCaptured = false
     private var baselineRequestElapsedNanos = 0L
@@ -301,9 +301,6 @@ class TrackingService : Service(), LocationListener {
         // A single stationary GPS fix does not reveal a square or count as a visit.
         if (explorationMotionConfirmed) {
             FogGrid.cell(location.latitude, location.longitude)?.let { cell ->
-                if (exploredMileCellsThisSession.size >= MAX_EXPLORED_CELL_CACHE) {
-                    exploredMileCellsThisSession.clear()
-                }
                 if (exploredMileCellsThisSession.add(cell.key)) {
                     val accepted = Location(location)
                     storageExecutor.execute {
@@ -328,9 +325,6 @@ class TrackingService : Service(), LocationListener {
             lastExplored = visited
             // Fine-grained samples also capture genuine walking, without adding road miles.
             val exploredCell = TrackingRepository.exploredCellKey(visited.latitude, visited.longitude)
-            if (exploredCell != null && exploredCellsThisSession.size >= MAX_EXPLORED_CELL_CACHE) {
-                exploredCellsThisSession.clear()
-            }
             val saveExplored = exploredCell != null && exploredCellsThisSession.add(exploredCell)
             if (saveExplored) {
                 storageExecutor.execute {

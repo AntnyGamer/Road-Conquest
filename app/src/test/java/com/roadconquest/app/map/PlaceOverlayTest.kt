@@ -22,6 +22,31 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31], manifest = Config.NONE, shadows = [PosixAtomicFileShadow::class])
 class PlaceOverlayTest {
+    @Test fun retiredBoundaryCachesAreReclaimedWithoutTouchingCurrentOrUnrelatedFiles() {
+        val context = RuntimeEnvironment.getApplication()
+        PlaceOverlayCache.clear(context)
+        val retired = listOf("place-overlays-v2", "place-overlays-v4-towns").map { File(context.filesDir, it) }
+        val unrelated = File(context.filesDir, "keep-resource-audit.txt")
+        try {
+            retired.forEach { directory -> directory.mkdirs(); File(directory, "old.json").writeText("x".repeat(32 * 1024)) }
+            unrelated.writeText("keep")
+            val place = PlaceDiscovery(PlaceKind.STATE, "gb|test", "Test Region", "", "United Kingdom", 1L, 1.0, 1.0)
+            val data = PlaceOverlayData(place.key, place.displayName, place.kind, null, 1.0,
+                """{"type":"Polygon","coordinates":[[[0,0],[2,0],[2,2],[0,2],[0,0]]]}""")
+            assertTrue(PlaceOverlayCache.write(context, place, data))
+            assertTrue("Retired formats are no longer read anywhere", retired.none { it.exists() })
+            assertEquals(data.geometryJson, PlaceOverlayCache.read(context, place).data?.geometryJson)
+            assertEquals("keep", unrelated.readText())
+            retired.forEach { it.mkdirs(); File(it, "old.json").writeText("old") }
+            PlaceOverlayCache.clear(context)
+            assertTrue("Delete-all/restore cleanup includes retired cache formats", retired.none { it.exists() })
+            assertEquals("keep", unrelated.readText())
+        } finally {
+            retired.forEach { it.deleteRecursively() }
+            unrelated.delete()
+            PlaceOverlayCache.clear(context)
+        }
+    }
     @Test fun townFillRequiresSavedFixInsideActualMunicipalPolygon() {
         val town = PlaceDiscovery(PlaceKind.TOWN, "us|new jersey|pennsauken",
             "Pennsauken Township", "New Jersey", "United States",

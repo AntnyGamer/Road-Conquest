@@ -32,8 +32,11 @@ class GeoBoundariesClient(private val loadJson: (String, Int) -> JSONObject = ::
                 val download = metadata.getString("simplifiedGeometryGeoJSON")
                 require(validDownload(download, iso3, level))
                 loadJson(download, 4 * 1024 * 1024).also {
-                    if (datasets.size >= 2) datasets.remove(datasets.keys.first())
+                    // Refreshing an existing key must not evict the other still-valid
+                    // dataset. Keep the same two-entry bound and original expiry.
+                    datasets.remove(key)
                     datasets[key] = System.currentTimeMillis() to it
+                    if (datasets.size > 2) datasets.remove(datasets.keys.first())
                 }
             }
             parse(place, data, requireContainment)

@@ -1557,8 +1557,11 @@ class TrackingRepository(context: Context) {
                     destination.execSQL(createSql)
                     source.query(table, null, null, null, null, null, null).use { cursor ->
                         val columnNames = cursor.columnNames
+                        // Inserts bind synchronously. Reuse one row buffer per table
+                        // rather than allocating a map for every saved GPS record.
+                        val row = ContentValues(columnNames.size)
                         while (cursor.moveToNext()) {
-                            val row = ContentValues(columnNames.size)
+                            row.clear()
                             columnNames.forEachIndexed { index, name ->
                                 when (cursor.getType(index)) {
                                     Cursor.FIELD_TYPE_NULL -> row.putNull(name)
@@ -1576,6 +1579,20 @@ class TrackingRepository(context: Context) {
             } finally { destination.endTransaction() }
             source.setTransactionSuccessful()
         } finally { source.endTransaction() }
+    }
+
+    /** Only the explicit stopped-data deletion flow calls this, after its deletes commit. */
+    internal fun reclaimDeletedStorage() = synchronized(dbHelper.historyLock) {
+        val db = dbHelper.writableDatabase
+        check(!db.inTransaction())
+        val freePages = db.rawQuery("PRAGMA freelist_count", null).use {
+            check(it.moveToFirst()); it.getLong(0)
+        }
+        if (freePages == 0L) return@synchronized
+        db.execSQL("VACUUM")
+        // VACUUM can shrink the logical DB while its WAL still occupies the old
+        // space. An active reader may defer truncation; never invalidate it.
+        db.rawQuery("PRAGMA wal_checkpoint(TRUNCATE)", null).use { it.moveToFirst() }
     }
 
     /** Queued pre-deletion writes become no-ops after the history generation changes. */
