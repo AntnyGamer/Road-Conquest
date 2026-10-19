@@ -24,7 +24,7 @@ internal object KnownRoadReuse {
         val remaining = markableIds - original.flatMap { it.pointIds }.toSet()
         if (remaining.isEmpty()) return original
         val evidence = repository.knownRoadEvidence(points)
-        if (evidence.size == points.size) return original
+        if (evidence.size == points.size) return withExtraApproach(repository, points, remaining, original, nearby)
         // The repository proves consecutive retained IDs and bounded original
         // samples before expansion. Give that actual sequence local ordinals so
         // identify retains every existing five-fix/edge/quality/ambiguity gate.
@@ -43,7 +43,18 @@ internal object KnownRoadReuse {
                     pointIds = previous.pointIds + mapped.pointIds, lastTimestamp = mapped.lastTimestamp)
             } else corroborated += mapped
         }
-        return original + corroborated
+        return withExtraApproach(repository, points, remaining, original + corroborated, nearby)
+    }
+
+    private fun withExtraApproach(
+        repository: TrackingRepository, points: List<TrackPoint>, pendingIds: Set<Long>,
+        visits: List<KnownRoadVisit>, nearby: (TrackPoint) -> String?
+    ): List<KnownRoadVisit> {
+        if (points.size != 4) return visits
+        val remaining = pendingIds - visits.flatMap { it.pointIds }.toSet()
+        if (remaining.isEmpty()) return visits
+        val context = repository.knownRoadApproach(points)
+        return if (context.size == points.size) visits else visits + identify(context, remaining, nearby)
     }
 
     /** Require a sustained, directionally consistent pass over one previously verified segment. */

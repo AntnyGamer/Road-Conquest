@@ -371,6 +371,21 @@ class TrackingRepository(context: Context) {
         val markableIds: Set<Long>
     )
 
+    /** One extra saved approach fix can complete the strict five-fix local proof. */
+    @Synchronized
+    internal fun knownRoadApproach(points: List<TrackPoint>): List<TrackPoint> = synchronized(dbHelper.historyLock) {
+        if (historyGeneration != dbHelper.historyGeneration || points.size != 4 || points.first().id <= 1L)
+            return@synchronized points
+        val previous = dbHelper.readableDatabase.query(
+            "track_points", TRACK_COLUMNS, "id = ?", arrayOf((points.first().id - 1L).toString()),
+            null, null, null, "1"
+        ).use { if (it.moveToFirst()) it.toTrackPoint() else null }
+        if (previous == null || !previous.matched ||
+            points.first().timestampMillis - previous.timestampMillis !in 1..12_000L
+        ) return@synchronized points
+        listOf(previous) + points // Local-only context; never changes the provider window.
+    }
+
     /** Original compressed-out fixes are local evidence only, never online work. */
     @Synchronized
     internal fun knownRoadEvidence(points: List<TrackPoint>): List<TrackPoint> = synchronized(dbHelper.historyLock) {

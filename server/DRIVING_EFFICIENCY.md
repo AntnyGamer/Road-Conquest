@@ -252,3 +252,28 @@ lookup and bounded metadata cost; no schema, provider-limit or cadence change.
 separate actual request avoidance from conditional daily-hour/driver estimates,
 and account for shared raster-tile spend, repairs and denser retained GPS.
 This part requires an Android build, with no additional gateway change.
+
+## Avoid singleton lookups on already-verified roads
+
+A single pending fix with three matched approach fixes previously fell one
+actual sample short of the strict five-fix local rule. For this four-sample case
+only, the local matcher may read one immediately preceding matched record. It
+must be adjacent and within the existing continuity limit, then pass the same
+accuracy, speed, heading, span, snap and ambiguity checks. This extra context is
+never added to the provider request, and it never becomes eligible work.
+
+The SDK 31/37 service fixture feeds 100 genuine saved fixes after four matched
+approach samples. Online matcher invocations fall from two to zero, keeping all
+104 GPS records and the one verified road. Missing, unmatched/deferred, stale,
+reversed-time, inaccurate, wrong-heading, high-speed, off-road or ambiguous
+context cannot establish the proof. When a request is still needed, it contains
+exactly the original samples. The provider reply is stubbed; this is targeted
+request avoidance, with no additional fleet-capacity multiplier claimed.
+
+All **411 focused matching/accuracy tests** pass with no failures, errors or
+skips, including the new ten SDK-expanded cases. Android lint and the debug build
+pass. The [accuracy review](maps/ACCURACY_REVIEW.md) covers the earlier work in
+this chat as well: core validators, GPS acceptance, distance calculations,
+tracking constants and source data remain intact. This adds one small local
+lookup for an unresolved four-fix window, with no new cache or schema. It
+requires an Android build; no additional gateway deployment is needed.

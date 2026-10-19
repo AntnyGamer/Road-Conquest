@@ -750,5 +750,119 @@
       "https://developers.cloudflare.com/durable-objects/platform/pricing/",
       "https://developer.android.com/google/play/integrity/setup#increase-daily"
     ]
+  },
+  "known_road_singleton_fixture": {
+    "baseline_commit": "b52fa5629611f75ea42245423702cb985c127117",
+    "runtime": "Real Android tracking service and SQLite repository via Robolectric SDK 31 and 37; online matcher stubbed",
+    "initial_matched_approach_fixes": 4,
+    "offered_saved_fixes": 100,
+    "before": {
+      "online_matcher_invocations": 2
+    },
+    "after": {
+      "online_matcher_invocations": 0,
+      "network_clock_updated": false
+    },
+    "retained_gps_records": 104,
+    "existing_roads": 1,
+    "new_context": "Only an unresolved four-fix window may read one immediately preceding matched record; the unchanged five-fix rule must accept it",
+    "unchanged_online_request_on_failed_proof": true,
+    "new_metadata_cache": false,
+    "new_schema": false,
+    "source_audit": {
+      "baseline": "137e398706c0caf591ac13c091634a3711fc15e2",
+      "checked_head": "b52fa5629611f75ea42245423702cb985c127117",
+      "checks": [
+        {
+          "path": "matching/RoadGeometryValidator.kt",
+          "scope": "complete file",
+          "identical": true
+        },
+        {
+          "path": "matching/GeoapifyMatcher.kt",
+          "scope": "complete file",
+          "identical": true
+        },
+        {
+          "path": "matching/LocationIqMatcher.kt",
+          "scope": "complete file",
+          "identical": true
+        },
+        {
+          "path": "services/ProviderHealth.kt",
+          "scope": "complete file",
+          "identical": true
+        },
+        {
+          "path": "matching/KnownRoadReuse.kt",
+          "scope": "/** Require a sustained",
+          "identical": true
+        },
+        {
+          "path": "TrackingService.kt",
+          "scope": "private fun isUsableDrivingLocation(",
+          "identical": true
+        },
+        {
+          "path": "TrackingService.kt",
+          "scope": "internal fun skippedFixCarriesGeometry(",
+          "identical": true
+        },
+        {
+          "path": "data/TrackingRepository.kt",
+          "scope": "private fun drivingValues(",
+          "identical": true
+        },
+        {
+          "path": "data/TrackingRepository.kt",
+          "scope": "fun insertLocation(",
+          "identical": true
+        },
+        {
+          "path": "data/TrackingRepository.kt",
+          "scope": "private fun insertLocationInTransaction(",
+          "identical": true
+        },
+        {
+          "path": "data/TrackingRepository.kt",
+          "scope": "fun findUnambiguousPreviouslyDrivenRoadNear(",
+          "identical": true
+        },
+        {
+          "path": "TrackingService.kt",
+          "scope": "companion object {",
+          "identical": true
+        },
+        {
+          "path": "data/TravelDistance.kt",
+          "scope": "complete file",
+          "identical": true
+        },
+        {
+          "path": "data/AppDatabase.kt",
+          "scope": "complete file",
+          "identical": true
+        }
+      ],
+      "limit": "Source invariants and regression checks do not establish accuracy parity on every physical drive."
+    },
+    "validation": {
+      "focused_android_tests": 411,
+      "suites": 13,
+      "new_sdk_expanded_cases": 10,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "lint": "passed",
+      "debug_build": "passed",
+      "previous_highway_ci": {
+        "url": "https://github.com/AntnyGamer/RoadConquest-Beta/actions/runs/39265811849",
+        "android_unit_tests": 1043,
+        "failures": 0,
+        "errors": 0,
+        "skips": 0
+      }
+    },
+    "limitations": "Synthetic known-road sequence and stubbed online reply. Measures targeted online-request avoidance; no measured fleet reuse share, additional daily-hour multiplier or physical-drive accuracy-parity claim."
   }
 }

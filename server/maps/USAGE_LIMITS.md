@@ -69,6 +69,16 @@ cases cover source association, restarts/eviction, exact original acceptance,
 missing IDs, clock changes, excessive/duplicate data, bad quality, parallel roads,
 new roads and the service comparison. Android lint and the debug build pass.
 
+A further local-only fix supplies one immediately adjacent, already-matched
+approach fix when the current online window contains exactly four samples. The
+unchanged five-fix acceptance rule can then prove a known-road singleton without
+a paid request. No extra sample is added to the online window, and uncertain,
+missing, unmatched, stale or ambiguous context still requires the original
+request. A 100-fix stream fixture avoids two online matcher invocations while
+preserving all 104 records and one verified road. Provider replies are stubbed;
+these counts are not added as another fleet capacity multiplier.
+See the [accuracy review](ACCURACY_REVIEW.md) for the previous changes as well.
+
 ## Reproducible hours and daily-driver planning
 
 Run `node server/tools/driving-capacity.mjs` from the repository root. Options
