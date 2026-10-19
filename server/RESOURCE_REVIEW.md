@@ -60,7 +60,9 @@ does not add a compaction step to test setup or normal repository maintenance.
 The Android Keystore device regression now repeats twenty unchanged profile
 refreshes and requires the encrypted token preference to remain identical.
 Existing cases still require fresh IVs for actual saves and reject old tokens.
-That device test requires emulator/device CI; compiling its APK is not execution.
+The [combined CI at 587b8ae](https://github.com/AntnyGamer/RoadConquest-Beta/actions/runs/39274583015)
+executed all nine native cases on Android 12, 15 and 17, including that Keystore
+test and actual border continuity at three zoom levels. All 27 cases passed.
 
 ## Compaction tradeoff
 
@@ -103,3 +105,56 @@ quota/verification rule was used for an additional saving.
 
 Nothing is deployed or released. Android changes need a new app build; the tile
 accounting change needs a maps-gateway deployment.
+
+## Further review based on 587b8ae
+
+Five additional changes remove repeated work outside the matching algorithm:
+
+| Area | Change and protection |
+|---|---|
+| Recent trip browsing | Read descending IDs in keyset pages, initially 512 rows and growing to 8,192 for long drives. Keep grouping across pages, exact IDs/times/counts/distances, singleton exclusion, free/VIP limits and reset-generation checks. New GPS appends cannot enter an older page. |
+| Provisional route rendering | Compare complete immutable GeoJSON collections before another native source update. Changed coordinates or properties still publish; style installation resets the comparison. Missing sources and synchronous failures remain retryable. Expiry scheduling and all matching/confirmed geometry stay unchanged. |
+| Private GPX exports | Apply the existing inclusive endpoint time bounds in SQL as well as retaining the writer's guard. Hidden endpoints need not cross the cursor/JVM boundary. Trip-ID bounds, row ordering, privacy padding, output format, entitlement and reset checks stay unchanged. |
+| Weekly reward refresh | Read owned reward keys before inserting and omit already-owned milestones. Keep the same write transaction, unique keys, thresholds, payouts, current/previous-week grace and historical records. Missing rewards still earn normally. |
+| Verification JSON buffers | Decode a single bounded response chunk through its exact byte-range view. Multi-chunk UTF-8 still joins before decoding; size checks and error classification remain. No verification rule, attestation call or quota changes. |
+
+Android's `SQLiteCursor` requests the complete SQL result count during its first
+window fill. Stopping the Kotlin loop therefore did not stop the old unbounded
+history query. The official [Android implementation](https://android.googlesource.com/platform/frameworks/base/+/refs/heads/main/core/java/android/database/sqlite/SQLiteCursor.java)
+supports the bounded-query change. This does not trim stored history or downsample
+replay/driving data.
+
+A local SQLite result-projection probe with 200,000 fixes and 100 requested
+two-point trips evaluates **200,000 rows before versus 512 after**, in one query
+in both versions, with identical 100 trip results. This is query-work evidence,
+not an Android latency, physical I/O or battery measurement.
+
+Long scans can issue more bounded queries. A 20,000-point drive, three singleton
+stops and one older trip keep all 20,023 scanned rows and both trips, using six
+queries instead of one. Growing pages to 8,192 limits cursor churn; no row limit
+is used to discard an unfinished trip. Android regression cases separately cover
+20,000-row archives and a whole 20,000-point drive across pages on SDKs 31 and 37.
+
+The publication fixture sends 100 newly constructed identical collections: the
+publisher invokes the native-update callback once. A one-billionth-degree
+coordinate change, property change, clearing and style reset still update.
+One prior collection is retained for exact comparison; no coordinate rounding,
+lossy fingerprint or reduced refresh cadence is used.
+
+A SQLite BEFORE INSERT probe records **40 conflicting reward attempts before
+versus zero after** across 20 refreshes of two owned road goals. Deleting one
+reward then produces exactly one replacement award and the original balance.
+Both old SDK-expanded cases failed the zero-attempt assertion before the fix.
+The probe counts attempted statements/rows, not a production WAL saving: SQLite
+could already ignore conflicts without rewriting the reward rows themselves.
+
+The verification-buffer regression records **one joined-buffer copy before
+versus zero after** for a single-chunk reply. Sliced buffers, split multibyte UTF-8,
+exact byte limits, oversized bodies and malformed/error responses remain covered.
+It failed against the original implementation. All 123 server tests pass against
+isolated PostgreSQL, including the optional verified-scoring paths.
+
+The same fourteen driving/matching source invariants still match the chat's
+starting commit. Full Android validation is recorded in the PR and
+[follow-up evidence](resource-followup-evidence.json). These changes do not
+increase supplier credits or change the DAU/driving-hours planning assumptions.

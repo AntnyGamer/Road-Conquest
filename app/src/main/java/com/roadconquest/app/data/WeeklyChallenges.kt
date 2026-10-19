@@ -72,10 +72,17 @@ object WeeklyChallenges {
                         WeeklyChallenge("towns", "Explore 3 new towns", towns, 3, 300, false)
                     )
                     val keys = challenges.map { "weekly:$week:${it.id}" }
+                    val rewarded = HashSet<String>(challenges.size)
+                    db.rawQuery(
+                        "SELECT reward_key FROM progression_rewards WHERE reward_key IN (?,?,?,?)",
+                        keys.toTypedArray()
+                    ).use { cursor ->
+                        while (cursor.moveToNext()) rewarded.add(cursor.getString(0))
+                    }
                     // Insert every newly qualified reward in one atomic SQL
                     // statement. IGNORE still prevents a second payout per key.
                     val earned = challenges.indices.filter {
-                        challenges[it].progress >= challenges[it].target
+                        challenges[it].progress >= challenges[it].target && keys[it] !in rewarded
                     }
                     if (earned.isNotEmpty()) {
                         val values = ArrayList<Any>(earned.size * 3)
@@ -89,13 +96,9 @@ object WeeklyChallenges {
                                 List(earned.size) { "(?,?,?)" }.joinToString(","),
                             values.toTypedArray()
                         )
-                    }
-                    val rewarded = HashSet<String>(challenges.size)
-                    db.rawQuery(
-                        "SELECT reward_key FROM progression_rewards WHERE reward_key IN (?,?,?,?)",
-                        keys.toTypedArray()
-                    ).use { cursor ->
-                        while (cursor.moveToNext()) rewarded.add(cursor.getString(0))
+                        // The write transaction owns these keys; all inserted
+                        // values meet the schema and IGNORE retains uniqueness.
+                        earned.forEach { rewarded.add(keys[it]) }
                     }
                     return challenges.mapIndexed { index, challenge ->
                         challenge.copy(rewarded = keys[index] in rewarded)

@@ -57,28 +57,44 @@ class TripHistoryRepository(context: Context) {
                 output += SavedTrip(firstId, lastId, firstTime, lastTime, count, distance, generation)
             }
         }
-        db.rawQuery(
-            "SELECT id, timestamp_ms, distance_m FROM track_points ORDER BY id DESC", null
-        ).use { cursor ->
-            while (cursor.moveToNext() && output.size < limit) {
-                val id = cursor.getLong(0)
-                val time = cursor.getLong(1)
-                val meters = cursor.getDouble(2)
-                if (count != 0 && isTripBoundary(lastTime = firstTime, olderTime = time)) {
-                    addCurrent()
-                    count = 0
-                    distance = 0.0
-                    if (output.size >= limit) break
+        // SQLiteCursor counts the entire SQL result when first filling its window,
+        // even if Kotlin stops after a few trips. Keyset pages bound that work.
+        // These columns are immutable during tracking; new fixes append above the
+        // first page. Restore/deletion still invalidate the generation below.
+        var beforeId: Long? = null
+        var pageSize = RECENT_TRIP_PAGE_SIZE
+        while (output.size < limit) {
+            var rows = 0
+            val where = if (beforeId == null) "" else " WHERE id < ?"
+            db.rawQuery(
+                "SELECT id, timestamp_ms, distance_m FROM track_points$where ORDER BY id DESC LIMIT $pageSize",
+                beforeId?.let { arrayOf(it.toString()) }
+            ).use { cursor ->
+                while (cursor.moveToNext() && output.size < limit) {
+                    val id = cursor.getLong(0)
+                    beforeId = id
+                    rows++
+                    val time = cursor.getLong(1)
+                    val meters = cursor.getDouble(2)
+                    if (count != 0 && isTripBoundary(lastTime = firstTime, olderTime = time)) {
+                        addCurrent()
+                        count = 0
+                        distance = 0.0
+                        if (output.size >= limit) break
+                    }
+                    if (count == 0) {
+                        lastId = id
+                        lastTime = time
+                    }
+                    firstId = id
+                    firstTime = time
+                    count++
+                    if (meters.isFinite() && meters > 0.0) distance += meters
                 }
-                if (count == 0) {
-                    lastId = id
-                    lastTime = time
-                }
-                firstId = id
-                firstTime = time
-                count++
-                if (meters.isFinite() && meters > 0.0) distance += meters
             }
+            if (rows < pageSize) break
+            // Long drives use larger bounded pages instead of hundreds of tiny cursors.
+            pageSize = minOf(pageSize * 2, MAX_RECENT_TRIP_PAGE_SIZE)
         }
         if (output.size < limit) addCurrent()
         // A device-data reset can complete while this independent snapshot is
@@ -149,8 +165,9 @@ class TripHistoryRepository(context: Context) {
             writer.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
             writer.write("<gpx version=\"1.1\" creator=\"Road Conquest\" xmlns=\"http://www.topografix.com/GPX/1/1\">\n<trk><name>Road Conquest drive</name>\n")
             snapshot.rawQuery(
-                "SELECT latitude, longitude, timestamp_ms FROM track_points WHERE id BETWEEN ? AND ? ORDER BY id ASC",
-                arrayOf(trip.firstId.toString(), trip.lastId.toString())
+                "SELECT latitude, longitude, timestamp_ms FROM track_points WHERE id BETWEEN ? AND ? " +
+                    "AND timestamp_ms BETWEEN ? AND ? ORDER BY id ASC",
+                arrayOf(trip.firstId.toString(), trip.lastId.toString(), from.toString(), until.toString())
             ).use { cursor ->
                 while (cursor.moveToNext()) {
                     // A reset or restore must cancel this old trip's export.
@@ -234,6 +251,8 @@ class TripHistoryRepository(context: Context) {
         }
 
     companion object {
+        internal const val RECENT_TRIP_PAGE_SIZE = 512
+        private const val MAX_RECENT_TRIP_PAGE_SIZE = 8192
         internal const val TRIP_GAP_MS = 15 * 60_000L
         internal fun isTripBoundary(lastTime: Long, olderTime: Long): Boolean =
             olderTime > lastTime || lastTime - olderTime >= TRIP_GAP_MS

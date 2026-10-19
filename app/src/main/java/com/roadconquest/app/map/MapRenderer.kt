@@ -144,7 +144,7 @@ class MapRenderer(
     private var displayedRoadFeatures = EMPTY_FEATURES
     // A newly installed GeoJSON source already contains EMPTY_FEATURES. Avoid sending the
     // same empty data over the native bridge on every viewport/GPS refresh.
-    private var pendingRouteSourceIsEmpty = true
+    private val pendingRoutePublisher = DistinctGeoJson(EMPTY_FEATURES)
     private var displayedPlaces = doubleArrayOf()
     private var savedGridCoordinates = doubleArrayOf()
     private var loadedRoadBounds: RoadQueryBounds? = null
@@ -1267,18 +1267,19 @@ class MapRenderer(
     }
 
     private fun applyPendingRoute(features: FeatureCollection, hasPending: Boolean) {
-        // The native source starts empty after each style install. Only upload an empty
-        // collection once when clearing a previously nonempty preview; preserve every
-        // nonempty update so new/changed corners are still shown immediately.
-        if (!hasPending && pendingRouteSourceIsEmpty) return
-        val source = map.style?.getSource(PENDING_ROUTE_SOURCE_ID) as? GeoJsonSource ?: return
-        source.setGeoJson(if (hasPending) features else EMPTY_FEATURES)
-        pendingRouteSourceIsEmpty = !hasPending
+        // Equality checks every feature/coordinate, without a lossy fingerprint.
+        // An unchanged retry trail needs no new JNI serialization/native retiling.
+        pendingRoutePublisher.publish(if (hasPending) features else EMPTY_FEATURES) { next ->
+            val source = map.style?.getSource(PENDING_ROUTE_SOURCE_ID) as? GeoJsonSource
+                ?: return@publish false
+            source.setGeoJson(next)
+            true
+        }
     }
 
     private fun installRecordedRouteLayer(style: Style) {
         style.addSource(GeoJsonSource(PENDING_ROUTE_SOURCE_ID, EMPTY_FEATURES))
-        pendingRouteSourceIsEmpty = true
+        pendingRoutePublisher.reset()
         // Pending evidence is raw GPS, not final road geometry. Keep a faint, narrow
         // provisional trace so the map never appears to have a random hole while the online matcher is
         // resolving the interval. Confirmed traveled roads remain thicker and nearly opaque,
