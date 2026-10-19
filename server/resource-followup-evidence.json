@@ -75,7 +75,14 @@
     "server_failures": 0,
     "server_skips": 0,
     "server_database": "isolated local PostgreSQL 17",
-    "android_full_run": "in progress; final results are recorded in the PR"
+    "android_unit_tests": 1082,
+    "android_suites": 68,
+    "android_failures_errors_skipped": 0,
+    "android_lint_and_debug_builds": "passed",
+    "completed_ci_head": "31e09840d2e60a2312162a1cc7ba6be7dd85bfc8",
+    "completed_ci": "https://github.com/AntnyGamer/RoadConquest-Beta/actions/runs/39314700779",
+    "ci_native_tests": 27,
+    "ci_release_packaging_and_startup_apis_31_37": "passed; publication skipped"
   },
   "production_changes": false,
   "limits": "No measured physical-device battery percentage, whole-app speedup, new supplier allowance, DAU capacity or daily driving-hours gain."

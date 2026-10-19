@@ -638,6 +638,52 @@ class TrackingRepositoryTest {
         assertEquals(600L, after.single().lastDrivenAt)
     }
 
+    @Test fun containedAndExtendingMatcherWindowsAvoidReplacingTheSameVisit() {
+        val geometry = "[[-74,40],[-74.001,40]]"
+        fun match(start: Long, end: Long) = repository.upsertRoads(
+            listOf(MatchedRoad("Visit write probe", geometry, start, end, 0.99))
+        )
+        match(1_000_000L, 1_030_000L)
+        val db = repository.readableDatabase()
+        db.execSQL("CREATE TABLE visit_write_probe (kind TEXT NOT NULL)")
+        for (kind in listOf("INSERT", "DELETE", "UPDATE")) {
+            db.execSQL("CREATE TRIGGER visit_probe_$kind AFTER $kind ON road_visits " +
+                "BEGIN INSERT INTO visit_write_probe VALUES ('$kind'); END")
+        }
+        fun writes(): Map<String, Int> = db.rawQuery(
+            "SELECT kind,COUNT(*) FROM visit_write_probe GROUP BY kind", null
+        ).use { cursor ->
+            buildMap { while (cursor.moveToNext()) put(cursor.getString(0), cursor.getInt(1)) }
+        }
+        try {
+            // Even a contained retry must still repair old/inaccurate visit metadata.
+            db.execSQL("UPDATE roads SET drive_count=7,drive_count_exact=1")
+            repeat(20) { match(1_005_000L, 1_025_000L) }
+            assertEquals(emptyMap<String, Int>(), writes())
+            val repaired = repository.getRoadsInBounds(41.0, -73.0, 39.0, -75.0).single()
+            assertEquals(1, repaired.timesDriven)
+            assertFalse(repaired.timesDrivenExact)
+
+            match(990_000L, 1_040_000L)
+            assertEquals(mapOf("UPDATE" to 1), writes())
+            db.rawQuery("SELECT started_at,ended_at FROM road_visits", null).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals(990_000L, cursor.getLong(0))
+                assertEquals(1_040_000L, cursor.getLong(1))
+                assertFalse(cursor.moveToNext())
+            }
+            // A spanning window must still collapse multiple stored visits.
+            match(2_000_000L, 2_030_000L)
+            db.execSQL("DELETE FROM visit_write_probe")
+            match(1_030_000L, 2_010_000L)
+            assertEquals(mapOf("DELETE" to 2, "INSERT" to 1), writes())
+            assertEquals(1, repository.getRoadsInBounds(41.0, -73.0, 39.0, -75.0).single().timesDriven)
+        } finally {
+            for (kind in listOf("INSERT", "DELETE", "UPDATE")) db.execSQL("DROP TRIGGER visit_probe_$kind")
+            db.execSQL("DROP TABLE visit_write_probe")
+        }
+    }
+
     @Test fun overlappingMatcherRetryDoesNotInflateTimesDriven() {
         val geometry = "[[-74,40],[-74.001,40]]"
         repository.upsertRoads(listOf(MatchedRoad("Main St", geometry, 100, 200, 1.0)))

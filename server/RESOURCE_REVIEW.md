@@ -158,3 +158,75 @@ The same fourteen driving/matching source invariants still match the chat's
 starting commit. Full Android validation is recorded in the PR and
 [follow-up evidence](resource-followup-evidence.json). These changes do not
 increase supplier credits or change the DAU/driving-hours planning assumptions.
+
+## Deeper review based on 31e0984
+
+Five more changes remove repeated writes and phone work:
+
+| Area | Change and protection |
+|---|---|
+| Road visit persistence | After the existing merge/departure algorithm finishes, keep a single unchanged interval or update its endpoints in place. New visits and merges of multiple existing visits retain insertion/deletion. Always recount and repair road visit metadata, including legacy inaccurate counts. |
+| Friend acceptance retries | Update only pending incoming requests. An already accepted incoming relationship keeps its successful response without another PostgreSQL tuple version. Keep both participant locks, the same database round trips, reciprocal consent, missing-request errors and notification behavior. |
+| Municipal discovery cache | Load town metadata once per batch, but read/decompress/parse a polygon only after the existing state filter accepts it. Cache geometry only within that batch and precompute each town's state code. Preserve exact containment, holes, boundary points, state aliases, ambiguity fallback and immediate reuse of newly verified towns. Subdivisions and legacy keys still cannot bypass authoritative lookup. |
+| Trip replay | Index existing recording breaks once when loading a route. Seeking uses those ranges rather than rescanning every previous point. Keep every existing sampled coordinate, route prefix, backward-seek behavior and recording gap. |
+| Weekly reminders | Setting the same PendingIntent replaces its alarm, avoiding a separate cancel call when scheduling. Disabling reminders or revoking permission still cancels. Keep Monday/time-zone calculation, inexact timing, idle behavior and boot/package rescheduling. |
+
+The Android SQLite trigger probe observes **20 deletes plus 20 inserts before,
+zero interval writes after** for 20 contained match completions. The old code
+fails this assertion on SDKs 31 and 37. Extending one interval now uses one UPDATE;
+merging two intervals still deletes both and inserts their union. The fixture
+also deliberately corrupts a road's count/exactness metadata and confirms it is
+repaired even when its interval does not change. These are interval-row operation
+counts; road metadata and point resolution still write when required.
+
+The PostgreSQL regression submits 20 concurrent repeated accepts for each ID
+orientation. The accepted row's `xmin`, requester, creation timestamp and consent
+remain unchanged. The old code changes `xmin` after the retries. Requester-side
+self-acceptance and acceptance after removal still fail; only newly created
+requests send a notification. This avoids retry-related tuple churn and maintenance,
+not request rate-limit reservations or GPS-provider credits.
+
+The municipal-cache fixture has 200 entries across four states. Six fixes in
+one state invoke only its 50 geometry loaders once, leaving the other states unread.
+Moving to a state with two overlapping incorporated towns loads those two
+polygons and immediately requires authoritative lookup. Holes still exclude a
+fix and exact outer-boundary fixes remain contained. The production context
+loader uses the same lazy geometry wrapper; fixture load attempts do not measure
+physical file I/O or battery. Cache metadata/lazy wrappers add a small per-town
+allocation in exchange for avoiding unrelated full polygon allocations.
+
+For a 5,000-point replay, preparation reads 4,999 break flags once and 10,000
+forward/backward seeks read no further point objects. An exhaustive fixture
+compares every break combination for routes of up to nine points, at all prefixes
+and backward positions, against the frozen original algorithm. The index retains
+one range per drawable segment; native source serialization still occurs when
+the visible route changes. No replay accuracy or native-rendering speedup is
+inferred from the break-scan count.
+
+Android documents that an alarm with the same IntentSender is replaced by a new
+`set` call, and that `setAndAllowWhileIdle` follows `set` scheduling semantics:
+[AlarmManager reference](https://developer.android.com/reference/android/app/AlarmManager).
+Existing notification tests also cover duplicate initialization, opt-out,
+permission revocation and Monday/DST calculation.
+
+The fourteen original driving/matching source invariants still match
+`137e398706c0caf591ac13c091634a3711fc15e2`. Ten additional comparisons against
+`31e0984` confirm unchanged visit merging/departure checks, visit metadata repair,
+known-road completion, road upsert decisions, exact containment, official Census
+lookup, map renderer, trip queries and resolver behavior after the cache class.
+Regression outcomes and final validation are recorded in
+[resource-deep-review-evidence.json](resource-deep-review-evidence.json).
+
+All **1,088 Android unit tests across 68 suites** and **124 server tests** pass
+with zero failures, errors or skips. Android lint has zero errors and 299 warnings,
+unchanged from the prior run. Debug app/device-test APKs and the account Function
+bundle build successfully. Server cases use isolated local PostgreSQL without
+production database or map-provider traffic. Previous complete CI at `31e0984`
+also passed release packaging, 27 native map/Keystore/persistence cases across
+APIs 31/35/37 and optimized-release startup on APIs 31/37; new-head CI is tracked
+separately in the PR.
+
+No production service, quota, sampling rate, confidence threshold, geometry
+precision, history retention, version number or release configuration changes.
+These targeted savings do not establish a new DAU/driving-hours capacity or a
+measured physical-device battery percentage.

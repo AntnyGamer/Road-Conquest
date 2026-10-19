@@ -35,6 +35,7 @@ class OptionalServicesTest {
         assertFalse(CrashReporting.enabled(app))
         assertFalse(OptionalNotifications.acceptsFriend(app, "friend_request", "stale"))
         OptionalNotifications.initialize(app)
+        OptionalNotifications.initialize(app)
         assertEquals(1, Shadows.shadowOf(app.getSystemService(AlarmManager::class.java)).scheduledAlarms.size)
         assertTrue(FirebaseApp.getApps(app).isEmpty())
     }
@@ -63,6 +64,10 @@ class OptionalServicesTest {
         Shadows.shadowOf(app).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
         OptionalNotifications.initialize(app)
         assertEquals(1, alarms.scheduledAlarms.size)
+        Shadows.shadowOf(app).denyPermissions(Manifest.permission.POST_NOTIFICATIONS)
+        WeeklyReminderReceiver.schedule(app)
+        assertTrue("Revoking permission must cancel an already scheduled reminder", alarms.scheduledAlarms.isEmpty())
+        Shadows.shadowOf(app).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
         assertNotNull(OptionalNotifications.prepareBinding(app, "a-login"))
         assertFalse(CrashReporting.enabled(app))
     }

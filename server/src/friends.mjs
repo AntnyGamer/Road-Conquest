@@ -54,10 +54,17 @@ export function createFriends(pool, notifyRequest = async () => {}) {
           if (!existed && !inserted) throw new EvidenceError("Friend/request limit reached.", 409);
           if (inserted) notificationTarget = target.id;
         } else if (action === "accept") {
-          const updated = await db.query(
-            "UPDATE friendships SET accepted = TRUE WHERE user_low = $1 AND user_high = $2 AND requested_by <> $3", [...pair, user.id]
-          );
-          if (!updated.rowCount) throw new EvidenceError("No incoming request to accept.", 409);
+          // The participant locks still serialize changes. Retries keep their
+          // successful response without creating another PostgreSQL row version.
+          const decision = await db.query(`WITH updated AS (
+            UPDATE friendships SET accepted=TRUE
+            WHERE user_low=$1 AND user_high=$2 AND requested_by<>$3 AND NOT accepted
+            RETURNING 1
+          ) SELECT EXISTS(SELECT 1 FROM updated) OR EXISTS(
+            SELECT 1 FROM friendships WHERE user_low=$1 AND user_high=$2
+              AND requested_by<>$3 AND accepted
+          ) AS accepted`, [...pair, user.id]);
+          if (!decision.rows[0].accepted) throw new EvidenceError("No incoming request to accept.", 409);
         } else {
           await db.query("DELETE FROM friendships WHERE user_low = $1 AND user_high = $2", pair);
         }

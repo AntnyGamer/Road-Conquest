@@ -1196,22 +1196,37 @@ class TrackingRepository(context: Context) {
             }
         } while (changed)
 
-        merged.forEach { (start, end) ->
-            db.delete(
+        val single = merged.singleOrNull()
+        if (single != null) {
+            // Most overlapping batches extend one existing visit or are already
+            // contained in it. Keep that row rather than deleting and reinserting
+            // it. All merging/departure checks above and metadata repair below
+            // still run, including for legacy inaccurate drive counts.
+            if (single.first != mergedStart || single.second != mergedEnd) {
+                check(db.update("road_visits", ContentValues().apply {
+                    put("started_at", mergedStart)
+                    put("ended_at", mergedEnd)
+                }, "segment_id = ? AND started_at = ? AND ended_at = ?",
+                    arrayOf(segmentId, single.first.toString(), single.second.toString())) == 1)
+            }
+        } else {
+            merged.forEach { (start, end) ->
+                db.delete(
+                    "road_visits",
+                    "segment_id = ? AND started_at = ? AND ended_at = ?",
+                    arrayOf(segmentId, start.toString(), end.toString())
+                )
+            }
+            db.insertOrThrow(
                 "road_visits",
-                "segment_id = ? AND started_at = ? AND ended_at = ?",
-                arrayOf(segmentId, start.toString(), end.toString())
+                null,
+                ContentValues().apply {
+                    put("segment_id", segmentId)
+                    put("started_at", mergedStart)
+                    put("ended_at", mergedEnd)
+                }
             )
         }
-        db.insertOrThrow(
-            "road_visits",
-            null,
-            ContentValues().apply {
-                put("segment_id", segmentId)
-                put("started_at", mergedStart)
-                put("ended_at", mergedEnd)
-            }
-        )
         val count = db.rawQuery(
             "SELECT COUNT(*) FROM road_visits WHERE segment_id = ?",
             arrayOf(segmentId)

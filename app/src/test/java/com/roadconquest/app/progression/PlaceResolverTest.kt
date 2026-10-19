@@ -17,6 +17,9 @@ import java.util.Locale
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31, 37], manifest = Config.NONE)
 class PlaceResolverTest {
+    private fun cached(place: PlaceDiscovery, polygon: JSONObject) =
+        PlaceResolver.VerifiedMunicipalCache.CachedPolygon(place) { polygon }
+
     private val candidate = PendingPlaceCandidate(
         cellX = 1, cellY = 2, latitude = 39.824, longitude = -75.125,
         visitedAt = 1000L, attempts = 0
@@ -198,7 +201,7 @@ class PlaceResolverTest {
         var loads = 0
         val cache = PlaceResolver.VerifiedMunicipalCache {
             loads++
-            mutableListOf(town to rectangle)
+            mutableListOf(cached(town, rectangle))
         }
         for (index in 0 until 6) {
             val fix = town.copy(latitude = 39.815 + index * 0.001, longitude = -75.025,
@@ -229,7 +232,7 @@ class PlaceResolverTest {
             [-75.04,39.83],[-75.04,39.81]
         ]]}""")
         val cache = PlaceResolver.VerifiedMunicipalCache {
-            mutableListOf(town to polygon)
+            mutableListOf(cached(town, polygon))
         }
         assertEquals(town.key, cache.find(town.copy(
             parentName = "New Jersey", visitedAt = 2000L
@@ -256,8 +259,8 @@ class PlaceResolverTest {
             latitude = 40.0, longitude = -82.95, visitedAt = 3000L
         )
         for (ordered in listOf(
-            mutableListOf(countySubdivision to outer, incorporated to inner),
-            mutableListOf(incorporated to inner, countySubdivision to outer)
+            mutableListOf(cached(countySubdivision, outer), cached(incorporated, inner)),
+            mutableListOf(cached(incorporated, inner), cached(countySubdivision, outer))
         )) {
             val cache = PlaceResolver.VerifiedMunicipalCache { ordered }
             // An incorporated town always wins over overlapping county
@@ -280,10 +283,10 @@ class PlaceResolverTest {
             [-83.0,40.1],[-83.0,39.9]
         ]]}""")
         assertNull(PlaceResolver.VerifiedMunicipalCache {
-            mutableListOf(oldKey to polygon)
+            mutableListOf(cached(oldKey, polygon))
         }.find(oldKey))
         assertNull(PlaceResolver.VerifiedMunicipalCache {
-            mutableListOf(subdivision to polygon)
+            mutableListOf(cached(subdivision, polygon))
         }.find(subdivision))
     }
 
@@ -313,6 +316,44 @@ class PlaceResolverTest {
             stateLookup = { _, _ -> null },
             townLookup = { throw AssertionError("No US state means no town lookup") }
         ))
+    }
+
+    @Test fun otherStatesStayUnloadedWhileRelevantPolygonsKeepExactContainmentAndAmbiguity() {
+        val seed = PlaceDiscovery(PlaceKind.TOWN, "us|new jersey|census-4-3400001", "City",
+            "New Jersey", "United States", 1000L, 39.82, -75.03)
+        val polygon = JSONObject("""{"type":"Polygon","coordinates":[[
+            [-75.04,39.81],[-75.02,39.81],[-75.02,39.83],[-75.04,39.83],[-75.04,39.81]
+        ],[
+            [-75.035,39.815],[-75.025,39.815],[-75.025,39.825],[-75.035,39.825],[-75.035,39.815]
+        ]]}""")
+        val loads = mutableMapOf<String, Int>()
+        var ambiguous = false
+        val states = listOf("New Jersey", "Texas", "California", "Maine")
+        val cache = PlaceResolver.VerifiedMunicipalCache {
+            states.flatMap { state ->
+                (0 until 50).map { i ->
+                    val place = seed.copy(key = "us|$state|census-4-$i", parentName = state)
+                    PlaceResolver.VerifiedMunicipalCache.CachedPolygon(place) {
+                        loads[state] = (loads[state] ?: 0) + 1
+                        if (i == 0 || (i == 1 && ambiguous)) polygon else null
+                    }
+                }
+            }.toMutableList()
+        }
+        val inside = seed.copy(latitude = 39.812, longitude = -75.03)
+        repeat(6) { i ->
+            assertEquals("us|New Jersey|census-4-0", cache.find(inside.copy(parentName = "NJ", visitedAt = i.toLong()))?.key)
+        }
+        assertEquals(mapOf("New Jersey" to 50), loads)
+        assertNull("A hole still excludes the fix", cache.find(seed))
+        assertEquals("us|New Jersey|census-4-0", cache.find(seed.copy(latitude = 39.81))?.key)
+        ambiguous = true
+        assertNull("Two incorporated polygons still require a fresh official lookup",
+            cache.find(inside.copy(parentName = "Texas")))
+        assertEquals(mapOf("New Jersey" to 50, "Texas" to 2), loads)
+        // The ambiguity early return need not read the other 48 Texas shapes.
+        assertNull(cache.find(inside.copy(parentName = "Texas")))
+        assertEquals(mapOf("New Jersey" to 50, "Texas" to 2), loads)
     }
 
     @Test fun newTownBecomesReusableImmediatelyWithoutReloading() {
