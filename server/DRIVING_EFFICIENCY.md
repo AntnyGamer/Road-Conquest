@@ -67,7 +67,7 @@ This relies on the existing Durable Object being the sole active owner/writer
 of its private storage. Cloudflare documents this pattern for
 [in-memory state initialized from storage](https://developers.cloudflare.com/durable-objects/best-practices/access-durable-objects-storage/)
 and the rollback behavior of
-[synchronous SQLite transactions](https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/#transactions).
+[synchronous SQLite transactions](https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/#transactionsync).
 The new caches contain only metadata already held by this object, never GPS,
 trace fingerprints or provider responses. They add a small bounded memory cost.
 
