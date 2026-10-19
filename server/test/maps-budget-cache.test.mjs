@@ -58,6 +58,81 @@ test('warm matching reuses bookkeeping reads without skipping quota or dispatch 
   assert.equal((await s.call('reserve', { ...args(201), limit: 800, ipLimit: 800 })).status, 429);
 });
 
+test('known global exhaustion avoids client counter reads while retaining durable replay checks', async t => {
+  const s = store(); t.after(() => s.db.close());
+  for (let i = 1; i <= 300; i++) {
+    assert.equal((await s.call('reserve', { ...args(i, i), limit: 1200, ipLimit: 1200 })).status, 200);
+    s.advance(1500);
+  }
+  const before = snapshot(s), start = s.queries.length;
+  // The first 100 clients have fallen out of the bounded cache. Another 100
+  // have no durable counters yet. Neither needs reading to prove global denial.
+  for (let i = 1; i <= 200; i++) {
+    const input = { ...args(300 + i, i <= 100 ? i : 300 + i), limit: 1200, ipLimit: 1200 };
+    assert.deepEqual(await response(await s.call('reserve', input)), {
+      status: 429,
+      body: { error: 'Daily map allowance exhausted', code: 'budget_global' },
+      headers: [...Response.json({}, { headers: { 'Cache-Control': 'no-store', 'Retry-After': '42750',
+        'X-RoadConquest-Error': 'budget_global' } }).headers]
+    });
+  }
+  const queries = s.queries.slice(start);
+  assert.equal(queries.filter(q => q.includes('SELECT bucket,used')).length, 0);
+  assert.equal(queries.filter(q => q.includes('FROM map_permits')).length, 200,
+    'unknown attempt IDs must still consult durable replay history');
+  assert.ok(queries.every(q => q.startsWith('SELECT')), 'denials never change durable state');
+  assert.deepEqual(snapshot(s), before);
+});
+
+test('early global denial respects exact request cost, current caps, cold state and UTC rollover', async t => {
+  const s = store(); t.after(() => s.db.close());
+  s.db.prepare('INSERT INTO usage(day,bucket,used) VALUES(?,?,?)').run('2026-10-19', 'all', 2);
+  const input = { ...args(1, 2), limit: 9, ipLimit: 9 };
+  const reads = () => s.queries.filter(q => q.includes('SELECT bucket,used')).length;
+  assert.equal((await s.call('reserve', input)).headers.get('X-RoadConquest-Error'), 'budget_global');
+  assert.equal(reads(), 1, 'cold state must load historical whole-credit and unit balances');
+  assert.equal((await s.call('reserve', { ...input, ...args(2, 3), limit: 9, ipLimit: 9 })).status, 429);
+  assert.equal(reads(), 1, 'both cached global balances prove the second denial');
+  const tile = { ...input, bucket: key(4), costUnits: 1 };
+  delete tile.attemptId; delete tile.healthKey;
+  assert.equal((await s.call('reserve', tile)).status, 200, 'a remaining quarter-credit still admits a tile');
+  assert.equal((await s.call('reserve', { ...args(3, 5), limit: 13, ipLimit: 13 })).status, 200,
+    'raising the cap takes effect immediately');
+  assert.equal((await s.call('reserve', { ...args(4, 6), limit: 9, ipLimit: 9 })).status, 429);
+  s.restart();
+  const before = reads();
+  assert.equal((await s.call('reserve', { ...args(5, 7), limit: 13, ipLimit: 13 })).status, 429);
+  assert.equal(reads(), before + 1, 'restart cannot trust a prior in-memory balance');
+  s.advance(86_400_000);
+  assert.equal((await s.call('reserve', { ...args(6, 8), limit: 9, ipLimit: 9 })).status, 200);
+  assert.equal(s.db.prepare("SELECT used FROM usage WHERE bucket='units:all'").get().used, 4);
+  assert.equal(s.db.prepare("SELECT COUNT(*) n FROM usage WHERE day='2026-10-19'").get().n, 0);
+});
+
+test('global denial preserves replay, conflict and health precedence and reloads refunded balances', async t => {
+  const s = store(); t.after(() => s.db.close());
+  const first = { ...args(1), limit: 16, ipLimit: 16, costUnits: 8 };
+  const second = { ...first, ...args(2, 2), limit: 16, ipLimit: 16, costUnits: 8 };
+  assert.equal((await s.call('reserve', first)).status, 200);
+  assert.equal((await s.call('reserve', second)).status, 200);
+  const next = { ...args(3, 3), limit: 16, ipLimit: 16 };
+  assert.equal((await s.call('reserve', next)).headers.get('X-RoadConquest-Error'), 'budget_global');
+  assert.equal((await s.call('reserve', first)).status, 200, 'a valid replay cannot be denied by spent quota');
+  assert.equal((await s.call('reserve', { ...first, bucket: key(4) })).headers.get('X-RoadConquest-Error'),
+    'budget_conflict', 'conflict detection must precede quota rejection');
+  assert.equal((await s.call('cancel', second)).status, 200);
+  const reads = s.queries.filter(q => q.includes('SELECT bucket,used')).length;
+  assert.equal((await s.call('reserve', next)).status, 200, 'refund invalidation must reopen available credits');
+  assert.equal(s.queries.filter(q => q.includes('SELECT bucket,used')).length, reads + 1);
+  assert.equal((await s.call('dispatch', first)).status, 200);
+  assert.equal((await s.call('failure', { ...first, status: 503 })).status, 200);
+  const exhausted = { ...args(4, 5), limit: 12, ipLimit: 12 };
+  assert.equal((await s.call('reserve', exhausted)).headers.get('X-RoadConquest-Error'), 'provider_cooldown');
+  s.advance(2000);
+  assert.equal((await s.call('reserve', exhausted)).headers.get('X-RoadConquest-Error'), 'budget_global');
+  assert.equal(s.db.prepare("SELECT used FROM usage WHERE bucket='attempts:all'").get().used, 3);
+});
+
 test('rollback invalidates warmed counters and mutated permits before a retry', async t => {
   const s = store(); t.after(() => s.db.close());
   const first = args(1);

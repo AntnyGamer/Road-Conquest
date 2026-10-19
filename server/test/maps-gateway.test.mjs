@@ -136,7 +136,7 @@ test('durable reservations persist across instances and enforce global and clien
   assert.equal((await reserve(restarted, 'a')).status, 429);
   assert.equal((await reserve(restarted, 'b')).status, 200);
   assert.equal((await reserve(restarted, 'c')).status, 429);
-  assert.equal(counterReads, 4, 'Restart and uncached clients reload counters; denied requests make no reservation');
+  assert.equal(counterReads, 3, 'Restart and eligible uncached clients reload counters; known global denial needs no client read');
   assert.equal(cleanupReads, 2, 'A restarted object reads one durable cleanup marker');
   assert.equal(pruneCalls, 1, 'Restart does not rescan current-day tables');
   assert.equal(insertStatements, 3, 'Quota-rejected requests never write counters');

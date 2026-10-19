@@ -184,3 +184,51 @@ This saves work only when cancellation is known before reservation begins.
 Actual savings depend on real cancellation frequency; these fixture counts are
 not a fleet-wide estimate or a claim that handling the HTTP request costs zero.
 It requires a maps-gateway deployment, with no additional Android change.
+
+## Skip caller-counter reads when global rejection is already known
+
+Compared with `510ac86`, the budget object avoids loading missing client
+counters when its existing authoritative global balances already prove the
+current request cannot fit. Both the historical whole-credit and current unit
+balances must be present. Cold/restarted objects and invalidated refund balances
+still load SQLite. This uses the existing bounded cache, with no new retained
+state, expiry or rejection cache.
+
+Permit replay/conflict checks and provider cooldowns still run first. The normal
+global-limit check returns the same status, body and headers. The proof uses the
+current cap and this request's actual cost, so a rejected matching request cannot
+block a cheaper tile that still fits. Cap increases, refunds, UTC rollover and
+storage-error invalidation retain their existing behavior. No admitted request
+skips its counter writes or other eligibility checks.
+
+The actual budget code ran before/after in local Cloudflare **workerd**. Each
+primary, backup and tile case first admitted 300 synthetic client reservations,
+then rejected 100 previously seen clients evicted from the cache and 100 new
+clients. Setup work is excluded from the following rejection-only counts:
+
+| Work for the 200 rejected requests in each case | Before | After |
+|---|---:|---:|
+| Primary: caller-counter queries / all SQL executions | 200 / 400 | 0 / 200 |
+| Backup: caller-counter queries / all SQL executions | 200 / 400 | 0 / 200 |
+| Tiles: caller-counter queries / all SQL executions | 200 / 200 | 0 / 0 |
+| Combined runtime SQLite rows read | 2,300 | 0 |
+| Combined runtime SQLite rows written | 0 | 0 |
+
+All 600 responses matched exactly, including `Retry-After`. Complete durable
+state matched before/after rejection and after recovery/next-day cleanup. Every
+unknown matching attempt still performed its durable replay lookup. Recreating
+each object forced one counter query before rejection; matching refunds, live
+tile-cap increases and next-day reservations then admitted work correctly.
+
+Three new regressions also cover exact costs, historical balances, bounded
+eviction, replay/conflict/health precedence and refunds. The full **121 server
+tests** pass with zero failures or skips, including the existing 1,200-operation
+warm/cold comparison and rollback tests. Wrangler accepts the bundle in a dry
+run. The previous combined CI run at `510ac86` passed all 1,019 Android unit
+tests, lint/build, native map checks on Android 12/15/17 and release startup on
+Android 12/17; this follow-up changes only gateway code/tests and evidence.
+
+These are synthetic exhausted-budget results, with no provider or production
+traffic. They measure rejection accounting, not normal driving, whole-server
+CPU, billing or additional provider capacity. The HTTP handling and replay
+checks still have a cost. This requires a maps-gateway deployment.

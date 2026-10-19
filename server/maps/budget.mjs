@@ -91,14 +91,18 @@ export class MapBudget {
         remember(this.counterCache, key, this.counterCache.get(key), 512));
       else missing.push(key);
     }
-    if (missing.length) {
+    const used = key => counters.get(key) || 0;
+    // Known global balances can prove rejection without loading a new/evicted
+    // client's counters. Refunds invalidate units:all, forcing a fresh read.
+    const globalExhausted = counters.has('all') && counters.has('units:all') &&
+      used('all') * 4 + used('units:all') + costUnits > limit;
+    if (missing.length && !globalExhausted) {
       const stored = new Map([...this.sql.exec(
         'SELECT bucket,used FROM usage WHERE day = ? AND bucket IN (' + missing.map(() => '?').join(',') + ')',
         day, ...missing
       )].map(row => [row.bucket, row.used]));
       for (const key of missing) counters.set(key, remember(this.counterCache, key, stored.get(key) || 0, 512));
     }
-    const used = key => counters.get(key) || 0;
     if (used('all') * 4 + used('units:all') + costUnits > limit)
       return denied('budget_global', 'Daily map allowance exhausted', 429, Math.ceil((DAY - now % DAY) / 1000));
     if (used(bucket) * 4 + used('units:' + bucket) + costUnits > ipLimit)

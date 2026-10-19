@@ -528,5 +528,129 @@
       },
       "note": "Includes daily maintenance performed on the first active request when no abandoned request has started accounting."
     }
+  },
+  "global_denial_fixture": {
+    "baseline_commit": "510ac8694e2d9e8e37e9e4066c4d928f828e0cda",
+    "runtime": "local Cloudflare workerd via Miniflare 5.20261012.1-beta",
+    "case": "Global allowance filled across 300 clients; 100 evicted previous clients and 100 new clients rejected per provider/tile case",
+    "cases": {
+      "primary": {
+        "setup_reservations": 300,
+        "denied_requests": 200,
+        "before": {
+          "statements": 400,
+          "counterQueries": 200,
+          "permitQueries": 200,
+          "rowsRead": 800,
+          "rowsWritten": 0
+        },
+        "after": {
+          "statements": 200,
+          "counterQueries": 0,
+          "permitQueries": 200,
+          "rowsRead": 0,
+          "rowsWritten": 0
+        },
+        "identical_responses_including_headers": 200,
+        "unchanged_durable_state_on_denial": true,
+        "identical_initial_and_final_durable_state": true,
+        "cold_restart_counter_queries": 1,
+        "recovery_status": 200,
+        "next_utc_day_status": 200
+      },
+      "backup": {
+        "setup_reservations": 300,
+        "denied_requests": 200,
+        "before": {
+          "statements": 400,
+          "counterQueries": 200,
+          "permitQueries": 200,
+          "rowsRead": 800,
+          "rowsWritten": 0
+        },
+        "after": {
+          "statements": 200,
+          "counterQueries": 0,
+          "permitQueries": 200,
+          "rowsRead": 0,
+          "rowsWritten": 0
+        },
+        "identical_responses_including_headers": 200,
+        "unchanged_durable_state_on_denial": true,
+        "identical_initial_and_final_durable_state": true,
+        "cold_restart_counter_queries": 1,
+        "recovery_status": 200,
+        "next_utc_day_status": 200
+      },
+      "tile": {
+        "setup_reservations": 300,
+        "denied_requests": 200,
+        "before": {
+          "statements": 200,
+          "counterQueries": 200,
+          "permitQueries": 0,
+          "rowsRead": 700,
+          "rowsWritten": 0
+        },
+        "after": {
+          "statements": 0,
+          "counterQueries": 0,
+          "permitQueries": 0,
+          "rowsRead": 0,
+          "rowsWritten": 0
+        },
+        "identical_responses_including_headers": 200,
+        "unchanged_durable_state_on_denial": true,
+        "identical_initial_and_final_durable_state": true,
+        "cold_restart_counter_queries": 1,
+        "recovery_status": 200,
+        "next_utc_day_status": 200
+      }
+    },
+    "rejection_only_totals": {
+      "denied_requests": 600,
+      "caller_counter_queries": {
+        "before": 600,
+        "after": 0
+      },
+      "all_sql_executions": {
+        "before": 1000,
+        "after": 400
+      },
+      "sqlite_rows_read": {
+        "before": 2300,
+        "after": 0
+      },
+      "sqlite_rows_written": {
+        "before": 0,
+        "after": 0
+      }
+    },
+    "validation": {
+      "new_regressions": 3,
+      "full_server_tests": 121,
+      "failures": 0,
+      "skips": 0,
+      "wrangler_dry_run": "passed",
+      "prior_combined_ci": {
+        "commit": "510ac8694e2d9e8e37e9e4066c4d928f828e0cda",
+        "url": "https://github.com/AntnyGamer/RoadConquest-Beta/actions/runs/39200565032",
+        "conclusion": "success",
+        "android_unit_tests": 1019,
+        "android_failures": 0,
+        "android_errors": 0,
+        "android_skips": 0,
+        "native_map_android": [
+          12,
+          15,
+          17
+        ],
+        "release_startup_android": [
+          12,
+          17
+        ]
+      }
+    },
+    "limitations": "Synthetic exhausted-budget requests: 100 evicted previous clients plus 100 new clients per case after 300 allowed reservations. No upstream/provider/production traffic. Measures rejection-accounting SQL only, not normal-drive savings, total CPU, billing or provider capacity."
   }
 }
