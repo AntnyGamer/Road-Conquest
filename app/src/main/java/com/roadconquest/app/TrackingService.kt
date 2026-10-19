@@ -905,15 +905,20 @@ class TrackingService : Service(), LocationListener {
                 }
                 // The 25-point backup has its own shorter capacity-based cadence.
                 val submittedPointLimit = matcher.lastUsedProviderPointLimit
+                val submittedPointIds = points.take(submittedPointLimit).map { it.id }
+                val submittedPendingIds = window.markableIds intersect submittedPointIds.toSet()
                 if (result == null) {
-                    noMatchBackoff.clear(window.markableIds)
+                    noMatchBackoff.clear(submittedPendingIds)
                     val providerCooldown = matcher.rateLimitRemainingMs()
                     if (!matcher.unavailable && providerCooldown == 0L && points.size >= 20) {
                         adaptiveMatchPointLimit = maxOf(10, points.size / 2)
                         successfulShortMatches = 0
                     }
                     repository.deferMatching(
-                        window.markableIds,
+                        // A primary outage can fall back from a full window to
+                        // a 25-fix prefix. A rejected backup prefix is no evidence
+                        // against the remaining fixes; retain their eligibility.
+                        submittedPendingIds,
                         System.currentTimeMillis() +
                             maxOf(MATCH_RETRY_AFTER_FAILURE_MS, providerCooldown)
                     )
@@ -951,8 +956,7 @@ class TrackingService : Service(), LocationListener {
                 }
 
                 // A backup receives just the prefix; never defer unsent fixes.
-                val submittedPointIds = points.take(submittedPointLimit).map { it.id }
-                val unresolvedIds = (window.markableIds intersect submittedPointIds.toSet()) - resolvedIds
+                val unresolvedIds = submittedPendingIds - resolvedIds
                 if (unresolvedIds.isNotEmpty()) {
                     // Repeated *valid* NoMatch responses for identical GPS/context evidence
                     // do not justify the same paid request every seven minutes. The first
