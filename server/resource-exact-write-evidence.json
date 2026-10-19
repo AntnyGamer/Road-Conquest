@@ -1,0 +1,79 @@
+{
+  "baseline_commit": "221a0cb22bdbc875743c8b67ae4f65dd5f3d13bf",
+  "changes": 4,
+  "road_metadata": {
+    "matching_completions": 20,
+    "road_metadata_values_compared": 9,
+    "before_update_trigger_events": 40,
+    "after_update_trigger_events": 0,
+    "baseline_expected_failures": 2,
+    "android_sdks": [31, 37],
+    "guards": ["Exact geometry string", "One-billionth-degree coordinate change", "Display-name case change", "Bounds repair", "Legacy count and exactness repair", "Earliest and latest times", "Six older locally matched fixes resolved without regressing last-driven time"],
+    "regression": "app/src/test/java/com/roadconquest/app/data/TrackingRepositoryTest.kt",
+    "extra_database_queries": 0,
+    "limits": "Adds exact comparisons and bindings to avoid unchanged writes. Trigger events are row-operation evidence, not measured Android disk bytes or battery. Grouping, visit recounting, point resolution, transactions and generation checks remain."
+  },
+  "isolated_sqlite_wal": {
+    "runtime": "Node v24.19.0 / SQLite 3.53.3",
+    "geometry_coordinates": 2000,
+    "transactions": 20,
+    "triggers_installed": false,
+    "road_indexes": ["last_driven_at", "min_lat,max_lat,min_lon,max_lon", "road_group_id"],
+    "before_statement_row_changes": 40,
+    "after_statement_row_changes": 0,
+    "before_wal_bytes": 329632,
+    "after_wal_bytes": 0,
+    "identical_final_road": true,
+    "limits": "Only affected statements in a local SQLite fixture, with SQL metadata columns read from current source. Not an Android filesystem, latency, physical-device battery, whole-app or fleet-capacity measurement."
+  },
+  "csv_restore": {
+    "gps_rows": 500,
+    "road_rows": 4,
+    "checks": ["Every CSV entry round-trips identically", "Mixed matching/retry fields", "Varied numeric fields", "Derived road bounds", "Quoted and Unicode names"],
+    "row_buffer_allocation": "One cleared ContentValues per CSV table replaces one per record.",
+    "regression": "app/src/test/java/com/roadconquest/app/export/DataImporterTest.kt",
+    "limits": "Allocation reduction follows the loop structure; no allocation profiler or device speed percentage. All conversions, validation, checksums, limits, cancellation, transactions and reset protections remain."
+  },
+  "notification_digest": {
+    "algorithm_and_encoding": "SHA-256 over the same UTF-8 bytes, lowercase hexadecimal",
+    "formatter_calls_per_digest_before": 32,
+    "formatter_calls_per_digest_after": 0,
+    "standard_known_hash_checked": true,
+    "additional_inputs_compared_to_original_formatter": 259,
+    "regression": "app/src/test/java/com/roadconquest/app/OptionalServicesTest.kt",
+    "limits": "Format construction count from source, not a physical-device benchmark. Stored values, account binding and all consent/registration rules are unchanged."
+  },
+  "rejected_notification_oauth": {
+    "before_rejected_body_cancel_requests": 0,
+    "after_rejected_body_cancel_requests": 1,
+    "baseline_regression_failed": true,
+    "checks": ["Rejected cleanup keeps original failure", "Never-finishing cleanup does not delay failure", "Failure is not cached", "Later refresh recovers"],
+    "regression": "server/test/notifications.test.mjs",
+    "limits": "Releases unused network resources, without removing authorization attempts, changing credentials/expiry or claiming a provider-quota saving. No production Google requests were made."
+  },
+  "source_audit": {
+    "original_baseline": "137e398706c0caf591ac13c091634a3711fc15e2",
+    "original_driving_matching_scopes_identical": 14,
+    "additional_scopes_identical_to_221a0cb": 12,
+    "additional_scopes": ["Upsert geometry/grouping decisions and values", "Road grouping and identity", "Visit merging and interval persistence", "GPS departure checks", "Bounds, geometry keys and segment IDs", "Restore validation and schema columns", "Notification consent/registration flow", "Strict known-road reuse", "RoadGrouping", "MapRenderer", "PlaceResolver", "Server notification encryption/registration/delivery/limits"]
+  },
+  "validation": {
+    "focused_android_cases": 185,
+    "focused_android_failures_errors_skips": 0,
+    "server_tests": 125,
+    "server_failures_errors_skips": 0,
+    "server_database": "Isolated local PostgreSQL 17",
+    "server_function_bundle": "passed",
+    "full_android_tests": 1094,
+    "full_android_suites": 68,
+    "full_android_failures_errors_skips": 0,
+    "android_lint_errors": 0,
+    "android_lint_warnings": 299,
+    "debug_app_build": "passed",
+    "debug_device_test_apk_build": "passed"
+  },
+  "schema_quota_gps_sampling_matching_confidence_or_history_retention_changes": false,
+  "production_changes": false,
+  "references": ["https://www.sqlite.org/lang_expr.html", "https://www.sqlite.org/datatype3.html#type_conversions_prior_to_comparison"],
+  "limits": "No guaranteed physical-device battery percentage, whole-app speedup, DAU capacity or daily driving-hour increase."
+}

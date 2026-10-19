@@ -638,6 +638,63 @@ class TrackingRepositoryTest {
         assertEquals(600L, after.single().lastDrivenAt)
     }
 
+    @Test fun unchangedRoadMetadataAvoidsWritesButChangedValuesAndLegacyCountsStillPersist() {
+        val geometry = "[[-74,40],[-73.999,40]]"
+        val matched = MatchedRoad("Metadata probe", geometry, 1_000_000L, 2_000_000L, 0.99)
+        repository.upsertRoads(listOf(matched))
+        val db = repository.readableDatabase()
+        db.execSQL("CREATE TABLE road_update_probe (value INTEGER)")
+        db.execSQL("CREATE TRIGGER road_update_probe_trigger AFTER UPDATE ON roads " +
+            "BEGIN INSERT INTO road_update_probe VALUES (1); END")
+        fun writes() = db.rawQuery("SELECT COUNT(*) FROM road_update_probe", null).use {
+            assertTrue(it.moveToFirst()); it.getInt(0)
+        }
+        fun road() = repository.getRoadsInBounds(41.0, -73.0, 39.0, -75.0).single()
+        try {
+            repeat(20) { repository.upsertRoads(listOf(matched)) }
+            assertEquals("Unchanged road rows must not be rewritten", 0, writes())
+            val exactGeometry = "[[-74,40],[-73.998999999,40.000000001]]"
+            repository.upsertRoads(listOf(matched.copy(name = "METADATA PROBE", coordinatesJson = exactGeometry)))
+            assertEquals(1, writes())
+            assertEquals("METADATA PROBE", road().name)
+            assertEquals(exactGeometry, road().geometryJson)
+            db.rawQuery("SELECT max_lat,max_lon FROM roads", null).use {
+                assertTrue(it.moveToFirst())
+                assertEquals(40.000000001, it.getDouble(0), 0.0)
+                // Bounds use the existing circular-longitude arithmetic; the
+                // exact input geometry above must still match byte for byte.
+                assertEquals(-73.998999999, it.getDouble(1), 1e-12)
+            }
+            // A legacy/corrupt count still needs repair even when all other fields match.
+            db.execSQL("UPDATE roads SET drive_count=9,drive_count_exact=1,min_lat=35")
+            db.execSQL("DELETE FROM road_update_probe")
+            repository.upsertRoads(listOf(matched.copy(name = "METADATA PROBE", coordinatesJson = exactGeometry)))
+            assertEquals(2, writes()) // Bounds repair and count/exactness repair.
+            assertEquals(1, road().timesDriven)
+            assertFalse(road().timesDrivenExact)
+            val earlier = matched.copy(firstTimestamp = 990_000L, lastTimestamp = 2_010_000L)
+            repository.upsertRoads(listOf(earlier))
+            assertEquals(990_000L, road().firstUnlockedAt)
+            assertEquals(2_010_000L, road().lastDrivenAt)
+            // Late local reuse resolves all fixes without rewriting a newer
+            // last-driven time or the unchanged visit count.
+            val ids = (0 until 6).map { index -> repository.insertLocation(Location("gps").apply {
+                latitude = 40.0; longitude = -74.0 + index * 0.0001
+                accuracy = 3f; speed = 8f; bearing = 90f; time = 1_500_000L + index * 6_000L
+            }) }
+            val window = repository.loadMatchingWindow(100)
+            val reused = com.roadconquest.app.matching.KnownRoadReuse.find(repository, window.points, window.markableIds)
+            db.execSQL("DELETE FROM road_update_probe")
+            assertEquals(6, repository.completeKnownRoadVisits(reused))
+            assertEquals(ids, reused.flatMap { it.pointIds })
+            assertEquals(0, writes())
+            assertEquals(2_010_000L, road().lastDrivenAt)
+        } finally {
+            db.execSQL("DROP TRIGGER road_update_probe_trigger")
+            db.execSQL("DROP TABLE road_update_probe")
+        }
+    }
+
     @Test fun containedAndExtendingMatcherWindowsAvoidReplacingTheSameVisit() {
         val geometry = "[[-74,40],[-74.001,40]]"
         fun match(start: Long, end: Long) = repository.upsertRoads(

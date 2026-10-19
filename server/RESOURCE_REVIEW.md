@@ -230,3 +230,63 @@ No production service, quota, sampling rate, confidence threshold, geometry
 precision, history retention, version number or release configuration changes.
 These targeted savings do not establish a new DAU/driving-hours capacity or a
 measured physical-device battery percentage.
+
+## Exact write and buffer cleanup based on 221a0cb
+
+Four further changes preserve existing results while avoiding repeated work:
+
+| Area | Change and protections |
+|---|---|
+| Road metadata | Update an existing road only when one of its nine persisted metadata/geometry values differs. Compare the exact geometry string in SQLite; grouping, collision handling, bounds calculation and earliest/latest timestamps still run. Always recount visits, but write count/exactness only when they need to change. A late known-road completion updates last-driven time only when it advances. All point resolution, history-generation guards and write transactions remain. |
+| CSV restore staging | Reuse one cleared ContentValues buffer per CSV table. Keep every field conversion, derived bounds/cells, validation, checksum, row/byte limit, insertion, transaction, cancellation and reset check. This extends the existing buffer-reuse approach to the CSV staging path. |
+| Notification binding hashes | Format the same SHA-256 bytes directly into lowercase hexadecimal instead of constructing 32 formatters per digest. No hash input, algorithm, stored value, session binding, consent check, refresh interval or registration request changes. |
+| Rejected notification OAuth | Cancel an unread rejected response body without awaiting cleanup. Keep the same authorization error, uncached failure, shared refresh behavior, retry, device selection, notification payload and delivery limits. Cleanup rejection is swallowed; slow cleanup cannot delay the original failure. |
+
+A native-SQLite-backed Android trigger probe observes **40 road-row updates
+before versus zero after** for 20 identical matching completions on each SDK
+(31 and 37). A one-billionth-degree coordinate change and a display-name case
+change still persist. The fixture also checks derived bounds, earliest/latest
+times, legacy count/exactness repair and resolving six older locally matched
+fixes without moving a newer last-driven timestamp backward. The tiny circular
+longitude arithmetic difference is tolerated only in the bounds assertion; the
+geometry string comparison remains exact.
+
+A separate isolated Node 24.19.0 / SQLite 3.53.3 WAL fixture uses the same road
+indexes and a 2,000-coordinate geometry. Across 20 unchanged-update transactions,
+the affected statements produce **329,632 WAL bytes before and zero after**, with
+identical final road data. No triggers are installed in this WAL fixture. This
+is a targeted SQLite measurement, not Android filesystem, physical-device battery,
+whole-app speed or DAU capacity evidence. Changed road values still write normally.
+The predicates add comparisons to identify unchanged values; no geometry is
+rounded or omitted and no additional database query is introduced.
+
+The restore regression round-trips 500 varied GPS rows, mixed matching/retry
+fields and four distinct quoted/Unicode road rows through real ZIP export,
+staging and restore. Every CSV entry remains identical. Existing schema 9/10
+compatibility, malformed inputs, checksum/size limits, stale-generation rejection
+and recovery-copy tests remain in the suite. The allocation change is inferred
+from the loop: one row buffer per table replaces one per record. No allocation
+profiler or device speed percentage is claimed.
+
+The digest regression compares a standard known SHA-256 value and 259 additional
+inputs, including empty and Unicode strings, against the original formatter.
+The OAuth regression first failed because cancellation was never requested;
+it now confirms rejected and never-finishing cleanup do not change or delay the
+authorization failure, and a later successful refresh recovers normally.
+
+SQLite documents the comparison and column-affinity rules used by the metadata
+predicates: [IS / IS NOT](https://www.sqlite.org/lang_expr.html),
+[comparison affinity](https://www.sqlite.org/datatype3.html#type_conversions_prior_to_comparison).
+The fourteen original driving/matching source invariants still match `137e398`.
+Twelve additional comparisons against `221a0cb` confirm unchanged grouping,
+geometry/bounds identity, visit merging and departure checks, strict local reuse,
+restore validation, notification consent/registration/delivery, renderer and
+municipal resolver. Final validation and limitations are recorded in
+[resource-exact-write-evidence.json](resource-exact-write-evidence.json).
+
+All **1,094 Android unit tests across 68 suites** and **125 server tests** pass
+with zero failures, errors or skips. Android lint passes with zero errors and the
+same 299 warnings. The debug app, device-test APK and account Function bundle
+build successfully. These are local results; native-device and release CI status
+is recorded separately in the PR. No release, deployment, version bump, schema,
+quota, GPS sampling, matching confidence or history-retention change is included.

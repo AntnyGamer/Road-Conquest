@@ -773,8 +773,9 @@ class TrackingRepository(context: Context) {
                     )
                     check(count == ids.size) { "Local match changed during validation" }
                     recordRoadVisit(db, visit.segmentId, visit.firstTimestamp, visit.lastTimestamp)
-                    db.execSQL("UPDATE roads SET last_driven_at = MAX(last_driven_at, ?) WHERE segment_id = ?",
-                        arrayOf(visit.lastTimestamp, visit.segmentId))
+                    db.execSQL("UPDATE roads SET last_driven_at = MAX(last_driven_at, ?) " +
+                        "WHERE segment_id = ? AND last_driven_at < ?",
+                        arrayOf(visit.lastTimestamp, visit.segmentId, visit.lastTimestamp))
                     resolved += count
                 }
                 db.setTransactionSuccessful()
@@ -936,7 +937,11 @@ class TrackingRepository(context: Context) {
         if (existing == null) {
             db.insertOrThrow("roads", null, values)
         } else {
-            check(db.update("roads", values, "segment_id = ?", arrayOf(segmentId)) == 1)
+            // This row was read under the write transaction. Zero means every
+            // persisted value already matches, including the exact geometry.
+            // Compare inside SQLite rather than loading another full geometry.
+            val args = arrayOf(segmentId, *ROAD_UPDATE_COLUMNS.map { values.getAsString(it) }.toTypedArray())
+            check(db.update("roads", values, ROAD_UPDATE_IF_CHANGED, args) in 0..1)
         }
         recordRoadVisit(db, segmentId, firstTimestamp, lastTimestamp)
     }
@@ -1242,9 +1247,9 @@ class TrackingRepository(context: Context) {
                 // of separate passes through a segment when GPS evidence is missing.
                 put("drive_count_exact", 0)
             },
-            "segment_id = ?",
-            arrayOf(segmentId)
-        ) == 1)
+            "segment_id = ? AND (drive_count IS NOT ? OR drive_count_exact IS NOT 0)",
+            arrayOf(segmentId, count.toString())
+        ) in 0..1)
     }
 
     private fun hasConfirmedDeparture(
@@ -1925,6 +1930,13 @@ class TrackingRepository(context: Context) {
     }
 
     companion object {
+        private val ROAD_UPDATE_COLUMNS = listOf(
+            "name", "geometry_json", "first_unlocked_at", "last_driven_at", "road_group_id",
+            "min_lat", "max_lat", "min_lon", "max_lon"
+        )
+        private val ROAD_UPDATE_IF_CHANGED = "segment_id = ? AND (" +
+            ROAD_UPDATE_COLUMNS.joinToString(" OR ") { "$it IS NOT ?" } + ")"
+
         /**
          * Stable 50 m Web-Mercator cell key shared by tracking and persistence. Keeping this
          * calculation outside SQLite lets the foreground service suppress repeat writes to a
