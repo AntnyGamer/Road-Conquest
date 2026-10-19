@@ -283,5 +283,51 @@
     "identical_state_and_quota_responses": true,
     "real_sqlite_rollback_and_restart_checks": true,
     "limitations": "Synthetic budget operations; no provider or production traffic. Runtime read counts are not whole-server CPU, billed savings or a matching-capacity increase. Warm bounded metadata caches; cold/evicted state reloads from SQLite."
+  },
+  "fallback_window_fixture": {
+    "baseline_commit": "cb16891",
+    "runtime": "Android tracking service and real LocationIQ client/parser via Robolectric SDK 31 and 37; local MockWebServer",
+    "target_selection": "Preserve existing provider prefix if it contains any eligible pending ID; otherwise select one contiguous provider-sized window at the first eligible ID, retaining up to three genuine approach fixes.",
+    "successful_middle_gap": {
+      "saved_fixes": 100,
+      "previously_matched": 98,
+      "pending_fixes": 2,
+      "primary_attempts": 1,
+      "backup_http_requests": 1,
+      "pending_after_valid_response": 0,
+      "saved_fixes_after": 100,
+      "backup_point_limit": 25,
+      "remote_gate_unchanged": true
+    },
+    "failed_middle_gap": {
+      "saved_fixes": 100,
+      "pending_fixes": 35,
+      "submitted_points": 25,
+      "submitted_context": 3,
+      "submitted_pending": 22,
+      "unsent_pending_still_eligible": 13,
+      "new_roads": 0,
+      "saved_fixes_after": 100
+    },
+    "cache_checks": [
+      "Complete exact answer resolves shifted pending fixes without another HTTP call or moving the network timestamp",
+      "Negative cached answer cannot bypass the network gate or defer pending fixes",
+      "Deferred unmatched context is not treated as eligible work",
+      "A provider prefix already containing eligible work remains unchanged"
+    ],
+    "limitations": "Synthetic GPS and mock provider responses. Measures useful request selection, not a fleet-wide percentage or physical-drive accuracy. No provider credits, production traffic, quota or validation-rule changes.",
+    "primary_outage": "Stubbed unavailable primary; backup responses use local MockWebServer",
+    "validation": {
+      "focused_android_tests": 225,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "sdk": [
+        31,
+        37
+      ],
+      "lint": "passed",
+      "debug_build": "passed"
+    }
   }
 }

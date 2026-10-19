@@ -134,6 +134,33 @@ class ProviderFallbackTest {
         assertFalse(MatchResult(emptyList(), emptyMap()).explicitNoMatch)
     }
 
+    @Test fun smallerFallbackTargetsEligibleFixesRatherThanDeferredContext() {
+        val input = List(100) { points.first().copy(id = it + 1L, matched = it != 8 && it != 40) }
+        val primary = Fake(unavailable = true)
+        var submitted = emptyList<TrackPoint>()
+        val backup = object : RoadMatcher {
+            override val maxPoints = 25
+            override val unavailable = false
+            override fun rateLimitRemainingMs() = 0L
+            override fun match(points: List<TrackPoint>): MatchResult {
+                submitted = points
+                return MatchResult(emptyList(), points.associate { it.id to .9 })
+            }
+        }
+        val router = FallbackRoadMatcher(listOf(primary, backup))
+        // The unmatched fix at index 8 is deferred context, not eligible work.
+        val result = requireNotNull(router.match(input, setOf(41L)))
+        assertEquals(input.subList(37, 62), submitted)
+        assertEquals(submitted, router.lastSubmittedPoints(input))
+        assertEquals(submitted.map { it.id }.toSet(), result.matchedPointConfidences.keys)
+        assertEquals(37, router.lastUsedProviderPointOffset)
+        assertEquals(25, router.lastNetworkProviderPointLimit)
+        // When the usual prefix contains any eligible fix it must remain unchanged.
+        requireNotNull(router.match(input, setOf(9L, 41L)))
+        assertEquals(input.take(25), submitted)
+        assertEquals(0, router.lastUsedProviderPointOffset)
+    }
+
     @Test fun realGeoapifyPublicExamplePassesExistingGeometryAndSnapValidation() {
         val result = requireNotNull(GeoapifyMatcher("https://maps.example").parse(example, points))
         assertTrue(result.roads.isNotEmpty())

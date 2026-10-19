@@ -32,6 +32,7 @@ import com.roadconquest.app.matching.RoadMatcher
 import com.roadconquest.app.matching.KnownRoadReuse
 import com.roadconquest.app.matching.UnchangedNoMatchBackoff
 import com.roadconquest.app.matching.completelyCoversPending
+import com.roadconquest.app.matching.lastSubmittedPoints
 import com.roadconquest.app.map.FogGrid
 import com.roadconquest.app.progression.ProgressionManager
 import com.roadconquest.app.util.LocationProviders
@@ -880,8 +881,8 @@ class TrackingService : Service(), LocationListener {
                         return@repeat
                     }
                 }
-                val cached = matcher.cachedMatch(points)?.takeIf {
-                    it.completelyCoversPending(points.take(matcher.lastUsedProviderPointLimit))
+                val cached = matcher.cachedMatch(points, window.markableIds)?.takeIf {
+                    it.completelyCoversPending(matcher.lastSubmittedPoints(points))
                 }
                 val nowElapsed = SystemClock.elapsedRealtime()
                 val wait = remainingRemoteMatchingDelayMs(nowElapsed, lastMatchAttempt, lastRemotePointLimit,
@@ -898,14 +899,13 @@ class TrackingService : Service(), LocationListener {
                     scheduleBacklogContinuation(providerCooldown)
                     return
                 }
-                val result = cached ?: matcher.match(points)
+                val result = cached ?: matcher.match(points, window.markableIds)
                 if (matcher.lastCallUsedNetwork) {
                     lastMatchAttempt = nowElapsed
                     lastRemotePointLimit = matcher.lastNetworkProviderPointLimit
                 }
                 // The 25-point backup has its own shorter capacity-based cadence.
-                val submittedPointLimit = matcher.lastUsedProviderPointLimit
-                val submittedPointIds = points.take(submittedPointLimit).map { it.id }
+                val submittedPointIds = matcher.lastSubmittedPoints(points).map { it.id }
                 val submittedPendingIds = window.markableIds intersect submittedPointIds.toSet()
                 if (result == null) {
                     noMatchBackoff.clear(submittedPendingIds)
@@ -916,7 +916,7 @@ class TrackingService : Service(), LocationListener {
                     }
                     repository.deferMatching(
                         // A primary outage can fall back from a full window to
-                        // a 25-fix prefix. A rejected backup prefix is no evidence
+                        // a 25-fix window. A rejected backup window is no evidence
                         // against the remaining fixes; retain their eligibility.
                         submittedPendingIds,
                         System.currentTimeMillis() +
@@ -943,7 +943,7 @@ class TrackingService : Service(), LocationListener {
                 val acceptedRoads = result.roads.filter { it.confidence >= RoadGeometryValidator.MIN_ACCEPTABLE_CONFIDENCE }
                 val matchedIds = result.matchedPointConfidences.mapNotNull { (id, confidence) ->
                     id.takeIf {
-                        confidence >= RoadGeometryValidator.MIN_ACCEPTABLE_CONFIDENCE && id in window.markableIds
+                        confidence >= RoadGeometryValidator.MIN_ACCEPTABLE_CONFIDENCE && id in submittedPendingIds
                     }
                 }
 
@@ -955,7 +955,7 @@ class TrackingService : Service(), LocationListener {
                     emptySet()
                 }
 
-                // A backup receives just the prefix; never defer unsent fixes.
+                // A backup receives just its selected window; never defer unsent fixes.
                 val unresolvedIds = submittedPendingIds - resolvedIds
                 if (unresolvedIds.isNotEmpty()) {
                     // Repeated *valid* NoMatch responses for identical GPS/context evidence

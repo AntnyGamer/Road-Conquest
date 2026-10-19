@@ -28,9 +28,9 @@ still change a provider's route inference; fixture tests cannot prove accuracy
 parity on every physical drive.
 
 Cache preflight accepts only an exact, unexpired answer that passes the current
-parser and covers every pending fix in the submitted provider prefix. Partial
+parser and covers every pending fix in the submitted provider window. Partial
 and negative answers cannot bypass a network gate. Existing normal matching-cache
-and unchanged-NoMatch backoff behavior remains. Prefix results cannot mark or
+and unchanged-NoMatch backoff behavior remains. Provider results cannot mark or
 defer fixes that were never submitted to that provider.
 
 ## Recovery and accounting
