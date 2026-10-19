@@ -5,23 +5,283 @@
     "requests": 200,
     "providers": 2,
     "concurrent": true,
-    "before": { "health_derivations": 200, "client_signatures": 200, "total_hmac_operations": 400, "upstream_calls": 200, "reservations": 200 },
-    "after": { "health_derivations": 2, "client_signatures": 200, "total_hmac_operations": 202, "upstream_calls": 200, "reservations": 200 },
+    "before": {
+      "health_derivations": 200,
+      "client_signatures": 200,
+      "total_hmac_operations": 400,
+      "upstream_calls": 200,
+      "reservations": 200
+    },
+    "after": {
+      "health_derivations": 2,
+      "client_signatures": 200,
+      "total_hmac_operations": 202,
+      "upstream_calls": 200,
+      "reservations": 200
+    },
     "limitations": "Synthetic requests with stable keys in one warm handler. Reservations and upstream are stubbed. No actual provider credits or production traffic. Counts are not whole-request CPU, latency or capacity. Cache retains at most two fixed identities and re-derives evicted/rotated keys."
   },
   "verified_fixture": {
     "runtime": "isolated local PostgreSQL",
     "case": "Valid moving GPS near a cell edge; no server-derived qualifying cells",
-    "statements_including_transaction_boundaries": { "before": 10, "after": 9 },
-    "exact_committed_retry_statements": { "before": 1, "after": 1 },
+    "statements_including_transaction_boundaries": {
+      "before": 10,
+      "after": 9
+    },
+    "exact_committed_retry_statements": {
+      "before": 1,
+      "after": 1
+    },
     "limitations": "Excludes HTTP authentication and maintenance. Saves an empty insertion statement, not an inserted row. Nonempty qualifying sets, including revisits, retain their original insertion/conflict path. Verified scoring is optional and currently disabled in the Android build."
   },
   "validation": {
     "node": "v24.19.0",
-    "server_tests": 105,
+    "server_tests": 110,
     "failures": 0,
     "skips": 0,
     "gateway_wrangler_dry_run": "passed with Wrangler 4.151.1"
   },
-  "production_changes": false
+  "production_changes": false,
+  "budget_fixture": {
+    "baseline_commit": "9086a6cbfa06bbea816054f398be1d90ef874a95",
+    "runtime": "local Cloudflare workerd via Miniflare 5.20261012.1-beta",
+    "client_buckets_per_provider": 200,
+    "counter_cache_entries": 512,
+    "permit_cache_entries": 64,
+    "before": {
+      "/primary": {
+        "matches": 2400,
+        "firstDay": {
+          "reads": 44800,
+          "writes": 17212,
+          "statements": 14409,
+          "bytes": 483328,
+          "elapsedMs": 2649
+        },
+        "rejection": {
+          "status": 429,
+          "body": {
+            "error": "Daily map allowance exhausted",
+            "code": "budget_global"
+          },
+          "retryAfter": "39600"
+        },
+        "stateDigest": "f4ea64feb65f61fd7a2d361c58f402b3f8bf6e627d39a9cfb03c98ae0bf003d2",
+        "afterCleanup": {
+          "reads": 2826,
+          "writes": 2818,
+          "statements": 14
+        },
+        "rollbackVerified": true,
+        "restartVerified": true,
+        "finalDigest": "a15bac05e0c10076ccd9c66c28fd028fbb5e60e5cf7987e98301c0a2f926f1c6"
+      },
+      "/backup": {
+        "matches": 4000,
+        "firstDay": {
+          "reads": 75200,
+          "writes": 28412,
+          "statements": 24009,
+          "bytes": 737280,
+          "elapsedMs": 4405
+        },
+        "rejection": {
+          "status": 429,
+          "body": {
+            "error": "Daily map allowance exhausted",
+            "code": "budget_global"
+          },
+          "retryAfter": "37200"
+        },
+        "stateDigest": "70def2e0e2c0fad3613cba82bc0bb6c2976d86cd2b850a8f19f8e1c2a4b6eb27",
+        "afterCleanup": {
+          "reads": 4426,
+          "writes": 4418,
+          "statements": 14
+        },
+        "rollbackVerified": true,
+        "restartVerified": true,
+        "finalDigest": "d537b5b925d687ef49dd8a920b0dedae5fea91ce22bd89407ee912a5c8ac54c2"
+      },
+      "/primary/repeat": {
+        "matches": 600,
+        "firstDay": {
+          "reads": 11396,
+          "writes": 4214,
+          "statements": 3609,
+          "bytes": 110592,
+          "elapsedMs": 662
+        },
+        "rejection": {
+          "status": 429,
+          "body": {
+            "error": "Daily client map allowance exhausted",
+            "code": "budget_client"
+          },
+          "retryAfter": "42300"
+        },
+        "stateDigest": "409d1fae52127305fa471d951b3a1a00c56e8528341a354328c4f78e301e37b5",
+        "afterCleanup": {
+          "reads": 628,
+          "writes": 620,
+          "statements": 14
+        },
+        "rollbackVerified": true,
+        "restartVerified": true,
+        "finalDigest": "db668ac72af55b2ec9136f682aea9cc8898ec4ce4828201f33e60bddd7b78b36"
+      },
+      "/backup/repeat": {
+        "matches": 1000,
+        "firstDay": {
+          "reads": 18996,
+          "writes": 7014,
+          "statements": 6009,
+          "bytes": 180224,
+          "elapsedMs": 1127
+        },
+        "rejection": {
+          "status": 429,
+          "body": {
+            "error": "Daily client map allowance exhausted",
+            "code": "budget_client"
+          },
+          "retryAfter": "41700"
+        },
+        "stateDigest": "dccdb6c8270ac55cf8d9a91afc16588900a024162f525f059e918f21057c7e76",
+        "afterCleanup": {
+          "reads": 1028,
+          "writes": 1020,
+          "statements": 14
+        },
+        "rollbackVerified": true,
+        "restartVerified": true,
+        "finalDigest": "0633dc9faab54dc9fcb3540d8d244309240d39af86293847ee2631cd73c66432"
+      }
+    },
+    "after": {
+      "/primary": {
+        "matches": 2400,
+        "firstDay": {
+          "reads": 25607,
+          "writes": 17212,
+          "statements": 12009,
+          "bytes": 483328,
+          "elapsedMs": 2659
+        },
+        "rejection": {
+          "status": 429,
+          "body": {
+            "error": "Daily map allowance exhausted",
+            "code": "budget_global"
+          },
+          "retryAfter": "39600"
+        },
+        "stateDigest": "f4ea64feb65f61fd7a2d361c58f402b3f8bf6e627d39a9cfb03c98ae0bf003d2",
+        "afterCleanup": {
+          "reads": 2818,
+          "writes": 2818,
+          "statements": 13
+        },
+        "rollbackVerified": true,
+        "restartVerified": true,
+        "finalDigest": "a15bac05e0c10076ccd9c66c28fd028fbb5e60e5cf7987e98301c0a2f926f1c6"
+      },
+      "/backup": {
+        "matches": 4000,
+        "firstDay": {
+          "reads": 43207,
+          "writes": 28412,
+          "statements": 20009,
+          "bytes": 737280,
+          "elapsedMs": 4382
+        },
+        "rejection": {
+          "status": 429,
+          "body": {
+            "error": "Daily map allowance exhausted",
+            "code": "budget_global"
+          },
+          "retryAfter": "37200"
+        },
+        "stateDigest": "70def2e0e2c0fad3613cba82bc0bb6c2976d86cd2b850a8f19f8e1c2a4b6eb27",
+        "afterCleanup": {
+          "reads": 4418,
+          "writes": 4418,
+          "statements": 13
+        },
+        "rollbackVerified": true,
+        "restartVerified": true,
+        "finalDigest": "d537b5b925d687ef49dd8a920b0dedae5fea91ce22bd89407ee912a5c8ac54c2"
+      },
+      "/primary/repeat": {
+        "matches": 600,
+        "firstDay": {
+          "reads": 3608,
+          "writes": 4214,
+          "statements": 2410,
+          "bytes": 110592,
+          "elapsedMs": 653
+        },
+        "rejection": {
+          "status": 429,
+          "body": {
+            "error": "Daily client map allowance exhausted",
+            "code": "budget_client"
+          },
+          "retryAfter": "42300"
+        },
+        "stateDigest": "409d1fae52127305fa471d951b3a1a00c56e8528341a354328c4f78e301e37b5",
+        "afterCleanup": {
+          "reads": 615,
+          "writes": 620,
+          "statements": 12
+        },
+        "rollbackVerified": true,
+        "restartVerified": true,
+        "finalDigest": "db668ac72af55b2ec9136f682aea9cc8898ec4ce4828201f33e60bddd7b78b36"
+      },
+      "/backup/repeat": {
+        "matches": 1000,
+        "firstDay": {
+          "reads": 6008,
+          "writes": 7014,
+          "statements": 4010,
+          "bytes": 180224,
+          "elapsedMs": 1040
+        },
+        "rejection": {
+          "status": 429,
+          "body": {
+            "error": "Daily client map allowance exhausted",
+            "code": "budget_client"
+          },
+          "retryAfter": "41700"
+        },
+        "stateDigest": "dccdb6c8270ac55cf8d9a91afc16588900a024162f525f059e918f21057c7e76",
+        "afterCleanup": {
+          "reads": 1015,
+          "writes": 1020,
+          "statements": 12
+        },
+        "rollbackVerified": true,
+        "restartVerified": true,
+        "finalDigest": "0633dc9faab54dc9fcb3540d8d244309240d39af86293847ee2631cd73c66432"
+      }
+    },
+    "first_day_totals": {
+      "before": {
+        "rows_read": 120000,
+        "sql_executions": 38418,
+        "rows_written": 45624
+      },
+      "after": {
+        "rows_read": 68814,
+        "sql_executions": 32018,
+        "rows_written": 45624
+      }
+    },
+    "identical_state_and_quota_responses": true,
+    "real_sqlite_rollback_and_restart_checks": true,
+    "limitations": "Synthetic budget operations; no provider or production traffic. Runtime read counts are not whole-server CPU, billed savings or a matching-capacity increase. Warm bounded metadata caches; cold/evicted state reloads from SQLite."
+  }
 }

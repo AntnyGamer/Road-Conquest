@@ -47,3 +47,55 @@ accepted the gateway bundle in a dry run. [Recorded counts](driving-efficiency-e
 No GPS, Android matching, provider quota, scoring rule, schema, service plan,
 deployment or production configuration change is included. The gateway and
 account-server improvements require their respective deployments to become live.
+
+## Larger map-budget read reduction
+
+A further change, compared with `9086a6c`, removes repeated SQLite reads inside
+the shared map-budget object. It retains at most **512 counter entries and 64
+permit records** in memory. Every admitted request still writes its counters,
+permit and dispatch marker durably in the same synchronous transactions. Every
+request still evaluates the current global/client credit limits, non-refundable
+attempt ceilings, pacing, provider health and dispatch eligibility.
+
+Only missing counters are read from SQLite. Newly created permits can be used
+for dispatch without reading back the row just inserted. Refunds invalidate the
+affected balances; UTC day changes and storage exceptions clear the caches.
+Eviction and restart reload from SQLite, including historical whole-credit
+balances and spent/cancelled permits. Unknown permit IDs are not cached.
+
+This relies on the existing Durable Object being the sole active owner/writer
+of its private storage. Cloudflare documents this pattern for
+[in-memory state initialized from storage](https://developers.cloudflare.com/durable-objects/best-practices/access-durable-objects-storage/)
+and the rollback behavior of
+[synchronous SQLite transactions](https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/#transactions).
+The new caches contain only metadata already held by this object, never GPS,
+trace fingerprints or provider responses. They add a small bounded memory cost.
+
+The before/after fixture ran the actual budget implementation in local
+Cloudflare **workerd**, across two independent objects and **200 synthetic
+client buckets per provider**. It filled the existing 2,400-primary/4,000-backup
+allowances, using exactly the same reservations and dispatches in both versions.
+
+| First-day runtime counter, including initialization/cleanup | Before | After |
+|---|---:|---:|
+| Primary SQLite rows read, 2,400 matches | 44,800 | 25,607 |
+| Backup SQLite rows read, 4,000 matches | 75,200 | 43,207 |
+| Combined SQLite rows read | 120,000 | 68,814 |
+| Combined SQL executions | 38,418 | 32,018 |
+| Combined SQLite rows written | 45,624 | 45,624 |
+
+That is **42.7% fewer rows read** and **16.7% fewer SQL executions** in this
+fixture. A separate warm single-client fixture, stopping at the existing client
+caps, reduced reads by **68.4%** and SQL executions by **33.3%**. Cold starts and
+evicted entries need more reads. Local elapsed times were similar; these counts
+do not establish whole-server CPU, latency, billing or driving-capacity gains.
+Provider requests, provider credits, durable writes and storage size are unchanged.
+
+Both versions produced identical complete database-state digests before and
+after next-day cleanup, identical exhausted-quota responses, and correct retries
+after a real SQLite transaction rollback and object recreation. Five additional
+regressions cover warm reads, bounded eviction, restarts, historical balances,
+lowered caps, refunds, shared tile/matching accounting, rollback and a 1,200-step
+comparison against forced-cold durable reads. All **110 server tests** pass with
+zero failures or skips. Wrangler accepts the gateway in a dry run. No deployment
+or production traffic was used; this change requires a maps-gateway deployment.
