@@ -652,5 +652,103 @@
       }
     },
     "limitations": "Synthetic exhausted-budget requests: 100 evicted previous clients plus 100 new clients per case after 300 allowed reservations. No upstream/provider/production traffic. Measures rejection-accounting SQL only, not normal-drive savings, total CPU, billing or provider capacity."
+  },
+  "known_highway_fixture": {
+    "baseline_commit": "3443ff4c03505d946a36b307e822e16a117c8c1e",
+    "runtime": "Real Android tracking service and SQLite repository through Robolectric SDK 31 and 37; online matcher stubbed",
+    "retained_fixes": 100,
+    "original_intermediate_fixes": 99,
+    "speed_mps": 30,
+    "original_raw_spacing_ms": 3000,
+    "retained_spacing_ms": 6000,
+    "retained_only_reference": {
+      "online_matcher_invocations": 1
+    },
+    "corroborated_evidence": {
+      "online_matcher_invocations": 0,
+      "resolved_retained_ids": 100,
+      "network_clock_updated": false
+    },
+    "unchanged_gps_records": 199,
+    "unchanged_existing_roads": 1,
+    "acceptance": "Existing five-actual-fix, 25-metre span, 5-metre accuracy, speed, heading, 160-metre step and road-ambiguity checks",
+    "provenance": "Capture-time association to exact preceding retained ID, bounded to 512 ID pairs per repository; no timestamp-only trust after restart or eviction",
+    "cost": "One small local anchor lookup per compressed-out fix and a bounded metadata map; no database schema or network cadence change",
+    "validation": {
+      "focused_android_tests": 281,
+      "new_sdk_expanded_cases": 24,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "lint": "passed",
+      "debug_build": "passed"
+    },
+    "planning": {
+      "planning_only": true,
+      "configured_caps": {
+        "primary_credits": 2400,
+        "backup_calls": 4000
+      },
+      "assumptions": {
+        "retained_fixes_per_hour": 900,
+        "fragment_hours": 1.25,
+        "context_slots": 3,
+        "budget_fraction": 0.8,
+        "primary_credits_per_online_hour": 10.4,
+        "backup_calls_per_online_hour": 69.6,
+        "tile_cache_misses": 0,
+        "repair_credits": 0,
+        "repair_backup_calls": 0
+      },
+      "selected": {
+        "local_paid_work_avoided": 0,
+        "driving_hours_per_day": 230.5923961096375,
+        "driving_users_per_day": 92,
+        "hours_per_user": 2.5
+      },
+      "scenarios": [
+        {
+          "local_paid_work_avoided": 0,
+          "driving_hours_per_day": 230.5923961096375,
+          "driving_users_per_day": 92,
+          "hours_per_user": 2.5
+        },
+        {
+          "local_paid_work_avoided": 0.25,
+          "driving_hours_per_day": 307.4565281461833,
+          "driving_users_per_day": 122,
+          "hours_per_user": 2.5
+        },
+        {
+          "local_paid_work_avoided": 0.5,
+          "driving_hours_per_day": 461.184792219275,
+          "driving_users_per_day": 184,
+          "hours_per_user": 2.5
+        },
+        {
+          "local_paid_work_avoided": 0.55,
+          "driving_hours_per_day": 512.4275469103056,
+          "driving_users_per_day": 204,
+          "hours_per_user": 2.5
+        },
+        {
+          "local_paid_work_avoided": 0.6,
+          "driving_hours_per_day": 576.4809902740936,
+          "driving_users_per_day": 230,
+          "hours_per_user": 2.5
+        }
+      ],
+      "limitations": "Matching-only planning model. Local share means whole paid work actually avoided, not familiar miles. Provider health, quality, trip shapes, repairs, bursts, shared IP caps and other service quotas can reduce supported usage. No production reuse share has been measured."
+    },
+    "limitations": "Synthetic accurate highway; online response stubbed. No physical drive, actual provider credit usage or fleet reuse-rate measurement. Local avoidance scenarios are conditional matching-only planning estimates, not whole-application DAU capacity.",
+    "official_sources_checked": "2026-10-19",
+    "sources": [
+      "https://www.geoapify.com/pricing-details/",
+      "https://locationiq.com/pricing",
+      "https://docs.locationiq.com/docs/routing-api",
+      "https://developers.cloudflare.com/workers/cache/",
+      "https://developers.cloudflare.com/durable-objects/platform/pricing/",
+      "https://developer.android.com/google/play/integrity/setup#increase-daily"
+    ]
   }
 }

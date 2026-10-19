@@ -232,3 +232,23 @@ These are synthetic exhausted-budget results, with no provider or production
 traffic. They measure rejection accounting, not normal driving, whole-server
 CPU, billing or additional provider capacity. The HTTP handling and replay
 checks still have a cost. This requires a maps-gateway deployment.
+
+## Additional provider-allowance capacity
+
+The next pass targets paid matching requests on precise, already-known highways.
+Saved original intermediate fixes can corroborate compressed queue points while
+preserving the existing local geometry/quality rules. Capture associations prove
+which retained interval each fix belongs to; a bounded 512-pair memory map falls
+back safely after restart/eviction. No geometry, GPS sample or new road is invented.
+
+The SDK 31/37 service fixture resolves all 100 retained fixes of a verified
+highway using 99 original intermediate fixes, with zero online matcher calls.
+The retained-only reference needs one online invocation. Both keep the 199 GPS
+records and one existing road. Provider replies are stubbed. All 281 focused
+Android tests, lint and the debug build pass. There is a small local capture
+lookup and bounded metadata cost; no schema, provider-limit or cadence change.
+
+[The allowance audit and reproducible planning model](maps/USAGE_LIMITS.md)
+separate actual request avoidance from conditional daily-hour/driver estimates,
+and account for shared raster-tile spend, repairs and denser retained GPS.
+This part requires an Android build, with no additional gateway change.

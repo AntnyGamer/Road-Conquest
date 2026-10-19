@@ -17,6 +17,8 @@ import com.roadconquest.app.map.FogGrid
 class TrackingRepository(context: Context) {
     private val dbHelper = AppDatabase.get(context)
     private val historyGeneration = synchronized(dbHelper.historyLock) { dbHelper.historyGeneration }
+    // Capture provenance only; no GPS copies or persistent trust after restart.
+    private val skippedFixAnchors = LinkedHashMap<Long, Long>()
 
     private fun wrap(value: Double): Double =
         ((value + 180.0) % 360.0 + 360.0) % 360.0 - 180.0
@@ -178,7 +180,16 @@ class TrackingRepository(context: Context) {
         synchronized(dbHelper.historyLock) {
             if (historyGeneration != dbHelper.historyGeneration) return
             val values = drivingValues(location, location.time.takeIf { it > 0L } ?: System.currentTimeMillis())
-            dbHelper.writableDatabase.insertOrThrow("skipped_driving_fixes", null, values)
+            val db = dbHelper.writableDatabase
+            val anchorId = db.rawQuery("SELECT id,timestamp_ms FROM track_points ORDER BY id DESC LIMIT 1", null).use {
+                if (it.moveToFirst() && requireNotNull(values.getAsLong("timestamp_ms")) - it.getLong(1) in 1..12_000L)
+                    it.getLong(0) else null
+            }
+            val id = db.insertOrThrow("skipped_driving_fixes", null, values)
+            if (anchorId != null) {
+                skippedFixAnchors[id] = anchorId
+                if (skippedFixAnchors.size > 512) skippedFixAnchors.remove(skippedFixAnchors.keys.first())
+            }
         }
     }
 
@@ -359,6 +370,51 @@ class TrackingRepository(context: Context) {
         val points: List<TrackPoint>,
         val markableIds: Set<Long>
     )
+
+    /** Original compressed-out fixes are local evidence only, never online work. */
+    @Synchronized
+    internal fun knownRoadEvidence(points: List<TrackPoint>): List<TrackPoint> = synchronized(dbHelper.historyLock) {
+        if (historyGeneration != dbHelper.historyGeneration || points.size !in 2..100 ||
+            points.any { it.id <= 0L } || points.zipWithNext().any { (a, b) ->
+                b.id != a.id + 1L || b.timestampMillis - a.timestampMillis !in 1..12_000L
+            }) return@synchronized points
+        // Compression retains at most four original fixes between queue points.
+        // Do not broaden across missing IDs, pauses, clock changes or noisy data.
+        val maximum = (points.size - 1) * 4
+        val skipped = ArrayList<TrackPoint>()
+        dbHelper.readableDatabase.rawQuery(
+            "SELECT id,latitude,longitude,accuracy_m,speed_mps,bearing_deg,timestamp_ms " +
+                "FROM skipped_driving_fixes WHERE timestamp_ms > ? AND timestamp_ms < ? " +
+                "ORDER BY timestamp_ms,id LIMIT ?",
+            arrayOf(points.first().timestampMillis.toString(), points.last().timestampMillis.toString(), (maximum + 1).toString())
+        ).use { cursor ->
+            while (cursor.moveToNext()) skipped += TrackPoint(
+                -cursor.getLong(0), cursor.getDouble(1), cursor.getDouble(2), cursor.getFloat(3),
+                cursor.getFloat(4), cursor.getFloat(5), cursor.getLong(6), matched = true)
+        }
+        val retainedTimes = points.mapTo(HashSet()) { it.timestampMillis }
+        if (skipped.isEmpty() || skipped.size > maximum ||
+            skipped.any { it.timestampMillis in retainedTimes } ||
+            skipped.zipWithNext().any { (a, b) -> a.timestampMillis == b.timestampMillis }
+        ) return@synchronized points
+        val evidence = ArrayList<TrackPoint>(points.size + skipped.size)
+        var next = 0
+        evidence += points.first()
+        for (i in 1 until points.size) {
+            val point = points[i]
+            val start = next
+            while (next < skipped.size && skipped[next].timestampMillis < point.timestampMillis) {
+                // A timestamp match is insufficient after clock rollback or an
+                // import. Only this capture's exact preceding retained ID proves
+                // the source interval; restart/eviction safely falls back online.
+                if (skippedFixAnchors[-skipped[next].id] != points[i - 1].id) return@synchronized points
+                evidence += skipped[next++]
+            }
+            if (next - start > 4) return@synchronized points
+            evidence += point
+        }
+        evidence
+    }
 
     /**
      * Returns the newest contiguous group of pending points with adjacent raw points as

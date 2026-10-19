@@ -15,11 +15,35 @@ data class KnownRoadVisit(
 
 internal object KnownRoadReuse {
     fun find(repository: TrackingRepository, points: List<TrackPoint>, markableIds: Set<Long>): List<KnownRoadVisit> {
-        if (points.size < 5 || markableIds.isEmpty() || repository.getSummary().roadSegmentCount == 0L)
+        if (points.size < 2 || markableIds.isEmpty() || repository.getSummary().roadSegmentCount == 0L)
             return emptyList()
-        return identify(points, markableIds) { fix ->
+        val nearby = { fix: TrackPoint ->
             repository.findUnambiguousPreviouslyDrivenRoadNear(fix.latitude, fix.longitude)?.segmentId
         }
+        val original = identify(points, markableIds, nearby)
+        val remaining = markableIds - original.flatMap { it.pointIds }.toSet()
+        if (remaining.isEmpty()) return original
+        val evidence = repository.knownRoadEvidence(points)
+        if (evidence.size == points.size) return original
+        // The repository proves consecutive retained IDs and bounded original
+        // samples before expansion. Give that actual sequence local ordinals so
+        // identify retains every existing five-fix/edge/quality/ambiguity gate.
+        // Negative source IDs are context only; only real pending IDs map back.
+        val ordered = evidence.mapIndexed { index, fix -> fix.copy(id = index + 1L) }
+        val pending = evidence.indices.filter { evidence[it].id in remaining }
+            .mapTo(HashSet()) { it + 1L }
+        val corroborated = ArrayList<KnownRoadVisit>()
+        for (visit in identify(ordered, pending, nearby)) {
+            val mapped = visit.copy(pointIds = visit.pointIds.map { evidence[(it - 1L).toInt()].id })
+            val previous = corroborated.lastOrNull()
+            // Context-only samples separate ordinal IDs but do not split one
+            // consecutive retained visit into many database updates.
+            if (previous?.segmentId == mapped.segmentId && previous.pointIds.last() + 1L == mapped.pointIds.first()) {
+                corroborated[corroborated.lastIndex] = previous.copy(
+                    pointIds = previous.pointIds + mapped.pointIds, lastTimestamp = mapped.lastTimestamp)
+            } else corroborated += mapped
+        }
+        return original + corroborated
     }
 
     /** Require a sustained, directionally consistent pass over one previously verified segment. */
