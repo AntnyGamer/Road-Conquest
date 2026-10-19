@@ -864,5 +864,126 @@
       }
     },
     "limitations": "Synthetic known-road sequence and stubbed online reply. Measures targeted online-request avoidance; no measured fleet reuse share, additional daily-hour multiplier or physical-drive accuracy-parity claim."
+  },
+  "eligible_cached_matching_fixture": {
+    "baseline_commit": "3e5d32b175669e9ab148310cd1cda9261010909e",
+    "runtime": "Real Geoapify/LocationIQ HTTP clients, router, parsers, tracking service and SQLite repository via Robolectric SDK 31 and 37; MockWebServer provider responses",
+    "input_fixes": 3,
+    "eligible_fixes": 2,
+    "unresolved_deferred_context_fixes": 1,
+    "prepared_primary_cache_http_requests": 1,
+    "before": {
+      "extra_backup_http_requests": 1,
+      "service_eligible_fixes_completed_during_network_gates": 0
+    },
+    "after": {
+      "extra_backup_http_requests": 0,
+      "service_eligible_fixes_completed_during_network_gates": 2,
+      "deferred_context_completed": false,
+      "original_deferral_preserved": true,
+      "gps_records_preserved": true,
+      "distance_preserved": true,
+      "network_clock_updated": false
+    },
+    "unchanged": [
+      "provider payload and slice",
+      "exact cache key and expiry",
+      "parser and geometric validation",
+      "accepted road and point confidence thresholds",
+      "provider precedence",
+      "negative-cache and incomplete-eligible gates",
+      "GPS subscriptions, capture, retention and distance",
+      "server budgets and accounting"
+    ],
+    "new_cache_or_query": false,
+    "source_audit": {
+      "baseline": "137e398706c0caf591ac13c091634a3711fc15e2",
+      "checked_head": "3e5d32b175669e9ab148310cd1cda9261010909e",
+      "checked_worktree": true,
+      "checks": [
+        {
+          "path": "matching/RoadGeometryValidator.kt",
+          "scope": "complete file",
+          "identical": true
+        },
+        {
+          "path": "matching/GeoapifyMatcher.kt",
+          "scope": "complete file",
+          "identical": true
+        },
+        {
+          "path": "matching/LocationIqMatcher.kt",
+          "scope": "complete file",
+          "identical": true
+        },
+        {
+          "path": "services/ProviderHealth.kt",
+          "scope": "complete file",
+          "identical": true
+        },
+        {
+          "path": "data/TravelDistance.kt",
+          "scope": "complete file",
+          "identical": true
+        },
+        {
+          "path": "data/AppDatabase.kt",
+          "scope": "complete file",
+          "identical": true
+        },
+        {
+          "path": "matching/KnownRoadReuse.kt",
+          "scope": "    /** Require a sustained",
+          "identical": true
+        },
+        {
+          "path": "TrackingService.kt",
+          "scope": "    private fun isUsableDrivingLocation(",
+          "identical": true
+        },
+        {
+          "path": "TrackingService.kt",
+          "scope": "    internal fun skippedFixCarriesGeometry(",
+          "identical": true
+        },
+        {
+          "path": "TrackingService.kt",
+          "scope": "    companion object {",
+          "identical": true
+        },
+        {
+          "path": "data/TrackingRepository.kt",
+          "scope": "    private fun drivingValues(",
+          "identical": true
+        },
+        {
+          "path": "data/TrackingRepository.kt",
+          "scope": "    fun insertLocation(",
+          "identical": true
+        },
+        {
+          "path": "data/TrackingRepository.kt",
+          "scope": "    private fun insertLocationInTransaction(",
+          "identical": true
+        },
+        {
+          "path": "data/TrackingRepository.kt",
+          "scope": "    fun findUnambiguousPreviouslyDrivenRoadNear(",
+          "identical": true
+        }
+      ],
+      "limit": "Source invariants and regression checks do not establish accuracy parity on every physical drive."
+    },
+    "validation": {
+      "focused_android_tests": 423,
+      "suites": 14,
+      "new_sdk_expanded_cases": 12,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "lint": "passed",
+      "debug_build": "passed"
+    },
+    "limitations": "Targeted synthetic exact-cache case, including already-paid cache preparation. No provider credits or production traffic used. Cache-case fleet frequency is unmeasured; no additional daily-hour/driver multiplier or physical-drive accuracy-parity claim."
   }
 }

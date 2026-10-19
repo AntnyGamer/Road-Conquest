@@ -27,6 +27,7 @@ existing direction-change threshold. It does not remove original evidence.
 | Short-turn approach retention | Keeps original GPS evidence in addition to the existing curve selection |
 | Backup failure scope | Defers only submitted pending IDs; never credits an unsent point |
 | Backup window placement | Changes a prefix only when it contains no eligible work; submits one contiguous slice with genuine approach fixes; existing parsers and valid-NoMatch precedence remain |
+| Exact cached coverage of eligible work | Requires an accepted road and accepted point confidence for every eligible fix in the actual provider slice; unresolved deferred context stays unmarked; cache equality, expiry, parser checks and provider precedence remain |
 | Known-highway evidence | Uses original captured intermediate fixes with a bounded association to the exact preceding retained ID; no timestamp-only trust after restart/eviction; invokes the unchanged local acceptance algorithm |
 | Budget/HMAC caching and proven quota rejection | Changes accounting work; no trace geometry or matching decision is cached on the server |
 | Early cancellation | Stops abandoned work before reservation; retains active-request handling and conservative dispatch/refund accounting |
@@ -61,6 +62,15 @@ the debug build. Fourteen source invariants were checked against the starting
 commit, including the complete distance calculator, database schema and tracking
 constants. The preceding highway follow-up also passed all **1,043 Android unit
 tests** in CI; the XML artifact confirms zero failures, errors or skips.
+
+The subsequent exact-cache eligibility fix also passes **423 tests across 14
+suites**, Android lint and the debug build. Its twelve new SDK-expanded cases
+exercise both the real HTTP clients/router and tracking service: unresolved
+deferred context cannot block fully validated eligible work, remains unmatched
+with its original deferral, and becomes required evidence if made eligible.
+Changed traces, missing or low-confidence eligible evidence, empty work and
+missing/low-confidence roads cannot use the bypass. The same fourteen source
+invariants were rechecked against the starting commit and still match.
 
 Source equality and fixture
 tests cannot prove accuracy parity on every physical drive. No matching threshold,

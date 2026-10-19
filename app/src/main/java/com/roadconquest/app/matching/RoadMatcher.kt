@@ -7,7 +7,7 @@ interface RoadMatcher {
     fun match(points: List<TrackPoint>): MatchResult?
     /** Context can include deferred unmatched fixes; only these IDs are eligible work. */
     fun match(points: List<TrackPoint>, pendingIds: Set<Long>): MatchResult? = match(points)
-    /** Local-only validated response; callers must require complete coverage to bypass gates. */
+    /** Local-only validated response; callers must require complete eligible coverage to bypass gates. */
     fun cachedMatch(points: List<TrackPoint>): MatchResult? = null
     fun cachedMatch(points: List<TrackPoint>, pendingIds: Set<Long>): MatchResult? = cachedMatch(points)
     val lastCallUsedNetwork: Boolean get() = true
@@ -57,7 +57,7 @@ class FallbackRoadMatcher(private val providers: List<RoadMatcher>) : RoadMatche
         if (providers.any { it.rateLimitRemainingMs() > 0L }) {
             // Incomplete cached evidence must not suppress a ready backup provider.
             cachedMatch(points, pendingIds)?.takeIf {
-                it.completelyCoversPending(lastSubmittedPoints(points))
+                it.completelyCoversPending(lastSubmittedPoints(points), pendingIds)
             }?.let { return it }
         }
         unavailable = false
@@ -105,8 +105,11 @@ class FallbackRoadMatcher(private val providers: List<RoadMatcher>) : RoadMatche
 internal fun RoadMatcher.lastSubmittedPoints(points: List<TrackPoint>): List<TrackPoint> =
     points.drop(lastUsedProviderPointOffset).take(lastUsedProviderPointLimit)
 
-internal fun MatchResult.completelyCoversPending(points: List<TrackPoint>): Boolean {
-    val pending = points.filterNot { it.matched }
+internal fun MatchResult.completelyCoversPending(points: List<TrackPoint>, pendingIds: Set<Long>? = null): Boolean {
+    // Deferred unmatched fixes can be read-only context. Require the same
+    // accepted confidence for every eligible fix in the actual provider window;
+    // unresolved context neither blocks that proof nor becomes completed work.
+    val pending = points.filter { !it.matched && (pendingIds == null || it.id in pendingIds) }
     return pending.isNotEmpty() && roads.any { it.confidence >= RoadGeometryValidator.MIN_ACCEPTABLE_CONFIDENCE } &&
         pending.all { (matchedPointConfidences[it.id] ?: 0.0) >= RoadGeometryValidator.MIN_ACCEPTABLE_CONFIDENCE }
 }

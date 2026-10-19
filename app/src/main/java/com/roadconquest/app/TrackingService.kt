@@ -882,7 +882,7 @@ class TrackingService : Service(), LocationListener {
                     }
                 }
                 val cached = matcher.cachedMatch(points, window.markableIds)?.takeIf {
-                    it.completelyCoversPending(matcher.lastSubmittedPoints(points))
+                    it.completelyCoversPending(matcher.lastSubmittedPoints(points), window.markableIds)
                 }
                 val nowElapsed = SystemClock.elapsedRealtime()
                 val wait = remainingRemoteMatchingDelayMs(nowElapsed, lastMatchAttempt, lastRemotePointLimit,

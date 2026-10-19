@@ -277,3 +277,37 @@ this chat as well: core validators, GPS acceptance, distance calculations,
 tracking constants and source data remain intact. This adds one small local
 lookup for an unresolved four-fix window, with no new cache or schema. It
 requires an Android build; no additional gateway deployment is needed.
+
+## Reuse validated cache coverage for eligible work
+
+A provider window may include deferred unmatched fixes as read-only context.
+Previously, an exact cached response covering every eligible fix could still
+fail the completeness check because it did not resolve that deferred context.
+During primary cooldown this could spend a backup request on work already
+validated by the primary; the service could also delay completing that work.
+
+Both completeness checks now use the explicit eligible IDs within the actual
+provider slice. They still require nonempty unmatched eligible work, an accepted
+road and accepted point confidence for every eligible fix. Deferred context is
+never completed by this change. Cache payload equality, expiry, reparsing with
+current IDs, provider precedence and all geometry validation remain unchanged.
+There is no new cache, query, retained state, batching delay or provider input.
+
+The SDK 31/37 local HTTP fixture obtains a real parsed Geoapify response for two
+fixes with a third unresolved context fix. With only those two fixes eligible
+and the primary cooling down, extra backup requests fall from one to zero;
+total fixture HTTP requests fall from two to one, including cache preparation.
+The real tracking service completes only the two validated fixes during its
+network gates, preserving the third fix's exact deferral, every GPS record,
+distance and network-attempt clock. If that third fix becomes eligible, or the
+trace changes, the existing remote path is still required.
+
+This is conditional removal of duplicate work when such an exact cached answer
+already exists. It does not establish a fleet frequency, a new daily-hour/driver
+capacity figure or physical-drive accuracy parity. It requires an Android build
+only; provider parsers, quality thresholds and server quota accounting are unchanged.
+
+All **423 focused tests across 14 suites** pass with no failures, errors or skips,
+including twelve new SDK-expanded cases. Android lint and the debug build pass.
+Fourteen source invariants still match the chat's starting commit, including the
+complete provider parsers, validator, distance calculator and database schema.

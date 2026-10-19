@@ -559,6 +559,22 @@ class ProviderFallbackTest {
         assertEquals(25, router.lastUsedProviderPointLimit)
     }
 
+    @Test fun eligibleCacheCoverageStillRequiresNonemptyUnmatchedWorkAndAcceptedEvidence() {
+        val good = requireNotNull(GeoapifyMatcher("https://unused.example").parse(example, points))
+            .copy(matchedPointConfidences = mapOf(1L to .9))
+        assertTrue(good.completelyCoversPending(points, setOf(1L)))
+        assertFalse(good.completelyCoversPending(points, setOf(1L, 2L)))
+        assertFalse(good.completelyCoversPending(points, setOf(2L)))
+        assertFalse(good.completelyCoversPending(points, emptySet()))
+        assertFalse(good.completelyCoversPending(points, setOf(3L)))
+        assertFalse(good.completelyCoversPending(points.map { it.copy(matched = true) }, setOf(1L)))
+        assertFalse(good.copy(roads = emptyList()).completelyCoversPending(points, setOf(1L)))
+        assertFalse(good.copy(roads = good.roads.map { it.copy(confidence = .1) })
+            .completelyCoversPending(points, setOf(1L)))
+        assertFalse(good.copy(matchedPointConfidences = mapOf(1L to .1))
+            .completelyCoversPending(points, setOf(1L)))
+    }
+
     @Test fun queueRetryInstructionDoesNotCreateThirtySecondProviderOutage() {
         var now = 1000L
         val health = ProviderHealth { now }
