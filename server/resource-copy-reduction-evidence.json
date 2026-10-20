@@ -1,0 +1,421 @@
+{
+  "baseline_commit": "491e4e59bb7fca1aea9edc64b675eb17af3953fb",
+  "changes": 6,
+  "phone": {
+    "fixture": "tools/PhoneAllocationProbe.java",
+    "runtime": "JDK 21.0.10 HotSpot / Kotlin stdlib 2.4.10; compiled app classes",
+    "heap_flags": [
+      "-Xms64m",
+      "-Xmx256m"
+    ],
+    "before": [
+      {
+        "compatibility_cases": 25,
+        "sha256": "f24ffd4c6ac3bdc490fb04406ae4346ff493fe836caaaf584311e777ddfc17c3"
+      },
+      {
+        "progress": 100000,
+        "owned_cards": 43,
+        "refreshes": 10000,
+        "round": 0,
+        "allocated_bytes": 59600048
+      },
+      {
+        "progress": 100000,
+        "owned_cards": 43,
+        "refreshes": 10000,
+        "round": 1,
+        "allocated_bytes": 59600000
+      },
+      {
+        "progress": 100000,
+        "owned_cards": 43,
+        "refreshes": 10000,
+        "round": 2,
+        "allocated_bytes": 59600000
+      },
+      {
+        "progress": 0,
+        "owned_cards": 43,
+        "refreshes": 10000,
+        "round": 0,
+        "allocated_bytes": 59361768
+      },
+      {
+        "progress": 0,
+        "owned_cards": 43,
+        "refreshes": 10000,
+        "round": 1,
+        "allocated_bytes": 59360000
+      },
+      {
+        "progress": 0,
+        "owned_cards": 43,
+        "refreshes": 10000,
+        "round": 2,
+        "allocated_bytes": 59360000
+      },
+      {
+        "grid_center": -74,
+        "cells": 25,
+        "refreshes": 10000,
+        "round": 0,
+        "allocated_bytes": 20000000,
+        "last_cell_sha256": "3b60bf900e9308958a839066561d63d21139c6b6aa886dd88439520c885dcb50"
+      },
+      {
+        "grid_center": -74,
+        "cells": 25,
+        "refreshes": 10000,
+        "round": 1,
+        "allocated_bytes": 20000000,
+        "last_cell_sha256": "3b60bf900e9308958a839066561d63d21139c6b6aa886dd88439520c885dcb50"
+      },
+      {
+        "grid_center": -74,
+        "cells": 25,
+        "refreshes": 10000,
+        "round": 2,
+        "allocated_bytes": 20000000,
+        "last_cell_sha256": "3b60bf900e9308958a839066561d63d21139c6b6aa886dd88439520c885dcb50"
+      },
+      {
+        "grid_center": 286,
+        "cells": 25,
+        "refreshes": 10000,
+        "round": 0,
+        "allocated_bytes": 20495072,
+        "last_cell_sha256": "e1cb520979a0e519017868d48b6fcdcd7d85df7cd0a8628de785b49a05ed24c0"
+      },
+      {
+        "grid_center": 286,
+        "cells": 25,
+        "refreshes": 10000,
+        "round": 1,
+        "allocated_bytes": 20000000,
+        "last_cell_sha256": "e1cb520979a0e519017868d48b6fcdcd7d85df7cd0a8628de785b49a05ed24c0"
+      },
+      {
+        "grid_center": 286,
+        "cells": 25,
+        "refreshes": 10000,
+        "round": 2,
+        "allocated_bytes": 20000000,
+        "last_cell_sha256": "e1cb520979a0e519017868d48b6fcdcd7d85df7cd0a8628de785b49a05ed24c0"
+      },
+      {
+        "equal_payload_chars": 128000,
+        "renderer_and_publisher_distinct_payload_references": 2,
+        "native_callbacks": 1
+      }
+    ],
+    "after": [
+      {
+        "compatibility_cases": 25,
+        "sha256": "f24ffd4c6ac3bdc490fb04406ae4346ff493fe836caaaf584311e777ddfc17c3"
+      },
+      {
+        "progress": 100000,
+        "owned_cards": 43,
+        "refreshes": 10000,
+        "round": 0,
+        "allocated_bytes": 35520048
+      },
+      {
+        "progress": 100000,
+        "owned_cards": 43,
+        "refreshes": 10000,
+        "round": 1,
+        "allocated_bytes": 35520000
+      },
+      {
+        "progress": 100000,
+        "owned_cards": 43,
+        "refreshes": 10000,
+        "round": 2,
+        "allocated_bytes": 35520000
+      },
+      {
+        "progress": 0,
+        "owned_cards": 43,
+        "refreshes": 10000,
+        "round": 0,
+        "allocated_bytes": 59488728
+      },
+      {
+        "progress": 0,
+        "owned_cards": 43,
+        "refreshes": 10000,
+        "round": 1,
+        "allocated_bytes": 59360000
+      },
+      {
+        "progress": 0,
+        "owned_cards": 43,
+        "refreshes": 10000,
+        "round": 2,
+        "allocated_bytes": 59360000
+      },
+      {
+        "grid_center": -74,
+        "cells": 25,
+        "refreshes": 10000,
+        "round": 0,
+        "allocated_bytes": 0,
+        "last_cell_sha256": "3b60bf900e9308958a839066561d63d21139c6b6aa886dd88439520c885dcb50"
+      },
+      {
+        "grid_center": -74,
+        "cells": 25,
+        "refreshes": 10000,
+        "round": 1,
+        "allocated_bytes": 0,
+        "last_cell_sha256": "3b60bf900e9308958a839066561d63d21139c6b6aa886dd88439520c885dcb50"
+      },
+      {
+        "grid_center": -74,
+        "cells": 25,
+        "refreshes": 10000,
+        "round": 2,
+        "allocated_bytes": 0,
+        "last_cell_sha256": "3b60bf900e9308958a839066561d63d21139c6b6aa886dd88439520c885dcb50"
+      },
+      {
+        "grid_center": 286,
+        "cells": 25,
+        "refreshes": 10000,
+        "round": 0,
+        "allocated_bytes": 20277824,
+        "last_cell_sha256": "e1cb520979a0e519017868d48b6fcdcd7d85df7cd0a8628de785b49a05ed24c0"
+      },
+      {
+        "grid_center": 286,
+        "cells": 25,
+        "refreshes": 10000,
+        "round": 1,
+        "allocated_bytes": 20000000,
+        "last_cell_sha256": "e1cb520979a0e519017868d48b6fcdcd7d85df7cd0a8628de785b49a05ed24c0"
+      },
+      {
+        "grid_center": 286,
+        "cells": 25,
+        "refreshes": 10000,
+        "round": 2,
+        "allocated_bytes": 20000000,
+        "last_cell_sha256": "e1cb520979a0e519017868d48b6fcdcd7d85df7cd0a8628de785b49a05ed24c0"
+      },
+      {
+        "equal_payload_chars": 128000,
+        "renderer_and_publisher_distinct_payload_references": 1,
+        "native_callbacks": 1
+      }
+    ],
+    "limits": "Actual thread-allocated JVM bytes in the specified loops, not Android/whole-app/peak memory or battery. Publisher fixture counts the two named owners only, without GC assumptions."
+  },
+  "grid_compatibility": {
+    "center_longitudes": 2161,
+    "cells": 41,
+    "comparison": "Double.toRawBits for every coordinate",
+    "input_mutated": false,
+    "only_production_caller": "MapRenderer.showNearbyExploration; reads corners into JSON without mutating them"
+  },
+  "server": {
+    "baseline": "491e4e59bb7fca1aea9edc64b675eb17af3953fb",
+    "runtime": "v24.19.0",
+    "before": {
+      "checkpoint": {
+        "seal": {
+          "calls": 2,
+          "output_bytes": 308
+        },
+        "verify": {
+          "calls": 1,
+          "output_bytes": 140
+        }
+      },
+      "notifications": {
+        "calls": 4,
+        "output_bytes": 400,
+        "delivered": 4,
+        "corrupt_dropped": 1
+      },
+      "passwords": {
+        "operations": 3,
+        "copies": 3,
+        "copied_bytes": 192
+      }
+    },
+    "after": {
+      "checkpoint": {
+        "seal": {
+          "calls": 1,
+          "output_bytes": 168
+        },
+        "verify": {
+          "calls": 0,
+          "output_bytes": 0
+        }
+      },
+      "notifications": {
+        "calls": 0,
+        "output_bytes": 0,
+        "delivered": 4,
+        "corrupt_dropped": 1
+      },
+      "passwords": {
+        "operations": 3,
+        "copies": 0,
+        "copied_bytes": 0
+      }
+    },
+    "limits": "Counts affected Buffer concatenation output bytes and explicit 64-byte copies, not slab allocations, peak heap, device battery, storage or quota consumption. Local fixtures only."
+  },
+  "baseline_regressions": {
+    "android_tests": 13,
+    "android_expected_failures": 2,
+    "server_targeted_tests": 4,
+    "server_expected_failures": 3,
+    "original_ciphertext_compatibility_already_passed": true
+  },
+  "validation": {
+    "focused_android": {
+      "failures": 0,
+      "suites": 6,
+      "skipped": 0,
+      "errors": 0,
+      "tests": 157
+    },
+    "server": {
+      "tests": 137,
+      "failures": 0,
+      "skips": 0,
+      "database": "Isolated PostgreSQL 17, 127.0.0.1:54339, stopped after suite",
+      "function_build": "passed"
+    },
+    "scope": "Complete local current-source tests/builds; current-head CI is tracked separately in PR 105.",
+    "full_android": {
+      "debug_app": "passed",
+      "tests": 1104,
+      "skipped": 0,
+      "failures": 0,
+      "errors": 0,
+      "lint_warnings": 299,
+      "suites": 68,
+      "device_test_apk": "passed",
+      "build": "passed",
+      "lint_errors": 0
+    }
+  },
+  "source_audit": {
+    "original_baseline": "137e398706c0caf591ac13c091634a3711fc15e2",
+    "original_identical_scopes": 14,
+    "additional_checks": [
+      {
+        "path": "app/src/main/java/com/roadconquest/app/map/FogGrid.kt",
+        "scope": "All grid identity, cell coordinates and corner calculations outside copy-on-first-shift",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/map/DistinctGeoJson.kt",
+        "scope": "Entire publisher except refreshing an equal immutable payload reference",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/achievements/Achievements.kt",
+        "scope": "Every achievement definition, value calculation, filtering, prefs and reset rule outside guarded identical-value copy",
+        "identical": true
+      },
+      {
+        "path": "server/src/security.mjs",
+        "scope": "All password input, scrypt parameters, validation, random salts and constant-time comparison; only owned-result wrappers removed",
+        "identical": true
+      },
+      {
+        "path": "server/src/checkpoints.mjs",
+        "scope": "All checkpoint crypto parameters, key/AAD, fingerprint and continuity checks outside byte assembly",
+        "identical": true
+      },
+      {
+        "path": "server/src/notifications.mjs",
+        "scope": "All notification authorization, encryption, registration, selection, limits and delivery outside authenticated plaintext assembly",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/map/MapRenderer.kt",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/data/TrackingRepository.kt",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/data/AppDatabase.kt",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/TrackingService.kt",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/matching/KnownRoadReuse.kt",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/data/TravelDistance.kt",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "server/src/competition.mjs",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "server/src/scoring.mjs",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "server/src/cells.mjs",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "server/src/integrity.mjs",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "server/src/application.mjs",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "server/maps",
+        "scope": "Complete provider gateway, caps, reservations and deployment config",
+        "identical": true
+      }
+    ]
+  },
+  "production_changes": false,
+  "provider_credits_used": false,
+  "limits": "Six allocation/retention reductions; no new quota capacity, provider credits, stored-history reduction, device battery percentage or physical-drive accuracy parity claim. Copy-elision adds small comparisons/branches. GPS, matching, town geometry, crypto parameters and authorization/rate limits remain.",
+  "previous_complete_ci": {
+    "commit": "491e4e59bb7fca1aea9edc64b675eb17af3953fb",
+    "url": "https://github.com/AntnyGamer/RoadConquest-Beta/actions/runs/39353946703",
+    "attempt": 2,
+    "status": "success; all verification jobs including native map APIs 31/35/37 and release startup APIs 31/37; publication skipped",
+    "native35_rerun": {
+      "tests": 9,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "reason": "Initial ActivityScenario transition to CREATED timed out with last lifecycle state RESUMED. The same source passed all nine native tests on job-only rerun."
+    }
+  }
+}

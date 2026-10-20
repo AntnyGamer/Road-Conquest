@@ -85,4 +85,19 @@ class DistinctGeoJsonTest {
         assertFalse(publisher.publish(empty().toJson()) { calls++; true })
         assertEquals(2, calls)
     }
+
+    @Test fun equalSnapshotsReleaseThePriorPayloadReferenceWithoutNativeWork() {
+        val publisher = DistinctGeoJson("")
+        val first = routeJson()
+        val latest = String(first.toCharArray())
+        var calls = 0
+        assertTrue(publisher.publish(first) { calls++; true })
+        assertFalse(publisher.publish(latest) { calls++; true })
+        // Observe retained ownership directly instead of relying on nondeterministic GC.
+        val retained = publisher.javaClass.getDeclaredField("applied").apply { isAccessible = true }
+        assertSame(latest, retained.get(publisher))
+        assertFalse(publisher.publish(routeJson(property = 8)) { false })
+        assertSame(latest, retained.get(publisher))
+        assertEquals(1, calls)
+    }
 }

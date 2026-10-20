@@ -35,9 +35,10 @@ function seal(fix, run, key, aad) {
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
   cipher.setAAD(aad);
-  const encrypted = Buffer.concat([cipher.update(JSON.stringify({ ...fix, run }), "utf8"), cipher.final()]);
+  const encrypted = cipher.update(JSON.stringify({ ...fix, run }), "utf8");
+  const tail = cipher.final();
   return { version: 2, time: fix.time, fingerprint: fingerprint(fix, key),
-    sealed: Buffer.concat([iv, encrypted, cipher.getAuthTag()]).toString("base64url") };
+    sealed: Buffer.concat([iv, encrypted, tail, cipher.getAuthTag()]).toString("base64url") };
 }
 
 function verify(checkpoint, first, run, key, aad) {
@@ -51,7 +52,9 @@ function verify(checkpoint, first, run, key, aad) {
     const decipher = createDecipheriv("aes-256-gcm", key, bytes.subarray(0, 12));
     decipher.setAAD(aad);
     decipher.setAuthTag(bytes.subarray(-16));
-    previous = JSON.parse(Buffer.concat([decipher.update(bytes.subarray(12, -16)), decipher.final()]).toString("utf8"));
+    const plaintext = decipher.update(bytes.subarray(12, -16));
+    const tail = decipher.final(); // Authenticate before parsing or using any plaintext.
+    previous = JSON.parse((tail.length ? Buffer.concat([plaintext, tail]) : plaintext).toString("utf8"));
     if (previous.time !== checkpoint.time || fingerprint(previous, key) !== checkpoint.fingerprint ||
         !Number.isFinite(previous.lat) || !Number.isFinite(previous.lon)) throw new Error("Invalid checkpoint");
   } catch {

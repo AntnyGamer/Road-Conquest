@@ -369,3 +369,85 @@ The account/gateway implementation and configuration are unchanged. The measured
 fixtures and focused validation are recorded in
 [resource-phone-work-evidence.json](resource-phone-work-evidence.json). Full-suite
 and current-head CI status are tracked separately in the PR.
+
+## Additional allocation reductions
+
+This pass compares with `491e4e59bb7fca1aea9edc64b675eb17af3953fb`. It removes
+six forms of redundant copying/retention. These are CPU/allocation improvements;
+they do not increase a supplier allowance, change sampling, or reduce stored
+history. There is no new persistent cache, background task, schema or network call.
+
+| Area and fixture | Before | After |
+|---|---:|---:|
+| 10,000 achievement refreshes, 43 owned cards with current progress still above their goals | 59,600,000 JVM allocated bytes | 35,520,000 |
+| 10,000 nearby projections of 25 cells, without a world-copy shift | 250,000 array copies / 20,000,000 JVM allocated bytes | 0 copies / 0 bytes in the projection loop |
+| The same cell fixture with every cell requiring a world-copy shift | 20,000,000 median allocated bytes | 20,000,000; exact shifted coordinates retained |
+| Equal 128,000-character snapshots jointly referenced by the current display field and publisher | Two distinct equal payload objects | One; same single native callback |
+| Seal and verify a checkpoint with a 140-byte JSON payload | Three Buffer concatenations / 448 output bytes copied | One / 168 bytes |
+| Decode four valid 100-byte notification plaintexts and reject a fifth corrupted token | Four plaintext concatenations / 400 bytes | Zero; same four deliveries, corrupted token dropped |
+| One password hash plus one correct and one incorrect verification | Three extra 64-byte Buffer copies / 192 bytes | Zero; same authentication outcomes |
+
+The JVM table uses medians of three warmed rounds, with the same JDK 21.0.10
+fixture and separately saved baseline/current app classes. All 25 complete
+achievement snapshot signatures match, including low progress after deduplication,
+historical payout amounts, earned retired battery cards, an unknown ledger key,
+and NaN/infinite/signed-zero distance. When historic rewards actually require
+reconstructing the displayed progress, the objects still copy; that low-progress
+fixture's median allocation is unchanged at 59,360,000 bytes. Each of the 43
+unnecessary card copies in the high-progress case accounts for 56 observed JVM
+bytes per refresh. This is not an Android heap layout or device-speed claim.
+
+The grid regression compares raw coordinate bits across 2,161 center longitudes
+and 41 geographically distributed cells, leaving its input unchanged. The only
+production caller reads the returned corners when building nearby JSON; it never
+mutates them. Allocate on the first actual shift and keep the original array
+otherwise. Grid identity, cell size, wrapping arithmetic and output coordinates
+are unchanged. The publisher now replaces its remembered reference when a new
+immutable value compares equal. Failed updates retain the last applied value;
+native publication counts and every changed-value update remain the same. The
+reference fixture counts these two owners, not total live process memory or GC.
+
+Checkpoint sealing now includes the cipher's final chunk directly in the final
+IV/ciphertext/tag assembly. Checkpoint and notification opening still call
+`final()` successfully before parsing or exposing plaintext, but use the update
+buffer directly when the final chunk is empty. A nonempty final chunk still joins.
+Tests reconstruct the original ciphertext assembly using the same IV and check
+exact bytes, UTF-8 round trips, old ciphertext, tampered tags, wrong keys/scopes,
+replay and impossible travel. No cryptographic parameter, IV generation, AAD,
+fingerprint, nonce, token format, delivery gate or rate limit changes.
+
+The password change returns/compares scrypt's existing owned Buffer directly.
+[Node's scrypt contract](https://nodejs.org/docs/latest-v22.x/api/crypto.html#cryptoscryptpassword-salt-keylen-options-callback)
+already returns a Buffer; the removed wrappers only cloned those same 64 bytes.
+Password validation, salt generation, peppering, scrypt cost/memory parameters
+and constant-time comparison are byte-for-byte unchanged.
+
+The five allocation/retention regressions first failed against the baseline:
+two Android tests and three server tests. All 157 focused Android tests and all
+137 server tests subsequently pass with zero failures/errors/skips, and the
+account Function builds. The server fixture is reproducible with:
+
+```
+node server/tools/check-buffer-resources.mjs 491e4e59bb7fca1aea9edc64b675eb17af3953fb
+```
+
+Compile [PhoneAllocationProbe.java](../tools/PhoneAllocationProbe.java) with JDK 21,
+the compiled app classes, its matching Kotlin stdlib and Android SDK JAR; run it
+against baseline/current class directories using `-Xms64m -Xmx256m`. No Android
+stub methods execute. All fixture work is local, without provider/production
+traffic. [resource-copy-reduction-evidence.json](resource-copy-reduction-evidence.json)
+records the raw rounds and operation counts. Buffer counts measure affected copy
+operations/output bytes rather than physical/slab allocations, storage, peak
+memory or quota use. The comparisons/branches needed to omit copies remain;
+no whole-app speed, battery percentage or DAU/driving-hours gain is inferred.
+
+Fourteen original driving/matching source scopes still match `137e398`. Eighteen
+additional comparisons against `491e4e5` constrain this pass to the six copy
+changes and confirm unchanged complete map renderer, tracking/database/distance,
+strict local reuse, scoring/Integrity/competition, account routing and gateway.
+The full local run passes **1,104 Android tests across 68 suites**, with zero
+failures/errors/skips. Lint passes with zero errors and the same 299 warnings;
+debug app/device-test APKs and the account Function build successfully. The
+previous commit's CI passes every verification job after Android 35's unchanged
+job-only rerun passed all nine native cases following a lifecycle-transition
+timeout. Current-head CI status is tracked separately in the PR.

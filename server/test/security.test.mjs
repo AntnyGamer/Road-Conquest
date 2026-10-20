@@ -56,3 +56,22 @@ test("session tokens are random and only their hashes need storage", () => {
   assert.notEqual(first.token, second.token);
   assert.deepEqual(first.tokenHash, hashSessionToken(first.token));
 });
+
+test("scrypt returns its owned 64-byte result without copying password hashes", async () => {
+  const from = Buffer.from;
+  let copies = 0;
+  Buffer.from = function (value, ...args) {
+    if (Buffer.isBuffer(value) && value.length === 64) copies++;
+    return from.call(this, value, ...args);
+  };
+  let result;
+  try {
+    result = await hashPassword('Unicode password 🛣️', 'local-test-pepper');
+    assert.equal(await verifyPassword('Unicode password 🛣️', result.salt, result.hash, 'local-test-pepper'), true);
+    assert.equal(await verifyPassword('different password', result.salt, result.hash, 'local-test-pepper'), false);
+  } finally { Buffer.from = from; }
+  assert.equal(Buffer.isBuffer(result.hash), true);
+  assert.equal(result.hash.length, 64);
+  assert.equal(result.salt.length, 16);
+  assert.equal(copies, 0);
+});

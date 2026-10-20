@@ -56,14 +56,14 @@ export async function hashPassword(password, pepper = "") {
   if (!validatePassword(password)) throw new Error("invalid password");
   const salt = randomBytes(16);
   const hash = await scrypt(passwordInput(password, pepper), salt, 64, SCRYPT_OPTIONS);
-  return { salt, hash: Buffer.from(hash) };
+  return { salt, hash };
 }
 
 export async function verifyPassword(password, salt, expectedHash, pepper = "") {
   if (typeof password !== "string" || !Buffer.isBuffer(salt) || salt.length !== 16 ||
       !Buffer.isBuffer(expectedHash) || expectedHash.length !== 64
   ) return false;
-  const actual = Buffer.from(await scrypt(passwordInput(password, pepper), salt, 64, SCRYPT_OPTIONS));
+  const actual = await scrypt(passwordInput(password, pepper), salt, 64, SCRYPT_OPTIONS);
   return timingSafeEqual(actual, expectedHash);
 }
 

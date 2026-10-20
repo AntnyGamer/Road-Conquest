@@ -81,4 +81,32 @@ class FogGridTest {
         assertNull(FogGrid.cell(92.0, -75.0))
         assertTrue(FogGrid.visitedCorners(doubleArrayOf(Double.NaN, 0.0, 90.1, 20.0)).isEmpty())
     }
+
+    @Test fun worldCopyProjectionCopiesOnlyWhenNeededAndPreservesEveryBitAndInput() {
+        val corners = (-20..20).flatMap { offset ->
+            FogGrid.corners(offset.toDouble(), offset * 8.99).asList()
+        }.toDoubleArray()
+        val original = corners.copyOf()
+        fun previous(center: Double): DoubleArray {
+            val shifted = corners.copyOf()
+            for (i in 0 until shifted.size - 7 step 8) {
+                val longitude = (shifted[i + 1] + shifted[i + 3]) / 2.0
+                val offset = kotlin.math.floor((center - longitude) / 360.0 + 0.5) * 360.0
+                if (offset == 0.0) continue
+                for (corner in 0..3) shifted[i + 2 * corner + 1] += offset
+            }
+            return shifted
+        }
+        for (center in -1080..1080) {
+            val actual = FogGrid.nearLongitude(corners, center.toDouble())
+            assertEquals(previous(center.toDouble()).map { it.toRawBits() }, actual.map { it.toRawBits() })
+            assertArrayEquals(original, corners, 0.0)
+        }
+        val local = FogGrid.corners(40.0, -74.0)
+        repeat(100) { assertSame(local, FogGrid.nearLongitude(local, -74.0)) }
+        val wrapped = FogGrid.nearLongitude(local, 286.0)
+        assertNotSame(local, wrapped)
+        assertEquals(local[1] + 360.0, wrapped[1], 0.0)
+        assertSame(local, FogGrid.nearLongitude(local, Double.NaN))
+    }
 }

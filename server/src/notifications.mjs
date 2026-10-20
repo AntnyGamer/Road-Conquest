@@ -68,7 +68,9 @@ export function createNotifications(pool, { pepper, sender, deliveryLimit }) {
     const cipher = createDecipheriv('aes-256-gcm', key, bytes.subarray(0, 12));
     cipher.setAAD(aad);
     cipher.setAuthTag(bytes.subarray(-16));
-    return Buffer.concat([cipher.update(bytes.subarray(12, -16)), cipher.final()]).toString('utf8').replace(/\0+$/, '');
+    const plaintext = cipher.update(bytes.subarray(12, -16));
+    const tail = cipher.final(); // Authentication still completes before a token is exposed.
+    return (tail.length ? Buffer.concat([plaintext, tail]) : plaintext).toString('utf8').replace(/\0+$/, '');
   };
   return {
     configured: Boolean(sender),

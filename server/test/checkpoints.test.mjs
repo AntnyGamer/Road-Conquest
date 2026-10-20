@@ -2,13 +2,50 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createCheckpointCodec, sealCheckpoint, verifyContinuity } from "../src/checkpoints.mjs";
 import { parseEvidence } from "../src/scoring.mjs";
-import { randomUUID } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHmac, randomUUID } from "node:crypto";
 
 const secret = "K".repeat(43);
 const run = randomUUID();
 const scope = "2:123:dataset";
 const fix = { lat: 40, lon: -75, time: Date.now() - 5000, elapsed: 100000, accuracy: 5, speed: 10, mock: false };
 const next = (changes = {}) => ({ ...fix, lon: -74.9995, time: fix.time + 5000, elapsed: fix.elapsed + 5000, ...changes });
+
+test("checkpoint buffer assembly avoids duplicate ciphertext and authenticated plaintext copies", () => {
+  const codec = createCheckpointCodec(scope, secret);
+  const concatenate = Buffer.concat;
+  const counts = { seal: 0, verify: 0 };
+  let phase = 'seal';
+  Buffer.concat = function (...args) { counts[phase]++; return concatenate.apply(this, args); };
+  try {
+    const checkpoint = codec.seal(fix, run);
+    phase = 'verify';
+    codec.verify(checkpoint, next(), run);
+  } finally { Buffer.concat = concatenate; }
+  assert.deepEqual(counts, { seal: 1, verify: 0 });
+});
+
+test("checkpoint bytes match original assembly and old ciphertext still verifies with exact UTF8", () => {
+  const key = createHmac('sha256', secret).update('roadconquest-checkpoint-v2\0').update(scope).digest();
+  for (const fixtureRun of [run, 'Unicode-🛣️-é-\u0000']) {
+    const checkpoint = sealCheckpoint(fix, fixtureRun, scope, secret);
+    const bytes = Buffer.from(checkpoint.sealed, 'base64url');
+    const iv = bytes.subarray(0, 12);
+    const cipher = createCipheriv('aes-256-gcm', key, iv);
+    cipher.setAAD(Buffer.from(scope));
+    const payload = JSON.stringify({ ...fix, run: fixtureRun });
+    const encrypted = Buffer.concat([cipher.update(payload, 'utf8'), cipher.final()]);
+    const original = Buffer.concat([iv, encrypted, cipher.getAuthTag()]).toString('base64url');
+    assert.equal(checkpoint.sealed, original);
+    assert.doesNotThrow(() => verifyContinuity({ ...checkpoint, sealed: original }, next(), fixtureRun, scope, secret));
+    const decipher = createDecipheriv('aes-256-gcm', key, iv);
+    decipher.setAAD(Buffer.from(scope));
+    decipher.setAuthTag(bytes.subarray(-16));
+    assert.equal(Buffer.concat([decipher.update(bytes.subarray(12, -16)), decipher.final()]).toString('utf8'), payload);
+    const corrupt = Buffer.from(bytes);
+    corrupt[corrupt.length - 1] ^= 1;
+    assert.throws(() => verifyContinuity({ ...checkpoint, sealed: corrupt.toString('base64url') }, next(), fixtureRun, scope, secret), /checkpoint unavailable/u);
+  }
+});
 
 test("batch checkpoint contexts interoperate with existing ciphertext and retain scope and replay checks", () => {
   const codec = createCheckpointCodec(scope, secret);
