@@ -586,3 +586,48 @@ the preceding head's results; fresh-head native/release results are tracked
 separately in the PR.
 No version bump, release, deployment, provider credits or production traffic
 are involved.
+
+## Final road-overlay buffers
+
+One further change, against `e1a718c`, avoids copying final prepared-road arrays
+when their allocated length already equals the returned logical length. The
+producer is local to one preparation and has no remaining writer after return.
+There is no shared cache or retained spare capacity. Part buffers that are
+cleared/reused while splitting roads still use their original defensive copies;
+final buffers that need trimming still copy to their original exact length.
+
+| Actual OverlayRoads.prepare fixture | Before | After |
+| --- | --- | --- |
+| 128 separate roads, 256 points each; 65,536 coordinate values and 129 chain starts | Two final array copies | Zero final array copies |
+| Same fixture, calling-thread JVM allocation median | 15,315,352 bytes | 14,790,512 (524,840 fewer) |
+| Joined-road control, requiring both trim copies | 945,112 bytes | 945,112 bytes |
+
+All three measured rounds give those exact counts on both SDKs 31/37, after
+four warmup preparations per fixture. The omitted raw payload copies total
+524,804 bytes; the measured JVM allocation difference also includes array
+headers/alignment. The allocation measurement includes unchanged JSON parsing
+and graph work. It is not Android peak memory, speed, battery, storage, provider
+quota or driving-hour evidence. Savings are conditional on a final array
+already fitting; the joined-road control retains its original allocations.
+
+Before/after signatures match every coordinate's raw bits and every ordered
+chain start across 240 scenes per SDK: separate/joined roads, repeated date-line
+crossings, T junctions, loops and duplicate points. Ownership tests mutate one
+preparation's returned arrays and confirm that other preparations stay intact.
+All **204 targeted tests across six suites** pass with zero failures/errors/skips,
+including existing native-graphics fog/road rendering, turn geometry, travel,
+date-line and progression checks. Lint passes with zero errors and the same 299
+warnings; debug app/device-test APK builds pass. The full new-head suite and
+device/release checks run in CI; they are not presented as a completed local run.
+
+[check-overlay-buffer-sources.mjs](../tools/check-overlay-buffer-sources.mjs)
+verifies the entire renderer outside the two final ownership decisions and
+every other app source/asset/manifest. All graph/geometry math, snap/join/visit
+gates, split handling, GPS/matching, requests, town-border code, server/gateway,
+build and workflow configuration remain unchanged. The preceding `e1a718c` CI
+passes every verification job; downloaded reports confirm 1,138 unit cases,
+27 native cases and four successful release launches. Raw rounds, signatures,
+scope and validation are in
+[resource-overlay-buffer-evidence.json](resource-overlay-buffer-evidence.json).
+No other proposed quota/resource change was retained in this pass. No version
+bump, release, deployment or provider/production test traffic is involved.

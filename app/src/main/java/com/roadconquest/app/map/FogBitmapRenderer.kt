@@ -209,7 +209,10 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
             for (i in segments.indices) {
                 if (!used[i]) walk(i, segments[i].startNode)
             }
-            return OverlayRoads(output.toArray(), starts.copyOf(chainCount + 1))
+            return OverlayRoads(
+                output.finish(),
+                if (chainCount + 1 == starts.size) starts else starts.copyOf(chainCount + 1)
+            )
         }
 
         /**
@@ -499,6 +502,10 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
             fun clear() { size = 0 }
 
             fun toArray() = values.copyOf(size)
+
+            // Only use when this buffer is finished: the caller may own its
+            // backing array. Reused split-road buffers must keep using toArray().
+            fun finish() = if (size == values.size) values else values.copyOf(size)
         }
 
         private const val EARTH_RADIUS_M = 6_371_008.8
