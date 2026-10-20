@@ -631,3 +631,73 @@ scope and validation are in
 [resource-overlay-buffer-evidence.json](resource-overlay-buffer-evidence.json).
 No other proposed quota/resource change was retained in this pass. No version
 bump, release, deployment or provider/production test traffic is involved.
+
+## Direct UTF-8 response decoding
+
+This pass compares against `889ba9c`. Five response paths previously called
+`ByteArrayOutputStream.toByteArray()` solely to decode that copy as UTF-8:
+account replies, service switches, Geoapify matching, LocationIQ matching and
+the fallback geoBoundaries country/region display client. They now decode the
+accumulator directly with its API-31-compatible `toString(String)` overload.
+There is no retained buffer or new cache. The shared reader is named
+`readBoundedUtf8` to make its string result explicit.
+
+The same byte read loops, chunk sizes and caps remain: 64 KiB for accounts,
+4 KiB for switches, 4 MiB for matching and downloaded fallback boundaries,
+and 64 KiB for fallback metadata. Switches still reject a 4,097th byte before
+parsing or saving. Oversized matching responses still fail before decoding;
+replacement of malformed UTF-8, exceptions and caller ownership of input
+streams remain unchanged. Requests, provider calls, HTTP rate reservations,
+response caches, freshness, redirects, parser/geometry decisions, confidence,
+GPS recording, turns, gaps and town borders retain their existing behavior.
+
+This avoids one payload-sized byte-array copy per decoded response. Network
+bytes, provider credits, server quotas and maximum driving hours do not change.
+No additional quota reduction with a demonstrated equivalent result was found.
+Other candidates requiring altered freshness, cooldowns, retry semantics or
+geometry behavior were left alone.
+
+`ResponseDecodingTest` exercises real account requests and asynchronous service
+refreshes through local fake HTTPS connections: split Unicode, malformed UTF-8,
+exact byte caps, oversized replies, HTTP errors, invalid/absent bodies, read
+failure, offline defaults, stream closure and disconnect. Both implementations
+pass the same checks. `BoundedInputTest` additionally compares complete decoded
+strings, including every two-byte combination, split four-byte Unicode and
+truncated/surrogate sequences. Its byte-limit cases include empty streams,
+zero/negative limits, chunk boundaries, exactly 4 MiB and one extra byte, plus
+unchanged read amounts and propagation of the original I/O exception.
+
+The before/after fixture runs the actual compiled account request and shared
+reader on JDK 21 with Robolectric SDKs 31/37. It measures calling-thread JVM
+allocations with inputs built outside the measurement, warmups and three rounds.
+These results are not Android peak memory, battery, speed or provider-quota
+measurements. The exact raw rounds and final validation are recorded in
+[resource-response-decoding-evidence.json](resource-response-decoding-evidence.json).
+
+[check-response-decoding-sources.mjs](../tools/check-response-decoding-sources.mjs)
+reverses just the decoding edits and compares each entire affected file with
+`889ba9c`. It also verifies that every other app source, asset and manifest,
+the complete server/gateway, build configuration and workflows are unchanged.
+This is the current source guard; earlier guards that require completely
+unchanged provider-client files describe their respective earlier passes.
+
+| Per decoded response in the JVM fixture | Allocated bytes avoided |
+| --- | ---: |
+| 4 KiB account reply or shared-reader input, both SDKs | 4,112 |
+| 64 KiB account reply or shared-reader input, both SDKs | 65,552 |
+| 1 MiB shared-reader input, both SDKs | 1,048,592 |
+| 4 MiB shared-reader input, SDKs 31/37 | 4,194,320 / 4,194,296 |
+
+The small difference between the 4 MiB JVM samples is retained in the raw
+rounds; the source-derived payload-copy removal remains exactly 4,194,304
+bytes. These conditional fixture savings are not a per-drive/fleet estimate.
+All **293 targeted tests across twelve suites** pass, including local provider
+network/cache/fallback fixtures and turn/geometry validation. Both new test
+classes also pass against their original decoding pipelines. After hardening
+the isolated HTTPS fixture to permit missing Robolectric SDK downloads, its
+eight account/config cases pass again. Lint passes with zero errors and the
+same 299 warnings; debug app/device-test APK builds pass. Eleven source checks
+preserve the implementation outside the decoding edits. Full fresh-head CI is
+tracked in PR #105. The preceding `889ba9c` native reports confirm 27 cases
+across APIs 31/35/37 with no failures/errors/skips; they are not presented as
+fresh-head device results. No version bump, release or deployment is included.

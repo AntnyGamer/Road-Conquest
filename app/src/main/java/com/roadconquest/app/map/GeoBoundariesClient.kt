@@ -3,7 +3,7 @@ package com.roadconquest.app.map
 import com.roadconquest.app.data.PlaceDiscovery
 import com.roadconquest.app.data.PlaceKind
 import com.roadconquest.app.services.ProviderHealth
-import com.roadconquest.app.services.readBounded
+import com.roadconquest.app.services.readBoundedUtf8
 import org.json.JSONObject
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -91,8 +91,8 @@ class GeoBoundariesClient(private val loadJson: (String, Int) -> JSONObject = ::
                         url = next.toString()
                     } else {
                         if (connection.responseCode !in 200..299) throw IOException("Boundary service unavailable")
-                        val bytes = connection.inputStream.use { readBounded(it, limit) }
-                        return JSONObject(bytes.toString(Charsets.UTF_8))
+                        val body = connection.inputStream.use { readBoundedUtf8(it, limit) }
+                        return JSONObject(body)
                     }
                 } finally { connection.disconnect() }
             }

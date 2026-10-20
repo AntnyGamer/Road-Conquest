@@ -56,7 +56,7 @@ object ServiceConfig {
                 connection.readTimeout = 5000
                 try {
                     check(connection.responseCode == 200)
-                    val bytes = connection.inputStream.use { input ->
+                    val raw = connection.inputStream.use { input ->
                         val output = java.io.ByteArrayOutputStream()
                         val buffer = ByteArray(1024)
                         while (output.size() <= 4096) {
@@ -64,10 +64,9 @@ object ServiceConfig {
                             if (count < 0) break
                             output.write(buffer, 0, count)
                         }
-                        output.toByteArray()
+                        check(output.size() <= 4096)
+                        output.toString(Charsets.UTF_8.name())
                     }
-                    check(bytes.size <= 4096)
-                    val raw = bytes.toString(Charsets.UTF_8)
                     val updated = parse(raw)
                     prefs.edit().putString("json", raw).putLong("fetched", System.currentTimeMillis()).apply()
                     val changed = updated != values

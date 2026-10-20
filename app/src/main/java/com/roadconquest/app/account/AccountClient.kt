@@ -145,7 +145,7 @@ object AccountClient {
             }
             val status = connection.responseCode
             val stream = if (status in 200..299) connection.inputStream else connection.errorStream
-            val bytes = stream?.use { input ->
+            val responseText = stream?.use { input ->
                 val output = java.io.ByteArrayOutputStream()
                 val buffer = ByteArray(4096)
                 while (true) {
@@ -154,9 +154,9 @@ object AccountClient {
                     if (output.size() + count > 64 * 1024) throw ApiException("Account server response was too large.")
                     output.write(buffer, 0, count)
                 }
-                output.toByteArray()
-            } ?: ByteArray(0)
-            val json = runCatching { JSONObject(bytes.toString(Charsets.UTF_8)) }.getOrElse {
+                output.toString(Charsets.UTF_8.name())
+            } ?: ""
+            val json = runCatching { JSONObject(responseText) }.getOrElse {
                 throw ApiException("Account server returned an invalid response.", status)
             }
             if (status !in 200..299) {

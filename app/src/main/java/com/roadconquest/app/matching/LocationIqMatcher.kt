@@ -2,7 +2,7 @@ package com.roadconquest.app.matching
 
 import com.roadconquest.app.data.TrackPoint
 import com.roadconquest.app.services.ProviderHealth
-import com.roadconquest.app.services.readBounded
+import com.roadconquest.app.services.readBoundedUtf8
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -89,7 +89,7 @@ class LocationIqMatcher(
                     errorCode)
                 return null
             }
-            val body = connection.inputStream.use { readBounded(it, 4 * 1024 * 1024) }.toString(Charsets.UTF_8)
+            val body = connection.inputStream.use { readBoundedUtf8(it, 4 * 1024 * 1024) }
             val result = parse(body, points)
             if (body.length <= 256_000 && result != null) {
                 cachedRequest = payload; cachedBody = body; cachedAt = System.currentTimeMillis()
