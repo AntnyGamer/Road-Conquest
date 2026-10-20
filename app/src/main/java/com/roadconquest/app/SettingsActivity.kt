@@ -53,7 +53,7 @@ class SettingsActivity : Activity() {
                     if (checked && friends && AccountStore.load(this@SettingsActivity) == null) {
                         Toast.makeText(this@SettingsActivity, "Friend notifications will start after you sign in and allow notifications.", Toast.LENGTH_LONG).show()
                     }
-                    if (checked && !options.permission(this@SettingsActivity) && Build.VERSION.SDK_INT >= 33) {
+                    if (checked && !options.permission(this@SettingsActivity)) {
                         requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 9103)
                     }
                     setupOptionalNotifications()
