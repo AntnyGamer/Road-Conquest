@@ -12,14 +12,6 @@ function fingerprint(fix, key) {
   ])).digest("base64url");
 }
 
-export function sealCheckpoint(fix, run, scope, secret) {
-  return createCheckpointCodec(scope, secret).seal(fix, run);
-}
-
-export function verifyContinuity(checkpoint, first, run, scope, secret) {
-  if (checkpoint) createCheckpointCodec(scope, secret).verify(checkpoint, first, run);
-}
-
 // Keep this context local to one batch: reuse its derived key and AAD for
 // continuity verification and sealing, without caching account keys globally.
 export function createCheckpointCodec(scope, secret) {

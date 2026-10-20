@@ -71,7 +71,7 @@ class TripHistoryRepositoryTest {
         times.forEachIndexed { index, time ->
             db.execSQL(
                 "INSERT INTO track_points(latitude, longitude, accuracy_m, speed_mps, bearing_deg, timestamp_ms) VALUES (?,?,?,?,?,?)",
-                arrayOf(40.0, -74.0 + index * 0.001, 5.0, 10.0, 0.0, time)
+                arrayOf<Any>(40.0, -74.0 + index * 0.001, 5.0, 10.0, 0.0, time)
             )
         }
 

@@ -9,7 +9,6 @@ import org.json.JSONObject
 import java.util.Locale
 import kotlin.math.atan2
 import kotlin.math.cos
-import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 import kotlin.math.sin
 import kotlin.math.sqrt
@@ -451,68 +450,6 @@ class RoadGeometryValidator {
     private fun bearingDifferenceDegrees(a: Double, b: Double): Double =
         kotlin.math.abs(((a - b + 540.0) % 360.0) - 180.0)
 
-    private fun isSharpTurn(points: List<TrackPoint>, index: Int): Boolean {
-        if (index == 0 || index == points.lastIndex) return false
-        val incoming = points[index - 1]
-        val point = points[index]
-        val outgoing = points[index + 1]
-        return pointDistanceMeters(incoming, point) >= MIN_BEARING_EVIDENCE_DISTANCE_M &&
-            pointDistanceMeters(point, outgoing) >= MIN_BEARING_EVIDENCE_DISTANCE_M &&
-            bearingDifferenceDegrees(
-                initialBearingDegrees(incoming, point),
-                initialBearingDegrees(point, outgoing)
-            ) >= SHARP_TURN_DEGREES
-    }
-
-    internal fun buildBearingGuidance(points: List<TrackPoint>): String? {
-        // Keep an entry for EVERY fix, including blank junction entries, while
-        // writing directly to one buffer instead of allocating a list of strings.
-        val guidance = StringBuilder(points.size * 6)
-        var hasGuidance = false
-        for (index in points.indices) {
-            if (index > 0) guidance.append(';')
-            val point = points[index]
-            // A forward-only course at a junction describes the exit road, not necessarily
-            // the incoming road. Do not forbid provider from considering the true turn here.
-            if (isSharpTurn(points, index)) continue
-            val from: TrackPoint
-            val to: TrackPoint
-            if (index < points.lastIndex) {
-                from = point
-                to = points[index + 1]
-            } else {
-                if (index == 0) continue
-                from = points[index - 1]
-                to = point
-            }
-            val distance = pointDistanceMeters(from, to)
-            val fromAccuracy = from.accuracyMeters.takeIf { it.isFinite() && it >= 0f } ?: MAX_MATCH_RADIUS_M
-            val toAccuracy = to.accuracyMeters.takeIf { it.isFinite() && it >= 0f } ?: MAX_MATCH_RADIUS_M
-            val minimumEvidenceDistance = maxOf(
-                MIN_BEARING_EVIDENCE_DISTANCE_M,
-                (fromAccuracy + toAccuracy) * BEARING_ACCURACY_DISTANCE_FACTOR
-            )
-            if (!distance.isFinite() || distance < minimumEvidenceDistance) continue
-
-            val elapsedMs = to.timestampMillis - from.timestampMillis
-            val combinedAccuracy = fromAccuracy + toAccuracy
-            val inferredSpeedMps = if (elapsedMs > 0L && distance > combinedAccuracy) {
-                distance / (elapsedMs / 1_000.0)
-            } else {
-                0.0
-            }
-            val storedSpeed = point.speedMps.toDouble().takeIf { it.isFinite() && it >= 0.0 } ?: 0.0
-            val movementSpeedMps = if (storedSpeed > 0.0) storedSpeed else inferredSpeedMps
-            if (movementSpeedMps < MIN_BEARING_GUIDANCE_SPEED_MPS) continue
-
-            val movementBearing = initialBearingDegrees(from, to)
-            guidance.append(movementBearing.roundToInt() % 360)
-                .append(',').append(BEARING_GUIDANCE_RANGE_DEGREES)
-            hasGuidance = true
-        }
-        return if (hasGuidance) guidance.toString() else null
-    }
-
     private fun pointDistanceMeters(a: TrackPoint, b: TrackPoint): Double {
         val lat1 = Math.toRadians(a.latitude)
         val lat2 = Math.toRadians(b.latitude)
@@ -645,13 +582,6 @@ class RoadGeometryValidator {
         private const val MAX_UNNAMED_BRIDGE_BEARING_DEGREES = 20.0
         private const val MIN_ZERO_SEAM_RAW_DISTANCE_M = 3.0
         private const val MAX_ZERO_SEAM_RAW_DISTANCE_M = 10.0
-        private const val MIN_BEARING_GUIDANCE_SPEED_MPS = 4f
-        private const val MIN_BEARING_EVIDENCE_DISTANCE_M = 8.0
-        private const val BEARING_ACCURACY_DISTANCE_FACTOR = 0.75
-        // provider interprets this as a symmetric range around the supplied heading. Sixty-five
-        // degrees is broad enough for ordinary curves while still excluding the opposite road.
-        private const val BEARING_GUIDANCE_RANGE_DEGREES = 65
-        private const val SHARP_TURN_DEGREES = 45.0
         private const val EARTH_RADIUS_M = 6_371_008.8
         private const val MIN_GEOMETRY_LENGTH_M = 0.001
         private const val DUPLICATE_POINT_TOLERANCE_M = 0.01

@@ -770,7 +770,7 @@ class TrackingRepository(context: Context) {
                     recordRoadVisit(db, visit.segmentId, visit.firstTimestamp, visit.lastTimestamp)
                     db.execSQL("UPDATE roads SET last_driven_at = MAX(last_driven_at, ?) " +
                         "WHERE segment_id = ? AND last_driven_at < ?",
-                        arrayOf(visit.lastTimestamp, visit.segmentId, visit.lastTimestamp))
+                        arrayOf<Any>(visit.lastTimestamp, visit.segmentId, visit.lastTimestamp))
                     resolved += count
                 }
                 db.setTransactionSuccessful()
@@ -1403,13 +1403,6 @@ class TrackingRepository(context: Context) {
     )
 
     /** Pending raw evidence can be time-bounded for display without deleting retryable fixes. */
-    fun getPendingRouteInBounds(
-        north: Double, east: Double, south: Double, west: Double,
-        visibleSinceMillis: Long = Long.MIN_VALUE
-    ): List<RoadRecord> = getPendingRouteInBoundsResult(
-        north, east, south, west, visibleSinceMillis
-    ).roads
-
     @Synchronized
     fun getPendingRouteInBoundsResult(
         north: Double, east: Double, south: Double, west: Double,
@@ -1910,7 +1903,7 @@ class TrackingRepository(context: Context) {
     private fun isMatchingContinuation(older: TrackPoint, newer: TrackPoint, ordinaryGapMs: Long): Boolean {
         val gap = newer.timestampMillis - older.timestampMillis
         if (gap <= 0L || gap > MAX_STOP_CONTINUATION_MS) return false
-        val distance = MATCH_DISTANCE_RESULT.get()
+        val distance = requireNotNull(MATCH_DISTANCE_RESULT.get())
         Location.distanceBetween(older.latitude, older.longitude, newer.latitude, newer.longitude, distance)
         if (!distance[0].isFinite() || distance[0] > gap / 1_000f * MAX_MATCH_SPEED_MPS) return false
         if (gap <= ordinaryGapMs) return true

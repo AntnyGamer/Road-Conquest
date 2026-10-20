@@ -250,11 +250,11 @@ class TrackingRepositoryTest {
     @Test fun pendingGpsIntervalsRemainContinuousUntilMatchingCompletes() {
         val ids = (0..4).map { point(1_000_000L + it * 3_000L, lon = -74.0 + it * 0.0001) }
         repository.markMatched(listOf(ids.first(), ids.last()))
-        val pending = repository.getPendingRouteInBounds(41.0, -73.0, 39.0, -75.0)
+        val pending = repository.getPendingRouteInBoundsResult(41.0, -73.0, 39.0, -75.0).roads
         assertEquals(1, pending.size)
         assertEquals(5, org.json.JSONArray(pending.single().geometryJson).length())
         repository.markMatched(ids)
-        assertTrue(repository.getPendingRouteInBounds(41.0, -73.0, 39.0, -75.0).isEmpty())
+        assertTrue(repository.getPendingRouteInBoundsResult(41.0, -73.0, 39.0, -75.0).roads.isEmpty())
     }
 
     @Test fun oldUnmatchedEvidenceExpiresFromPreviewButRemainsRetryable() {
@@ -299,7 +299,7 @@ class TrackingRepositoryTest {
         point(1_009_000L, lon = -73.9997)
         point(2_000_000L, lon = -73.9996)
         repository.readableDatabase().delete("track_points", "id = ?", arrayOf(removed.toString()))
-        val pending = repository.getPendingRouteInBounds(41.0, -73.0, 39.0, -75.0)
+        val pending = repository.getPendingRouteInBoundsResult(41.0, -73.0, 39.0, -75.0).roads
         assertEquals(1, pending.size)
         assertEquals(2, org.json.JSONArray(pending.single().geometryJson).length())
     }
@@ -480,7 +480,7 @@ class TrackingRepositoryTest {
         assertEquals(current, window.points.map { it.id })
         assertFalse(old in window.markableIds)
 
-        val pending = repository.getPendingRouteInBounds(41.0, -73.0, 39.0, -75.0)
+        val pending = repository.getPendingRouteInBoundsResult(41.0, -73.0, 39.0, -75.0).roads
         assertEquals(1, pending.size)
         assertEquals(
             2,
@@ -543,9 +543,9 @@ class TrackingRepositoryTest {
         val window = repository.loadMatchingWindow()
         assertEquals(current, window.points.map { it.id })
         assertEquals(current.toSet(), window.markableIds)
-        assertEquals(1, repository.getPendingRouteInBounds(41.0, -73.0, 39.0, -75.0).size)
+        assertEquals(1, repository.getPendingRouteInBoundsResult(41.0, -73.0, 39.0, -75.0).roads.size)
         assertEquals(2, org.json.JSONArray(
-            repository.getPendingRouteInBounds(41.0, -73.0, 39.0, -75.0).single().geometryJson
+            repository.getPendingRouteInBoundsResult(41.0, -73.0, 39.0, -75.0).roads.single().geometryJson
         ).length())
     }
 
@@ -801,7 +801,7 @@ class TrackingRepositoryTest {
         val db = repository.readableDatabase()
         db.execSQL(
             "INSERT INTO road_visits(segment_id,started_at,ended_at) VALUES (?,?,?)",
-            arrayOf(road.segmentId, 1_100_000L, 1_500_000L)
+            arrayOf<Any>(road.segmentId, 1_100_000L, 1_500_000L)
         )
         db.execSQL("UPDATE roads SET drive_count = 2 WHERE segment_id = ?",
             arrayOf(road.segmentId))
@@ -825,7 +825,7 @@ class TrackingRepositoryTest {
         val db = repository.readableDatabase()
         db.execSQL(
             "INSERT INTO road_visits(segment_id,started_at,ended_at) VALUES (?,?,?)",
-            arrayOf(road.segmentId, 1_100_000L, 1_500_000L)
+            arrayOf<Any>(road.segmentId, 1_100_000L, 1_500_000L)
         )
         // There was a real departure from the road inside that 90-second gap.
         point(1_060_000L, lat = 40.004, lon = -74.003)
@@ -839,7 +839,7 @@ class TrackingRepositoryTest {
         val road = repository.getRoadsInBounds(41.0, -73.0, 39.0, -75.0).single()
         val db = repository.readableDatabase()
         db.execSQL("INSERT INTO road_visits(segment_id, started_at, ended_at) VALUES (?,?,?)",
-            arrayOf(road.segmentId, 1_080_000L, 1_095_000L))
+            arrayOf<Any>(road.segmentId, 1_080_000L, 1_095_000L))
         db.execSQL("UPDATE roads SET drive_count = 2 WHERE segment_id = ?", arrayOf(road.segmentId))
 
         val stored = repository.getRoadsInBounds(41.0, -73.0, 39.0, -75.0).single()
@@ -859,7 +859,7 @@ class TrackingRepositoryTest {
         val road = repository.getRoadsInBounds(41.0, -73.0, 39.0, -75.0).single()
         val db = repository.readableDatabase()
         db.execSQL("INSERT INTO road_visits(segment_id, started_at, ended_at) VALUES (?,?,?)",
-            arrayOf(road.segmentId, 1_080_000L, 1_095_000L))
+            arrayOf<Any>(road.segmentId, 1_080_000L, 1_095_000L))
         point(1_045_000L, lat = 40.004, lon = -74.003)
         assertEquals(2, repository.estimatedRoadVisitCount(road))
     }
@@ -1120,12 +1120,12 @@ class TrackingRepositoryTest {
     @Test fun pendingLineCrossingViewportRendersEvenWhenBothEndpointsAreOutside() {
         point(1_000_000L, lat = 40.0, lon = -74.01)
         point(1_030_000L, lat = 40.0, lon = -73.99)
-        val pending = repository.getPendingRouteInBounds(
+        val pending = repository.getPendingRouteInBoundsResult(
             north = 40.0005,
             east = -73.9999,
             south = 39.9995,
             west = -74.0001
-        )
+        ).roads
         assertEquals(1, pending.size)
         assertEquals(2, org.json.JSONArray(pending.single().geometryJson).length())
     }

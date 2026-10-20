@@ -557,7 +557,7 @@ object FogBitmapRenderer {
             Bitmap.createBitmap(request.bitmapWidth, request.bitmapHeight, Bitmap.Config.ARGB_8888)
         }
         val canvas = Canvas(bitmap)
-        val scratch = renderScratch.get()
+        val scratch = requireNotNull(renderScratch.get())
         if (request.gridMode) {
             // All three cloud octaves use geographic Mercator texture matrices,
             // never the camera's previous pan or zoom. The dark, layered wisps
@@ -569,7 +569,7 @@ object FogBitmapRenderer {
             // Retain the legacy road-fog renderer for its independent unit tests.
             scratch.textureMatrix.setValues(request.textureMatrix)
             scratch.cloudShader.setLocalMatrix(scratch.textureMatrix)
-            canvas.drawRect(0f, 0f, request.bitmapWidth.toFloat(), request.bitmapHeight.toFloat(), scratch.cloudPaint)
+            canvas.drawRect(0f, 0f, request.bitmapWidth.toFloat(), request.bitmapHeight.toFloat(), scratch.legacy.cloudPaint)
         }
         // In grid mode, road geometry and point-radius fog reveals do not contribute.
         // Blue roads still render separately; entering a mile tile is the sole unlock trigger.
@@ -611,10 +611,11 @@ object FogBitmapRenderer {
         val reveal = scratch.acquireRevealBitmap(request.bitmapWidth, request.bitmapHeight)
         val revealCanvas = Canvas(reveal)
         val erasePaint = scratch.revealPaint
-        val capBounds = scratch.capBounds
-        val roadLinear = scratch.roadLinear
-        val roadRadial = scratch.roadRadial
-        val locationRadial = scratch.locationRadial
+        val legacy = scratch.legacy
+        val capBounds = legacy.capBounds
+        val roadLinear = legacy.roadLinear
+        val roadRadial = legacy.roadRadial
+        val locationRadial = legacy.locationRadial
 
         val centerCos = cos(Math.toRadians(request.centerLatitude.coerceIn(-85.05112878, 85.05112878)))
             .coerceAtLeast(1e-6)
@@ -900,11 +901,10 @@ object FogBitmapRenderer {
     private class RenderScratch {
         val textureMatrix = Matrix()
         val cloudShader = BitmapShader(cloudTexture, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
-        val cloudPaint = Paint(Paint.FILTER_BITMAP_FLAG).apply {
-            shader = cloudShader
-            alpha = (MAX_FOG_ALPHA * 255).roundToInt()
-            xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC)
-        }
+        // The app renders grid fog; initialize road-only native objects only for legacy requests.
+        private var legacyScratch: LegacyRoadScratch? = null
+        val legacy: LegacyRoadScratch
+            get() = legacyScratch ?: LegacyRoadScratch(cloudShader).also { legacyScratch = it }
         private val mediumShader = BitmapShader(cloudTexture, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
         private val broadShader = BitmapShader(cloudTexture, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
         private val mediumMatrix = Matrix()
@@ -966,7 +966,6 @@ object FogBitmapRenderer {
                 1f, 0f, 0f, 0f, 0f
             ))
         }
-        val capBounds = RectF(-1f, -1f, 1f, 1f)
         val gridPoints = FloatArray(8)
         val gridPath = Path()
         private var gridPixelCache = IntArray(0)
@@ -981,6 +980,29 @@ object FogBitmapRenderer {
             if (gridDistanceCache.size < count) gridDistanceCache = FloatArray(count)
             return gridDistanceCache
         }
+        private var revealBitmap: Bitmap? = null
+
+        fun acquireRevealBitmap(width: Int, height: Int): Bitmap {
+            val existing = revealBitmap
+            if (existing != null && !existing.isRecycled && existing.width == width && existing.height == height) {
+                existing.eraseColor(Color.BLACK)
+                return existing
+            }
+            existing?.recycle()
+            return Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also {
+                it.eraseColor(Color.BLACK)
+                revealBitmap = it
+            }
+        }
+    }
+
+    private class LegacyRoadScratch(cloudShader: BitmapShader) {
+        val cloudPaint = Paint(Paint.FILTER_BITMAP_FLAG).apply {
+            shader = cloudShader
+            alpha = (MAX_FOG_ALPHA * 255).roundToInt()
+            xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC)
+        }
+        val capBounds = RectF(-1f, -1f, 1f, 1f)
         private val roadClearFraction = ROAD_CLEAR_M / ROAD_FULL_M
         val roadLinear = LinearGradient(
             0f, -1f, 0f, 1f,
@@ -1014,20 +1036,6 @@ object FogBitmapRenderer {
         // Road and place reveals intentionally use the same clear/full radii, so the exact
         // same immutable shader can serve both instead of allocating a duplicate gradient.
         val locationRadial = roadRadial
-        private var revealBitmap: Bitmap? = null
-
-        fun acquireRevealBitmap(width: Int, height: Int): Bitmap {
-            val existing = revealBitmap
-            if (existing != null && !existing.isRecycled && existing.width == width && existing.height == height) {
-                existing.eraseColor(Color.BLACK)
-                return existing
-            }
-            existing?.recycle()
-            return Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also {
-                it.eraseColor(Color.BLACK)
-                revealBitmap = it
-            }
-        }
     }
 
     private val renderScratch = ThreadLocal.withInitial { RenderScratch() }
