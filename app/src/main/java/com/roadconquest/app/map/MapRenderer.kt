@@ -125,6 +125,9 @@ class MapRenderer(
     private var nearbyVisitedFeatures = EMPTY_FEATURES.toJson()
     private var nearbyUnvisitedFeatures = EMPTY_FEATURES.toJson()
     private var nearbyNumberFeatures = EMPTY_FEATURES.toJson()
+    private val nearbyVisitedPublisher = DistinctGeoJson(nearbyVisitedFeatures)
+    private val nearbyUnvisitedPublisher = DistinctGeoJson(nearbyUnvisitedFeatures)
+    private val nearbyNumbersPublisher = DistinctGeoJson(nearbyNumberFeatures)
     private val nearbyMarkerImages = HashMap<String, Bitmap>()
     @Volatile private var shownOverlayKeys = emptyList<String>()
     @Volatile private var shownOverlayCacheGeneration = -1L
@@ -382,9 +385,21 @@ class MapRenderer(
 
     private fun applyNearbyExploration() {
         val style = map.style ?: return
-        (style.getSource(NEARBY_VISITED_SOURCE_ID) as? GeoJsonSource)?.setGeoJson(nearbyVisitedFeatures)
-        (style.getSource(NEARBY_UNVISITED_SOURCE_ID) as? GeoJsonSource)?.setGeoJson(nearbyUnvisitedFeatures)
-        (style.getSource(NEARBY_NUMBERS_SOURCE_ID) as? GeoJsonSource)?.setGeoJson(nearbyNumberFeatures)
+        nearbyVisitedPublisher.publish(nearbyVisitedFeatures) { next ->
+            val source = style.getSource(NEARBY_VISITED_SOURCE_ID) as? GeoJsonSource ?: return@publish false
+            source.setGeoJson(next)
+            true
+        }
+        nearbyUnvisitedPublisher.publish(nearbyUnvisitedFeatures) { next ->
+            val source = style.getSource(NEARBY_UNVISITED_SOURCE_ID) as? GeoJsonSource ?: return@publish false
+            source.setGeoJson(next)
+            true
+        }
+        nearbyNumbersPublisher.publish(nearbyNumberFeatures) { next ->
+            val source = style.getSource(NEARBY_NUMBERS_SOURCE_ID) as? GeoJsonSource ?: return@publish false
+            source.setGeoJson(next)
+            true
+        }
     }
 
     private data class NearbyOverlaySnapshot(
@@ -423,8 +438,11 @@ class MapRenderer(
 
     private fun installNearbyExploration(style: Style) {
         style.addSource(GeoJsonSource(NEARBY_VISITED_SOURCE_ID, nearbyVisitedFeatures))
+        nearbyVisitedPublisher.reset(nearbyVisitedFeatures)
         style.addSource(GeoJsonSource(NEARBY_UNVISITED_SOURCE_ID, nearbyUnvisitedFeatures))
+        nearbyUnvisitedPublisher.reset(nearbyUnvisitedFeatures)
         style.addSource(GeoJsonSource(NEARBY_NUMBERS_SOURCE_ID, nearbyNumberFeatures))
+        nearbyNumbersPublisher.reset(nearbyNumberFeatures)
         // Local bitmap numbers work even with the offline fallback style, which
         // intentionally has no glyph endpoint or text-font network requests.
         nearbyMarkerImages.forEach { (id, image) -> style.addImage(id, image) }

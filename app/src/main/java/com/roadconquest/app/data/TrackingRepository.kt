@@ -782,7 +782,7 @@ class TrackingRepository(context: Context) {
             } finally {
                 db.endTransaction()
             }
-            if (resolved > 0) dbHelper.invalidateRoadSummary()
+            // Visits change timestamps/counts, never segment or unlocked-road identities.
             resolved
         }
 

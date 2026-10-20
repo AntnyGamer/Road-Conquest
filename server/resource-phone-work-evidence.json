@@ -1,0 +1,256 @@
+{
+  "baseline_commit": "d4a8f8a28231a7084c55d5bfacb07203644c8b44",
+  "changes": 3,
+  "known_road_summary": {
+    "android_sdks": [
+      31,
+      37
+    ],
+    "repeat_completions_per_sdk": 20,
+    "shared_repository_instances": 2,
+    "original_regression_failures": 4,
+    "checks": [
+      "Same warmed road cache retained",
+      "Fresh SQL and cached summary equal after each completion",
+      "Track cache retained",
+      "Every fix resolved",
+      "Exact last-driven timestamp",
+      "Failed transaction rolls back and retries",
+      "New road still invalidates counts"
+    ],
+    "regression": "app/src/test/java/com/roadconquest/app/data/SummaryCacheTest.kt",
+    "limits": "Cache identity and exact summaries, not measured physical SQL disk reads."
+  },
+  "csv_export": {
+    "affected_tables": [
+      "roads",
+      "road_visits",
+      "visited_places",
+      "place_candidates"
+    ],
+    "compatibility_rows": 202,
+    "large_geometry_coordinates": 5000,
+    "checks": [
+      "Original UTF-8 bytes match",
+      "Schema-12 reader/unescape restores every field",
+      "Formula/apostrophe/Unicode/control protection unchanged",
+      "Writer receives fields instead of assembled row",
+      "Real ZIP round trips and 5000-road/5000-fix export suite pass"
+    ],
+    "regression": "app/src/test/java/com/roadconquest/app/export/CsvUtilTest.kt"
+  },
+  "allocation_fixture": {
+    "runtime": "JDK 21.0.10 HotSpot on Windows; compiled app CsvUtil with Kotlin stdlib 2.4.10",
+    "source": "tools/CsvExportAllocationProbe.java",
+    "heap_flags": [
+      "-Xms64m",
+      "-Xmx256m"
+    ],
+    "rounds": [
+      {
+        "coordinates": 0,
+        "rows": 20000,
+        "round": 0,
+        "before_allocated_bytes": 15297824,
+        "after_allocated_bytes": 5008064,
+        "before_ms": 27.212,
+        "after_ms": 16.884,
+        "identical_zip_sha256": "e581735049cef01209ae12195c865aa9c3a0a71863f5425f49b1dd3839cb1ba9"
+      },
+      {
+        "coordinates": 0,
+        "rows": 20000,
+        "round": 1,
+        "before_allocated_bytes": 14768064,
+        "after_allocated_bytes": 5009088,
+        "before_ms": 17.145,
+        "after_ms": 24.389,
+        "identical_zip_sha256": "e581735049cef01209ae12195c865aa9c3a0a71863f5425f49b1dd3839cb1ba9"
+      },
+      {
+        "coordinates": 0,
+        "rows": 20000,
+        "round": 2,
+        "before_allocated_bytes": 14768832,
+        "after_allocated_bytes": 5008064,
+        "before_ms": 19.543,
+        "after_ms": 14.752,
+        "identical_zip_sha256": "e581735049cef01209ae12195c865aa9c3a0a71863f5425f49b1dd3839cb1ba9"
+      },
+      {
+        "coordinates": 400,
+        "rows": 1000,
+        "round": 0,
+        "before_allocated_bytes": 28267520,
+        "after_allocated_bytes": 9482800,
+        "before_ms": 60.708,
+        "after_ms": 62.724,
+        "identical_zip_sha256": "b98a0d5f8884212a8add91bf9e852db66dcf80b39c8c38a2a5444d05f94c290f"
+      },
+      {
+        "coordinates": 400,
+        "rows": 1000,
+        "round": 1,
+        "before_allocated_bytes": 28266528,
+        "after_allocated_bytes": 9482832,
+        "before_ms": 60.953,
+        "after_ms": 56.49,
+        "identical_zip_sha256": "b98a0d5f8884212a8add91bf9e852db66dcf80b39c8c38a2a5444d05f94c290f"
+      },
+      {
+        "coordinates": 400,
+        "rows": 1000,
+        "round": 2,
+        "before_allocated_bytes": 28266528,
+        "after_allocated_bytes": 9482528,
+        "before_ms": 58.395,
+        "after_ms": 54.259,
+        "identical_zip_sha256": "b98a0d5f8884212a8add91bf9e852db66dcf80b39c8c38a2a5444d05f94c290f"
+      },
+      {
+        "coordinates": 5000,
+        "rows": 100,
+        "round": 0,
+        "before_allocated_bytes": 35873920,
+        "after_allocated_bytes": 12035808,
+        "before_ms": 87.037,
+        "after_ms": 80.885,
+        "identical_zip_sha256": "577bdf34f2499d8ab7679404f094b81d0dc83a6f67f9964709354b35f1e30a03"
+      },
+      {
+        "coordinates": 5000,
+        "rows": 100,
+        "round": 1,
+        "before_allocated_bytes": 35873920,
+        "after_allocated_bytes": 12035520,
+        "before_ms": 86.583,
+        "after_ms": 80.891,
+        "identical_zip_sha256": "577bdf34f2499d8ab7679404f094b81d0dc83a6f67f9964709354b35f1e30a03"
+      },
+      {
+        "coordinates": 5000,
+        "rows": 100,
+        "round": 2,
+        "before_allocated_bytes": 35873920,
+        "after_allocated_bytes": 12035520,
+        "before_ms": 84.426,
+        "after_ms": 80.011,
+        "identical_zip_sha256": "577bdf34f2499d8ab7679404f094b81d0dc83a6f67f9964709354b35f1e30a03"
+      }
+    ],
+    "limits": "Thread-allocated JVM heap bytes, not Android allocations, peak memory, device battery, backup size or fleet capacity. More buffered writer calls replace whole-row string copies. No speed claim from these timings."
+  },
+  "nearby_publication": {
+    "sources": 3,
+    "identical_snapshots": 100,
+    "unconditional_callbacks_before": 300,
+    "callbacks_after": 3,
+    "comparison": "Complete exact JSON string equality",
+    "checks": [
+      "Distinct equal String objects",
+      "One-billionth-degree coordinate change",
+      "Property change",
+      "Clear once per source",
+      "Style source initialized from exact constructor data",
+      "Missing/failed updates retry",
+      "Existing FeatureCollection publication cases retained"
+    ],
+    "regression": "app/src/test/java/com/roadconquest/app/map/DistinctGeoJsonTest.kt",
+    "limits": "Counts update callbacks, not rendered frames or GPU speed. One prior immutable value per source; equal new payloads may coexist. The overlay remains bounded to 25 cells. Generation, queries, cameras and callbacks remain."
+  },
+  "source_audit": {
+    "original_baseline": "137e398706c0caf591ac13c091634a3711fc15e2",
+    "original_identical_scopes": 14,
+    "additional_checks": [
+      {
+        "file": "app/src/main/java/com/roadconquest/app/data/TrackingRepository.kt",
+        "scope": "Entire repository except redundant known-visit road-summary invalidation",
+        "identical": true
+      },
+      {
+        "file": "app/src/main/java/com/roadconquest/app/map/MapRenderer.kt",
+        "scope": "Entire renderer except three nearby publishers, their publication body and source-install seeds; town borders, geometry, cameras and style lifecycle identical",
+        "identical": true
+      },
+      {
+        "file": "app/src/main/java/com/roadconquest/app/export/DataExporter.kt",
+        "scope": "Entire exporter except four field-streaming row writes",
+        "identical": true
+      },
+      {
+        "file": "app/src/main/java/com/roadconquest/app/export/CsvUtil.kt",
+        "scope": "Entire CSV escaping/unescaping, including spreadsheet formula and legacy schema protection",
+        "identical": true
+      },
+      {
+        "file": "app/src/main/java/com/roadconquest/app/matching/KnownRoadReuse.kt",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "file": "app/src/main/java/com/roadconquest/app/data/RoadGrouping.kt",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "file": "app/src/main/java/com/roadconquest/app/data/AppDatabase.kt",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "file": "app/src/main/java/com/roadconquest/app/export/DataImporter.kt",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "file": "app/src/main/java/com/roadconquest/app/TrackingService.kt",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "file": "server/src and server/maps",
+        "scope": "All tracked account/gateway implementation, tests, config and provider behavior",
+        "identical": true
+      }
+    ]
+  },
+  "local_validation": {
+    "focused_tests": 196,
+    "focused_suites": 7,
+    "focused_failures": 0,
+    "focused_errors": 0,
+    "focused_skips": 0,
+    "scope": "Focused regressions recorded here; full-suite and current-head CI status tracked separately in PR 105."
+  },
+  "previous_complete_ci": {
+    "commit": "d4a8f8a28231a7084c55d5bfacb07203644c8b44",
+    "url": "https://github.com/AntnyGamer/RoadConquest-Beta/actions/runs/39350791894",
+    "status": "success; verify, account-server, native map APIs 31/35/37, release startup APIs 31/37; publication skipped",
+    "downloaded_xml": {
+      "android": {
+        "suites": 68,
+        "failures": 0,
+        "tests": 1094,
+        "errors": 0,
+        "skipped": 0
+      },
+      "native": {
+        "suites": 12,
+        "failures": 0,
+        "tests": 27,
+        "errors": 0,
+        "skipped": 0
+      }
+    },
+    "downloaded_startup_logs": {
+      "android_sdks": [
+        31,
+        37
+      ],
+      "successful_launches": 4
+    }
+  },
+  "production_changes": false,
+  "provider_credits_used": false,
+  "limits": "No server/provider quota savings, physical-drive accuracy parity, device battery percentage or DAU/driving-hours increase is claimed. No release, version bump, deployment, GPS, matching, town-boundary or history-retention changes."
+}

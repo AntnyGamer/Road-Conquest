@@ -1,17 +1,15 @@
 package com.roadconquest.app.map
 
-import org.maplibre.geojson.FeatureCollection
-
-/** UI-thread publication of immutable collections; remember only successful updates. */
-internal class DistinctGeoJson(private val initial: FeatureCollection) {
+/** UI-thread publication of immutable GeoJSON values; remember only successful updates. */
+internal class DistinctGeoJson<T>(private val initial: T) {
     private var applied = initial
 
-    fun publish(next: FeatureCollection, update: (FeatureCollection) -> Boolean): Boolean {
+    fun publish(next: T, update: (T) -> Boolean): Boolean {
         if (next == applied || !update(next)) return false
         applied = next
         return true
     }
 
-    /** A newly installed native source starts with the initial empty collection. */
-    fun reset() { applied = initial }
+    /** Remember the exact data used to construct a newly installed native source. */
+    fun reset(installed: T = initial) { applied = installed }
 }

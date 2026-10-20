@@ -1,6 +1,19 @@
 package com.roadconquest.app.export
 
+import java.io.Writer
+
 internal object CsvUtil {
+    /** Keep large geometry fields out of a second, joined row string. */
+    fun writeRow(writer: Writer, fields: Iterable<String>) {
+        var first = true
+        for (field in fields) {
+            if (!first) writer.write(','.code)
+            first = false
+            writer.write(escape(field))
+        }
+        writer.write('\n'.code)
+    }
+
     fun escape(value: String): String {
         // Road names come from a remote service. Keep spreadsheet applications from
         // interpreting those names as formulas when the CSV is opened.

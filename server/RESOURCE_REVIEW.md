@@ -295,3 +295,77 @@ The following pass specifically targets actual quota consumption rather than
 phone-only resources. See [QUOTA_REVIEW.md](QUOTA_REVIEW.md) for in-flight duplicate
 Google-decode savings and compact counter storage, with complete local workerd
 measurements, migration/retry safeguards and their capacity limits.
+
+## Further phone work reduction
+
+This pass compares with `d4a8f8a28231a7084c55d5bfacb07203644c8b44` and changes
+three phone paths. It does not change server or provider requests, quota caps,
+GPS recording, matching decisions, geometry generation or history retention.
+
+| Area | Removed work | Preserved behavior |
+|---|---|---|
+| Previously driven road completion | Stop invalidating the shared road-count summary after a visit | This transaction changes matched flags, visit intervals, visit counts and last-driven time, none of which participate in the road-summary aggregate. New/grouped roads and history resets still invalidate or replace the cache; raw DB access still disables caching. |
+| CSV backup export | Write escaped fields directly to the existing buffered UTF-8 writer instead of joining another complete row string | Same fields, order, escaping, spreadsheet protections, schema, snapshot, ZIP entries and restore validation. Applies to roads, road visits, visited places and place candidates. Geometry escaping still allocates its quoted field; backup size is not reduced. |
+| Nearby exploration | Skip native publication when each complete JSON string is identical to that source's last successfully applied data | Every changed coordinate/property, transition to empty and missing/failed-source retry remains. Each newly installed source seeds the comparison with its exact constructor data. Camera fitting, callbacks, SQL, geometry generation, marker images and town boundaries are unchanged. |
+
+On both Android SDKs 31 and 37, 20 repeated known-road completions retain the
+same warmed shared road summary across two repository instances. Each result
+also equals a fresh SQL summary, with the same pending-fix resolution and
+last-driven time. A failed transaction rolls back and remains retryable, and a
+subsequent new road invalidates counts. Both new tests first failed against the
+old invalidation at the successful-completion cache assertion: four expected
+failures across the two SDKs. This proves avoided cache clearing; it is not a
+physical disk-read measurement.
+
+The CSV regression compares original and streamed UTF-8 bytes for 202 rows,
+including Unicode/control characters, literal apostrophes, formulas, quotes and
+multiline fields, and round-trips all fields through the existing reader and
+schema-12 unescaping. A separate 5,000-coordinate row verifies that the writer
+receives individual escaped fields rather than an assembled row. Real ZIP
+export/restore and the 5,000-road/5,000-fix archive tests also pass in the focused
+suite.
+
+The standalone [JDK allocation probe](../tools/CsvExportAllocationProbe.java)
+calls the compiled app's `CsvUtil` and compares it with the original Kotlin
+`joinToString` expression. Both use buffered UTF-8 output and the default ZIP
+compression. Fixed ZIP timestamps let the fixture compare complete compressed
+byte hashes. Three warmed, alternating rounds produced:
+
+| Fixture | Median allocated bytes before | Median allocated bytes after |
+|---|---:|---:|
+| 20,000 short rows | 14,768,832 | 5,008,064 |
+| 1,000 rows with 400 coordinates | 28,266,528 | 9,482,800 |
+| 100 rows with 5,000 coordinates | 35,873,920 | 12,035,520 |
+
+All nine before/after ZIP hashes match. These are thread-allocated JVM heap
+bytes for this writing fixture, not peak app memory, Android allocation data,
+backup storage savings or physical-device battery results. Timing varies across
+rounds and is not used to claim a speed improvement. The writer makes more
+small buffered calls while removing complete-row copies.
+
+To reproduce after compiling the debug app, compile the probe with JDK 21 using
+the app's `app/build/intermediates/built_in_kotlinc/debug/compileDebugKotlin/classes`
+and matching `kotlin-stdlib` JAR on the classpath. Run `CsvExportAllocationProbe`
+with the same classpath plus its output directory, using `-Xms64m -Xmx256m`.
+It requires no Android runtime, database, network or supplier credentials.
+
+The nearby publication fixture sends 100 identical three-source snapshots and
+observes three native-update callbacks instead of the former unconditional 300.
+A one-billionth-degree JSON coordinate change and a property change still
+publish; repeated clearing publishes once per source. Style installation seeds,
+missing sources, synchronous failures and retry are checked. Comparison is exact
+string equality and retains one applied value per source; a later equal string
+may coexist with that prior string. The 25-cell overlay bounds this small retained
+payload. JSON generation and DB queries are still performed; callbacks count
+publication requests, not GPU time or rendered-frame speed.
+
+All 196 focused tests across seven suites pass without failures, errors or skips.
+Fourteen original source invariants still match `137e398`. Ten further checks
+against `d4a8f8a` compare the entire tracking repository class except the removed invalidation,
+the entire renderer except the three nearby publishers/publication/seeds, the
+exporter except its four row writes, unchanged escaping/unescaping, and the
+complete matching reuse, grouping, database, importer and tracking service files.
+The account/gateway implementation and configuration are unchanged. The measured
+fixtures and focused validation are recorded in
+[resource-phone-work-evidence.json](resource-phone-work-evidence.json). Full-suite
+and current-head CI status are tracked separately in the PR.

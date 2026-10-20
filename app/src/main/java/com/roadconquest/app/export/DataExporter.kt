@@ -252,8 +252,7 @@ object DataExporter {
                         Instant.ofEpochMilli(cursor.getLong(1)).toString(),
                         Instant.ofEpochMilli(cursor.getLong(2)).toString()
                     )
-                    writer.write(fields.joinToString(",") { CsvUtil.escape(it) })
-                    writer.write("\n")
+                    CsvUtil.writeRow(writer, fields)
                 }
             }
         }
@@ -288,8 +287,7 @@ object DataExporter {
                         Instant.ofEpochMilli(cursor.getLong(5)).toString(),
                         cursor.getDouble(6).toString(), cursor.getDouble(7).toString()
                     )
-                    writer.write(fields.joinToString(",") { CsvUtil.escape(it) })
-                    writer.write("\n")
+                    CsvUtil.writeRow(writer, fields)
                 }
             }
         }
@@ -329,8 +327,7 @@ object DataExporter {
                         cursor.getInt(5).toString(),
                         if (retry > 0L) Instant.ofEpochMilli(retry).toString() else ""
                     )
-                    writer.write(fields.joinToString(",") { CsvUtil.escape(it) })
-                    writer.write("\n")
+                    CsvUtil.writeRow(writer, fields)
                 }
             }
         }
@@ -420,8 +417,7 @@ object DataExporter {
                         (cursor.getInt(6) != 0).toString(),
                         cursor.getString(7)
                     )
-                    writer.write(fields.joinToString(",") { CsvUtil.escape(it) })
-                    writer.write("\n")
+                    CsvUtil.writeRow(writer, fields)
                 }
             }
         }

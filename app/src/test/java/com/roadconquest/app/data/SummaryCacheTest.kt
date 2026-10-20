@@ -104,4 +104,56 @@ class SummaryCacheTest {
         raw.execSQL("DELETE FROM track_points")
         assertEquals(0L, repository.getSummary().trackPointCount)
     }
+
+    @Test fun repeatedKnownRoadVisitsKeepSharedCountsAndExactTrackSummary() {
+        repository.upsertRoads(listOf(MatchedRoad(
+            "Saved road", "[[-74,40],[-74,40.001]]", 1_000L, 11_000L, 0.99)))
+        val segment = repository.getRoadsInBounds(41.0, -73.0, 39.0, -75.0).single().segmentId
+        repository.getSummary()
+        val roadCache = requireNotNull(database.roadSummaryCache)
+        val otherRepository = TrackingRepository(context)
+
+        repeat(20) { index ->
+            val timestamp = 2_000_000L + index * 600_000L
+            val id = repository.insertLocation(fix(40.0 + index * 0.00001, timestamp))
+            val trackCache = requireNotNull(database.trackSummaryCache)
+            assertEquals(1, otherRepository.completeKnownRoadVisits(listOf(
+                com.roadconquest.app.matching.KnownRoadVisit(segment, listOf(id), timestamp, timestamp))))
+            assertSame(roadCache, database.roadSummaryCache)
+            assertSame(trackCache, database.trackSummaryCache)
+            val summary = repository.getSummary()
+            assertEquals(TrackingRepository.summaryOf(database.readableDatabase)
+                .copy(historyGeneration = summary.historyGeneration), summary)
+            assertEquals(index + 1L, summary.trackPointCount)
+            assertEquals(1L, summary.roadSegmentCount)
+            assertEquals(1L, summary.roadsUnlockedCount)
+            assertEquals(timestamp, repository.getRoadsInBounds(41.0, -73.0, 39.0, -75.0)
+                .single().lastDrivenAt)
+            assertTrue(repository.loadMatchingWindow().points.isEmpty())
+        }
+        // New road identities still invalidate the shared count cache.
+        otherRepository.upsertRoads(listOf(MatchedRoad(
+            "Another road", "[[-74,40.01],[-74,40.011]]", 1_000L, 11_000L, 0.99)))
+        assertNull(database.roadSummaryCache)
+        assertEquals(2L, repository.getSummary().roadSegmentCount)
+    }
+
+    @Test fun failedKnownRoadCompletionPreservesCacheAndPendingFixForRetry() {
+        repository.upsertRoads(listOf(MatchedRoad(
+            "Saved road", "[[-74,40],[-74,40.001]]", 1_000L, 11_000L, 0.99)))
+        val segment = repository.getRoadsInBounds(41.0, -73.0, 39.0, -75.0).single().segmentId
+        val timestamp = 2_000_000L
+        val id = repository.insertLocation(fix(40.0, timestamp))
+        repository.getSummary()
+        val roadCache = requireNotNull(database.roadSummaryCache)
+        val visit = com.roadconquest.app.matching.KnownRoadVisit(segment, listOf(id), timestamp, timestamp)
+        assertThrows(IllegalStateException::class.java) {
+            repository.completeKnownRoadVisits(listOf(visit.copy(pointIds = listOf(id, id + 100_000L))))
+        }
+        assertSame(roadCache, database.roadSummaryCache)
+        assertEquals(listOf(id), repository.loadMatchingWindow().points.map { it.id })
+        assertEquals(1, repository.completeKnownRoadVisits(listOf(visit)))
+        assertSame(roadCache, database.roadSummaryCache)
+        assertTrue(repository.loadMatchingWindow().points.isEmpty())
+    }
 }
