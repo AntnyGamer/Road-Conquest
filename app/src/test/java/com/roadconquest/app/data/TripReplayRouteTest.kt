@@ -54,35 +54,36 @@ class TripReplayRouteTest {
         assertEquals(reference(points, 4999), prepared.visibleRanges(4999))
     }
 
-    private val route = (0..5).map { index ->
+    private val route = TripReplayRoute.prepare((0..5).map { index ->
         SavedTripPoint(40.0, index.toDouble(), index.toLong(), breakBefore = index == 3)
-    }
+    })
 
     @Test fun revealsOnlyRoadBehindMarkerAndPreservesBreaks() {
-        assertTrue(TripReplayRoute.visibleRanges(route, 0).isEmpty())
-        assertEquals(listOf(0..1), TripReplayRoute.visibleRanges(route, 1))
-        assertEquals(listOf(0..2), TripReplayRoute.visibleRanges(route, 2))
+        assertTrue(route.visibleRanges(0).isEmpty())
+        assertEquals(listOf(0..1), route.visibleRanges(1))
+        assertEquals(listOf(0..2), route.visibleRanges(2))
         // A single point immediately after a gap must not create a bridge.
-        assertEquals(listOf(0..2), TripReplayRoute.visibleRanges(route, 3))
-        assertEquals(listOf(0..2, 3..4), TripReplayRoute.visibleRanges(route, 4))
-        assertEquals(listOf(0..2, 3..5), TripReplayRoute.visibleRanges(route, 5))
+        assertEquals(listOf(0..2), route.visibleRanges(3))
+        assertEquals(listOf(0..2, 3..4), route.visibleRanges(4))
+        assertEquals(listOf(0..2, 3..5), route.visibleRanges(5))
     }
 
     @Test fun scrubbingBackwardRemovesFutureRoute() {
-        assertEquals(listOf(0..2, 3..5), TripReplayRoute.visibleRanges(route, 99))
-        assertEquals(listOf(0..1), TripReplayRoute.visibleRanges(route, 1))
-        assertTrue(TripReplayRoute.visibleRanges(route, -1).isEmpty())
-        assertTrue(TripReplayRoute.visibleRanges(emptyList(), 100).isEmpty())
+        assertEquals(listOf(0..2, 3..5), route.visibleRanges(99))
+        assertEquals(listOf(0..1), route.visibleRanges(1))
+        assertTrue(route.visibleRanges(-1).isEmpty())
+        assertTrue(TripReplayRoute.prepare(emptyList()).visibleRanges(100).isEmpty())
     }
 
     @Test fun consecutiveBreaksNeverCreateSpuriousBridges() {
         val separated = (0..6).map { i ->
             SavedTripPoint(40.0, i.toDouble(), i.toLong(), breakBefore = i in setOf(1, 2, 5))
         }
-        assertEquals(listOf(2..4, 5..6), TripReplayRoute.visibleRanges(separated, 6))
-        assertEquals(listOf(2..4), TripReplayRoute.visibleRanges(separated, 5))
-        assertEquals(listOf(2..3), TripReplayRoute.visibleRanges(separated, 3))
-        assertTrue(TripReplayRoute.visibleRanges(separated.take(2), 1).isEmpty())
+        val prepared = TripReplayRoute.prepare(separated)
+        assertEquals(listOf(2..4, 5..6), prepared.visibleRanges(6))
+        assertEquals(listOf(2..4), prepared.visibleRanges(5))
+        assertEquals(listOf(2..3), prepared.visibleRanges(3))
+        assertTrue(TripReplayRoute.prepare(separated.take(2)).visibleRanges(1).isEmpty())
     }
 
     @Test fun firstRecordedPointAfterBreakStartsANewLine() {
@@ -91,6 +92,6 @@ class TripReplayRouteTest {
             SavedTripPoint(0.0, 1.0, 1L, breakBefore = true),
             SavedTripPoint(0.0, 2.0, 2L)
         )
-        assertEquals(listOf(1..2), TripReplayRoute.visibleRanges(short, 2))
+        assertEquals(listOf(1..2), TripReplayRoute.prepare(short).visibleRanges(2))
     }
 }

@@ -17,6 +17,11 @@ object TripReplayRoute {
     }
 
     class Prepared internal constructor(private val segments: List<IntRange>) {
+        /**
+         * Every returned range has two or more recorded fixes. A breakBefore flag
+         * starts a new segment rather than joining it to the preceding point.
+         * Calling this with an earlier index also hides any future route.
+         */
         fun visibleRanges(lastVisibleIndex: Int): List<IntRange> {
             if (lastVisibleIndex < 1) return emptyList()
             val ranges = ArrayList<IntRange>()
@@ -28,12 +33,4 @@ object TripReplayRoute {
             return ranges
         }
     }
-
-    /**
-     * Every returned range has two or more recorded fixes. A breakBefore flag
-     * starts a new segment rather than joining it to the preceding point.
-     * Calling this with an earlier index also hides any future route.
-     */
-    fun visibleRanges(points: List<SavedTripPoint>, lastVisibleIndex: Int): List<IntRange> =
-        prepare(points).visibleRanges(lastVisibleIndex)
 }

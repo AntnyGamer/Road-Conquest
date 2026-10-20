@@ -81,7 +81,7 @@ class TripHistoryRepositoryTest {
         assertEquals(2, downsampled.size)
         assertFalse(downsampled.first().breakBefore)
         assertTrue(downsampled.last().breakBefore)
-        assertTrue(TripReplayRoute.visibleRanges(downsampled, 1).isEmpty())
+        assertTrue(TripReplayRoute.prepare(downsampled).visibleRanges(1).isEmpty())
     }
 
     @Test fun replayDownsamplingPreservesSampleTimesAndTrueEndpoint() {

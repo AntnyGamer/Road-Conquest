@@ -129,11 +129,6 @@ class TrackingRepository(context: Context) {
         cells.map { it to (it.key in visited) }
     }
 
-    fun nearbyExploration(latitude: Double, longitude: Double): Pair<Int, Int> {
-        val tiles = nearbyExplorationTiles(latitude, longitude)
-        return tiles.count { it.second } to tiles.size
-    }
-
     /** Read the authoritative mile cells (as centers) with a padded viewport query. */
     @Synchronized
     fun getExploredGridInBounds(north: Double, east: Double, south: Double, west: Double): DoubleArray =
