@@ -988,11 +988,15 @@ class ProgressionRepository(context: Context) {
             (expectedHistoryGeneration == null || expectedHistoryGeneration == dbHelper.historyGeneration)
 
     private fun currentBalance(db: SQLiteDatabase): Long {
-        val earned = db.rawQuery("SELECT COALESCE(SUM(points), 0) FROM progression_rewards", null)
-            .use { check(it.moveToFirst()); it.getLong(0) }
-        val spent = db.rawQuery("SELECT COALESCE(SUM(points_spent), 0) FROM progression_purchases", null)
-            .use { check(it.moveToFirst()); it.getLong(0) }
-        return earned - spent
+        return db.rawQuery(
+            """SELECT
+                (SELECT COALESCE(SUM(points), 0) FROM progression_rewards),
+                (SELECT COALESCE(SUM(points_spent), 0) FROM progression_purchases)""",
+            null
+        ).use {
+            check(it.moveToFirst())
+            it.getLong(0) - it.getLong(1)
+        }
     }
 
     private fun awardOnce(db: SQLiteDatabase, key: String, points: Long): Boolean =

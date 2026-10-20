@@ -519,3 +519,70 @@ on APIs 31/35/37 and release startup on APIs 31/37. Downloaded reports confirm
 1,104 unit cases, 27 native cases and four successful release launches. Fresh
 head CI is tracked separately in the PR. The server implementation is unchanged
 in this pass, so its previously passing 137-test local suite was not repeated.
+
+## Session, shop and GPX follow-up
+
+This pass compares against `93ff4e6`. The three changes reduce local work and
+preserve existing behavior; no additional provider/server quota saving was found.
+
+| Path | Before | After |
+| --- | --- | --- |
+| Load an encrypted account session | Two explicit temporary input-array slices | None; read the same IV/ciphertext ranges directly |
+| Check shop balance for an item not yet owned | Two total-query statements/cursors | One; both SUM scans remain |
+| Already-owned shop item | Zero balance queries | Zero |
+| JVM/SDK 31 fixture: actual GPX export of 10,000 points | 13,770,704 median allocated bytes | 13,530,904 (239,800 fewer) |
+| JVM/SDK 37 fixture: same GPX export | 13,292,784 median allocated bytes | 13,052,984 (239,800 fewer) |
+
+Session loading uses the documented range overloads of
+[GCMParameterSpec](https://developer.android.com/reference/javax/crypto/spec/GCMParameterSpec)
+and [Cipher.doFinal](https://developer.android.com/reference/javax/crypto/Cipher).
+The two omitted explicit copies together held the decoded encrypted record's
+byte count. This is a source-derived copy count, not a measurement of all
+provider/internal allocations. The GCM spec still makes its own required IV
+copy. AES-GCM, key alias, 12-byte IV, 128-bit tag, stored format, synchronization,
+saving/fresh IVs and failure handling are unchanged. Authentication still
+finishes before a Session can receive plaintext. Local tests exercise empty,
+ASCII, Unicode/NUL and long tokens, plus 32 invalid-IV/tag/key/truncation cases
+per SDK. Invalid data still clears the session and revokes verification consent.
+This JVM fixture supplies a fixed software key through a fixture KeyStore;
+real JVM AES-GCM executes, but it is not an Android hardware-Keystore test.
+The existing device test now also checks Unicode and corrupted-tag rejection;
+fresh-head device execution is tracked separately in CI.
+
+Shop totals are returned in separate columns of one statement, inside the
+existing purchase transaction and history lock. Subtraction remains Kotlin Long
+arithmetic; it is not moved into SQLite, where overflow can change numeric type.
+Empty totals, free purchases, ownership, insufficient funds, exact balances,
+negative balances and individual SUM overflow retain their behavior. Actual
+CursorFactory probes reproduce two old cursors versus one new cursor on each
+SDK. This does not halve rows scanned or change entitlement/reward rules.
+
+GPX formatting reuses one small export-local StringBuilder and still creates
+an immutable point String for one buffered write per point. The existing 32-KB
+writer, original doubles/timestamps, snapshot query, privacy cutoffs, validity
+checks, segment gaps, reset cancellation and final flush checks remain. Tests
+compare exact old/new XML bytes and the same 10,000-point SHA-256. The modest
+allocation saving above measures the calling thread around actual full exports,
+including SQLite, formatting and byte-array output, after three warmup exports
+and across three measured rounds per SDK. It is not Android peak memory, device
+speed, battery, backup-size or quota evidence.
+
+All 12 focused tests and the full **1,138 Android tests across 73 suites** pass
+with zero failures/errors/skips. The balance-cursor regression first fails
+against old code on both SDKs. Lint passes with zero errors and the same 299
+warnings; debug app and device-test APK builds pass. Seventeen comparisons in
+[check-session-export-sources.mjs](../tools/check-session-export-sources.mjs),
+fourteen original driving checks and eighteen preceding copy-scope checks pass.
+GPS recording, road matching, geometry/rendering, all server/gateway code and
+the previous lookup improvements remain unchanged. The unchanged server's
+previously passing 137-test local suite was not repeated. Raw measurements,
+validation and CI context are recorded in
+[resource-session-export-evidence.json](resource-session-export-evidence.json).
+The preceding `93ff4e6` CI now passes every verification job. Android 35 passes
+on an unchanged-source rerun after its original emulator refused the adb
+connection before instrumentation started. Downloaded reports confirm 1,126
+unit cases, 27 native cases and four successful release launches. These are
+the preceding head's results; fresh-head native/release results are tracked
+separately in the PR.
+No version bump, release, deployment, provider credits or production traffic
+are involved.
