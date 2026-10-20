@@ -1,0 +1,549 @@
+{
+  "baseline": "d34f7c65519c588ff4ee95ef891a54d720a6d206",
+  "scope": "Three further local-phone resource changes; no new server or provider quota reduction",
+  "preference_lookups": {
+    "method": "Counting ContextWrapper and delegated SharedPreferences getString on Robolectric SDKs 31/37",
+    "all_saved_values_and_unknown_and_removed_values_preserved": true,
+    "next_call_sees_subsequent_edits": true,
+    "last_or_unknown_choice_across_six_getters": {
+      "baseline_acquisitions_and_reads": 35,
+      "current_acquisitions_and_reads": 6
+    },
+    "worst_case_basis": "Baseline source loop lengths 3+4+4+6+9+9; baseline tests reproduce repeat reads on the second entry, current tests measure one read for every entry/unknown/removal.",
+    "first_choice_each": {
+      "baseline": 1,
+      "current": 1
+    },
+    "baseline": {
+      "tests": 12,
+      "failures": 12
+    },
+    "current": {
+      "tests": 12,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "limitation": "Counts preference API calls, not physical disk reads or a device timing/battery measurement."
+  },
+  "baseline_completeness": {
+    "method": "Actual Android SQLiteDatabase CursorFactory counts, both SDKs; no production query instrumentation",
+    "complete_zero_point_start_cursors": {
+      "baseline": 6,
+      "current": 1
+    },
+    "country_only_first_retry_cursors": {
+      "baseline": 2,
+      "current": 2
+    },
+    "partial_release_completeness_cursors": {
+      "baseline": 4,
+      "current": 2
+    },
+    "partial_release_including_three_unchanged_missing_kind_queries": {
+      "baseline": 7,
+      "current": 5
+    },
+    "ordinary_discovery_completeness_cursors": {
+      "baseline": 0,
+      "current": 0
+    },
+    "truth_table": {
+      "resolved_missing_combinations": 64,
+      "sdk_versions": [
+        31,
+        37
+      ],
+      "original_predicates_and_results_match": true
+    },
+    "incomplete_paths_recheck_after_retry_or_missing_marker_writes": true,
+    "baseline_zero_points_start_coordinates_timestamp_and_pending_lifecycle_preserved": true,
+    "sqlite_case_reference": "https://www.sqlite.org/lang_expr.html#the_case_expression",
+    "limitation": "Cursor/statement counts are not physical I/O or wall-time measurements. CASE retains lazy kind checks; tiny SQL/binding templates are held for process lifetime."
+  },
+  "municipality_names": {
+    "reference": "Original function including type order, trim, Locale.ROOT, whitespace, the prefix, exact prefix/suffix matching",
+    "compatibility_cases_per_sdk": 2250,
+    "sdk_versions": [
+      31,
+      37
+    ],
+    "mismatches": 0,
+    "jvm_probe": {
+      "runtime": "JDK 21.0.10",
+      "flags": [
+        "-Xms64m",
+        "-Xmx256m"
+      ],
+      "warmup_per_name": 20000,
+      "source": "tools/MunicipalityAllocationProbe.java",
+      "actual_compiled_baseline_and_current_classes": true,
+      "output_signatures": {
+        "compatibility_cases": 7,
+        "sha256": "a56dc5a31c263680f88148daa0fbaa11dcc3fe1af2177d27afe97d2f409b8bd4"
+      },
+      "allocations": [
+        {
+          "name": "Pine Hill",
+          "lookups": 10000,
+          "baseline_bytes": [
+            10720000,
+            10720000,
+            10720000
+          ],
+          "current_bytes": [
+            4480000,
+            4480000,
+            4480000
+          ],
+          "baseline_median_bytes": 10720000,
+          "current_median_bytes": 4480000
+        },
+        {
+          "name": "Township of Pine Hill",
+          "lookups": 10000,
+          "baseline_bytes": [
+            6320000,
+            6320000,
+            6320000
+          ],
+          "current_bytes": [
+            5760000,
+            5760000,
+            5760000
+          ],
+          "baseline_median_bytes": 6320000,
+          "current_median_bytes": 5760000
+        },
+        {
+          "name": "City of Québec",
+          "lookups": 10000,
+          "baseline_bytes": [
+            10720000,
+            10720000,
+            10720000
+          ],
+          "current_bytes": [
+            4960000,
+            4960000,
+            4960000
+          ],
+          "baseline_median_bytes": 10720000,
+          "current_median_bytes": 4960000
+        },
+        {
+          "name": "The Pine Hill Borough",
+          "lookups": 10000,
+          "baseline_bytes": [
+            8320000,
+            8320000,
+            8320000
+          ],
+          "current_bytes": [
+            6160000,
+            6160000,
+            6160000
+          ],
+          "baseline_median_bytes": 8320000,
+          "current_median_bytes": 6160000
+        },
+        {
+          "name": "",
+          "lookups": 10000,
+          "baseline_bytes": [
+            8800000,
+            8800000,
+            8800552
+          ],
+          "current_bytes": [
+            2560000,
+            2560000,
+            2560000
+          ],
+          "baseline_median_bytes": 8800000,
+          "current_median_bytes": 2560000
+        },
+        {
+          "name": "city of",
+          "lookups": 10000,
+          "baseline_bytes": [
+            9840000,
+            9840000,
+            9840000
+          ],
+          "current_bytes": [
+            3600000,
+            3600000,
+            3600000
+          ],
+          "baseline_median_bytes": 9840000,
+          "current_median_bytes": 3600000
+        },
+        {
+          "name": "town of x city",
+          "lookups": 10000,
+          "baseline_bytes": [
+            8960000,
+            8960000,
+            8411480
+          ],
+          "current_bytes": [
+            4160000,
+            4160000,
+            4160000
+          ],
+          "baseline_median_bytes": 8960000,
+          "current_median_bytes": 4160000
+        }
+      ]
+    },
+    "limitation": "ThreadMXBean allocation fixture includes unchanged normalization, reflection and output Pair costs. Unsafe is used only by this standalone fixture to bypass Android construction. It is not Android peak memory, speed, storage or battery."
+  },
+  "baseline_regression_check": {
+    "tests": 22,
+    "failures": 16,
+    "errors": 0,
+    "expected_failures_only": true
+  },
+  "focused_validation": [
+    {
+      "name": "com.roadconquest.app.util.PreferenceLookupTest",
+      "tests": "12",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0"
+    },
+    {
+      "name": "com.roadconquest.app.data.ProgressionResourceTest",
+      "tests": "10",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0"
+    }
+  ],
+  "source_scope": {
+    "baseline": "d34f7c65519c588ff4ee95ef891a54d720a6d206",
+    "checks": [
+      {
+        "path": "app/src/main/java/com/roadconquest/app/util/Prefs.kt",
+        "scope": "All preferences, consent, durable writes and setters outside three current-value enum lookups",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/progression/Cosmetics.kt",
+        "scope": "All catalog, purchase/entitlement, equip and drawing behavior outside three enum lookups",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/data/ProgressionRepository.kt",
+        "scope": "All history locks, transactions, candidates, rewards, aliases, geometry gates and retry writes outside the three stated changes",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/TrackingService.kt",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/data/TrackingRepository.kt",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/data/AppDatabase.kt",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/data/TravelDistance.kt",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/matching/KnownRoadReuse.kt",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/map/MapRenderer.kt",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/progression/PlaceResolver.kt",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/map/PlaceOverlay.kt",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/map/DistinctGeoJson.kt",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/map/FogGrid.kt",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/achievements/Achievements.kt",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "server/src",
+        "scope": "Complete server implementation/configuration",
+        "identical": true
+      },
+      {
+        "path": "server/maps",
+        "scope": "Complete server implementation/configuration",
+        "identical": true
+      }
+    ]
+  },
+  "prior_source_comparisons": [
+    {
+      "baseline": "137e398706c0caf591ac13c091634a3711fc15e2",
+      "checked_head": "d34f7c65519c588ff4ee95ef891a54d720a6d206",
+      "checked_worktree": true,
+      "checks": [
+        {
+          "path": "matching/RoadGeometryValidator.kt",
+          "scope": "complete file",
+          "identical": true
+        },
+        {
+          "path": "matching/GeoapifyMatcher.kt",
+          "scope": "complete file",
+          "identical": true
+        },
+        {
+          "path": "matching/LocationIqMatcher.kt",
+          "scope": "complete file",
+          "identical": true
+        },
+        {
+          "path": "services/ProviderHealth.kt",
+          "scope": "complete file",
+          "identical": true
+        },
+        {
+          "path": "data/TravelDistance.kt",
+          "scope": "complete file",
+          "identical": true
+        },
+        {
+          "path": "data/AppDatabase.kt",
+          "scope": "complete file",
+          "identical": true
+        },
+        {
+          "path": "matching/KnownRoadReuse.kt",
+          "scope": "    /** Require a sustained",
+          "identical": true
+        },
+        {
+          "path": "TrackingService.kt",
+          "scope": "    private fun isUsableDrivingLocation(",
+          "identical": true
+        },
+        {
+          "path": "TrackingService.kt",
+          "scope": "    internal fun skippedFixCarriesGeometry(",
+          "identical": true
+        },
+        {
+          "path": "TrackingService.kt",
+          "scope": "    companion object {",
+          "identical": true
+        },
+        {
+          "path": "data/TrackingRepository.kt",
+          "scope": "    private fun drivingValues(",
+          "identical": true
+        },
+        {
+          "path": "data/TrackingRepository.kt",
+          "scope": "    fun insertLocation(",
+          "identical": true
+        },
+        {
+          "path": "data/TrackingRepository.kt",
+          "scope": "    private fun insertLocationInTransaction(",
+          "identical": true
+        },
+        {
+          "path": "data/TrackingRepository.kt",
+          "scope": "    fun findUnambiguousPreviouslyDrivenRoadNear(",
+          "identical": true
+        }
+      ],
+      "limit": "Source invariants and regression checks do not establish accuracy parity on every physical drive."
+    },
+    {
+      "baseline": "491e4e59bb7fca1aea9edc64b675eb17af3953fb",
+      "checks": [
+        {
+          "path": "app/src/main/java/com/roadconquest/app/map/FogGrid.kt",
+          "scope": "All grid identity, cell coordinates and corner calculations outside copy-on-first-shift",
+          "identical": true
+        },
+        {
+          "path": "app/src/main/java/com/roadconquest/app/map/DistinctGeoJson.kt",
+          "scope": "Entire publisher except refreshing an equal immutable payload reference",
+          "identical": true
+        },
+        {
+          "path": "app/src/main/java/com/roadconquest/app/achievements/Achievements.kt",
+          "scope": "Every achievement definition, value calculation, filtering, prefs and reset rule outside guarded identical-value copy",
+          "identical": true
+        },
+        {
+          "path": "server/src/security.mjs",
+          "scope": "All password input, scrypt parameters, validation, random salts and constant-time comparison; only owned-result wrappers removed",
+          "identical": true
+        },
+        {
+          "path": "server/src/checkpoints.mjs",
+          "scope": "All checkpoint crypto parameters, key/AAD, fingerprint and continuity checks outside byte assembly",
+          "identical": true
+        },
+        {
+          "path": "server/src/notifications.mjs",
+          "scope": "All notification authorization, encryption, registration, selection, limits and delivery outside authenticated plaintext assembly",
+          "identical": true
+        },
+        {
+          "path": "app/src/main/java/com/roadconquest/app/map/MapRenderer.kt",
+          "scope": "Complete file",
+          "identical": true
+        },
+        {
+          "path": "app/src/main/java/com/roadconquest/app/data/TrackingRepository.kt",
+          "scope": "Complete file",
+          "identical": true
+        },
+        {
+          "path": "app/src/main/java/com/roadconquest/app/data/AppDatabase.kt",
+          "scope": "Complete file",
+          "identical": true
+        },
+        {
+          "path": "app/src/main/java/com/roadconquest/app/TrackingService.kt",
+          "scope": "Complete file",
+          "identical": true
+        },
+        {
+          "path": "app/src/main/java/com/roadconquest/app/matching/KnownRoadReuse.kt",
+          "scope": "Complete file",
+          "identical": true
+        },
+        {
+          "path": "app/src/main/java/com/roadconquest/app/data/TravelDistance.kt",
+          "scope": "Complete file",
+          "identical": true
+        },
+        {
+          "path": "server/src/competition.mjs",
+          "scope": "Complete file",
+          "identical": true
+        },
+        {
+          "path": "server/src/scoring.mjs",
+          "scope": "Complete file",
+          "identical": true
+        },
+        {
+          "path": "server/src/cells.mjs",
+          "scope": "Complete file",
+          "identical": true
+        },
+        {
+          "path": "server/src/integrity.mjs",
+          "scope": "Complete file",
+          "identical": true
+        },
+        {
+          "path": "server/src/application.mjs",
+          "scope": "Complete file",
+          "identical": true
+        },
+        {
+          "path": "server/maps",
+          "scope": "Complete provider gateway, caps, reservations and deployment config",
+          "identical": true
+        }
+      ]
+    }
+  ],
+  "full_android_validation": {
+    "suites": 70,
+    "lint": {
+      "warnings": 299,
+      "errors": 0
+    },
+    "tests": 1126,
+    "skipped": 0,
+    "apks": [
+      {
+        "bytes": 69125967,
+        "path": "app/build/outputs/apk/debug/app-debug.apk",
+        "last_write": "2026-10-19T22:29:52.0061614-04:00"
+      },
+      {
+        "bytes": 1172674,
+        "path": "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk",
+        "last_write": "2026-10-19T10:59:01.8278310-04:00"
+      }
+    ],
+    "errors": 0,
+    "build": "BUILD SUCCESSFUL in 14m 28s",
+    "failures": 0
+  },
+  "server_validation": {
+    "implementation_unchanged_this_pass": true,
+    "previous_head_local_tests": 137,
+    "previous_head_ci": "https://github.com/AntnyGamer/RoadConquest-Beta/actions/runs/39356784844",
+    "current_pass_server_suite_not_repeated": true
+  },
+  "previous_head_ci": {
+    "run": 39356784844,
+    "conclusion": "success",
+    "all_verification_jobs_passed": true,
+    "downloaded_reports": {
+      "verify": {
+        "failures": 0,
+        "errors": 0,
+        "suites": 68,
+        "tests": 1104,
+        "skipped": 0
+      },
+      "native": {
+        "failures": 0,
+        "errors": 0,
+        "suites": 12,
+        "tests": 27,
+        "skipped": 0
+      }
+    },
+    "downloaded_release_startup": {
+      "sdk_versions": [
+        31,
+        37
+      ],
+      "launches_each": 2,
+      "all_status_ok": true
+    }
+  },
+  "caveats": [
+    "No physical-drive comparison or fleet capacity inference.",
+    "No provider/production traffic.",
+    "No release, version bump or deployment.",
+    "Preference lookups capture one current value per call and do not persistently cache selections."
+  ]
+}

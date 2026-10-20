@@ -416,7 +416,8 @@ class ProgressionRepository(context: Context) {
                         added++
                     }
                 }
-                if (baseline && !baselineComplete(db)) {
+                val completeBeforeRetry = baseline && baselineComplete(db)
+                if (baseline && !completeBeforeRetry) {
                     // Do not retire the only durable starting fix when geocoding has
                     // produced no places at all. Without an initial visited place,
                     // ordinary candidates remain gated forever and the next GPS fix
@@ -432,7 +433,9 @@ class ProgressionRepository(context: Context) {
                         scheduleCandidateRetry(db, candidate, System.currentTimeMillis())
                     }
                 }
-                if (!baseline || baselineComplete(db)) {
+                // A complete baseline has no intervening writes to invalidate the
+                // check. Incomplete paths still recheck after retry/marker writes.
+                if (!baseline || completeBeforeRetry || baselineComplete(db)) {
                     db.delete(
                         "place_candidates",
                         "cell_x = ? AND cell_y = ?",
@@ -880,10 +883,13 @@ class ProgressionRepository(context: Context) {
         val text = value.trim().lowercase(java.util.Locale.ROOT)
             .replace(MUNICIPALITY_WHITESPACE_RE, " ").removePrefix("the ")
         for (kind in MUNICIPALITY_TYPES) {
-            val prefix = "${kind} of "
-            if (text.startsWith(prefix)) return text.removePrefix(prefix) to kind
-            val suffix = " $kind"
-            if (text.endsWith(suffix)) return text.removeSuffix(suffix) to kind
+            if (text.startsWith(kind) && text.startsWith(" of ", kind.length)) {
+                return text.substring(kind.length + 4) to kind
+            }
+            val kindStart = text.length - kind.length
+            if (kindStart > 0 && text[kindStart - 1] == ' ' && text.endsWith(kind)) {
+                return text.substring(0, kindStart - 1) to kind
+            }
         }
         return text to ""
     }
@@ -934,14 +940,8 @@ class ProgressionRepository(context: Context) {
         "baseline:${discovery.kind.name.lowercase()}:${discovery.key}"
 
     private fun baselineComplete(db: SQLiteDatabase): Boolean =
-        PlaceKind.entries.all { kind ->
-            db.rawQuery(
-                "SELECT 1 FROM progression_counters WHERE counter_key LIKE ? OR counter_key = ? LIMIT 1",
-                arrayOf(
-                    "baseline:${kind.name.lowercase()}:%",
-                    baselineMissingKey(kind)
-                )
-            ).use { it.moveToFirst() }
+        db.rawQuery(BASELINE_COMPLETE_SQL, BASELINE_COMPLETE_ARGUMENTS).use {
+            it.moveToFirst() && it.getInt(0) != 0
         }
 
     private fun markMissingBaselineKinds(db: SQLiteDatabase) {
@@ -1031,6 +1031,14 @@ class ProgressionRepository(context: Context) {
         const val POINTS_PER_ROAD = 5L
         private val MUNICIPALITY_WHITESPACE_RE = Regex("\\s+")
         private val MUNICIPALITY_TYPES = listOf("township", "borough", "municipality", "village", "town", "city")
+        // CASE preserves the original kind order and stops at the first missing
+        // kind, while using one statement/cursor rather than one per kind.
+        private val BASELINE_COMPLETE_SQL = "SELECT CASE " + PlaceKind.entries.joinToString(" ") {
+            "WHEN NOT EXISTS (SELECT 1 FROM progression_counters WHERE counter_key LIKE ? OR counter_key = ? LIMIT 1) THEN 0"
+        } + " ELSE 1 END"
+        private val BASELINE_COMPLETE_ARGUMENTS = PlaceKind.entries.flatMap {
+            listOf("baseline:${it.name.lowercase()}:%", "baseline_missing:${it.name.lowercase()}")
+        }.toTypedArray()
         // 150 m real-fix cells preserve short municipal crossings missed by older 400 m sampling.
         // Retain the old cells separately; their pending lookups remain valid after an update.
         private const val PLACE_CANDIDATE_CELL_M = 150.0

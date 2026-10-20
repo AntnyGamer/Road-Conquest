@@ -451,3 +451,71 @@ debug app/device-test APKs and the account Function build successfully. The
 previous commit's CI passes every verification job after Android 35's unchanged
 job-only rerun passed all nine native cases following a lifecycle-transition
 timeout. Current-head CI status is tracked separately in the PR.
+
+## Further local lookup reductions
+
+This pass compares against `d34f7c6` and changes three phone-only resource paths.
+The server/gateway implementation and provider quotas remain identical. Review
+of account/session, friend, push, verified submission and budget SQL found no
+additional quota change with a demonstrated behavior-preserving benefit.
+
+| Path and condition | Before | After |
+| --- | --- | --- |
+| Six theme/map/overlay/car/road enum lookups, last or unknown choice in each | Up to 35 preference acquisitions/string reads (3+4+4+6+9+9) | Six, one current read per getter |
+| Complete starting-place baseline | Six completeness statements/cursors | One |
+| Country-only incomplete baseline, first retry | Two completeness cursors | Two; still recheck after the retry write |
+| Partial baseline release | Four completeness cursors, plus three missing-kind queries | Two completeness cursors, plus the same three queries |
+| JVM: 10,000 ordinary `Pine Hill` municipal-name lookups | 10,720,000 allocated bytes | 4,480,000 |
+| JVM: 10,000 `Township of Pine Hill` lookups (earliest prefix match) | 6,320,000 allocated bytes | 5,760,000 |
+
+The six preference getters read once before searching their existing enums.
+Every saved choice, unknown/removed fallback and next-call preference edit is
+covered on SDKs 31/37. There is no persistent selection cache. Worst-case old
+counts are derived from the six existing loop lengths; the baseline regressions
+reproduce multiple acquisitions at the second choice, and current tests measure
+one acquisition/string read for every choice, unknown value and removal.
+These are API-call counts rather than physical disk reads.
+
+Completeness uses the original predicates, binding values and enum order in a
+single CASE statement. [SQLite documents lazy CASE evaluation](https://www.sqlite.org/lang_expr.html#the_case_expression),
+so later kinds are still skipped when an earlier kind is absent. A complete
+result is reused only when no writes intervene; incomplete paths still recheck
+after their retry or missing-marker writes. All 64 resolved/missing combinations
+match the original query algorithm on each SDK. Actual CursorFactory probes
+reproduce six/four old cursors and one/two new cursors. Ordinary discoveries
+still perform zero completeness queries. Rewards, original starting fix,
+pending-candidate lifecycle, missing-town markers and transaction/locking rules
+retain their original behavior. Small SQL/binding templates are retained for
+the process lifetime; the fixture does not measure physical I/O or query time.
+
+Municipal identity matching compares the existing type text and separator in
+place rather than constructing two temporary strings per rejected type. The
+original normalization, type order and exact matching boundaries remain.
+The old algorithm agrees on 2,250 combinations per SDK, including casing,
+whitespace, Unicode, empty/truncated names and overlapping municipal labels.
+[MunicipalityAllocationProbe.java](../tools/MunicipalityAllocationProbe.java)
+runs the same actual compiled app function against old/new class directories.
+Its JDK 21 ThreadMXBean rounds include unchanged normalization, reflection and
+Pair output costs. Unsafe is used only by the standalone fixture to bypass the
+Android database constructor; no Android stub methods execute. The probe is
+not part of the Android app. These allocations are not Android peak memory,
+storage, timing, battery or server-capacity measurements.
+
+All 22 focused tests pass. Sixteen regression cases first fail against the old
+code with only the expected repeated-read/cursor assertions. Full local
+validation is recorded in [resource-lookup-evidence.json](resource-lookup-evidence.json).
+Sixteen comparisons from [check-lookup-sources.mjs](../tools/check-lookup-sources.mjs)
+constrain this pass to the stated changes, alongside the fourteen original and
+eighteen preceding source checks. GPS acceptance/retention, matching, distance,
+road storage, municipal geometry/containment, drawing, all preference setters,
+consent, equipment entitlements and server code remain unchanged in this pass.
+No provider credits or production traffic were used.
+
+The full local run passes **1,126 Android tests across 70 suites**, with zero
+failures/errors/skips. Lint passes with zero errors and the same 299 warnings;
+debug app and device-test APK builds pass. The preceding `d34f7c6` CI passes
+every verification job, including server tests, release packaging, native maps
+on APIs 31/35/37 and release startup on APIs 31/37. Downloaded reports confirm
+1,104 unit cases, 27 native cases and four successful release launches. Fresh
+head CI is tracked separately in the PR. The server implementation is unchanged
+in this pass, so its previously passing 137-test local suite was not repeated.

@@ -18,23 +18,28 @@ object Prefs {
     private fun prefs(context: Context) =
         context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 
-    fun uiTheme(context: Context): UiTheme =
-        UiTheme.entries.firstOrNull { it.name == prefs(context).getString("ui_theme", null) } ?: UiTheme.SYSTEM
+    fun uiTheme(context: Context): UiTheme {
+        val saved = prefs(context).getString("ui_theme", null)
+        return UiTheme.entries.firstOrNull { it.name == saved } ?: UiTheme.SYSTEM
+    }
 
     fun setUiTheme(context: Context, theme: UiTheme) {
         prefs(context).edit().putString("ui_theme", theme.name).apply()
     }
 
-    fun mapMode(context: Context): MapMode =
-        MapMode.entries.firstOrNull { it.name == prefs(context).getString("map_mode", null) } ?: MapMode.STREETS
+    fun mapMode(context: Context): MapMode {
+        val saved = prefs(context).getString("map_mode", null)
+        return MapMode.entries.firstOrNull { it.name == saved } ?: MapMode.STREETS
+    }
 
     fun setMapMode(context: Context, mode: MapMode) {
         prefs(context).edit().putString("map_mode", mode.name).apply()
     }
 
-    fun placeOverlayMode(context: Context): PlaceOverlayMode =
-        PlaceOverlayMode.entries.firstOrNull { it.name == prefs(context).getString("place_overlay_mode", null) }
-            ?: PlaceOverlayMode.NONE
+    fun placeOverlayMode(context: Context): PlaceOverlayMode {
+        val saved = prefs(context).getString("place_overlay_mode", null)
+        return PlaceOverlayMode.entries.firstOrNull { it.name == saved } ?: PlaceOverlayMode.NONE
+    }
 
     fun setPlaceOverlayMode(context: Context, mode: PlaceOverlayMode) {
         prefs(context).edit().putString("place_overlay_mode", mode.name).apply()
