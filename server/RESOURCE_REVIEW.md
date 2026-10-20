@@ -290,3 +290,8 @@ same 299 warnings. The debug app, device-test APK and account Function bundle
 build successfully. These are local results; native-device and release CI status
 is recorded separately in the PR. No release, deployment, version bump, schema,
 quota, GPS sampling, matching confidence or history-retention change is included.
+
+The following pass specifically targets actual quota consumption rather than
+phone-only resources. See [QUOTA_REVIEW.md](QUOTA_REVIEW.md) for in-flight duplicate
+Google-decode savings and compact counter storage, with complete local workerd
+measurements, migration/retry safeguards and their capacity limits.

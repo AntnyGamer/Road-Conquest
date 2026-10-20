@@ -1,4 +1,5 @@
 const DAY = 86_400_000;
+const USAGE_TABLE = 'CREATE TABLE IF NOT EXISTS usage (day TEXT, bucket TEXT, used INTEGER NOT NULL, PRIMARY KEY(day,bucket)) WITHOUT ROWID';
 const json = (body, status = 200, extra = {}) => Response.json(body, {
   status, headers: { 'Cache-Control': 'no-store', ...extra }
 });
@@ -25,7 +26,7 @@ export class MapBudget {
     // read/written in synchronous transactions; eviction/restart falls back to SQL.
     this.counterCache = new Map();
     this.permitCache = new Map();
-    this.sql.exec('CREATE TABLE IF NOT EXISTS usage (day TEXT, bucket TEXT, used INTEGER NOT NULL, PRIMARY KEY(day,bucket))');
+    this.sql.exec(USAGE_TABLE);
     this.sql.exec(`CREATE TABLE IF NOT EXISTS map_permits (
       id TEXT PRIMARY KEY, day TEXT NOT NULL, bucket TEXT NOT NULL, cost INTEGER NOT NULL,
       slot INTEGER NOT NULL, state TEXT NOT NULL) WITHOUT ROWID`);
@@ -61,6 +62,15 @@ export class MapBudget {
         this.sql.exec('DELETE FROM usage WHERE day < ?', day);
         this.sql.exec('DELETE FROM map_permits WHERE day < ?', day);
         this.sql.exec('DELETE FROM map_health WHERE until_ms < ? AND probe_until < ?', now - DAY, now - DAY);
+        // Upgrade the original rowid layout only after normal retention leaves
+        // it empty. Current-day/legacy credits are never copied, reset or lost.
+        // This runs in the reservation transaction, so a failed commit restores
+        // both the old table and every expired row removed above.
+        if (![...this.sql.exec('SELECT 1 FROM usage LIMIT 1')].length &&
+            ![...this.sql.exec('PRAGMA index_info(usage)')].length) {
+          this.sql.exec('DROP TABLE usage');
+          this.sql.exec(USAGE_TABLE);
+        }
         this.sql.exec("INSERT INTO usage(day,bucket,used) VALUES(?,'maintenance:pruned',0)", day);
       }
       this.healthCache.clear();

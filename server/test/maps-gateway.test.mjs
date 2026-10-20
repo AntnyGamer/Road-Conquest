@@ -112,15 +112,17 @@ test('durable reservations persist across instances and enforce global and clien
   const db = new DatabaseSync(':memory:');
   let counterReads = 0;
   let cleanupReads = 0;
+  let layoutChecks = 0;
   let pruneCalls = 0;
   let insertStatements = 0;
   const ctx = { storage: { sql: { exec(sql, ...bindings) {
     if (sql.startsWith('SELECT') && sql.includes('maintenance:pruned')) cleanupReads++;
+    else if (sql === 'SELECT 1 FROM usage LIMIT 1') layoutChecks++;
     else if (sql.startsWith('SELECT')) counterReads++;
     if (sql.startsWith('DELETE FROM usage')) pruneCalls++;
     if (sql.startsWith('INSERT INTO usage') && !sql.includes('maintenance:pruned')) insertStatements++;
     const statement = db.prepare(sql);
-    return sql.startsWith('SELECT') ? statement.all(...bindings) : (statement.run(...bindings), []);
+    return statement.columns().length ? statement.all(...bindings) : (statement.run(...bindings), []);
   } } } };
   const reserve = (budget, bucket, limit = 12, ipLimit = 8, costUnits = 4) => budget.fetch(new Request('https://budget/reserve', {
     method: 'POST', body: JSON.stringify({ bucket: bucket.repeat(64), limit, ipLimit, costUnits })
@@ -138,6 +140,7 @@ test('durable reservations persist across instances and enforce global and clien
   assert.equal((await reserve(restarted, 'c')).status, 429);
   assert.equal(counterReads, 3, 'Restart and eligible uncached clients reload counters; known global denial needs no client read');
   assert.equal(cleanupReads, 2, 'A restarted object reads one durable cleanup marker');
+  assert.equal(layoutChecks, 1, 'The empty-table check runs only with daily cleanup, not each reservation or restart');
   assert.equal(pruneCalls, 1, 'Restart does not rescan current-day tables');
   assert.equal(insertStatements, 3, 'Quota-rejected requests never write counters');
   // The next request must be rejected if its *cost*, not just request count,

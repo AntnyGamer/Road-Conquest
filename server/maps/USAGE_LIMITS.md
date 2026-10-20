@@ -11,7 +11,7 @@ maps gateway; optional verified competition has separate limits.
 |---|---|---|
 | Geoapify | 3,000 credits/day; matching costs one credit per 100 waypoints; raster tiles cost 0.25 credit each | Shared 2,400-credit hard cap; 600 credits/client IP; live batches contain at most 100 total fixes |
 | LocationIQ | 5,000 requests/day, 60/minute and 2/second; routing accepts at most 25 coordinate pairs/request | 4,000/day, 1,000/client IP, 1,050-ms shared spacing; 25-fix backup batches |
-| Cloudflare Durable Objects | 100,000 requests, 100,000 SQLite rows written and five million rows read/day | Healthy matching needs two internal calls; full hard-cap fixture previously used 12,800 calls, with 52,860 writes including next-day cleanup |
+| Cloudflare Durable Objects | 100,000 requests, 100,000 SQLite rows written and five million rows read/day | Healthy matching needs two internal calls; compact-counter hard-cap fixture uses 12,800 calls for 6,400 matches, with 52,038 writes including next-day cleanup/two new matches |
 | Google Play Integrity, if verified competition is enabled | Default 10,000 server token decryptions/day, separately from its token/preparation bucket | At 40 new verified submissions/hour, this alone is about 250 verified hours/day before other use; normal Android builds currently hide/disable competition |
 
 Sources checked October 19: [Geoapify credits](https://www.geoapify.com/pricing-details/),
@@ -21,6 +21,14 @@ Sources checked October 19: [Geoapify credits](https://www.geoapify.com/pricing-
 [Play Integrity limits](https://developer.android.com/google/play/integrity/setup#increase-daily).
 Published allowances are not a readout of the project's actual remaining usage.
 Other applications/services using the same accounts consume their allowances.
+
+The [additional quota review](../QUOTA_REVIEW.md) reduces first-day metered SQL
+reads from 68,814 to 37,622 and writes from 45,624 to 44,814 for the same 6,400
+local workerd matching operations. It also reduces 20 overlapping exact verified
+submissions from 20 Google decodes to one, scoped to one authenticated operation
+and server instance. No completed verdicts are cached. Unique batches still need
+verification, and provider matching credits are unchanged; neither result is
+silently added as another driving-hours multiplier below.
 
 OpenFreeMap is already the normal street-map source. Public Geoapify fallback
 tiles already use the configured tiered **Workers Cache**, including request
