@@ -27,7 +27,10 @@ internal class CsvReader(reader: Reader, private val maxRowChars: Int = 1_048_57
             if (quoted) {
                 if (c == '"'.code) {
                     val after = input.read()
-                    if (after == '"'.code) field.append('"') else {
+                    if (after == '"'.code) {
+                        require(++chars <= maxRowChars) { "Backup CSV row is too large" }
+                        field.append('"')
+                    } else {
                         quoted = false
                         closed = true
                         if (after != -1) input.unread(after)
