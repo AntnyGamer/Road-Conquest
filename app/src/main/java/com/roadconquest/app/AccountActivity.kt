@@ -416,7 +416,9 @@ class AccountActivity : Activity() {
             ContextCompat.RECEIVER_NOT_EXPORTED)
         // Covers a response saved between onCreate and registering this observer.
         val session = AccountStore.load(this)
-        render(session)
+        // A pending sign-in must not be re-enabled simply because this screen resumed.
+        // Still refresh a completed sign-in or a previously displayed signed-in screen.
+        if (session != null || signedInGroup.visibility == View.VISIBLE) render(session)
         ForegroundSession.app.onStart()
     }
 
