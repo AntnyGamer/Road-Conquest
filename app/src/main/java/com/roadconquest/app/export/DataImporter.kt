@@ -211,6 +211,13 @@ object DataImporter {
         val app = context.applicationContext
         check(!Prefs.isDeviceDataDeletionPending(app)) { "Device data deletion is in progress" }
         val helper = AppDatabase.get(app)
+        // Reject a stale preview before changing tracking, GPS-sharing consent,
+        // or the running service. Reset/restore are serialized by operationLock.
+        synchronized(helper.historyLock) {
+            check(helper.historyGeneration == prepared.generation && !Prefs.isDeviceDataDeletionPending(app)) {
+                "Device data changed; select the backup again"
+            }
+        }
         val temporaryBackup = File(app.filesDir, "before-restore.tmp.zip")
         Prefs.setManualOnly(app, true)
         Prefs.setTrackingPaused(app, false)
