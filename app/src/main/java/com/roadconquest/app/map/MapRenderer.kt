@@ -39,6 +39,8 @@ import org.maplibre.android.style.layers.PropertyFactory.fillOpacity
 import org.maplibre.android.style.layers.PropertyFactory.fillOutlineColor
 import org.maplibre.android.style.layers.PropertyFactory.iconImage
 import org.maplibre.android.style.layers.PropertyFactory.iconRotate
+import org.maplibre.android.style.layers.PropertyFactory.iconSize
+import org.maplibre.android.style.layers.PropertyFactory.iconPitchAlignment
 import org.maplibre.android.style.layers.PropertyFactory.iconRotationAlignment
 import org.maplibre.android.style.layers.PropertyFactory.lineCap
 import org.maplibre.android.style.layers.PropertyFactory.lineColor
@@ -1375,6 +1377,10 @@ class MapRenderer(
         style.addLayer(
             SymbolLayer(CAR_LAYER_ID, CAR_SOURCE_ID).withProperties(
                 iconImage(CAR_IMAGE_ID),
+                // Constant screen-space size, independent of zoom. The full-size
+                // source bitmap remains sharp in the Garage's separate preview.
+                iconSize(0.72f),
+                iconPitchAlignment(Property.ICON_PITCH_ALIGNMENT_VIEWPORT),
                 iconAllowOverlap(true),
                 iconIgnorePlacement(true),
                 iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_MAP),
