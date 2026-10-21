@@ -51,7 +51,7 @@ class AccountActivity : Activity() {
             statusText.text = if (session == null) "Signed out." else "Signed in."
             // A completed onboarding sign-in must still return to the map when
             // the original activity was destroyed by a configuration change.
-            if (session != null && intent.getBooleanExtra(EXTRA_ONBOARDING, false)) finish()
+            if (session != null && this@AccountActivity.intent.getBooleanExtra(EXTRA_ONBOARDING, false)) finish()
         }
     }
 
