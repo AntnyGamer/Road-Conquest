@@ -38,6 +38,7 @@ object DataImporter {
     private const val MAX_ROAD_VERTICES = 500_000
     private const val PREFIX = "roadconquest-import-"
     internal val operationLock = Any()
+    const val ACTION_LOCAL_PROGRESS_RESTORED = "com.roadconquest.app.LOCAL_PROGRESS_RESTORED"
     private var temporaryFilesInitialized = false
     private val legacyTables = listOf("track_points", "roads", "road_visits", "explored_places", "explored_grid",
         "visited_places", "place_candidates", "progression_rewards", "progression_purchases", "progression_counters")
@@ -288,6 +289,11 @@ object DataImporter {
                 ShopCatalog.items.filter { it.id in selected }.forEach { Cosmetics.equip(app, it) }
             }.onFailure { android.util.Log.w("RoadConquest", "Progress restored; appearance could not be fully restored", it) }
         }
+        // A user may have returned to a still-visible map before a slow restore
+        // committed. Tell it to replace its stale repository without GPS polling.
+        runCatching {
+            app.sendBroadcast(Intent(ACTION_LOCAL_PROGRESS_RESTORED).setPackage(app.packageName))
+        }.onFailure { android.util.Log.w("RoadConquest", "Could not refresh map after restore", it) }
     }
 
     private fun count(db: SQLiteDatabase, table: String) = db.rawQuery("SELECT COUNT(*) FROM $table", null).use { it.moveToFirst(); it.getLong(0) }
