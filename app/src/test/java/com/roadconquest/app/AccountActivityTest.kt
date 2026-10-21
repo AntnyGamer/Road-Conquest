@@ -35,8 +35,13 @@ import java.util.concurrent.TimeUnit
 class AccountActivityTest {
     @Before fun clearAccountState() {
         AccountClient.endpointOverrideForTests = ""
-        RuntimeEnvironment.getApplication()
-            .getSharedPreferences("roadconquest_account", 0)
+        // Config.NONE omits the manifest's signature-only receiver permission.
+        // Device builds already declare it; give Robolectric the same permission.
+        val context = RuntimeEnvironment.getApplication<android.app.Application>()
+        org.robolectric.Shadows.shadowOf(context).grantPermissions(
+            "${context.packageName}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+        )
+        context.getSharedPreferences("roadconquest_account", 0)
             .edit().clear().commit()
         Prefs.setDriveVerificationEnabled(RuntimeEnvironment.getApplication(), false)
     }
