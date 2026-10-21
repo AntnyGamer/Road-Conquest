@@ -413,7 +413,6 @@ class AccountActivity : Activity() {
         // Covers a response saved between onCreate and registering this observer.
         val session = AccountStore.load(this)
         render(session)
-        if (session != null) statusText.text = "Signed in."
         ForegroundSession.app.onStart()
     }
 
