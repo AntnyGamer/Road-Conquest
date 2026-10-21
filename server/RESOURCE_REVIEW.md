@@ -928,3 +928,51 @@ host fixtures are not physical battery, Android peak memory, disk storage, provi
 fleet capacity measurements. Map measurements stop after actual preparation
 queues its exact strings; they do not measure native map rendering. New-head CI
 is tracked separately in the PR.
+
+## Large backup CSV fields without an escaped copy
+
+Compared with `528813a`, a large quote-free array field is handed directly to the
+existing buffered CSV writer between two quote characters. Eligibility requires
+at least 1,024 UTF-16 code units, enclosing square brackets, a comma and no double
+quote. The initial `[` is already safe under spreadsheet formula rules, and the
+comma already requires CSV quoting. Other values keep the unchanged escaper,
+including short arrays, quoted coordinates, formulas and unusual road names.
+No CSV schema, UTF-8, ZIP buffer, flush or restore-validation changes.
+
+The actual compiled old/new road-CSV export methods write 1,000 SQLite roads
+with 400 coordinates each and finish their ZIPs. Median calling-thread allocation
+falls from 13,820,296 to 7,884,296 bytes on SDK31 and from 13,818,792 to 7,882,792
+on SDK37: 5,936,000 fewer bytes per fixture, or 42.95-42.96%. With fixture entry
+times fixed, all 81,978 ZIP bytes agree. Both SDKs produce SHA-256
+`54c8e15d3682430e203b1be5590c65b7e6510f40be53f1054c0be61143e0598a`.
+
+The tradeoff is an eligibility check per field and two additional buffered quote
+writes per eligible field. The 10,000-row small-field control allocates the same
+bytes and takes median host wall times of 3.971 to 4.237 ms on SDK31 and 4.066 to
+4.396 ms on SDK37. That is about 0.27-0.33 ms extra per 10,000 rows, accepted for
+removing large field copies. No new buffer, persistent cache or extra flush is
+added. These local results do not establish physical battery, Android peak RAM,
+archive-size, provider-quota or fleet-capacity gains; no speed gain is claimed.
+
+A separate direct road-update argument-array experiment was evaluated and fully
+reverted: it saved only about 33 KB per 100 short-road updates without a convincing
+timing improvement. The complete final TrackingRepository matches baseline.
+The retained production patch changes only the CSV field handoff.
+
+After that reversion, all 196 targeted cases across seven suites pass, covering
+tracking/road IDs, CSV, export, restore and multi-window large history. Four
+additional actual CSV baseline-comparison cases pass. One new property case
+compares 2,066 fields across thresholds, quote/formula/control/Unicode/surrogate
+inputs and exact parser round trips. The existing 5,000-coordinate writer test
+now requires the unassembled field length. Final lint has zero errors and the
+same 298 warning IDs/messages; app and device-test debug APK builds pass.
+Three source checks preserve the entire repository, constrain CSV changes to
+this handoff and confirm 215 protected files unchanged, including all
+GPS/matching, distance, town borders, schema, exporter/importer and server code.
+
+See [resource-csv-field-evidence.json](resource-csv-field-evidence.json) for raw
+median measurements, the rejected experiment and limitations. The preceding
+`528813a` CI passes every verification job, including all three native-map jobs
+and both release-startup jobs. Downloaded unit XML confirms 1,207 cases across
+82 suites with zero failures/errors/skips. New-head CI is tracked separately
+in the PR.

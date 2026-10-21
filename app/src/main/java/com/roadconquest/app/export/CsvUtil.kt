@@ -9,7 +9,15 @@ internal object CsvUtil {
         for (field in fields) {
             if (!first) writer.write(','.code)
             first = false
-            writer.write(escape(field))
+            // A long array with no quotes needs only its enclosing CSV quotes.
+            // '[' is already spreadsheet-safe; keep all other values on escape().
+            if (field.length >= 1024 && field[0] == '[' && field.last() == ']' &&
+                ',' in field && '"' !in field
+            ) {
+                writer.write('"'.code)
+                writer.write(field)
+                writer.write('"'.code)
+            } else writer.write(escape(field))
         }
         writer.write('\n'.code)
     }

@@ -78,9 +78,35 @@ class CsvUtilTest {
         }
         CsvUtil.writeRow(writer, fields)
         assertEquals(expected, output.toString())
-        assertEquals(fields.maxOf { CsvUtil.escape(it).length }, largestWrite)
+        assertEquals(geometry.length, largestWrite)
         assertTrue(largestWrite < expected.length)
         assertEquals(fields, requireNotNull(CsvReader(java.io.StringReader(output.toString())).next())
             .map { CsvUtil.unescape(it, 12) })
     }
+
+    @Test fun longArrayFastPathKeepsExactEscapingAcrossThresholdsAndFallbacks() {
+        val random = java.util.Random(804412)
+        val fields = ArrayList<String>()
+        for (size in listOf(0, 1, 1023, 1024, 1025, 8192)) {
+            val text = "x".repeat(size)
+            fields += listOf(text, "[$text]", "[$text,1]", "[$text,\"quoted\"]",
+                "[$text,\r\n1]", "=[$text,1]", "'[$text,1]", " [$text,1]",
+                "[$text,1", "[$text,🛣️\u0000]", "[\uD800$text,\uDC00]")
+        }
+        val alphabet = charArrayOf('[', ']', ',', '\"', '\r', '\n', '\t', '\'', '=', '+', '-', '@',
+            '\uFEFF', '\u200B', ' ', 'x', '\u0000', '\uD800', '\uDC00', '雪')
+        repeat(1000) {
+            val text = buildString { repeat(1000 + random.nextInt(80)) { append(alphabet[random.nextInt(alphabet.size)]) } }
+            fields += "[$text,1]"
+            fields += text
+        }
+        for (field in fields) {
+            val output = java.io.StringWriter()
+            CsvUtil.writeRow(output, listOf(field))
+            assertEquals(CsvUtil.escape(field) + "\n", output.toString())
+            assertEquals(listOf(field), requireNotNull(CsvReader(java.io.StringReader(output.toString())).next())
+                .map { CsvUtil.unescape(it, 12) })
+        }
+    }
+
 }
