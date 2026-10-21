@@ -98,6 +98,31 @@ class DataImporterTest {
         assertEquals(500L, TrackingRepository(context).getSummary().trackPointCount)
     }
 
+    @Test fun detailedSavedRoadOverFiftyThousandVerticesRestoresFromItsOwnExport() {
+        // A provider can return a valid, >50k-point road. Backups must accept the
+        // exact geometry already persisted by normal matching, not only a subset.
+        val geometry = buildString {
+            append('[')
+            repeat(50_001) { index ->
+                if (index != 0) append(',')
+                append("[-74.")
+                append(index.toString().padStart(7, '0'))
+                append(",40.00000]")
+            }
+            append(']')
+        }
+        assertTrue(geometry.length > 1_000_000) // Also crosses the former CSV/JSON row limits.
+        TrackingRepository(context).upsertRoads(
+            listOf(MatchedRoad("Detailed Road", geometry, 1_000_000L, 1_005_000L, 0.99))
+        )
+        val original = export()
+        DataImporter.prepare(context, ByteArrayInputStream(original)).use {
+            DataImporter.restore(context, it)
+        }
+        assertEquals(1L, TrackingRepository(context).getSummary().roadSegmentCount)
+        assertEquals(entries(original).getValue("roads.csv"), entries(export()).getValue("roads.csv"))
+    }
+
     @Test fun restoringProgressDoesNotClaimItWasAlreadyExported() {
         TrackingRepository(context).insertLocation(fix(1_000_000))
         val backup = export()
