@@ -169,8 +169,7 @@ class AccountActivity : Activity() {
                 if (isDestroyed) return@runOnUiThread
                 result.fold(
                     onSuccess = { session ->
-                        val currentSession = AccountStore.load(this)
-                        if (session != null && currentSession?.token == session.token) {
+                        if (session != null && AccountStore.load(this)?.token == session.token) {
                             passwordInput.text.clear()
                             confirmPasswordInput.text.clear()
                             statusText.text = "Signed in."
@@ -178,7 +177,7 @@ class AccountActivity : Activity() {
                             if (intent.getBooleanExtra(EXTRA_ONBOARDING, false)) finish()
                         } else {
                             statusText.text = "A newer account action replaced this sign-in."
-                            render(currentSession)
+                            render(AccountStore.load(this))
                         }
                     },
                     onFailure = {
