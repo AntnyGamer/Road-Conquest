@@ -827,3 +827,51 @@ API31 attempt failed a Terrain-imagery source assertion; the rerun passes all
 nine native cases. Downloaded unit reports confirm 1,167 cases across 77 suites
 with zero failures/errors/skips. Both release-startup jobs also pass. New-head
 CI is tracked separately in the PR.
+
+## Local road identity formatting and boundary-cache metadata
+
+Compared with `1b5600b`, road identity formatting reuses one local builder and
+Java Formatter across the coordinates in one canonical key. Locale, decimal
+precision, input doubles, reversed-route handling and lexical selection stay
+identical. The complete old/new compiled helpers produce identical text for
+200 seeded traces per SDK; signed-zero/rounding, alternate-locale and real
+SQLite collision-ID regressions also pass. No saved ID or geometry changes.
+
+For four 1,000-coordinate helper calls, median calling-thread allocation drops
+from 5,112,424 to 4,653,912 bytes on SDK31 and from 5,336,424 to 4,696,808 on
+SDK37: 8.97% and 11.99%, or 114,628 and 159,904 fewer bytes per call. One small
+builder/formatter lives until the call ends, replacing per-coordinate objects.
+
+Over-budget boundary-cache ordering snapshots each timestamp once under the
+existing mutation lock. It keeps the same timestamp/name order, stable ties,
+File objects, cache caps, keep-current-write exclusion and deletion accounting.
+Every later cleanup reads fresh timestamps. Within-budget checks retain their
+early return, so they never build this snapshot. The 6,000-file fixture reduces
+File.lastModified calls from 135,888 to 6,000 with identical eviction order.
+Sorting 1,024 real temporary files on this Windows host takes medians of
+1.921/1.942 seconds before and 0.105/0.111 seconds after across SDK31/37 runs.
+These timings cover the sorter, not complete cleanup or Android performance.
+
+The sorting tradeoff is a temporary record per file plus list buffers during
+over-budget maintenance. This is worthwhile for the reduced metadata calls;
+measured total allocation decreases, but peak retained RAM was not measured.
+No persistent metadata cache or retention-policy change is introduced.
+
+A review of recent changes retains their disclosed costs: per-batch road parsing
+holds one bounded small geometry tree; exact overlay state holds one applied
+snapshot referencing existing data; explicit stopped-data compaction can take
+longer and require temporary disk space after deletion commits. None justifies
+claiming that every optimization has literally zero resource cost. GPS capture,
+matching acceptance, distance, town geometry, provider calls and server quotas
+are unchanged by this pass.
+
+All 190 targeted cases across four suites and four additional temporary
+comparison cases pass on SDKs31/37. Final lint has zero errors and the same
+298 warning IDs/messages; app and device-test debug APK builds pass. Three
+source checks reconstruct the two production files outside these exact edits
+and preserve another 212 protected files. See
+[resource-formatter-cache-evidence.json](resource-formatter-cache-evidence.json)
+for raw measurements, equivalence fixtures, bounds and limitations. The prior
+`1b5600b` CI passes every verification job, including native maps and release
+startup; downloaded unit XML confirms 1,181 cases across 78 suites
+with zero failures/errors/skips. New-head CI is tracked separately in the PR.

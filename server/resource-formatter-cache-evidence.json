@@ -1,0 +1,137 @@
+{
+  "baseline": "1b5600b4b9e30dd05f80edf1d3ed6a0be288d6e8",
+  "scope": "Reuse local road identity formatter and snapshot timestamps once during over-budget boundary cache ordering",
+  "road_identity": {
+    "implementation": "One StringBuilder and java.util.Formatter per canonicalGeometryKey call; same Locale.US, %.5f,%.5f format, input doubles, forward/reverse order and lexical choice.",
+    "equivalence": "Actual baseline/current compiled private methods compare exact text for 200 seeded traces per SDK. Repository tests cover signed zero, half rounding, reversed routes, alternate default locales and persisted SQLite collision IDs.",
+    "runtime": "JDK21, Robolectric SDKs31/37; calling-thread allocation and wall/CPU time medians.",
+    "method": "1000-coordinate fixture, four actual helper calls per sample, equal reflection overhead, eight warmup pairs and eleven alternating rounds.",
+    "measurements": [
+      {
+        "sdk": 31,
+        "cases": 200,
+        "coordinates": 1000,
+        "timingBatch": 4,
+        "sha256": "79f51b4244991d2273419bf09efe3df1818866e12fbc7706e3c035d69618236c",
+        "bytesBefore": 5112424,
+        "bytesAfter": 4653912,
+        "wallBefore": 7183100,
+        "wallAfter": 6131800,
+        "cpuBefore": 0,
+        "cpuAfter": 0,
+        "allocationReductionPercent": 8.97,
+        "bytesSavedPerCall": 114628
+      },
+      {
+        "sdk": 37,
+        "cases": 200,
+        "coordinates": 1000,
+        "timingBatch": 4,
+        "sha256": "79f51b4244991d2273419bf09efe3df1818866e12fbc7706e3c035d69618236c",
+        "bytesBefore": 5336424,
+        "bytesAfter": 4696808,
+        "wallBefore": 5803800,
+        "wallAfter": 5563400,
+        "cpuBefore": 0,
+        "cpuAfter": 0,
+        "allocationReductionPercent": 11.99,
+        "bytesSavedPerCall": 159904
+      }
+    ],
+    "tradeoff": "Retains one small local builder and formatter until this call completes, replacing per-coordinate instances; no shared state, geometry cache, rounding or saved-ID change."
+  },
+  "cache_ordering": {
+    "implementation": "Only after the existing budget check, snapshot one lastModified timestamp per file under mutationLock; keep ascending timestamp, filename ties and stable input order, returning original File objects.",
+    "metadata_fixture": {
+      "files": 6000,
+      "lastModifiedCallsBefore": 135888,
+      "lastModifiedCallsAfter": 6000,
+      "sdks": [
+        31,
+        37
+      ],
+      "sameOrder": true
+    },
+    "method": "1024 real empty temporary files with deterministic shuffled timestamps; exact original comparator versus actual changed helper; three warmup pairs and seven alternating rounds, JDK21 Windows host with Robolectric SDKs31/37.",
+    "measurements": [
+      {
+        "sdk": 31,
+        "files": 1024,
+        "bytesBefore": 434656,
+        "bytesAfter": 370288,
+        "wallBefore": 1921095400,
+        "wallAfter": 105217400,
+        "cpuBefore": 1906250000,
+        "cpuAfter": 109375000
+      },
+      {
+        "sdk": 37,
+        "files": 1024,
+        "bytesBefore": 434656,
+        "bytesAfter": 254008,
+        "wallBefore": 1942374100,
+        "wallAfter": 111446100,
+        "cpuBefore": 1906250000,
+        "cpuAfter": 109375000
+      }
+    ],
+    "tradeoff": "One temporary timestamp record per file and list buffers during over-budget maintenance. Within-budget checks allocate no snapshot; no persistent metadata cache. Peak retained RAM was not measured.",
+    "unchanged": "128 MiB / 6000-file caps, keep-current-write exclusion, delete/failure handling, counter updates, lifetimes and fresh timestamps on each later sort."
+  },
+  "validation": {
+    "targeted": {
+      "suites": 4,
+      "tests": 190,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "lint": {
+      "Warning": 298
+    },
+    "warningIdsAndMessagesUnchanged": true,
+    "buildsPassed": true,
+    "actualBaselineComparisonCases": 4
+  },
+  "source_comparison": {
+    "baseline": "1b5600b4b9e30dd05f80edf1d3ed6a0be288d6e8",
+    "checks": {
+      "entire_tracking_repository_except_local_formatter_lifetime": true,
+      "entire_overlay_geometry_cache_and_eviction_except_ordering_metadata_snapshot": true,
+      "all_other_protected_files_unchanged": true
+    },
+    "protectedFileCount": 212,
+    "unexpectedChanges": [],
+    "pass": true
+  },
+  "preceding_ci": {
+    "url": "https://github.com/AntnyGamer/RoadConquest-Beta/actions/runs/39534828934",
+    "revision": "1b5600b",
+    "allVerificationJobsPassed": true,
+    "downloadedUnitReports": {
+      "suites": 78,
+      "tests": 1181,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "publication": "skipped"
+  },
+  "recent_tradeoff_review": [
+    "Previously added per-batch saved-road parse reuse retains one tree for at most 16384 input characters; all fixes still query current roads and all acceptance gates remain.",
+    "Exact overlay publication retains one snapshot of already-loaded immutable data; bounds clear at the existing next-load boundary and equal refreshes release prior equal payloads.",
+    "Previously added compaction after an explicit stopped-data deletion can take longer and require temporary disk space; it runs after the delete commits and failure does not undo the successful deletion."
+  ],
+  "limits": [
+    "Local allocation and Windows filesystem timing are not Android peak memory, physical battery, driving accuracy, provider credits, storage savings or fleet capacity measurements.",
+    "The cache timing measures sorting, not the complete eviction operation. File.lastModified invocation counts are not counts of physical disk reads.",
+    "Host CPU clock resolution is coarse; zero formatter CPU samples mean below resolution, not zero CPU use. No CPU percentage is claimed.",
+    "GPS, matching decisions, turns/gaps, distance, geometry, containment, town borders, saved data/schema, provider calls and all server/gateway code remain unchanged in this pass.",
+    "Current-head CI is separate from the fully green preceding revision and is tracked in the draft PR."
+  ],
+  "measurement_units": {
+    "bytesBefore/After": "Calling-thread allocated bytes per sample",
+    "wallBefore/After": "Nanoseconds per sample",
+    "cpuBefore/After": "Calling-thread CPU nanoseconds per sample"
+  }
+}

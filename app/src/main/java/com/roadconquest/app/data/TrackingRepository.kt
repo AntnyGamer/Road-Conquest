@@ -1867,13 +1867,14 @@ class TrackingRepository(context: Context) {
 
     private fun canonicalGeometryKey(coordinates: JSONArray): String {
         val rounded = ArrayList<String>(coordinates.length())
-        for (i in 0 until coordinates.length()) {
-            val coordinate = coordinates.getJSONArray(i)
-            rounded += "%.5f,%.5f".format(
-                Locale.US,
-                coordinate.getDouble(0),
-                coordinate.getDouble(1)
-            )
+        val text = StringBuilder(32)
+        java.util.Formatter(text, Locale.US).use { formatter ->
+            for (i in 0 until coordinates.length()) {
+                val coordinate = coordinates.getJSONArray(i)
+                text.setLength(0)
+                formatter.format("%.5f,%.5f", coordinate.getDouble(0), coordinate.getDouble(1))
+                rounded += text.toString()
+            }
         }
         val forward = rounded.joinToString(";")
         val reverse = rounded.asReversed().joinToString(";")

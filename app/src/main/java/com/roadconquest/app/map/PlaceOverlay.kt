@@ -120,7 +120,7 @@ object PlaceOverlayCache {
         }
         // The oldest cached outlines go first. The destination currently being
         // written stays readable, even if it alone exceeds the cache budget.
-        for (candidate in files.sortedWith(compareBy<File> { it.lastModified() }.thenBy { it.name })) {
+        for (candidate in oldestCacheFiles(files)) {
             if (bytes <= maxBytes && count <= maxFiles) break
             if (candidate == keep) continue
             val length = candidate.length()
@@ -131,6 +131,15 @@ object PlaceOverlayCache {
         }
         cacheBytes = bytes
         cacheFiles = count
+    }
+
+    /** Snapshot timestamps under mutationLock instead of re-statting files during every comparison. */
+    internal fun oldestCacheFiles(files: List<File>): List<File> {
+        if (files.size < 2) return files
+        data class Candidate(val file: File, val modified: Long)
+        return files.map { Candidate(it, it.lastModified()) }
+            .sortedWith(compareBy<Candidate> { it.modified }.thenBy { it.file.name })
+            .map { it.file }
     }
 
     internal fun trimForTest(context: Context, maxBytes: Long, maxFiles: Int) =
