@@ -22,6 +22,58 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31], manifest = Config.NONE, shadows = [PosixAtomicFileShadow::class])
 class PlaceOverlayTest {
+    private fun assertCacheAccountingMatchesDisk(context: android.content.Context) {
+        val files = listOf("place-overlays-v3", "place-overlays-v5-world-admin", "place-overlays-us-census-v1")
+            .flatMap { File(context.filesDir, it).listFiles().orEmpty().toList() }
+            .filter { it.isFile && it.name.endsWith(".json") }
+        val owner = PlaceOverlayCache
+        val count = owner.javaClass.getDeclaredField("cacheFiles").apply { isAccessible = true }.getInt(owner)
+        val bytes = owner.javaClass.getDeclaredField("cacheBytes").apply { isAccessible = true }.getLong(owner)
+        assertEquals("Budget file count must reflect actual retained files", files.size, count)
+        assertEquals("Budget bytes must reflect actual retained files", files.sumOf { it.length() }, bytes)
+    }
+
+    @Test fun removingAnEmptyCorruptCacheFileRepairsTheBudgetCount() {
+        val context = RuntimeEnvironment.getApplication()
+        PlaceOverlayCache.clear(context)
+        try {
+            val neighbor = PlaceDiscovery(PlaceKind.STATE, "gb|neighbor", "Neighbor", "", "United Kingdom", 1L, 1.0, 1.0)
+            val empty = neighbor.copy(key = "gb|empty", displayName = "Empty")
+            val data = PlaceOverlayData(neighbor.key, neighbor.displayName, neighbor.kind, null, 1.0,
+                """{"type":"Polygon","coordinates":[[[0,0],[2,0],[2,2],[0,2],[0,0]]]}""")
+            assertTrue(PlaceOverlayCache.write(context, neighbor, data))
+            val hash = MessageDigest.getInstance("SHA-256")
+                .digest("${empty.kind.name}|${empty.key}".toByteArray(Charsets.UTF_8))
+                .joinToString("") { "%02x".format(Locale.US, it.toInt() and 0xff) }
+            val file = File(File(context.filesDir, "place-overlays-v3"), "$hash.json")
+            file.writeText("")
+            PlaceOverlayCache.trimForTest(context, Long.MAX_VALUE, Int.MAX_VALUE)
+            assertCacheAccountingMatchesDisk(context)
+            assertFalse(PlaceOverlayCache.read(context, empty).cached)
+            assertFalse(file.exists())
+            assertCacheAccountingMatchesDisk(context)
+            assertEquals(data.geometryJson, PlaceOverlayCache.read(context, neighbor).data?.geometryJson)
+        } finally { PlaceOverlayCache.clear(context) }
+    }
+
+    @Test fun failedCacheDeletionDoesNotUnderstateTheRetainedStorageBudget() {
+        val context = RuntimeEnvironment.getApplication()
+        PlaceOverlayCache.clear(context)
+        try {
+            val place = PlaceDiscovery(PlaceKind.STATE, "gb|retained", "Retained", "", "United Kingdom", 1L, 1.0, 1.0)
+            val data = PlaceOverlayData(place.key, place.displayName, place.kind, null, 1.0,
+                """{"type":"Polygon","coordinates":[[[0,0],[2,0],[2,2],[0,2],[0,0]]]}""")
+            assertTrue(PlaceOverlayCache.write(context, place, data))
+            val target = File(context.filesDir, "place-overlays-v3").listFiles()!!.single { it.name.endsWith(".json") }
+            val undeletable = object : File(target.path) { override fun delete(): Boolean = false }
+            PlaceOverlayCache.javaClass.getDeclaredMethod("forgetCacheFile", File::class.java)
+                .apply { isAccessible = true }.invoke(PlaceOverlayCache, undeletable)
+            assertTrue(target.isFile)
+            assertCacheAccountingMatchesDisk(context)
+            assertEquals(data.geometryJson, PlaceOverlayCache.read(context, place).data?.geometryJson)
+        } finally { PlaceOverlayCache.clear(context) }
+    }
+
     @Test fun retiredBoundaryCachesAreReclaimedWithoutTouchingCurrentOrUnrelatedFiles() {
         val context = RuntimeEnvironment.getApplication()
         PlaceOverlayCache.clear(context)

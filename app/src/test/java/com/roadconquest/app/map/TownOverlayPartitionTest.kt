@@ -14,6 +14,24 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31], manifest = Config.NONE)
 class TownOverlayPartitionTest {
+    @Test fun freshlyEncodedFeatureKeepsExactSerializedGeometryAndProperties() {
+        val shapes = listOf(
+            square(-74.0000000001, 40.0000000001, -73.9999999999, 40.0000000002),
+            """{"type":"Polygon","coordinates":[[[-0.0,0],[4,0],[4,4],[-0.0,0]],[[1,1],[2,1],[2,2],[1,1]]]}""",
+            """{"type":"MultiPolygon","coordinates":[[[[179.999,0],[180,0],[180,1],[179.999,0]]],[[[-180,0],[-179.999,0],[-179.999,1],[-180,0]]]]}"""
+        )
+        for (shape in shapes) for (population in listOf(null, 123_456L)) {
+            val encoded = JSONObject(shape)
+            val overlay = PlaceOverlayData("key", "A \"town\"", PlaceKind.TOWN, population, 12.34, encoded.toString())
+            val feature = overlay.featureJson(encoded)
+            if ("-0.0" in shape) {
+                assertFalse(encoded === feature.getJSONObject("geometry"))
+            } else org.junit.Assert.assertSame(encoded, feature.getJSONObject("geometry"))
+            assertEquals(overlay.featureJson().toString(), feature.toString())
+            assertEquals(encoded.toString(), overlay.geometryJson)
+        }
+    }
+
     @Test fun denselySharedBordersRemainContinuousInsteadOfTinySeparateStrokes() {
         // Both towns contain the same densely sampled survey edge. Dissolving
         // duplicates nodes every vertex; map tiling can discard those short pieces.

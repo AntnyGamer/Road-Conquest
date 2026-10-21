@@ -701,3 +701,77 @@ preserve the implementation outside the decoding edits. Full fresh-head CI is
 tracked in PR #105. The preceding `889ba9c` native reports confirm 27 cases
 across APIs 31/35/37 with no failures/errors/skips; they are not presented as
 fresh-head device results. No version bump, release or deployment is included.
+
+
+## Batch-local geometry parsing and town feature construction
+
+Compared with `a21c395`, two local paths reuse JSON that already exists without
+changing candidate queries, matching decisions or geographic geometry.
+
+- `KnownRoadReuse.find()` holds one parsed saved-road geometry for that call.
+  Equality includes the entire original JSON string, so a changed shape is
+  reparsed even when its segment ID stays the same. Every eligible fix still
+  queries current SQLite candidates, including newly added parallel roads.
+  Only bodies of at most 16,384 UTF-16 characters are retained. Larger bodies
+  follow the original parser path; the cache is released after the batch.
+- A town partition's freshly encoded polygon is passed into its feature instead
+  of immediately parsing the serialized copy again. The serialized copy remains
+  available for the shown overlay. Rare signed-zero coordinate tokens use the
+  original parser path, preserving its exact `-0` to `0` normalization. Border
+  union, line merging, clipping, holes, geometry repair and containment are unchanged.
+
+Actual before/after production methods were compared under local Robolectric
+SDKs 31 and 37 on JDK 21. After eight warmup pairs, eleven rounds alternated
+old/new ordering and measured sixteen operations per sample; the table contains
+calling-thread allocation medians for each complete sample.
+
+| Fixture | SDK | Before | After |
+| --- | --- | --- | --- |
+| 16 batches of 100 fixes on one 128-coordinate saved road | 31 | 75,673,088 bytes | 15,332,640 bytes |
+| Same saved-road fixture | 37 | 75,089,952 bytes | 15,083,136 bytes |
+| 16 complete renders of one 2,001-vertex town polygon | 31 | 111,304,064 bytes | 85,302,560 bytes |
+| Same town fixture | 37 | 111,303,008 bytes | 85,301,408 bytes |
+
+The local allocation reductions are 79.74-79.91% and 23.36%, respectively.
+Every saved-road result and all 100 accepted IDs match baseline. Fourteen town
+cases per SDK compare complete fill strings, outline strings and shown overlays,
+including official overlaps, holes, islands, signed zero and complex polygons.
+Their combined fill/outline SHA-256 is
+`5da5c342281426db1a29b42a2b13638d986973823cf26eabb1ea800f1aee17c1`
+on both SDKs. The source comparison reconstructs all four changed production
+files after removing only these parsing/handoff edits; the remaining GPS,
+continuity, distance, acceptance, containment and border algorithms match baseline.
+
+The saved-road cache adds a small object and retains one bounded parsed tree
+until its batch ends; it does not cache road candidates or completed decisions.
+These fixtures are not measurements of Android peak RAM, physical battery life,
+phone wall time, provider credits, storage saved or fleet driving capacity.
+The recorded CPU samples have a coarse host clock. See
+[resource-local-geometry-evidence.json](resource-local-geometry-evidence.json)
+for the actual samples, methodology, bounds and limitations.
+
+A fixed-row fog-noise precomputation was also evaluated and reverted: although
+all pixels matched, its timing did not improve consistently across SDKs. No new
+disk cleanup was selected. Current boundary caches are already compressed and
+bounded; exports already remove orphaned snapshots. History, valid offline
+boundaries and restore safety backups remain retained.
+
+The same pass fixes deletion-accounting drift in the boundary-cache budget.
+Removing a zero-byte corrupt entry previously left its file count charged;
+a failed deletion could instead subtract a file and its bytes while it remained
+on disk. Update the counters only when a previously present file is actually
+gone, including empty files. Two regression tests fail before the fix: one
+retained valid file is incorrectly counted as two after empty-file removal,
+and as zero after a simulated deletion failure. The final assertions compare
+both counters to actual directory entries and retain readable valid polygons.
+The AtomicFile deletion call, failure handling, cache caps and eviction policy
+remain unchanged. This is a bookkeeping fix, with no claimed disk-space or
+battery-life reduction.
+
+Validation covers 533 unique targeted Android cases across 21 suites (531 in
+the broad pass, then 55 affected cases after the additional cache fix), all with
+zero failures/errors/skips. Four additional baseline comparison cases pass.
+Final debug lint has zero errors and the same 298 warning IDs/messages; app
+and device-test debug APK builds pass. Five source checks reconstruct the
+changed algorithms and confirm another 207 production/configuration/supporting
+files byte-for-byte unchanged, excluding this review and its new evidence file.

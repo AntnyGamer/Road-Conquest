@@ -1682,7 +1682,8 @@ class TrackingRepository(context: Context) {
     @Synchronized
     fun findUnambiguousPreviouslyDrivenRoadNear(
         latitude: Double, longitude: Double,
-        snapRadiusMeters: Double = 3.0, exclusionRadiusMeters: Double = 12.0
+        snapRadiusMeters: Double = 3.0, exclusionRadiusMeters: Double = 12.0,
+        geometryReader: (String) -> JSONArray? = { runCatching { JSONArray(it) }.getOrNull() }
     ): RoadRecord? {
         if (!latitude.isFinite() || !longitude.isFinite() ||
             latitude !in -90.0..90.0 || longitude !in -180.0..180.0 ||
@@ -1692,7 +1693,7 @@ class TrackingRepository(context: Context) {
         var single: RoadRecord? = null
         var nearbyCount = 0
         for (road in roads) {
-            val distance = distanceToRoadMeters(latitude, longitude, road.geometryJson)
+            val distance = distanceToRoadMeters(latitude, longitude, geometryReader(road.geometryJson))
             if (distance > exclusionRadiusMeters) continue
             // Count even candidates outside the tight snap radius. They still make
             // the claimed road identity ambiguous at a junction/parallel street.

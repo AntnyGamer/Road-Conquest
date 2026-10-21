@@ -48,7 +48,14 @@ data class PlaceOverlayData(
     val areaSquareKilometers: Double,
     val geometryJson: String
 ) {
-    fun featureJson(): JSONObject = JSONObject()
+    fun featureJson(): JSONObject = featureJsonFromGeometry(JSONObject(geometryJson))
+
+    /** Reuse a fresh 2D polygon while preserving the old parser's signed-zero normalization. */
+    internal fun featureJson(geometry: JSONObject): JSONObject = featureJsonFromGeometry(
+        if ("[-0," in geometryJson || ",-0]" in geometryJson) JSONObject(geometryJson) else geometry
+    )
+
+    private fun featureJsonFromGeometry(geometry: JSONObject): JSONObject = JSONObject()
         .put("type", "Feature")
         .put("properties", JSONObject()
             .put("overlay_key", key)
@@ -56,7 +63,7 @@ data class PlaceOverlayData(
             .put("overlay_kind", kind.name)
             .put("area_sq_km", areaSquareKilometers)
             .also { properties -> population?.let { properties.put("population", it) } })
-        .put("geometry", JSONObject(geometryJson))
+        .put("geometry", geometry)
 }
 
 /** A saved town name alone is not proof that its recorded GPS fix was inside its polygon.
@@ -173,9 +180,11 @@ object PlaceOverlayCache {
     }
 
     private fun forgetCacheFile(file: File) {
-        val bytes = if (file.isFile) file.length() else 0L
+        val existed = file.isFile
+        val bytes = if (existed) file.length() else 0L
         AtomicFile(file).delete()
-        if (bytes > 0L && initialTrimDone) {
+        // Count empty corrupt files too, and retain charges when deletion failed.
+        if (existed && !file.isFile && initialTrimDone) {
             cacheBytes = (cacheBytes - bytes).coerceAtLeast(0L)
             cacheFiles = (cacheFiles - 1).coerceAtLeast(0)
         }

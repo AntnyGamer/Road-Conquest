@@ -96,7 +96,7 @@ internal object TownOverlayPartition {
         for (candidate in placed) {
             val shape = encodePolygonal(candidate.geometry) ?: continue
             val overlay = candidate.overlay.copy(geometryJson = shape.toString())
-            fills.put(overlay.featureJson())
+            fills.put(overlay.featureJson(shape))
             shown += overlay
             outlines += candidate.geometry.boundary
         }

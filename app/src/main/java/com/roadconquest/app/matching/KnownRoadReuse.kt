@@ -2,6 +2,7 @@ package com.roadconquest.app.matching
 
 import com.roadconquest.app.data.TrackPoint
 import com.roadconquest.app.data.TrackingRepository
+import org.json.JSONArray
 import kotlin.math.cos
 import kotlin.math.hypot
 
@@ -17,8 +18,11 @@ internal object KnownRoadReuse {
     fun find(repository: TrackingRepository, points: List<TrackPoint>, markableIds: Set<Long>): List<KnownRoadVisit> {
         if (points.size < 2 || markableIds.isEmpty() || repository.getSummary().roadSegmentCount == 0L)
             return emptyList()
+        val readGeometry = KnownRoadGeometryCache()::read
         val nearby = { fix: TrackPoint ->
-            repository.findUnambiguousPreviouslyDrivenRoadNear(fix.latitude, fix.longitude)?.segmentId
+            repository.findUnambiguousPreviouslyDrivenRoadNear(
+                fix.latitude, fix.longitude, geometryReader = readGeometry
+            )?.segmentId
         }
         val original = identify(points, markableIds, nearby)
         val remaining = markableIds - original.flatMap { it.pointIds }.toSet()
@@ -142,5 +146,23 @@ internal object KnownRoadReuse {
         if (!bearing.isFinite() || bearing !in 0.0..360.0) return false
         val delta = kotlin.math.abs(((bearing - course + 540.0) % 360.0) - 180.0)
         return delta <= 25.0
+    }
+}
+
+/** One small read-only geometry per find() call; every fix still queries current candidate roads. */
+internal class KnownRoadGeometryCache {
+    private var json: String? = null
+    private var coordinates: JSONArray? = null
+
+    fun read(next: String): JSONArray? {
+        if (next == json) return coordinates
+        val parsed = runCatching { JSONArray(next) }.getOrNull()
+        // Large or diverse road sets retain the original parsing path rather than
+        // holding many geometries. Equality includes every character, not just an ID.
+        if (next.length <= 16_384) {
+            json = next
+            coordinates = parsed
+        }
+        return parsed
     }
 }

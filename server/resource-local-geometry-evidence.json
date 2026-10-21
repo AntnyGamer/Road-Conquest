@@ -1,0 +1,132 @@
+{
+  "baseline": "a21c39542dd994505d8c3c14c4e9bd2e89b210d5",
+  "scope": "Batch-local saved-road JSON reuse, fresh town feature JSON handoff and accurate boundary-cache deletion accounting",
+  "method": {
+    "runtime": "JDK 21, local Robolectric SDKs 31 and 37",
+    "comparison": "Actual baseline compiled methods in child-first class loader against changed production methods; shared Android/model dependencies",
+    "timing": "Eight alternating before/after warmups, then eleven alternating measured rounds; medians; batches of sixteen operations",
+    "metrics": "Calling-thread JVM allocated bytes and CPU nanoseconds; no timing assertions"
+  },
+  "measurements": [
+    {
+      "sdk": 31,
+      "fixtures": 14,
+      "vertices": 2001,
+      "timingBatch": 16,
+      "sha256": "5da5c342281426db1a29b42a2b13638d986973823cf26eabb1ea800f1aee17c1",
+      "cpuBefore": 78125000,
+      "cpuAfter": 62500000,
+      "bytesBefore": 111304064,
+      "bytesAfter": 85302560,
+      "kind": "TOWN_COMPARISON",
+      "allocated_bytes_saved_per_operation": 1625094.0,
+      "allocation_reduction_percent": 23.36
+    },
+    {
+      "sdk": 31,
+      "fixes": 100,
+      "timingBatch": 16,
+      "visits": 1,
+      "cpuBefore": 109375000,
+      "cpuAfter": 62500000,
+      "bytesBefore": 75673088,
+      "bytesAfter": 15332640,
+      "kind": "ROAD_GEOMETRY_COMPARISON",
+      "allocated_bytes_saved_per_operation": 3771278.0,
+      "allocation_reduction_percent": 79.74
+    },
+    {
+      "sdk": 37,
+      "fixtures": 14,
+      "vertices": 2001,
+      "timingBatch": 16,
+      "sha256": "5da5c342281426db1a29b42a2b13638d986973823cf26eabb1ea800f1aee17c1",
+      "cpuBefore": 78125000,
+      "cpuAfter": 62500000,
+      "bytesBefore": 111303008,
+      "bytesAfter": 85301408,
+      "kind": "TOWN_COMPARISON",
+      "allocated_bytes_saved_per_operation": 1625100.0,
+      "allocation_reduction_percent": 23.36
+    },
+    {
+      "sdk": 37,
+      "fixes": 100,
+      "timingBatch": 16,
+      "visits": 1,
+      "cpuBefore": 125000000,
+      "cpuAfter": 46875000,
+      "bytesBefore": 75089952,
+      "bytesAfter": 15083136,
+      "kind": "ROAD_GEOMETRY_COMPARISON",
+      "allocated_bytes_saved_per_operation": 3750426.0,
+      "allocation_reduction_percent": 79.91
+    }
+  ],
+  "compatibility": {
+    "road_fixture": "Same exact KnownRoadVisit list and all 100 pending fix IDs; 128-coordinate saved road",
+    "town_fixtures_per_sdk": 14,
+    "town_full_output_sha256": "5da5c342281426db1a29b42a2b13638d986973823cf26eabb1ea800f1aee17c1",
+    "town_comparison": "Exact complete fills and outlines strings plus shown overlay list; empty, single, overlapping official/worldwide, nested, complex, signed-zero and multi-polygon with holes fixtures",
+    "regressions": "Changed geometry with the same segment ID, newly introduced parallel road, malformed/corrected geometry, oversized payloads, coordinate precision, signed zero, dateline and population properties"
+  },
+  "bounds_and_tradeoffs": {
+    "road_cache": "One geometry with at most 16,384 UTF-16 input characters, scoped to one find call. A small cache object/reference retains that parsed tree until the batch ends. Every fix still queries current SQLite candidates. Larger or changing inputs follow the existing parse path.",
+    "town": "Reuse only the just-encoded two-dimensional polygon, with the original parse path for signed-zero tokens; no persistent geometry cache.",
+    "rejected": "Fixed-row fog noise precomputation produced exact pixels but no consistent measured speedup; reverted.",
+    "storage_audit": "Existing boundary caches are compressed/bounded, interrupted export snapshots already cleaned, and restore safety backups/history preserved. No additional safe disk-storage reduction selected."
+  },
+  "limits": [
+    "Local microbenchmarks are not Android peak-memory, physical battery life, device speed, fleet DAU or driving-hours measurements.",
+    "No additional provider credit, API quota, on-disk storage or server-capacity savings claimed.",
+    "GPS capture, all matching acceptance and distance logic, exact polygon containment, border topology, saved history, consent, server/gateway and version are preserved."
+  ],
+  "cache_accounting_regressions": {
+    "empty_corrupt_file": {
+      "actual_retained_files": 1,
+      "before_counter": 2,
+      "after_counter": 1
+    },
+    "failed_file_deletion": {
+      "actual_retained_files": 1,
+      "before_counter": 0,
+      "after_counter": 1
+    },
+    "regression_proof": "Both new tests fail against prior bookkeeping before the fix. Final tests independently compare both byte totals and file counts to the actual directory entries, and preserve the neighboring or undeleted valid polygon.",
+    "change": "Count removed empty files as removed, and decrement bytes/files only when a previously present base file is actually gone. Existing AtomicFile deletion, read errors, eviction order and cache budgets remain unchanged."
+  },
+  "validation": {
+    "targeted_unique_cases_across_focused_runs": {
+      "suites": 21,
+      "tests": 533,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "runs": "531 cases in 21 suites, then 55 in 3 affected suites after the additional cache fix; 533 unique passing cases.",
+    "baseline_comparison_cases": 4,
+    "cache_regressions_first_fail_against_old_code": 2,
+    "lint": {
+      "errors": 0,
+      "warnings": 298,
+      "unchanged_warning_ids_and_messages": true
+    },
+    "builds": [
+      "assembleDebug",
+      "assembleDebugAndroidTest"
+    ],
+    "source_comparison": {
+      "baseline": "a21c39542dd994505d8c3c14c4e9bd2e89b210d5",
+      "checks": {
+        "whole_repository_except_geometry_reader_plumbing": true,
+        "whole_known_road_acceptance_and_expansion_except_reader_setup": true,
+        "entire_town_partition_and_border_geometry_except_feature_handoff": true,
+        "entire_overlay_cache_and_containment_except_feature_builder_and_deletion_accounting": true,
+        "all_other_protected_files_byte_identical": true
+      },
+      "protectedFileCount": 207,
+      "unexpectedChanges": [],
+      "pass": true
+    }
+  }
+}
