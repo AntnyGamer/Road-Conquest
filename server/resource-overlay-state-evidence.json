@@ -1,0 +1,100 @@
+{
+  "baseline": "3ce5059ce8e8264b7494a4ced475ba2161276a6b",
+  "scope": "Exact overlay publication and viewport cache identities; conservative upload retries and unknown-bounds caching",
+  "fixed_cases": [
+    "Two distinct valid polygons with Java String hash 997868208 must not suppress a boundary refresh or share a viewport envelope.",
+    "Changed overlay name, population, area, kind, key or ordering must publish even with unchanged geometry.",
+    "A missing fill or boundary source must not mark the pair uploaded; false or throwing updates remain retryable.",
+    "Unknown or malformed envelopes remain included, and their null result is cached until the next overlay load.",
+    "Worker adoption of an equal snapshot must not resurrect publication after a concurrent style reset."
+  ],
+  "collision_fixture": {
+    "hash": 997868208,
+    "first": {
+      "w": 98.8106,
+      "s": -34.0223,
+      "json": "{\"type\":\"Polygon\",\"coordinates\":[[[98.8106,-34.0223],[98.8206,-34.0223],[98.8206,-34.0123],[98.8106,-34.0123],[98.8106,-34.0223]]]}"
+    },
+    "second": {
+      "w": -75.6948,
+      "s": 55.7051,
+      "json": "{\"type\":\"Polygon\",\"coordinates\":[[[-75.6948,55.7051],[-75.6848,55.7051],[-75.6848,55.7151],[-75.6948,55.7151],[-75.6948,55.7051]]]}"
+    },
+    "attempts": 121346
+  },
+  "actual_renderer_comparison": {
+    "sdks": [
+      31,
+      37
+    ],
+    "changed_snapshots_per_sdk": 3,
+    "before_queued_updates_per_sdk": 0,
+    "after_queued_updates_per_sdk": 3,
+    "cases": "A colliding different geometry, a changed name, and changed population. Actual old/new postPlaceOverlay methods run with detached field setup and a counting Android Handler, without native map construction."
+  },
+  "allocation_method": {
+    "runtime": "JDK21, Robolectric SDKs31/37",
+    "operation": "Actual complete postPlaceOverlay unchanged-data fast path; old/new compiled classes, equal reflection overhead",
+    "fixture": "1000 immutable overlay records, 100 refreshes per sample, 30 warmup pairs, 11 alternating rounds; calling-thread medians",
+    "measurements": [
+      {
+        "sdk": 31,
+        "overlays": 1000,
+        "refreshes": 100,
+        "bytesBefore": 7203200,
+        "bytesAfter": 409600,
+        "cpuBefore": 15625000,
+        "cpuAfter": 0,
+        "allocationReductionPercent": 94.31,
+        "bytesSavedPerRefresh": 67936
+      },
+      {
+        "sdk": 37,
+        "overlays": 1000,
+        "refreshes": 100,
+        "bytesBefore": 7203200,
+        "bytesAfter": 409600,
+        "cpuBefore": 15625000,
+        "cpuAfter": 0,
+        "allocationReductionPercent": 94.31,
+        "bytesSavedPerRefresh": 67936
+      }
+    ],
+    "cpu_limit": "Host CPU clock is coarse; zero means below timing resolution, not zero CPU cost. No CPU percentage claimed."
+  },
+  "bounds": {
+    "retention": "One applied snapshot referencing the already-loaded immutable overlay objects; no geometry strings or JSON trees are copied. Equal refreshes adopt the current objects atomically so old equal payloads can be released. Bounds cache is cleared at the existing next-load boundary.",
+    "unknown_envelope_fixture": "20 repeated lookups: previous nullable getOrPut would parse20 times; new helper parses once, includes the polygon on every lookup, and parses again after clear.",
+    "eviction_and_capture": "No persistent cache, cap, timer, GPS request, disk write or provider request is added."
+  },
+  "validation": {
+    "targeted": {
+      "suites": 10,
+      "tests": 190,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "lint": {
+      "Warning": 298
+    },
+    "warningIdsAndMessagesUnchanged": true,
+    "buildsPassed": true,
+    "actualBaselineComparisonCases": 4
+  },
+  "source_comparison": {
+    "baseline": "3ce5059ce8e8264b7494a4ced475ba2161276a6b",
+    "checks": {
+      "complete_renderer_except_exact_publication_and_bounds_state": true,
+      "all_other_protected_files_unchanged": true
+    },
+    "protectedFileCount": 211,
+    "unexpectedChanges": [],
+    "pass": true
+  },
+  "limits": [
+    "Synthetic local allocations are not Android peak RAM, physical battery life, storage, paid quota or fleet capacity measurements.",
+    "All geometry serialization, clipping, merging, containment, GPS, distance, road matching, fog rendering and server/gateway algorithms are unchanged.",
+    "Preceding3ce5059 CI is fully green after an unchanged-code API31 rerun. Its first API31 attempt failed a Terrain-imagery assertion; the rerun passes all9 native cases. Full CI for the new revision is tracked separately in the PR."
+  ]
+}

@@ -129,8 +129,7 @@ class MapRenderer(
     private val nearbyUnvisitedPublisher = DistinctGeoJson(nearbyUnvisitedFeatures)
     private val nearbyNumbersPublisher = DistinctGeoJson(nearbyNumberFeatures)
     private val nearbyMarkerImages = HashMap<String, Bitmap>()
-    @Volatile private var shownOverlayKeys = emptyList<String>()
-    @Volatile private var shownOverlayCacheGeneration = -1L
+    private val overlayPublication = OverlayPublication()
     private val overlayClient = PlaceOverlayClient()
     @Volatile private var overlayGeneration = 0
     @Volatile private var visibleTownViewport: OverlayViewport? = null
@@ -140,7 +139,7 @@ class MapRenderer(
     private var loadedOverlayKind: PlaceKind? = null
     private var loadedOverlayCacheGeneration = -1L
     private var loadedOverlayData: List<PlaceOverlayData> = emptyList()
-    private val overlayBounds = HashMap<String, OverlayViewport?>()
+    private val overlayBounds = OverlayBoundsCache()
     @Volatile private var destroyed = false
     private val liveLocation = LiveLocation()
     private var displayedRoads = OverlayRoads.EMPTY
@@ -979,8 +978,7 @@ class MapRenderer(
 
     private fun installPlaceOverlayLayers(style: Style) {
         // A new MapLibre style has new empty GeoJSON sources even if the names match.
-        shownOverlayKeys = emptyList()
-        shownOverlayCacheGeneration = -1L
+        overlayPublication.reset()
         for (mode in listOf(PlaceOverlayMode.COUNTRY, PlaceOverlayMode.STATE, PlaceOverlayMode.TOWN)) {
             style.addSource(GeoJsonSource(overlaySourceId(mode), EMPTY_FEATURES))
             style.addSource(GeoJsonSource(overlayBoundarySourceId(mode), EMPTY_FEATURES))
@@ -1035,8 +1033,7 @@ class MapRenderer(
     }
 
     private fun clearPlaceOverlaySources() {
-        shownOverlayKeys = emptyList()
-        shownOverlayCacheGeneration = -1L
+        overlayPublication.reset()
         for (mode in listOf(PlaceOverlayMode.COUNTRY, PlaceOverlayMode.STATE, PlaceOverlayMode.TOWN)) {
             (map.style?.getSource(overlaySourceId(mode)) as? GeoJsonSource)?.setGeoJson(EMPTY_FEATURES)
             (map.style?.getSource(overlayBoundarySourceId(mode)) as? GeoJsonSource)?.setGeoJson(EMPTY_FEATURES)
@@ -1056,21 +1053,15 @@ class MapRenderer(
         val viewport = if (kind == PlaceKind.TOWN && data.size >= 200) visibleTownViewport else null
         val snapshot = if (viewport != null) {
             data.filter { place ->
-                val key = "${place.key}:${place.geometryJson.hashCode()}"
-                viewport.intersects(overlayBounds.getOrPut(key) {
-                    OverlayViewport.ofGeometry(place.geometryJson)
-                })
+                viewport.intersects(overlayBounds.get(place))
             }
         } else data.toList()
-        val keys = snapshot.map { "${it.key}:${it.geometryJson.hashCode()}" }
         // This gets called after normal activity refreshes as well as during
         // incremental downloads. If the complete geometry set is already drawn,
         // skip costly JTS polygon clipping and GeoJSON serialization altogether.
-        // These state fields are written on the UI thread and read here on the
-        // serial overlay executor; volatility keeps the early check up to date.
-        if (keys == shownOverlayKeys &&
-            expectedCacheGeneration == shownOverlayCacheGeneration
-        ) return
+        // Full data equality includes coordinates and popup properties. Equal
+        // hashes alone cannot prove that a boundary is unchanged.
+        if (overlayPublication.matches(snapshot, expectedCacheGeneration)) return
         // Existing boundaries can overlap due to mismatched or historical OSM
         // polygons. Partition only town shapes so their translucent fills never
         // stack or paint an overlapping boundary twice.
@@ -1123,13 +1114,16 @@ class MapRenderer(
                 com.roadconquest.app.data.PlaceKind.TOWN -> PlaceOverlayMode.TOWN
             }
             val cacheGeneration = PlaceOverlayCache.generation()
-            if (keys == shownOverlayKeys && cacheGeneration == shownOverlayCacheGeneration) return@post
-            (map.style?.getSource(overlaySourceId(mode)) as? GeoJsonSource)
-                ?.setGeoJson(fillFeatures)
-            (map.style?.getSource(overlayBoundarySourceId(mode)) as? GeoJsonSource)
-                ?.setGeoJson(boundaries)
-            shownOverlayKeys = keys
-            shownOverlayCacheGeneration = cacheGeneration
+            overlayPublication.publish(snapshot, cacheGeneration) {
+                val style = map.style ?: return@publish false
+                val fillSource = style.getSource(overlaySourceId(mode)) as? GeoJsonSource
+                    ?: return@publish false
+                val boundarySource = style.getSource(overlayBoundarySourceId(mode)) as? GeoJsonSource
+                    ?: return@publish false
+                fillSource.setGeoJson(fillFeatures)
+                boundarySource.setGeoJson(boundaries)
+                true
+            }
         }
     }
 

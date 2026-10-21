@@ -775,3 +775,55 @@ Final debug lint has zero errors and the same 298 warning IDs/messages; app
 and device-test debug APK builds pass. Five source checks reconstruct the
 changed algorithms and confirm another 207 production/configuration/supporting
 files byte-for-byte unchanged, excluding this review and its new evidence file.
+
+
+## Exact overlay state and repeated viewport work
+
+Compared with `3ce5059`, the map's overlay state compares complete immutable
+`PlaceOverlayData` values instead of allocating `key:geometryHash` strings.
+This fixes missed updates for hash collisions and popup-only metadata changes.
+The bounds cache uses complete values too, so colliding shapes cannot share an
+envelope and be incorrectly culled. Unknown envelopes stay included; remember
+the null result until the existing next-load clear instead of parsing it again
+on every camera idle callback.
+
+Publication records a snapshot only after both fill and boundary sources exist
+and both uploads complete. Missing sources and failed uploads remain retryable.
+An atomic snapshot pairs data and cache generation. Equal worker refreshes adopt
+the current payload references, and compare-and-set prevents resurrection of
+old publication state after a concurrent style/reset. Snapshot records reference
+already-loaded immutable overlay objects; no coordinate/string/tree copy is added.
+The applied record retains those references until a replacement or reset.
+
+A comparison of the actual previous and changed `postPlaceOverlay` methods on
+SDKs31/37 reproduces three missed changes per SDK: a different valid polygon
+with the same Java String hash, a changed name and changed population. The old
+renderer queues zero updates; the new renderer queues all three. The collision
+fixture contains two valid polygons in different hemispheres, both with hash
+`997868208`; exact geometry comparison distinguishes them.
+
+For 100 unchanged refreshes of 1,000 overlays, median calling-thread allocation
+falls from 7,203,200 to 409,600 bytes on both SDKs: 67,936 fewer bytes per refresh,
+or 94.31%. Both versions still queue zero updates for identical data. This
+measures the actual unchanged refresh method with equal reflection overhead,
+30 warmup pairs and eleven alternating rounds. Host CPU timing is too coarse
+to report a reliable percentage. These numbers do not measure Android peak
+memory, battery life, disk storage, provider credits or fleet capacity.
+
+All 190 focused cases across ten suites pass, alongside four temporary actual
+baseline-comparison cases. Tests include exact geometry/metadata, retry/reset,
+a controlled worker/reset race, equal-payload retention and unknown-envelope
+reuse. Final lint has zero errors and the same 298 warning IDs/messages; app
+and device-test debug APK builds pass. Two source checks reconstruct the whole
+prior renderer outside publication/bounds wiring and preserve another 211
+protected files, allowing only checkout newline normalization. Geometry,
+clipping, survey-border merging, containment, GPS, matching, fog, data and
+server/gateway algorithms remain unchanged.
+
+See [resource-overlay-state-evidence.json](resource-overlay-state-evidence.json)
+for the complete fixtures, allocation values and limits. The preceding CI run
+at `3ce5059` is fully green after an unchanged-code API31 job rerun. Its first
+API31 attempt failed a Terrain-imagery source assertion; the rerun passes all
+nine native cases. Downloaded unit reports confirm 1,167 cases across 77 suites
+with zero failures/errors/skips. Both release-startup jobs also pass. New-head
+CI is tracked separately in the PR.
