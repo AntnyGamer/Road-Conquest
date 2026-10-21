@@ -1,12 +1,14 @@
 package com.roadconquest.app
 
 import android.content.Context
+import android.content.Intent
 import android.os.SystemClock
 import android.widget.Switch
 import android.widget.TextView
 import android.view.View
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.roadconquest.app.account.AccountStore
 import com.roadconquest.app.account.AccountClient
@@ -58,6 +60,37 @@ class AccountStoreDeviceTest {
         } finally {
             AccountClient.endpointOverrideForTests = null
             Prefs.setDriveVerificationEnabled(context, false)
+            AccountStore.clear(context)
+        }
+    }
+
+    @Test fun signupCompletionAfterRotationIsPersistedAndShownByNewActivity() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        AccountStore.clear(context)
+        val session = AccountStore.Session("RotatedDriver", "device-test-rotation-token", false)
+        val generation = AccountStore.beginAuthentication()
+        try {
+            ActivityScenario.launch(AccountActivity::class.java).use { scenario ->
+                scenario.recreate()
+                // Model the network worker completing after the original screen has gone.
+                assertTrue(AccountStore.saveIfLatest(context, generation, session))
+                assertEquals(session, AccountStore.load(context))
+                context.sendBroadcast(Intent("com.roadconquest.app.ACCOUNT_SESSION_CHANGED")
+                    .setPackage(context.packageName))
+                InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+                scenario.onActivity { activity ->
+                    assertEquals(View.VISIBLE,
+                        activity.findViewById<View>(R.id.accountSignedInGroup).visibility)
+                    assertEquals("Signed in as RotatedDriver",
+                        activity.findViewById<TextView>(R.id.accountSignedInText).text.toString())
+                }
+            }
+            val obsolete = AccountStore.beginAuthentication()
+            AccountStore.clear(context)
+            assertFalse("A sign-out must invalidate an unfinished authentication",
+                AccountStore.saveIfLatest(context, obsolete, session))
+            assertNull(AccountStore.load(context))
+        } finally {
             AccountStore.clear(context)
         }
     }
