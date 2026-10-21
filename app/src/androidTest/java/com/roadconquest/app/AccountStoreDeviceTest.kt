@@ -99,6 +99,39 @@ class AccountStoreDeviceTest {
         }
     }
 
+    @Test fun rotatingAnUnfinishedSignupDoesNotEnableDuplicateRequests() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        AccountStore.clear(context)
+        val generation = AccountStore.beginAuthentication()
+        try {
+            ActivityScenario.launch(AccountActivity::class.java).use { scenario ->
+                scenario.recreate()
+                scenario.onActivity { activity ->
+                    assertFalse("The original request still owns signup after rotation",
+                        activity.findViewById<View>(R.id.accountSignupButton).isEnabled)
+                    assertFalse("The original request still owns login after rotation",
+                        activity.findViewById<View>(R.id.accountLoginButton).isEnabled)
+                }
+                assertTrue(AccountStore.finishAuthentication(generation))
+                context.sendBroadcast(Intent("com.roadconquest.app.ACCOUNT_SESSION_CHANGED")
+                    .setPackage(context.packageName)
+                    .putExtra("com.roadconquest.app.AUTHENTICATION_FAILED", true))
+                val deadline = SystemClock.elapsedRealtime() + 5_000L
+                var canRetry = false
+                do {
+                    scenario.onActivity { activity ->
+                        canRetry = activity.findViewById<View>(R.id.accountSignupButton).isEnabled &&
+                            activity.findViewById<View>(R.id.accountLoginButton).isEnabled
+                    }
+                    if (!canRetry) SystemClock.sleep(50)
+                } while (!canRetry && SystemClock.elapsedRealtime() < deadline)
+                assertTrue("A failed request must let the rotated screen retry", canRetry)
+            }
+        } finally {
+            AccountStore.clear(context)
+        }
+    }
+
     @Test fun onboardingScreenClosesAfterLoginCompletesAcrossRotation() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         AccountStore.clear(context)
