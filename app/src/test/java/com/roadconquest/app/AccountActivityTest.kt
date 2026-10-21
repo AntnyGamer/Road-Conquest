@@ -225,6 +225,24 @@ class AccountActivityTest {
         }
     }
 
+    @Test fun resumingAFormDoesNotReenableAnUnfinishedSignIn() {
+        AccountClient.endpointOverrideForTests = "https://example.com"
+        val controller = Robolectric.buildActivity(AccountActivity::class.java).create().start().resume()
+        try {
+            val activity = controller.get()
+            val signIn = activity.findViewById<Button>(R.id.accountLoginButton)
+            val signUp = activity.findViewById<Button>(R.id.accountSignupButton)
+            assertTrue(signIn.isEnabled)
+            signIn.isEnabled = false
+            signUp.isEnabled = false
+            controller.pause().stop().start().resume()
+            assertFalse(signIn.isEnabled)
+            assertFalse(signUp.isEnabled)
+        } finally {
+            controller.pause().stop().destroy()
+        }
+    }
+
     @Test fun accountFormHasSeparateFieldsAndActions() {
         val controller = Robolectric.buildActivity(AccountActivity::class.java).create()
         try {
