@@ -94,7 +94,7 @@ tasks.withType<Test>().configureEach {
 }
 
 dependencies {
-    implementation(platform("com.google.firebase:firebase-bom:35.0.1"))
+    implementation(platform("com.google.firebase:firebase-bom:35.0.2"))
     implementation("com.google.firebase:firebase-crashlytics")
     implementation("com.google.firebase:firebase-messaging")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
