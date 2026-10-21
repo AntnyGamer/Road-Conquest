@@ -170,6 +170,38 @@ class DataImporterTest {
         assertEquals(0L, TrackingRepository(context).getSummary().trackPointCount)
     }
 
+    @Test fun confirmedRestoreCompletesAfterItsActivityIsDestroyed() {
+        val tracker = TrackingRepository(context)
+        tracker.insertLocation(fix(1_000_000))
+        val original = export()
+        tracker.insertLocation(fix(1_005_000, -74.0001))
+        assertEquals(2L, tracker.getSummary().trackPointCount)
+        val backup = DataImporter.prepare(context, ByteArrayInputStream(original))
+        val controller = org.robolectric.Robolectric.buildActivity(
+            com.roadconquest.app.RestoreActivity::class.java
+        ).create().start().resume()
+        val activity = controller.get()
+        val worker = com.roadconquest.app.RestoreActivity::class.java
+            .getDeclaredField("worker").apply { isAccessible = true }
+            .get(activity) as java.util.concurrent.ExecutorService
+        try {
+            // Force the confirmed job to remain pending while Android destroys
+            // its Activity. An interrupt would make DataImporter reject the copy.
+            synchronized(DataImporter.operationLock) {
+                val restore = com.roadconquest.app.RestoreActivity::class.java
+                    .getDeclaredMethod("restore", DataImporter.Prepared::class.java)
+                    .apply { isAccessible = true }
+                restore.invoke(activity, backup)
+                controller.pause().stop().destroy()
+            }
+            assertTrue("A confirmed restore must finish after Activity destruction",
+                worker.awaitTermination(15, java.util.concurrent.TimeUnit.SECONDS))
+            assertEquals(1L, TrackingRepository(context).getSummary().trackPointCount)
+        } finally {
+            if (!worker.isShutdown) worker.shutdownNow()
+        }
+    }
+
     @Test fun rejectsPreparedBackupAfterDeletionAndCannotResurrectOldProgress() {
         val bytes = export()
         DataImporter.prepare(context, ByteArrayInputStream(bytes)).use { backup ->
