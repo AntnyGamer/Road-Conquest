@@ -197,6 +197,11 @@ class DataImporterTest {
             assertTrue("A confirmed restore must finish after Activity destruction",
                 worker.awaitTermination(15, java.util.concurrent.TimeUnit.SECONDS))
             assertEquals(1L, TrackingRepository(context).getSummary().trackPointCount)
+            assertTrue("Visible maps must be notified after a committed restore",
+                org.robolectric.Shadows.shadowOf(context).broadcastIntents.any {
+                    it.action == DataImporter.ACTION_LOCAL_PROGRESS_RESTORED &&
+                        it.`package` == context.packageName
+                })
         } finally {
             if (!worker.isShutdown) worker.shutdownNow()
         }
