@@ -1,6 +1,7 @@
 package com.roadconquest.app.export
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -26,6 +27,16 @@ class CsvUtilTest {
         assertEquals(listOf("name", "value"), reader.next())
         assertEquals(listOf("Main, \"North\"\nRoad", "5"), reader.next())
         assertEquals(null, reader.next())
+    }
+
+    @Test fun escapedQuotesCountTowardBoundedCsvRowSize() {
+        // Six quote characters encode a two-quote field. The two escaped
+        // inner quotes must count toward the raw row limit as well.
+        val encoded = "\"\"\"\"\"\"\n"
+        assertEquals(listOf("\"\""), CsvReader(java.io.StringReader(encoded), 16).next())
+        assertThrows(IllegalArgumentException::class.java) {
+            CsvReader(java.io.StringReader(encoded), 4).next()
+        }
     }
 
     @Test fun neutralizesFormulasHiddenAfterUnicodeFormatOrControlCharacters() {
