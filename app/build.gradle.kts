@@ -33,8 +33,8 @@ android {
         applicationId = "com.roadconquest.app"
         minSdk = 31
         targetSdk = 37
-        versionCode = 83
-        versionName = "1.0-beta.57"
+        versionCode = 84
+        versionName = "1.0-beta.58"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         testInstrumentationRunnerArguments["timeout_msec"] = "120000"
         val escapedAccountApiUrl = accountApiUrl.replace("\\", "\\\\").replace("\"", "\\\"")
@@ -97,17 +97,17 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:35.0.1"))
     implementation("com.google.firebase:firebase-crashlytics")
     implementation("com.google.firebase:firebase-messaging")
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:okhttp:5.5.0")
     implementation("com.android.billingclient:billing:9.1.0")
     implementation("com.google.android.gms:play-services-ads:25.5.0")
     implementation("com.google.android.ump:user-messaging-platform:4.0.0")
     implementation("com.google.android.play:integrity:1.6.0")
     implementation("androidx.core:core:1.19.1")
-    implementation("org.maplibre.gl:android-sdk-opengl:13.6.1")
+    implementation("org.maplibre.gl:android-sdk-opengl:13.7.1")
     implementation("org.locationtech.jts:jts-core:1.20.0")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.17")
-    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+    testImplementation("com.squareup.okhttp3:mockwebserver:5.5.0")
     androidTestImplementation("androidx.test:core:1.7.0")
     androidTestImplementation("androidx.test:runner:1.7.0")
     androidTestImplementation("androidx.test:rules:1.7.0")
