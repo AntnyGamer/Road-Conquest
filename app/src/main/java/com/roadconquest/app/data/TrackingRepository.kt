@@ -884,7 +884,7 @@ class TrackingRepository(context: Context) {
     ) {
         val coordinates = requireNotNull(runCatching { JSONArray(geometryJson) }.getOrNull()) { "Invalid road geometry JSON" }
         val bounds = requireNotNull(coordinateBounds(coordinates)) { "Invalid road coordinates" }
-        val segmentId = roadSegmentId(db, name, coordinates)
+        val segmentId = roadSegmentId(db, name, coordinates, geometryJson)
         val existing = db.query(
             "roads",
             arrayOf("first_unlocked_at", "last_driven_at", "road_group_id"),
@@ -1822,18 +1822,22 @@ class TrackingRepository(context: Context) {
         return RoadBounds(minLat, maxLat, wrap(gapEnd), wrap(gapStart))
     }
 
-    private fun roadSegmentId(db: SQLiteDatabase, name: String, coordinates: JSONArray): String {
+    private fun roadSegmentId(db: SQLiteDatabase, name: String, coordinates: JSONArray,
+                              geometryJson: String): String {
         val primary = stableRoadSegmentId(name, coordinates)
+        val storedGeometry = db.query(
+            "roads", arrayOf("geometry_json"), "segment_id = ?", arrayOf(primary),
+            null, null, null
+        ).use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
+        // Both values describe the already-validated input coordinates. Exact text
+        // equality proves the same canonical geometry without parsing/formatting it again.
+        if (storedGeometry == geometryJson) return primary
         val incomingKey = canonicalGeometryKey(coordinates)
         val normalizedName = name.trim().lowercase(Locale.US).ifBlank { "unnamed road" }
         fun alternateId(): String {
             return "g" + roadHashPrefix("$normalizedName|$incomingKey", 31)
         }
 
-        val storedGeometry = db.query(
-            "roads", arrayOf("geometry_json"), "segment_id = ?", arrayOf(primary),
-            null, null, null
-        ).use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
         if (storedGeometry != null) {
             val storedKey = runCatching { canonicalGeometryKey(JSONArray(storedGeometry)) }.getOrNull()
             return if (storedKey == incomingKey) primary else alternateId()

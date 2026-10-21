@@ -1,0 +1,223 @@
+{
+  "baseline": "7c186af4f9b4c3c1251b2e75b1e82b777c8a2cdb",
+  "scope": "Exact saved-road identity shortcut, paired country/state feature serialization, and avoiding unused empty Census collections",
+  "road_identity": {
+    "implementation": "The caller still parses and validates every incoming coordinate and calculates identical bounds. After the same primary-ID lookup, exact stored/incoming geometry text equality can return that ID. All different text follows the original complete canonical formatting and collision/alternate-ID recovery.",
+    "cost": "One exact string comparison, without a persistent geometry or decision cache. The comparison is worthwhile when unchanged saved geometry repeats. Different text still pays for full original validation/formatting.",
+    "equivalence": "105 actual baseline/current identity comparisons per SDK cover unchanged, whitespace-varied, reversed and seeded same-endpoint shapes. Six new repository cases cover the fast path, canonical fallback, collision IDs after primary deletion and invalid incoming coordinates even when stored text is corrupt. Full repeated upserts retain the expected ID, geometry, dates and visit count.",
+    "identityHelperNote": "Both private helpers are invoked reflectively; the current helper receives the original input text as one additional argument.",
+    "fullUpsertMethod": "Actual old/new upsertRoads methods, both invoked reflectively with equal argument structure; four repeated saves of one existing 1000-coordinate road per sample. The full upsert still parses input and computes bounds/group/visit/update state."
+  },
+  "overlay_features": {
+    "implementation": "Unpartitioned country/state fill and raw outline collections share one local parsed geometry. The existing signed-zero compatibility path remains. No ring filtering, coordinates, popup properties or collection ordering changes.",
+    "census_work": "Construct official Census fill/outline collections only when official Census towns are present. Official single-layer, mixed-layer and mixed-country branches retain their original JTS/merge behavior.",
+    "equivalence": "56 full old/new postPlaceOverlay output comparisons per SDK: 50 seeded country/state collections and six empty/non-US/single-layer/mixed-layer/mixed-country town combinations. Permanent tests also compare holes, islands, signed zero, extra coordinate dimensions, unsupported shapes, skipped short rings and malformed geometry failures.",
+    "method": "Four actual postPlaceOverlay preparation calls for one 2001-vertex state polygon per sample, with equivalent reflection and Android Handler capture overhead. Captured fill/boundary strings compare exactly; no native map construction or UI upload is benchmarked.",
+    "cost": "A small pair object couples the two string results; coordinate arrays are shared only inside the current conversion and never mutated. No persistent cache or new retained snapshot is added. Signed-zero input keeps its existing compatibility parse instead of forcing a saving."
+  },
+  "measurement_method": {
+    "runtime": "JDK21 Windows host, Robolectric SDKs31/37",
+    "samples": "Eight warmup pairs, eleven alternating before/after rounds, calling-thread medians",
+    "units": {
+      "bytesBefore/After": "Allocated bytes per sample",
+      "wallBefore/After": "Nanoseconds per sample",
+      "cpuBefore/After": "Calling-thread CPU nanoseconds per sample"
+    },
+    "raw": [
+      {
+        "fixture": "EXACT_OVERLAY_OUTPUT",
+        "sdk": 31,
+        "fixtures": 56,
+        "sha256": "b8aa56e27a71d2bb20cbfa9c319cff38ecae9f422885c705e57646644da1ccca"
+      },
+      {
+        "fixture": "EXACT_OVERLAY_BUILD",
+        "vertices": 2001,
+        "calls": 4,
+        "sdk": 31,
+        "bytesBefore": 20065768,
+        "bytesAfter": 13571944,
+        "wallBefore": 12722700,
+        "wallAfter": 7857500,
+        "cpuBefore": 15625000,
+        "cpuAfter": 0,
+        "allocationReductionPercent": 32.36,
+        "bytesSavedPerCall": 1623456
+      },
+      {
+        "fixture": "EXACT_ROAD_ID_SEPARATE",
+        "coordinates": 1000,
+        "calls": 8,
+        "sdk": 31,
+        "bytesBefore": 23246312,
+        "bytesAfter": 313192,
+        "wallBefore": 27595200,
+        "wallAfter": 10160800,
+        "cpuBefore": 31250000,
+        "cpuAfter": 15625000,
+        "allocationReductionPercent": 98.65,
+        "bytesSavedPerCall": 2866640
+      },
+      {
+        "fixture": "EXACT_ROAD_FALLBACK",
+        "coordinates": 1000,
+        "calls": 8,
+        "sdk": 31,
+        "bytesBefore": 23246312,
+        "bytesAfter": 23246312,
+        "wallBefore": 23621700,
+        "wallAfter": 23782900,
+        "cpuBefore": 31250000,
+        "cpuAfter": 31250000,
+        "allocationReductionPercent": 0.0,
+        "bytesSavedPerCall": 0
+      },
+      {
+        "fixture": "EXACT_ROAD_UPSERT",
+        "coordinates": 1000,
+        "calls": 4,
+        "sdk": 31,
+        "bytesBefore": 14317000,
+        "bytesAfter": 2850440,
+        "wallBefore": 18570600,
+        "wallAfter": 10606700,
+        "cpuBefore": 15625000,
+        "cpuAfter": 15625000,
+        "allocationReductionPercent": 80.09,
+        "bytesSavedPerCall": 2866640
+      },
+      {
+        "fixture": "EXACT_ROAD_OUTPUT",
+        "sdk": 31,
+        "variants": 105,
+        "sha256": "00ab3629baf693bb38838d0e1cda9c5dd2a4855c2e6b07d7788d56f869162432"
+      },
+      {
+        "fixture": "EXACT_OVERLAY_OUTPUT",
+        "sdk": 37,
+        "fixtures": 56,
+        "sha256": "b8aa56e27a71d2bb20cbfa9c319cff38ecae9f422885c705e57646644da1ccca"
+      },
+      {
+        "fixture": "EXACT_OVERLAY_BUILD",
+        "vertices": 2001,
+        "calls": 4,
+        "sdk": 37,
+        "bytesBefore": 20065352,
+        "bytesAfter": 13571816,
+        "wallBefore": 13779000,
+        "wallAfter": 8006400,
+        "cpuBefore": 15625000,
+        "cpuAfter": 15625000,
+        "allocationReductionPercent": 32.36,
+        "bytesSavedPerCall": 1623384
+      },
+      {
+        "fixture": "EXACT_ROAD_ID_SEPARATE",
+        "coordinates": 1000,
+        "calls": 8,
+        "sdk": 37,
+        "bytesBefore": 23623720,
+        "bytesAfter": 306600,
+        "wallBefore": 22566900,
+        "wallAfter": 7401300,
+        "cpuBefore": 31250000,
+        "cpuAfter": 0,
+        "allocationReductionPercent": 98.7,
+        "bytesSavedPerCall": 2914640
+      },
+      {
+        "fixture": "EXACT_ROAD_FALLBACK",
+        "coordinates": 1000,
+        "calls": 8,
+        "sdk": 37,
+        "bytesBefore": 23622952,
+        "bytesAfter": 23622952,
+        "wallBefore": 21169400,
+        "wallAfter": 21081900,
+        "cpuBefore": 15625000,
+        "cpuAfter": 15625000,
+        "allocationReductionPercent": 0.0,
+        "bytesSavedPerCall": 0
+      },
+      {
+        "fixture": "EXACT_ROAD_UPSERT",
+        "coordinates": 1000,
+        "calls": 4,
+        "sdk": 37,
+        "bytesBefore": 14476936,
+        "bytesAfter": 2818376,
+        "wallBefore": 16405000,
+        "wallAfter": 9173100,
+        "cpuBefore": 15625000,
+        "cpuAfter": 15625000,
+        "allocationReductionPercent": 80.53,
+        "bytesSavedPerCall": 2914640
+      },
+      {
+        "fixture": "EXACT_ROAD_OUTPUT",
+        "sdk": 37,
+        "variants": 105,
+        "sha256": "00ab3629baf693bb38838d0e1cda9c5dd2a4855c2e6b07d7788d56f869162432"
+      }
+    ]
+  },
+  "validation": {
+    "targeted": {
+      "suites": 11,
+      "tests": 334,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "actualCompiledBaselineComparisonCases": 4,
+    "additionalNewCasesRechecked": 12,
+    "lint": {
+      "Warning": 298
+    },
+    "warningIdsAndMessagesUnchanged": true,
+    "debugAppAndDeviceTestBuildsPassed": true
+  },
+  "source_comparison": {
+    "baseline": "7c186af4f9b4c3c1251b2e75b1e82b777c8a2cdb",
+    "checks": {
+      "entire_repository_except_exact_text_identity_shortcut": true,
+      "entire_renderer_except_paired_serialization_and_unused_empty_collections": true,
+      "entire_overlay_geometry_cache_and_model_except_local_pair_serializer": true,
+      "ring_traversal_exactly_preserved": true,
+      "all_other_protected_files_unchanged": true
+    },
+    "protectedFileCount": 212,
+    "unexpectedChanges": [],
+    "pass": true
+  },
+  "limits": [
+    "Measured savings are conditional on exactly repeated road text or rebuilding country/state overlays. Whitespace-different input retains the original formatting workload; its allocation control is unchanged.",
+    "Local allocations and host timings are not physical-phone battery, Android peak RAM, storage saved, provider credits or DAU/driving-hour capacity measurements.",
+    "Coarse CPU timing means zero samples are below resolution, not zero cost; no CPU percentage is claimed.",
+    "No new disk cleanup was chosen. GPS capture, road matching decisions, distance, canonical IDs, grouping rules, turns/gaps, town clipping/merging, provider calls, cache retention, schema and all server/gateway code are unchanged in this pass.",
+    "Preceding CI verification, account server, all three native-map jobs and API31 release startup pass. API37 release startup was still running at this check; fresh-head CI is tracked in the PR."
+  ],
+  "preceding_ci": {
+    "revision": "7c186af",
+    "url": "https://github.com/AntnyGamer/RoadConquest-Beta/actions/runs/39538949648",
+    "passedAtCheck": [
+      "account-server",
+      "verify",
+      "map-integration API31",
+      "map-integration API35",
+      "map-integration API37",
+      "release-startup API31"
+    ],
+    "stillRunningAtCheck": [
+      "release-startup API37"
+    ],
+    "downloadedUnitReports": {
+      "suites": 80,
+      "tests": 1195,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  }
+}

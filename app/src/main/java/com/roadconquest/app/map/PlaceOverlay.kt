@@ -66,6 +66,41 @@ data class PlaceOverlayData(
         .put("geometry", geometry)
 }
 
+/** Fill and raw outlines share a local parsed geometry; neither mutates its coordinate arrays. */
+internal fun overlayFeatureCollections(data: List<PlaceOverlayData>): Pair<String, String> {
+    val fills = JSONArray()
+    val features = JSONArray()
+    fun addRings(rings: JSONArray) {
+        for (ringIndex in 0 until rings.length()) {
+            val ring = rings.optJSONArray(ringIndex) ?: continue
+            if (ring.length() < 2) continue
+            features.put(
+                JSONObject()
+                    .put("type", "Feature")
+                    .put("properties", JSONObject())
+                    .put("geometry", JSONObject()
+                        .put("type", "LineString")
+                        .put("coordinates", ring))
+            )
+        }
+    }
+    for (overlay in data) {
+        val geometry = JSONObject(overlay.geometryJson)
+        fills.put(overlay.featureJson(geometry))
+        val coordinates = geometry.optJSONArray("coordinates") ?: continue
+        when (geometry.optString("type")) {
+            "Polygon" -> addRings(coordinates)
+            "MultiPolygon" -> {
+                for (polygonIndex in 0 until coordinates.length()) {
+                    coordinates.optJSONArray(polygonIndex)?.let(::addRings)
+                }
+            }
+        }
+    }
+    return JSONObject().put("type", "FeatureCollection").put("features", fills).toString() to
+        JSONObject().put("type", "FeatureCollection").put("features", features).toString()
+}
+
 /** A saved town name alone is not proof that its recorded GPS fix was inside its polygon.
  * Legacy entries can precede the current strict boundary verifier; never shade an
  * entire neighboring town merely because its name has a visited-place record.

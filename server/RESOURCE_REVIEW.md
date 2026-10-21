@@ -875,3 +875,56 @@ for raw measurements, equivalence fixtures, bounds and limitations. The prior
 `1b5600b` CI passes every verification job, including native maps and release
 startup; downloaded unit XML confirms 1,181 cases across 78 suites
 with zero failures/errors/skips. New-head CI is tracked separately in the PR.
+
+## Exact repeated-road text and paired overlay serialization
+
+Compared with `7c186af`, repeated road saving first checks whether the stored
+primary geometry is exactly the incoming text. Input parsing, coordinate validity
+and bounds calculation still happen before this check. Exact equality proves
+the same canonical geometry, so skip its redundant full formatting and stored
+JSON reparse. Different text keeps the entire original canonical/collision path,
+including reversed routes and recovering an alternate after primary deletion.
+No road candidate, completed decision or geometry is cached between calls.
+
+The added cost is one exact string comparison. For four full repeated upserts of
+one 1,000-coordinate road, median calling-thread allocation changes from
+14,317,000 to 2,850,440 bytes on SDK31 and from 14,476,936 to 2,818,376 on SDK37:
+80.09% and 80.53%, or 2,866,640 and 2,914,640 fewer bytes per save. Both complete
+upsert implementations are invoked reflectively with the same argument
+structure; input validation, grouping and visit/update logic still run. The
+whitespace-different control has identical allocation before/after, retaining
+full canonical work. Actual old/new helpers return identical IDs for 105 inputs
+per SDK, with combined SHA-256
+`00ab3629baf693bb38838d0e1cda9c5dd2a4855c2e6b07d7788d56f869162432`.
+
+Country/state feature conversion now parses a polygon locally once for both
+fill and raw outline collections. Shared coordinate arrays are read-only and
+never escape as mutable trees. The existing signed-zero normalization fallback
+remains. Map branches without official Census towns also skip the unused empty
+Census collections. Actual complete preparation calls allocate 20,065,768 to
+13,571,944 bytes on SDK31 and 20,065,352 to 13,571,816 on SDK37 for four builds
+of one 2,001-vertex state polygon: 32.36% fewer bytes. The small paired string
+result is included; no persistent cache or new snapshot retention is added.
+
+All 56 complete renderer fixtures per SDK have identical fill and outline
+strings, including ordinary country/state and empty, non-US, official
+single-layer, mixed-layer and mixed-country town paths. Their combined SHA-256
+is `b8aa56e27a71d2bb20cbfa9c319cff38ecae9f422885c705e57646644da1ccca`.
+Permanent tests additionally preserve holes, islands, signed zero, extra
+dimensions, malformed input errors and unsupported/short-ring behavior.
+
+All 334 targeted repository cases across eleven suites pass. Four additional
+actual compiled-baseline comparison cases pass; the twelve new repository cases
+are rechecked as well. Final lint has zero errors and the same 298 warning
+IDs/messages; app and device-test debug APK builds pass. Five source checks
+reconstruct the three production files outside these exact edits, preserve the
+old raw-outline traversal and confirm another 212 protected files unchanged.
+No GPS, matching, distance, grouping, turn/gap, JTS border, provider, schema or
+server/gateway algorithm changes. No additional storage cleanup was selected.
+
+See [resource-exact-geometry-evidence.json](resource-exact-geometry-evidence.json)
+for raw median measurements, operation counts and measurement bounds. These
+host fixtures are not physical battery, Android peak memory, disk storage, provider quota or
+fleet capacity measurements. Map measurements stop after actual preparation
+queues its exact strings; they do not measure native map rendering. New-head CI
+is tracked separately in the PR.

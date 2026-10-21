@@ -1077,33 +1077,29 @@ class MapRenderer(
         val otherPartition = if (kind == com.roadconquest.app.data.PlaceKind.TOWN &&
             other.isNotEmpty()
         ) TownOverlayPartition.render(other) else null
-        val censusLayers = officialUs.mapNotNull {
-            when {
-                "|census-4-" in it.key -> 4
-                "|census-3-" in it.key -> 3
-                "|census-1-" in it.key -> 1
-                else -> null
-            }
-        }.toSet()
-        // A single layer cannot overlap itself in normal Census geography.
-        // Avoid unnecessary polygon differences on ordinary single-layer maps.
-        val officialPartition = if (censusLayers.size > 1) {
-            TownOverlayPartition.renderOfficialUs(officialUs)
-        } else null
-        val officialFills = officialPartition?.fills ?: overlayFeatureCollection(officialUs)
-        val officialBorders = officialPartition?.outlines ?:
-            TownOverlayPartition.authoritativeOutlines(officialUs)
-        val fillFeatures = when {
-            officialUs.isNotEmpty() && otherPartition != null ->
-                mergeOverlayCollections(officialFills, otherPartition.fills)
-            officialUs.isNotEmpty() -> officialFills
-            else -> otherPartition?.fills ?: overlayFeatureCollection(snapshot)
-        }
-        val boundaries = when {
-            officialUs.isNotEmpty() && otherPartition != null ->
-                mergeOverlayCollections(officialBorders, otherPartition.outlines)
-            officialUs.isNotEmpty() -> officialBorders
-            else -> otherPartition?.outlines ?: overlayBoundaryFeatureCollection(snapshot)
+        val (fillFeatures, boundaries) = if (officialUs.isNotEmpty()) {
+            val censusLayers = officialUs.mapNotNull {
+                when {
+                    "|census-4-" in it.key -> 4
+                    "|census-3-" in it.key -> 3
+                    "|census-1-" in it.key -> 1
+                    else -> null
+                }
+            }.toSet()
+            // A single layer cannot overlap itself in normal Census geography.
+            // Avoid unnecessary polygon differences on ordinary single-layer maps.
+            val officialPartition = if (censusLayers.size > 1) {
+                TownOverlayPartition.renderOfficialUs(officialUs)
+            } else null
+            val officialFills = officialPartition?.fills ?: overlayFeatureCollection(officialUs)
+            val officialBorders = officialPartition?.outlines ?:
+                TownOverlayPartition.authoritativeOutlines(officialUs)
+            if (otherPartition != null) {
+                mergeOverlayCollections(officialFills, otherPartition.fills) to
+                    mergeOverlayCollections(officialBorders, otherPartition.outlines)
+            } else officialFills to officialBorders
+        } else {
+            otherPartition?.let { it.fills to it.outlines } ?: overlayFeatureCollections(snapshot)
         }
         mainHandler.post {
             if (destroyed || generation != overlayGeneration || overlayMode.kind != kind ||
@@ -1139,37 +1135,6 @@ class MapRenderer(
     private fun overlayFeatureCollection(data: List<PlaceOverlayData>): String {
         val features = JSONArray()
         data.forEach { features.put(it.featureJson()) }
-        return JSONObject().put("type", "FeatureCollection").put("features", features).toString()
-    }
-
-    private fun overlayBoundaryFeatureCollection(data: List<PlaceOverlayData>): String {
-        val features = JSONArray()
-        fun addRings(rings: JSONArray) {
-            for (ringIndex in 0 until rings.length()) {
-                val ring = rings.optJSONArray(ringIndex) ?: continue
-                if (ring.length() < 2) continue
-                features.put(
-                    JSONObject()
-                        .put("type", "Feature")
-                        .put("properties", JSONObject())
-                        .put("geometry", JSONObject()
-                            .put("type", "LineString")
-                            .put("coordinates", ring))
-                )
-            }
-        }
-        for (overlay in data) {
-            val geometry = runCatching { JSONObject(overlay.geometryJson) }.getOrNull() ?: continue
-            val coordinates = geometry.optJSONArray("coordinates") ?: continue
-            when (geometry.optString("type")) {
-                "Polygon" -> addRings(coordinates)
-                "MultiPolygon" -> {
-                    for (polygonIndex in 0 until coordinates.length()) {
-                        coordinates.optJSONArray(polygonIndex)?.let(::addRings)
-                    }
-                }
-            }
-        }
         return JSONObject().put("type", "FeatureCollection").put("features", features).toString()
     }
 
