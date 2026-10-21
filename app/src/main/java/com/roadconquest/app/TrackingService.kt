@@ -342,21 +342,17 @@ class TrackingService : Service(), LocationListener {
             lastExplored = visited
             // Fine-grained samples also capture genuine walking, without adding road miles.
             val exploredCell = TrackingRepository.exploredCellKey(visited.latitude, visited.longitude)
-            val saveExplored = exploredCell != null && exploredCellsThisSession.add(exploredCell)
-            if (saveExplored) {
+            if (exploredCell != null && exploredCellsThisSession.add(exploredCell)) {
                 storageExecutor.execute {
                     // Persist confirmed exploration without affecting road matching.
-                    if (exploredCell != null) {
-                        try {
-                            if (repository.recordExploredPlace(visited, exploredCell)) {
-                                sendUiBroadcast(ACTION_EXPLORATION_UPDATED)
-                            }
-                        } catch (error: Exception) {
-                            exploredCellsThisSession.remove(exploredCell)
-                            Log.e("RoadConquest", "Could not save explored place", error)
+                    try {
+                        if (repository.recordExploredPlace(visited, exploredCell)) {
+                            sendUiBroadcast(ACTION_EXPLORATION_UPDATED)
                         }
+                    } catch (error: Exception) {
+                        exploredCellsThisSession.remove(exploredCell)
+                        Log.e("RoadConquest", "Could not save explored place", error)
                     }
-
                 }
             }
         }
