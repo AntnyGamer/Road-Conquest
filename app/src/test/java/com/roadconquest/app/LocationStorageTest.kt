@@ -88,6 +88,81 @@ class LocationStorageTest {
         assertEquals(0L, repo.getSummary().trackPointCount)
     }
 
+    @Test fun normalThreeSecondWalkingAndSlowDrivingUnlockExplorationTiles() {
+        val app = RuntimeEnvironment.getApplication()
+        val repo = TrackingRepository(app)
+        for (speedAndAccuracy in listOf(1.4f to 5f, 5f to 10f)) {
+            for (table in listOf("track_points", "roads", "explored_places", "explored_grid")) {
+                repo.readableDatabase().execSQL("DELETE FROM $table")
+            }
+            val controller = Robolectric.buildService(TrackingService::class.java)
+            val service = controller.get()
+            fun field(name: String) = TrackingService::class.java.getDeclaredField(name).apply { isAccessible = true }
+            field("repository").set(service, repo)
+            field("verifiedDriving").set(service, VerifiedDriving(app))
+            field("ready").setBoolean(service, true)
+            val (speed, accuracy) = speedAndAccuracy
+            try {
+                repeat(30) { index ->
+                    ShadowSystemClock.advanceBy(Duration.ofSeconds(3))
+                    service.onLocationChanged(Location("gps").apply {
+                        latitude = 40.0 + index * (speed * 3.0 / 111_195.0)
+                        longitude = -74.0
+                        this.accuracy = accuracy
+                        this.speed = speed
+                        time = System.currentTimeMillis()
+                        elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
+                    })
+                }
+            } finally {
+                field("ready").setBoolean(service, false)
+                controller.destroy()
+            }
+            assertTrue((field("storageExecutor").get(service) as ExecutorService)
+                .awaitTermination(10, TimeUnit.SECONDS))
+            assertTrue("No exploration tiles at $speed m/s with $accuracy m accuracy",
+                repo.getExploredGridInBounds(41.0, -73.0, 39.0, -75.0).isNotEmpty())
+            assertTrue("No fine exploration samples at $speed m/s with $accuracy m accuracy",
+                repo.getExploredPlacesInBounds(41.0, -73.0, 39.0, -75.0).isNotEmpty())
+            if (speed < 2.2f) assertEquals(0L, repo.getSummary().trackPointCount)
+        }
+    }
+
+    @Test fun normalThreeSecondStationaryScatterStillUnlocksNothing() {
+        val app = RuntimeEnvironment.getApplication()
+        val repo = TrackingRepository(app)
+        for (table in listOf("track_points", "roads", "explored_places", "explored_grid")) {
+            repo.readableDatabase().execSQL("DELETE FROM $table")
+        }
+        val controller = Robolectric.buildService(TrackingService::class.java)
+        val service = controller.get()
+        fun field(name: String) = TrackingService::class.java.getDeclaredField(name).apply { isAccessible = true }
+        field("repository").set(service, repo)
+        field("verifiedDriving").set(service, VerifiedDriving(app))
+        field("ready").setBoolean(service, true)
+        try {
+            repeat(60) { index ->
+                ShadowSystemClock.advanceBy(Duration.ofSeconds(3))
+                service.onLocationChanged(Location("gps").apply {
+                    latitude = 40.0 + (index % 5 - 2) * 0.00001
+                    longitude = -74.0
+                    accuracy = 5f
+                    speed = 0f
+                    time = System.currentTimeMillis()
+                    elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
+                })
+            }
+        } finally {
+            field("ready").setBoolean(service, false)
+            controller.destroy()
+        }
+        assertTrue((field("storageExecutor").get(service) as ExecutorService)
+            .awaitTermination(10, TimeUnit.SECONDS))
+        assertTrue(repo.getExploredGridInBounds(41.0, -73.0, 39.0, -75.0).isEmpty())
+        assertTrue(repo.getExploredPlacesInBounds(41.0, -73.0, 39.0, -75.0).isEmpty())
+        assertEquals(0L, repo.getSummary().trackPointCount)
+    }
+
     @Test fun blockedDatabaseDoesNotBlockCallbacksAndAcceptedSamplesDrainAfterStop() {
         val repo = TrackingRepository(RuntimeEnvironment.getApplication())
         repo.readableDatabase().execSQL("DELETE FROM track_points")
