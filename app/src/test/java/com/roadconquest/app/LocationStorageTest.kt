@@ -100,6 +100,12 @@ class LocationStorageTest {
             fun field(name: String) = TrackingService::class.java.getDeclaredField(name).apply { isAccessible = true }
             field("repository").set(service, repo)
             field("verifiedDriving").set(service, VerifiedDriving(app))
+            // This verifies exploration only; never invoke the production remote matcher.
+            field("matcher").set(service, object : com.roadconquest.app.matching.RoadMatcher {
+                override val unavailable = true
+                override fun rateLimitRemainingMs() = Long.MAX_VALUE
+                override fun match(points: List<com.roadconquest.app.data.TrackPoint>) = null
+            })
             field("ready").setBoolean(service, true)
             val (speed, accuracy) = speedAndAccuracy
             try {
