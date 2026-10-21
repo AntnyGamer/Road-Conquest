@@ -1,3 +1,22 @@
+# Road Conquest 1.0 Beta 56
+
+## What's new since Beta 55
+
+- **Continuous town borders:** Rejoin shared survey-edge pieces into continuous outlines while retaining every coordinate, real junction, island and hole. This addresses missing or dotted town borders without snapping boundaries or inventing connections.
+- **Better short-turn and retry coverage:** Retain the original approach fix at detected turns. A failed backup matching batch now defers only the fixes actually submitted, so unsent fixes can continue. Matching confidence, snap-distance, ambiguity, speed and continuity checks remain in place.
+- **Less repeated online matching:** Reuse trusted saved-road geometry only when the existing strict GPS evidence proves the re-drive, and reuse exact cached responses only when every eligible submitted fix is covered. Uncertain or changed evidence continues through online matching.
+- **More reliable overlay updates:** Compare exact geometry and popup properties so hash collisions or metadata-only changes cannot leave stale boundaries. Missing map sources and failed uploads remain retryable.
+- **Less phone processing:** Reduce repeated geometry parsing, temporary arrays and strings, redundant database writes, and duplicate map-source updates across map refreshes, matching, trip replay, account refreshes and backups. These are targeted resource reductions, not a measured battery-life guarantee.
+- **Lower backup overhead:** Stream eligible large geometry fields without creating a second escaped copy. Backup bytes and restore format are preserved. In a local 1,000-road fixture, temporary export allocation falls about 43%; small fields retain the original escaping rules.
+- **More accurate cache accounting:** Keep boundary-cache file/byte counts correct after empty-file removal or deletion failure, and read eviction timestamps once per file while keeping the same retention order and limits. Compaction after an explicit stopped-data deletion can reclaim empty database pages; that deletion may take longer and need temporary disk space.
+- **More efficient optional server bundle:** Reduce repeated quota-accounting reads, identical in-flight Integrity checks and unchanged account/notification writes while retaining the existing reservations, limits, consent and scoring validation. Server and map-gateway changes require separate deployments; publishing this app release does not activate them.
+- **Compatibility:** Android 12+, versionCode **82**, versionName **1.0-beta.56**, unchanged application ID and permanent signing key. Existing saved GPS, roads, visits, points, purchases, accounts and compatible backups remain supported.
+- **Release verification:** Publication requires Android unit tests and lint, account-server checks, native map tests on Android 12/15/17, minified-release startup on Android 12/17, bundle validation, signing-certificate checks and 16 KB native-library compatibility.
+
+The GitHub release includes the signed APK, signed Play-ready AAB, Android Studio source archive, tested account-function bundle, R8 mapping and SHA-256 checksums. Uploading the AAB to Google Play and deploying backend services are separate steps. A separately deployed verified-scoring server must include versionCode 82 in its production `PLAY_VERSION_CODES` before accepting verified submissions; updating its documentation does not change production configuration. Ordinary builds keep competitive verification hidden by default.
+
+---
+
 # Road Conquest 1.0 Beta 55
 
 ## What's new since Beta 54
