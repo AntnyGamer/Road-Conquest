@@ -40,9 +40,9 @@ def request(layer, place, state, envelope, is_point=False):
                 urllib.request.Request(url, headers=headers), timeout=22
             ) as response:
                 return json.load(response)
-        except (urllib.error.URLError, TimeoutError) as error:
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as error:
             if attempt == 2:
-                raise RuntimeError("Census municipal GeoJSON service unreachable") from error
+                raise RuntimeError("Census municipal GeoJSON service unreachable or returned invalid JSON") from error
             time.sleep(3)
 
 
