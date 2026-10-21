@@ -37,7 +37,7 @@ class AccountActivityTest {
         AccountClient.endpointOverrideForTests = ""
         // Config.NONE omits the manifest's signature-only receiver permission.
         // Device builds already declare it; give Robolectric the same permission.
-        val context = RuntimeEnvironment.getApplication<android.app.Application>()
+        val context = RuntimeEnvironment.getApplication()
         org.robolectric.Shadows.shadowOf(context).grantPermissions(
             "${context.packageName}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
         )
