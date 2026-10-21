@@ -200,7 +200,8 @@ class AccountActivity : Activity() {
                     },
                     onFailure = {
                         statusText.text = it.message ?: "Account request failed."
-                        setAuthEnabled(true)
+                        // A newer request from another account screen may still be running.
+                        setAuthEnabled(!AccountStore.isAuthenticating())
                     }
                 )
             }
