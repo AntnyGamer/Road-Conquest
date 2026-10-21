@@ -32,6 +32,10 @@ import java.util.zip.ZipFile
 /** Imports only data into our own schema. Never executes SQL or opens a database from a ZIP. */
 object DataImporter {
     private const val MAX_BYTES = 512L * 1024 * 1024
+    // Provider responses can contain more than 50,000 valid vertices. Keep their
+    // backed-up geometry bounded without rejecting an ordinary saved road.
+    private const val MAX_ROAD_GEOMETRY_CHARS = 8_000_000
+    private const val MAX_ROAD_VERTICES = 500_000
     private const val PREFIX = "roadconquest-import-"
     internal val operationLock = Any()
     private var temporaryFilesInitialized = false
@@ -146,7 +150,8 @@ object DataImporter {
                     try {
                         for (table in backupTables) readEntry("$table.csv") { stream ->
                             val decoder = Charsets.UTF_8.newDecoder().onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
-                            val csv = CsvReader(java.io.InputStreamReader(stream, decoder).buffered())
+                            val csv = CsvReader(java.io.InputStreamReader(stream, decoder).buffered(),
+                                if (table == "roads") 8_388_608 else 1_048_576)
                             val header = csv.next() ?: error("Missing $table header")
                             val spec = if (schema < 11 && table == "explored_grid")
                                 legacyGridColumns else columns.getValue(table)
@@ -169,7 +174,7 @@ object DataImporter {
                                         'i' -> row.put(destination, field.toLong())
                                         'd' -> row.put(destination, field.toDouble().also { require(it.isFinite()) { "Invalid number" } })
                                         'b' -> row.put(destination, when (field) { "true" -> 1; "false" -> 0; else -> error("Invalid boolean") })
-                                        'j' -> { require(field.length <= 1_000_000); row.put(destination, field) }
+                                        'j' -> { require(field.length <= MAX_ROAD_GEOMETRY_CHARS); row.put(destination, field) }
                                     }
                                 }
                                 validateRow(table, row)
@@ -300,7 +305,7 @@ object DataImporter {
                 nonempty("segment_id"); nonempty("road_group_id")
                 require(v.getAsLong("last_driven_at") >= v.getAsLong("first_unlocked_at") && v.getAsLong("drive_count") in 1..Int.MAX_VALUE.toLong())
                 val geometry = JSONArray(v.getAsString("geometry_json"))
-                require(geometry.length() in 2..50_000) { "Invalid road geometry" }
+                require(geometry.length() in 2..MAX_ROAD_VERTICES) { "Invalid road geometry" }
                 val longitudes = DoubleArray(geometry.length())
                 var minLat = 90.0; var maxLat = -90.0
                 for (i in 0 until geometry.length()) {
