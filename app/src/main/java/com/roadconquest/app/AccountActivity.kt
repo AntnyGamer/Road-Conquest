@@ -49,6 +49,9 @@ class AccountActivity : Activity() {
             val session = AccountStore.load(this@AccountActivity)
             render(session)
             statusText.text = if (session == null) "Signed out." else "Signed in."
+            // A completed onboarding sign-in must still return to the map when
+            // the original activity was destroyed by a configuration change.
+            if (session != null && intent.getBooleanExtra(EXTRA_ONBOARDING, false)) finish()
         }
     }
 
@@ -419,6 +422,8 @@ class AccountActivity : Activity() {
         // A pending sign-in must not be re-enabled simply because this screen resumed.
         // Still refresh a completed sign-in or a previously displayed signed-in screen.
         if (session != null || signedInGroup.visibility == View.VISIBLE) render(session)
+        // Also cover a successful login saved just before this receiver registered.
+        if (session != null && intent.getBooleanExtra(EXTRA_ONBOARDING, false)) finish()
         ForegroundSession.app.onStart()
     }
 
