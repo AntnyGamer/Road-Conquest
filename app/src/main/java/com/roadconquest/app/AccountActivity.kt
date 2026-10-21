@@ -156,8 +156,12 @@ class AccountActivity : Activity() {
                     account.username, requireNotNull(account.token), account.leaderboardVisible
                 )
                 if (AccountStore.saveIfLatest(app, generation, session)) {
+                    // UI refresh and optional notifications cannot invalidate an already
+                    // durably saved sign-in if either optional action fails.
+                    runCatching {
+                        app.sendBroadcast(Intent(ACTION_SESSION_CHANGED).setPackage(app.packageName))
+                    }
                     runCatching { com.roadconquest.app.notifications.OptionalNotifications.initialize(app) }
-                    app.sendBroadcast(Intent(ACTION_SESSION_CHANGED).setPackage(app.packageName))
                     session
                 } else null
             }
