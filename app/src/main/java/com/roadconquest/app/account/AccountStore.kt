@@ -27,6 +27,20 @@ object AccountStore {
     private const val KEY_TOKEN = "token"
     private const val KEY_LEADERBOARD_VISIBLE = "leaderboard_visible"
 
+    // Process-local in-flight network requests cannot survive process death. Invalidate
+    // their results on a newer authentication, sign-out, deletion or session update.
+    private var sessionGeneration = 0L
+
+    @Synchronized
+    fun beginAuthentication(): Long = ++sessionGeneration
+
+    @Synchronized
+    fun saveIfLatest(context: Context, generation: Long, session: Session): Boolean {
+        if (generation != sessionGeneration) return false
+        save(context, session)
+        return true
+    }
+
     @Synchronized
     fun load(context: Context): Session? {
         val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -58,11 +72,14 @@ object AccountStore {
             .putString(KEY_USERNAME, session.username)
             .putString(KEY_TOKEN, encoded)
             .putBoolean(KEY_LEADERBOARD_VISIBLE, session.leaderboardVisible)
-            .apply()
+            .also { check(it.commit()) { "Could not persist account session" } }
+        sessionGeneration++
     }
 
     @Synchronized
     fun clear(context: Context) {
+        // Revoke pending sign-in responses before logout or account removal.
+        sessionGeneration++
         com.roadconquest.app.notifications.OptionalNotifications.disableLocal(context)
         // Disable precise-GPS sharing first, then durably remove the local bearer session.
         // Both changes must survive an abrupt process death immediately after logout/deletion.
