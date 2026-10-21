@@ -71,7 +71,7 @@ class ChallengesActivity : Activity() {
             root.addView(this)
         }
         root.addView(Button(this, null, 0, R.style.RoadConquest_BackAction).apply {
-            text = "← Back"
+            text = "Back"
             setOnClickListener { finish() }
         }, LinearLayout.LayoutParams(dp(110), dp(48)).apply { bottomMargin = dp(8) })
         label("YOUR WEEK", 12f).apply {
