@@ -3,6 +3,9 @@ package com.roadconquest.app
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.Context
+import android.content.BroadcastReceiver
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.Bundle
 import android.text.method.PasswordTransformationMethod
 import android.view.View
@@ -13,6 +16,7 @@ import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.Switch
 import android.widget.TextView
+import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -39,6 +43,14 @@ class AccountActivity : Activity() {
     private lateinit var deleteAccountButton: Button
     private var rendering = false
     private var busy = false
+    private val sessionReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != ACTION_SESSION_CHANGED) return
+            val session = AccountStore.load(this@AccountActivity)
+            render(session)
+            statusText.text = if (session == null) "Signed out." else "Signed in."
+        }
+    }
 
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(Appearance.wrap(newBase))
@@ -132,28 +144,37 @@ class AccountActivity : Activity() {
 
         setAuthEnabled(false)
         statusText.text = if (signup) "Creating account…" else "Signing in…"
+        val generation = AccountStore.beginAuthentication()
+        val app = applicationContext
         executor.execute {
+            // Durable account state is saved by the worker, not by an Activity that may
+            // already have been destroyed by a configuration change.
             val result = runCatching {
-                if (signup) AccountClient.signup(username, password)
-                else AccountClient.login(username, password)
+                val account = if (signup) AccountClient.signup(username, password)
+                    else AccountClient.login(username, password)
+                val session = AccountStore.Session(
+                    account.username, requireNotNull(account.token), account.leaderboardVisible
+                )
+                if (AccountStore.saveIfLatest(app, generation, session)) {
+                    runCatching { com.roadconquest.app.notifications.OptionalNotifications.initialize(app) }
+                    app.sendBroadcast(Intent(ACTION_SESSION_CHANGED).setPackage(app.packageName))
+                    session
+                } else null
             }
             runOnUiThread {
                 if (isDestroyed) return@runOnUiThread
                 result.fold(
-                    onSuccess = { account ->
-                        val token = requireNotNull(account.token)
-                        val session = AccountStore.Session(
-                            account.username,
-                            token,
-                            account.leaderboardVisible
-                        )
-                        AccountStore.save(this, session)
-                        com.roadconquest.app.notifications.OptionalNotifications.initialize(this)
-                        passwordInput.text.clear()
-                        confirmPasswordInput.text.clear()
-                        statusText.text = "Signed in."
-                        render(session)
-                        if (intent.getBooleanExtra(EXTRA_ONBOARDING, false)) finish()
+                    onSuccess = { session ->
+                        if (session != null && AccountStore.load(this)?.token == session.token) {
+                            passwordInput.text.clear()
+                            confirmPasswordInput.text.clear()
+                            statusText.text = "Signed in."
+                            render(session)
+                            if (intent.getBooleanExtra(EXTRA_ONBOARDING, false)) finish()
+                        } else {
+                            statusText.text = "A newer account action replaced this sign-in."
+                            render(AccountStore.load(this))
+                        }
                     },
                     onFailure = {
                         statusText.text = it.message ?: "Account request failed."
@@ -387,10 +408,17 @@ class AccountActivity : Activity() {
 
     override fun onStart() {
         super.onStart()
+        ContextCompat.registerReceiver(this, sessionReceiver, IntentFilter(ACTION_SESSION_CHANGED),
+            ContextCompat.RECEIVER_NOT_EXPORTED)
+        // Covers a response saved between onCreate and registering this observer.
+        val session = AccountStore.load(this)
+        render(session)
+        if (session != null) statusText.text = "Signed in."
         ForegroundSession.app.onStart()
     }
 
     override fun onStop() {
+        unregisterReceiver(sessionReceiver)
         passwordInput.text.clear()
         confirmPasswordInput.text.clear()
         ForegroundSession.app.onStop(isChangingConfigurations)
@@ -406,5 +434,6 @@ class AccountActivity : Activity() {
     companion object {
         const val EXTRA_ONBOARDING = "com.roadconquest.app.ACCOUNT_ONBOARDING"
         private val USERNAME = Regex("[A-Za-z0-9_]{3,24}")
+        private const val ACTION_SESSION_CHANGED = "com.roadconquest.app.ACCOUNT_SESSION_CHANGED"
     }
 }
