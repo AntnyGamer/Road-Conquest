@@ -35,8 +35,13 @@ import java.util.concurrent.TimeUnit
 class AccountActivityTest {
     @Before fun clearAccountState() {
         AccountClient.endpointOverrideForTests = ""
-        RuntimeEnvironment.getApplication()
-            .getSharedPreferences("roadconquest_account", 0)
+        // Config.NONE omits the manifest's signature-only receiver permission.
+        // Device builds already declare it; give Robolectric the same permission.
+        val context = RuntimeEnvironment.getApplication()
+        org.robolectric.Shadows.shadowOf(context).grantPermissions(
+            "${context.packageName}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+        )
+        context.getSharedPreferences("roadconquest_account", 0)
             .edit().clear().commit()
         Prefs.setDriveVerificationEnabled(RuntimeEnvironment.getApplication(), false)
     }
@@ -220,6 +225,37 @@ class AccountActivityTest {
             assertFalse(texts.contains("New roads"))
             assertFalse(texts.contains("Miles"))
             assertFalse(texts.any { it.contains("verified", ignoreCase = true) })
+        } finally {
+            controller.destroy()
+        }
+    }
+
+    @Test fun resumingAFormDoesNotReenableAnUnfinishedSignIn() {
+        AccountClient.endpointOverrideForTests = "https://example.com"
+        val controller = Robolectric.buildActivity(AccountActivity::class.java).create().start().resume()
+        try {
+            val activity = controller.get()
+            val signIn = activity.findViewById<Button>(R.id.accountLoginButton)
+            val signUp = activity.findViewById<Button>(R.id.accountSignupButton)
+            assertTrue(signIn.isEnabled)
+            signIn.isEnabled = false
+            signUp.isEnabled = false
+            controller.pause().stop().start().resume()
+            assertFalse(signIn.isEnabled)
+            assertFalse(signUp.isEnabled)
+        } finally {
+            controller.pause().stop().destroy()
+        }
+    }
+
+    @Test fun backArrowIsCenteredDrawableInsteadOfTextGlyph() {
+        val controller = Robolectric.buildActivity(AccountActivity::class.java).create()
+        try {
+            val back = controller.get().findViewById<Button>(R.id.backNavButton)
+            assertEquals("Back", back.text.toString())
+            assertNotNull(back.compoundDrawablesRelative[0])
+            assertEquals(android.view.Gravity.CENTER_VERTICAL,
+                back.gravity and android.view.Gravity.VERTICAL_GRAVITY_MASK)
         } finally {
             controller.destroy()
         }

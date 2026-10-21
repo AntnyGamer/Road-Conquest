@@ -27,6 +27,7 @@ class RestoreActivity : Activity() {
     private lateinit var recovery: Button
     private var prepared: DataImporter.Prepared? = null
     private var busy = false
+    private var restoreStarted = false
 
     override fun attachBaseContext(newBase: Context) { super.attachBaseContext(Appearance.wrap(newBase)) }
 
@@ -139,6 +140,7 @@ class RestoreActivity : Activity() {
     }
 
     private fun restore(backup: DataImporter.Prepared) {
+        restoreStarted = true
         setBusy(true)
         status.text = "Saving recovery backup and restoring progress…"
         worker.execute {
@@ -150,13 +152,19 @@ class RestoreActivity : Activity() {
                     android.widget.Toast.makeText(this, "Progress restored. Tracking is off.", android.widget.Toast.LENGTH_LONG).show()
                     // Rebuild map/repository owners after invalidating their history generation.
                     startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
-                }, { status.text = "Restore failed: ${it.message}. Existing progress was kept; tracking is off." })
+                }, { status.text = "Restore failed: ${it.message}. Existing progress was kept. Check tracking settings before driving." })
             }
         }
     }
 
     override fun onStart() { super.onStart(); ForegroundSession.app.onStart() }
     override fun onStop() { ForegroundSession.app.onStop(isChangingConfigurations); super.onStop() }
-    override fun onDestroy() { prepared?.close(); worker.shutdownNow(); super.onDestroy() }
+    override fun onDestroy() {
+        prepared?.close()
+        // An explicitly confirmed restore must finish its atomic transaction even if
+        // the UI rotates or closes. Unconfirmed validation remains cancellable.
+        if (restoreStarted) worker.shutdown() else worker.shutdownNow()
+        super.onDestroy()
+    }
     private companion object { const val REQUEST_IMPORT = 4001 }
 }

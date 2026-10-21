@@ -473,14 +473,38 @@ class MapRenderingDeviceTest {
             }
             moveAndAssert(LatLng(car.latitude + 0.00004, car.longitude), 19.5, 65.0)
 
-            val terrainReady = CountDownLatch(1)
+            // getStyle() can immediately return the previous STREET style before the
+            // asynchronous satellite reload finishes. Wait for a different Style
+            // object with the new overlay layers installed.
+            var previousStyle: Style? = null
             scenario.onActivity {
+                previousStyle = map.style
                 renderer.setMapMode(MapMode.TERRAIN)
-                map.getStyle { terrainReady.countDown() }
             }
-            assertTrue("Terrain style reloads", terrainReady.await(30, TimeUnit.SECONDS))
+            val terrainDeadline = SystemClock.elapsedRealtime() + 30_000L
+            var terrainReady = false
+            while (!terrainReady && SystemClock.elapsedRealtime() < terrainDeadline) {
+                scenario.onActivity {
+                    val style = map.style
+                    terrainReady = style != null && style !== previousStyle &&
+                        style.getSource("roadconquest-car") is GeoJsonSource &&
+                        style.getSource("roadconquest-fog") is ImageSource
+                }
+                if (!terrainReady) SystemClock.sleep(50)
+            }
+            assertTrue("Terrain style reloads and restores Road Conquest overlays", terrainReady)
             scenario.onActivity {
-                assertTrue("Terrain actually uses imagery", map.style!!.getSource("satellite") is RasterSource)
+                // An outage may select a documented backup style instead of the
+                // satellite raster; that must not make the overlay test fail.
+                val provider = MapRenderer::class.java.getDeclaredField("baseProvider")
+                    .apply { isAccessible = true }.get(renderer) as String
+                if (provider == "openfreemap") {
+                    assertTrue("Available satellite provider uses imagery",
+                        map.style!!.getSource("satellite") is RasterSource)
+                } else {
+                    assertTrue("Terrain must select a recognized backup when imagery is unavailable",
+                        provider in setOf("openfreemap-streets", "geoapify-tiles", "local"))
+                }
                 assertTrue("Fog source is recreated after style reload", map.style!!.getSource("roadconquest-fog") is ImageSource)
                 assertTrue("Fog layer is recreated after style reload", map.style!!.getLayer("roadconquest-fog-raster") is RasterLayer)
                 assertTrue("Car source is recreated after style reload", map.style!!.getSource("roadconquest-car") is GeoJsonSource)

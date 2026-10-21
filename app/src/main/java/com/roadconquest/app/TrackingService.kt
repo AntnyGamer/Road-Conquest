@@ -108,6 +108,8 @@ class TrackingService : Service(), LocationListener {
     private var successfulShortMatches = 0
     private var lastRemotePointLimit = com.roadconquest.app.matching.GeoapifyMatcher.MAX_MATCH_POINTS
     private var lastObserved: Location? = null
+    // Unlike the per-callback driving anchor, this accumulates small genuine movements.
+    private var lastExplorationAnchor: Location? = null
     private var lastAccepted: Location? = null
     // Accepted fixes omitted from network matching, also retained privately on disk.
     private val skippedSinceRetained = ArrayList<Location>(4)
@@ -294,9 +296,24 @@ class TrackingService : Service(), LocationListener {
         if (elapsedFromPrevious in 1..MAX_MOTION_SAMPLE_AGE_MS &&
             distanceFromPrevious / (elapsedFromPrevious / 1_000f) > MAX_PLAUSIBLE_SPEED_MPS
         ) return
+        val explorationAnchor = lastExplorationAnchor
+        val explorationAge = explorationAnchor?.let { elapsedMillis(it, location) } ?: Long.MIN_VALUE
+        val explorationDistance = if (explorationAnchor != null &&
+            explorationAge in 1..MAX_MOTION_SAMPLE_AGE_MS
+        ) explorationAnchor.distanceTo(location) else Float.NaN
         val explorationMotionConfirmed = isReliableExplorationMovement(
-            location, previous, elapsedFromPrevious, distanceFromPrevious
+            location, explorationAnchor, explorationAge, explorationDistance
         )
+        // Short, reliable moves accumulate instead of resetting the evidence every three
+        // seconds. An expired/poor-quality fix starts a new window, never bridges a gap.
+        if (explorationMotionConfirmed || explorationAnchor == null ||
+            explorationAge !in 1..MAX_MOTION_SAMPLE_AGE_MS ||
+            location.isMock || !location.hasAccuracy() || location.accuracy !in 0.01f..25f
+        ) {
+            lastExplorationAnchor = if (!location.isMock && location.hasAccuracy() &&
+                location.accuracy in 0.01f..25f
+            ) Location(location) else null
+        }
         // Fog and 50-m exploration follow corroborated walking OR driving movement.
         // A single stationary GPS fix does not reveal a square or count as a visit.
         if (explorationMotionConfirmed) {
@@ -325,21 +342,17 @@ class TrackingService : Service(), LocationListener {
             lastExplored = visited
             // Fine-grained samples also capture genuine walking, without adding road miles.
             val exploredCell = TrackingRepository.exploredCellKey(visited.latitude, visited.longitude)
-            val saveExplored = exploredCell != null && exploredCellsThisSession.add(exploredCell)
-            if (saveExplored) {
+            if (exploredCell != null && exploredCellsThisSession.add(exploredCell)) {
                 storageExecutor.execute {
                     // Persist confirmed exploration without affecting road matching.
-                    if (saveExplored && exploredCell != null) {
-                        try {
-                            if (repository.recordExploredPlace(visited, exploredCell)) {
-                                sendUiBroadcast(ACTION_EXPLORATION_UPDATED)
-                            }
-                        } catch (error: Exception) {
-                            exploredCellsThisSession.remove(exploredCell)
-                            Log.e("RoadConquest", "Could not save explored place", error)
+                    try {
+                        if (repository.recordExploredPlace(visited, exploredCell)) {
+                            sendUiBroadcast(ACTION_EXPLORATION_UPDATED)
                         }
+                    } catch (error: Exception) {
+                        exploredCellsThisSession.remove(exploredCell)
+                        Log.e("RoadConquest", "Could not save explored place", error)
                     }
-
                 }
             }
         }

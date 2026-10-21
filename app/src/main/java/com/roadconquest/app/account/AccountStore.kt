@@ -27,6 +27,32 @@ object AccountStore {
     private const val KEY_TOKEN = "token"
     private const val KEY_LEADERBOARD_VISIBLE = "leaderboard_visible"
 
+    // Process-local in-flight network requests cannot survive process death. Invalidate
+    // their results on a newer authentication, sign-out, deletion or session update.
+    private var sessionGeneration = 0L
+    private var pendingAuthentication: Long? = null
+
+    @Synchronized
+    fun beginAuthentication(): Long = (++sessionGeneration).also { pendingAuthentication = it }
+
+    @Synchronized
+    fun isAuthenticating(): Boolean = pendingAuthentication == sessionGeneration
+
+    /** Release a failed request only if a newer account action has not replaced it. */
+    @Synchronized
+    fun finishAuthentication(generation: Long): Boolean {
+        if (pendingAuthentication != generation || sessionGeneration != generation) return false
+        pendingAuthentication = null
+        return true
+    }
+
+    @Synchronized
+    fun saveIfLatest(context: Context, generation: Long, session: Session): Boolean {
+        if (generation != sessionGeneration) return false
+        saveInternal(context, session, durable = true)
+        return true
+    }
+
     @Synchronized
     fun load(context: Context): Session? {
         val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -49,20 +75,28 @@ object AccountStore {
     }
 
     @Synchronized
-    fun save(context: Context, session: Session) {
+    fun save(context: Context, session: Session) = saveInternal(context, session, durable = false)
+
+    private fun saveInternal(context: Context, session: Session, durable: Boolean) {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, key())
         val ciphertext = cipher.doFinal(session.token.toByteArray(Charsets.UTF_8))
         val encoded = Base64.encodeToString(cipher.iv + ciphertext, Base64.NO_WRAP)
-        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+        val editor = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putString(KEY_USERNAME, session.username)
             .putString(KEY_TOKEN, encoded)
             .putBoolean(KEY_LEADERBOARD_VISIBLE, session.leaderboardVisible)
-            .apply()
+        if (durable) check(editor.commit()) { "Could not persist account session" }
+        else editor.apply()
+        sessionGeneration++
+        pendingAuthentication = null
     }
 
     @Synchronized
     fun clear(context: Context) {
+        // Revoke pending sign-in responses before logout or account removal.
+        sessionGeneration++
+        pendingAuthentication = null
         com.roadconquest.app.notifications.OptionalNotifications.disableLocal(context)
         // Disable precise-GPS sharing first, then durably remove the local bearer session.
         // Both changes must survive an abrupt process death immediately after logout/deletion.

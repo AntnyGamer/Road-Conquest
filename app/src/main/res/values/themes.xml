@@ -23,6 +23,8 @@
     </style>
 
     <style name="RoadConquest.BackAction" parent="@style/RoadConquest.SettingsAction">
+        <item name="android:drawableStart">@drawable/ic_back_arrow</item>
+        <item name="android:drawablePadding">6dp</item>
         <item name="android:minHeight">48dp</item>
         <item name="android:paddingStart">12dp</item>
         <item name="android:paddingEnd">12dp</item>

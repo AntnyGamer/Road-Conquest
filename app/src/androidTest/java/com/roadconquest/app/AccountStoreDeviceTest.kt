@@ -1,6 +1,7 @@
 package com.roadconquest.app
 
 import android.content.Context
+import android.content.Intent
 import android.os.SystemClock
 import android.widget.Switch
 import android.widget.TextView
@@ -58,6 +59,103 @@ class AccountStoreDeviceTest {
         } finally {
             AccountClient.endpointOverrideForTests = null
             Prefs.setDriveVerificationEnabled(context, false)
+            AccountStore.clear(context)
+        }
+    }
+
+    @Test fun signupCompletionAfterRotationIsPersistedAndShownByNewActivity() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        AccountStore.clear(context)
+        val session = AccountStore.Session("RotatedDriver", "device-test-rotation-token", false)
+        val generation = AccountStore.beginAuthentication()
+        try {
+            ActivityScenario.launch(AccountActivity::class.java).use { scenario ->
+                scenario.recreate()
+                // Model the network worker completing after the original screen has gone.
+                assertTrue(AccountStore.saveIfLatest(context, generation, session))
+                assertEquals(session, AccountStore.load(context))
+                context.sendBroadcast(Intent("com.roadconquest.app.ACCOUNT_SESSION_CHANGED")
+                    .setPackage(context.packageName))
+                // sendBroadcast is asynchronous: an idle main looper does not prove
+                // the system has delivered this app-local broadcast.
+                val deadline = SystemClock.elapsedRealtime() + 5_000L
+                var signedInShown = false
+                do {
+                    scenario.onActivity { activity ->
+                        signedInShown = activity.findViewById<View>(R.id.accountSignedInGroup).visibility == View.VISIBLE &&
+                            activity.findViewById<TextView>(R.id.accountSignedInText).text.toString() == "Signed in as RotatedDriver"
+                    }
+                    if (!signedInShown) SystemClock.sleep(50)
+                } while (!signedInShown && SystemClock.elapsedRealtime() < deadline)
+                assertTrue("Rotation survivor must display the completed sign-in", signedInShown)
+            }
+            val obsolete = AccountStore.beginAuthentication()
+            AccountStore.clear(context)
+            assertFalse("A sign-out must invalidate an unfinished authentication",
+                AccountStore.saveIfLatest(context, obsolete, session))
+            assertNull(AccountStore.load(context))
+        } finally {
+            AccountStore.clear(context)
+        }
+    }
+
+    @Test fun rotatingAnUnfinishedSignupDoesNotEnableDuplicateRequests() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        AccountStore.clear(context)
+        val generation = AccountStore.beginAuthentication()
+        try {
+            ActivityScenario.launch(AccountActivity::class.java).use { scenario ->
+                scenario.recreate()
+                scenario.onActivity { activity ->
+                    assertFalse("The original request still owns signup after rotation",
+                        activity.findViewById<View>(R.id.accountSignupButton).isEnabled)
+                    assertFalse("The original request still owns login after rotation",
+                        activity.findViewById<View>(R.id.accountLoginButton).isEnabled)
+                }
+                assertTrue(AccountStore.finishAuthentication(generation))
+                context.sendBroadcast(Intent("com.roadconquest.app.ACCOUNT_SESSION_CHANGED")
+                    .setPackage(context.packageName)
+                    .putExtra("com.roadconquest.app.AUTHENTICATION_FAILED", true))
+                val deadline = SystemClock.elapsedRealtime() + 5_000L
+                var canRetry = false
+                do {
+                    scenario.onActivity { activity ->
+                        canRetry = activity.findViewById<View>(R.id.accountSignupButton).isEnabled &&
+                            activity.findViewById<View>(R.id.accountLoginButton).isEnabled
+                    }
+                    if (!canRetry) SystemClock.sleep(50)
+                } while (!canRetry && SystemClock.elapsedRealtime() < deadline)
+                assertTrue("A failed request must let the rotated screen retry", canRetry)
+            }
+        } finally {
+            AccountStore.clear(context)
+        }
+    }
+
+    @Test fun onboardingScreenClosesAfterLoginCompletesAcrossRotation() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        AccountStore.clear(context)
+        val session = AccountStore.Session("OnboardedDriver", "device-onboarding-token", false)
+        val generation = AccountStore.beginAuthentication()
+        try {
+            ActivityScenario.launch<AccountActivity>(
+                Intent(context, AccountActivity::class.java)
+                    .putExtra(AccountActivity.EXTRA_ONBOARDING, true)
+            ).use { scenario ->
+                scenario.recreate()
+                assertTrue(AccountStore.saveIfLatest(context, generation, session))
+                context.sendBroadcast(Intent("com.roadconquest.app.ACCOUNT_SESSION_CHANGED")
+                    .setPackage(context.packageName))
+                val deadline = SystemClock.elapsedRealtime() + 5_000L
+                while (scenario.state != androidx.lifecycle.Lifecycle.State.DESTROYED &&
+                    SystemClock.elapsedRealtime() < deadline
+                ) {
+                    SystemClock.sleep(50)
+                }
+                assertEquals("Onboarding must return to the app after login",
+                    androidx.lifecycle.Lifecycle.State.DESTROYED, scenario.state)
+            }
+        } finally {
             AccountStore.clear(context)
         }
     }
