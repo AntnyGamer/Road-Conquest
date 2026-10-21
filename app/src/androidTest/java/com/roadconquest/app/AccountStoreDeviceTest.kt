@@ -8,7 +8,6 @@ import android.widget.TextView
 import android.view.View
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
-import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.roadconquest.app.account.AccountStore
 import com.roadconquest.app.account.AccountClient
@@ -77,13 +76,18 @@ class AccountStoreDeviceTest {
                 assertEquals(session, AccountStore.load(context))
                 context.sendBroadcast(Intent("com.roadconquest.app.ACCOUNT_SESSION_CHANGED")
                     .setPackage(context.packageName))
-                InstrumentationRegistry.getInstrumentation().waitForIdleSync()
-                scenario.onActivity { activity ->
-                    assertEquals(View.VISIBLE,
-                        activity.findViewById<View>(R.id.accountSignedInGroup).visibility)
-                    assertEquals("Signed in as RotatedDriver",
-                        activity.findViewById<TextView>(R.id.accountSignedInText).text.toString())
-                }
+                // sendBroadcast is asynchronous: an idle main looper does not prove
+                // the system has delivered this app-local broadcast.
+                val deadline = SystemClock.elapsedRealtime() + 5_000L
+                var signedInShown = false
+                do {
+                    scenario.onActivity { activity ->
+                        signedInShown = activity.findViewById<View>(R.id.accountSignedInGroup).visibility == View.VISIBLE &&
+                            activity.findViewById<TextView>(R.id.accountSignedInText).text.toString() == "Signed in as RotatedDriver"
+                    }
+                    if (!signedInShown) SystemClock.sleep(50)
+                } while (!signedInShown && SystemClock.elapsedRealtime() < deadline)
+                assertTrue("Rotation survivor must display the completed sign-in", signedInShown)
             }
             val obsolete = AccountStore.beginAuthentication()
             AccountStore.clear(context)
