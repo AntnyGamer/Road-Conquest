@@ -346,7 +346,7 @@ class TrackingService : Service(), LocationListener {
             if (saveExplored) {
                 storageExecutor.execute {
                     // Persist confirmed exploration without affecting road matching.
-                    if (saveExplored && exploredCell != null) {
+                    if (exploredCell != null) {
                         try {
                             if (repository.recordExploredPlace(visited, exploredCell)) {
                                 sendUiBroadcast(ACTION_EXPLORATION_UPDATED)
