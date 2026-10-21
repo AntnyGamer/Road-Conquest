@@ -174,7 +174,20 @@ class DataImporterTest {
         val bytes = export()
         DataImporter.prepare(context, ByteArrayInputStream(bytes)).use { backup ->
             TrackingRepository(context).clearHistory()
-            assertTrue(runCatching { DataImporter.restore(context, backup) }.isFailure)
+            Prefs.setManualOnly(context, false)
+            Prefs.setTrackingPaused(context, true)
+            Prefs.setDriveVerificationEnabled(context, true)
+            try {
+                assertTrue(runCatching { DataImporter.restore(context, backup) }.isFailure)
+                // A rejected restore must not stop tracking, unpause it, or revoke
+                // the user's separate verified-driving consent.
+                assertFalse(Prefs.isManualOnly(context))
+                assertTrue(Prefs.isTrackingPaused(context))
+                assertTrue(Prefs.isDriveVerificationEnabled(context))
+            } finally {
+                Prefs.setTrackingPaused(context, false)
+                Prefs.setDriveVerificationEnabled(context, false)
+            }
         }
         assertEquals(0L, TrackingRepository(context).getSummary().trackPointCount)
     }
