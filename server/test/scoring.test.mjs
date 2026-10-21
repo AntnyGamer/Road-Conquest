@@ -78,6 +78,29 @@ test("upstream failures and oversized verification responses fail closed", async
   await assert.rejects(boundedJson(new Response("not JSON")));
 });
 
+test("bounded verification JSON avoids a one-chunk copy and preserves sliced/split UTF-8", async () => {
+  const data = { value: '道路 🚗', verified: true };
+  const text = JSON.stringify(data);
+  const backing = Buffer.from('prefix' + text + 'suffix');
+  const view = backing.subarray(6, 6 + Buffer.byteLength(text));
+  const response = chunks => new Response(new ReadableStream({ start(controller) {
+    for (const chunk of chunks) controller.enqueue(chunk);
+    controller.close();
+  } }));
+  const original = Buffer.concat;
+  let copies = 0;
+  Buffer.concat = (...args) => { copies++; return original(...args); };
+  try {
+    assert.deepEqual(await boundedJson(response([view]), view.length), data);
+    assert.equal(copies, 0);
+    const split = Buffer.byteLength('{"value":"') + 1; // Inside a multibyte character.
+    assert.deepEqual(await boundedJson(response([view.subarray(0, split), view.subarray(split)]), view.length), data);
+    assert.equal(copies, 1);
+    await assert.rejects(boundedJson(response([view]), view.length - 1), error => error.status === 503);
+    assert.equal(copies, 1, 'Reject oversized bytes before allocating a joined buffer');
+  } finally { Buffer.concat = original; }
+});
+
 test("failed verification responses release unread streams and preserve the retryable error", async () => {
   for (const status of [401, 403, 429, 500, 503]) {
     let cancelled = 0;

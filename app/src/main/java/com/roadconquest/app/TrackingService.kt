@@ -32,16 +32,17 @@ import com.roadconquest.app.matching.RoadMatcher
 import com.roadconquest.app.matching.KnownRoadReuse
 import com.roadconquest.app.matching.UnchangedNoMatchBackoff
 import com.roadconquest.app.matching.completelyCoversPending
+import com.roadconquest.app.matching.lastSubmittedPoints
 import com.roadconquest.app.map.FogGrid
 import com.roadconquest.app.progression.ProgressionManager
 import com.roadconquest.app.util.LocationProviders
 import com.roadconquest.app.util.Prefs
+import com.roadconquest.app.util.RecentCellCache
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.ScheduledThreadPoolExecutor
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.ConcurrentHashMap
 
 class TrackingService : Service(), LocationListener {
     private lateinit var locationManager: LocationManager
@@ -128,9 +129,9 @@ class TrackingService : Service(), LocationListener {
     }
     private var lastExplored: Location? = null
     // Avoid repeatedly hitting SQLite for the same 50 m fog cell during one service session.
-    // The concurrent set also prevents duplicate queued writes before storageExecutor catches up.
-    private val exploredCellsThisSession = ConcurrentHashMap.newKeySet<Long>()
-    private val exploredMileCellsThisSession = ConcurrentHashMap.newKeySet<Long>()
+    // The thread-safe cache also prevents duplicate queued writes before storageExecutor catches up.
+    private val exploredCellsThisSession = RecentCellCache(MAX_EXPLORED_CELL_CACHE)
+    private val exploredMileCellsThisSession = RecentCellCache(MAX_EXPLORED_CELL_CACHE)
     private var lastPlaceCandidate: Location? = null
     @Volatile private var baselineCandidateCaptured = false
     private var baselineRequestElapsedNanos = 0L
@@ -300,9 +301,6 @@ class TrackingService : Service(), LocationListener {
         // A single stationary GPS fix does not reveal a square or count as a visit.
         if (explorationMotionConfirmed) {
             FogGrid.cell(location.latitude, location.longitude)?.let { cell ->
-                if (exploredMileCellsThisSession.size >= MAX_EXPLORED_CELL_CACHE) {
-                    exploredMileCellsThisSession.clear()
-                }
                 if (exploredMileCellsThisSession.add(cell.key)) {
                     val accepted = Location(location)
                     storageExecutor.execute {
@@ -327,9 +325,6 @@ class TrackingService : Service(), LocationListener {
             lastExplored = visited
             // Fine-grained samples also capture genuine walking, without adding road miles.
             val exploredCell = TrackingRepository.exploredCellKey(visited.latitude, visited.longitude)
-            if (exploredCell != null && exploredCellsThisSession.size >= MAX_EXPLORED_CELL_CACHE) {
-                exploredCellsThisSession.clear()
-            }
             val saveExplored = exploredCell != null && exploredCellsThisSession.add(exploredCell)
             if (saveExplored) {
                 storageExecutor.execute {
@@ -387,7 +382,7 @@ class TrackingService : Service(), LocationListener {
         // uncertain fix and directional change so junctions can still be matched.
         val anchor = lastAccepted
         val importantSkipped = if (anchor != null && skippedSinceRetained.isNotEmpty()) {
-            skippedSinceRetained.filter { skippedFixCarriesGeometry(anchor, it, accepted) }
+            skippedFixesToRetain(anchor, skippedSinceRetained, accepted)
         } else emptyList()
         // Restore genuine bends before the route can be approximated by a straight chord.
         val skipStraightFix = importantSkipped.isEmpty() &&
@@ -689,8 +684,20 @@ class TrackingService : Service(), LocationListener {
             !previousSaved.hasSpeed() || !current.hasSpeed() ||
             previousSaved.speed < MIN_DRIVING_SPEED_MPS || current.speed < MIN_DRIVING_SPEED_MPS
         ) return true
-        val delta = kotlin.math.abs(((current.bearing - previousSaved.bearing + 540f) % 360f) - 180f)
+        val delta = bearingChangeDegrees(previousSaved, current)
         return !delta.isFinite() || delta >= MIN_RETAINED_BEND_DEGREES
+    }
+
+    private fun bearingChangeDegrees(from: Location, to: Location): Float =
+        kotlin.math.abs(((to.bearing - from.bearing + 540f) % 360f) - 180f)
+
+    /** Keep the last real approach fix even when a short turn is within the chord tolerance. */
+    internal fun skippedFixesToRetain(anchor: Location, skipped: List<Location>, end: Location): List<Location> {
+        val turned = anchor.hasBearing() && end.hasBearing() &&
+            bearingChangeDegrees(anchor, end) >= MIN_RETAINED_BEND_DEGREES
+        return skipped.filterIndexed { index, fix ->
+            (turned && index == skipped.lastIndex) || skippedFixCarriesGeometry(anchor, fix, end)
+        }
     }
 
     /** Reintroduce compressed samples whose path strays from the straight-line chord. */
@@ -868,8 +875,8 @@ class TrackingService : Service(), LocationListener {
                         return@repeat
                     }
                 }
-                val cached = matcher.cachedMatch(points)?.takeIf {
-                    it.completelyCoversPending(points.take(matcher.lastUsedProviderPointLimit))
+                val cached = matcher.cachedMatch(points, window.markableIds)?.takeIf {
+                    it.completelyCoversPending(matcher.lastSubmittedPoints(points), window.markableIds)
                 }
                 val nowElapsed = SystemClock.elapsedRealtime()
                 val wait = remainingRemoteMatchingDelayMs(nowElapsed, lastMatchAttempt, lastRemotePointLimit,
@@ -886,22 +893,26 @@ class TrackingService : Service(), LocationListener {
                     scheduleBacklogContinuation(providerCooldown)
                     return
                 }
-                val result = cached ?: matcher.match(points)
+                val result = cached ?: matcher.match(points, window.markableIds)
                 if (matcher.lastCallUsedNetwork) {
                     lastMatchAttempt = nowElapsed
                     lastRemotePointLimit = matcher.lastNetworkProviderPointLimit
                 }
                 // The 25-point backup has its own shorter capacity-based cadence.
-                val submittedPointLimit = matcher.lastUsedProviderPointLimit
+                val submittedPointIds = matcher.lastSubmittedPoints(points).map { it.id }
+                val submittedPendingIds = window.markableIds intersect submittedPointIds.toSet()
                 if (result == null) {
-                    noMatchBackoff.clear(window.markableIds)
+                    noMatchBackoff.clear(submittedPendingIds)
                     val providerCooldown = matcher.rateLimitRemainingMs()
                     if (!matcher.unavailable && providerCooldown == 0L && points.size >= 20) {
                         adaptiveMatchPointLimit = maxOf(10, points.size / 2)
                         successfulShortMatches = 0
                     }
                     repository.deferMatching(
-                        window.markableIds,
+                        // A primary outage can fall back from a full window to
+                        // a 25-fix window. A rejected backup window is no evidence
+                        // against the remaining fixes; retain their eligibility.
+                        submittedPendingIds,
                         System.currentTimeMillis() +
                             maxOf(MATCH_RETRY_AFTER_FAILURE_MS, providerCooldown)
                     )
@@ -926,7 +937,7 @@ class TrackingService : Service(), LocationListener {
                 val acceptedRoads = result.roads.filter { it.confidence >= RoadGeometryValidator.MIN_ACCEPTABLE_CONFIDENCE }
                 val matchedIds = result.matchedPointConfidences.mapNotNull { (id, confidence) ->
                     id.takeIf {
-                        confidence >= RoadGeometryValidator.MIN_ACCEPTABLE_CONFIDENCE && id in window.markableIds
+                        confidence >= RoadGeometryValidator.MIN_ACCEPTABLE_CONFIDENCE && id in submittedPendingIds
                     }
                 }
 
@@ -938,9 +949,8 @@ class TrackingService : Service(), LocationListener {
                     emptySet()
                 }
 
-                // A backup receives just the prefix; never defer unsent fixes.
-                val submittedPointIds = points.take(submittedPointLimit).map { it.id }
-                val unresolvedIds = (window.markableIds intersect submittedPointIds.toSet()) - resolvedIds
+                // A backup receives just its selected window; never defer unsent fixes.
+                val unresolvedIds = submittedPendingIds - resolvedIds
                 if (unresolvedIds.isNotEmpty()) {
                     // Repeated *valid* NoMatch responses for identical GPS/context evidence
                     // do not justify the same paid request every seven minutes. The first

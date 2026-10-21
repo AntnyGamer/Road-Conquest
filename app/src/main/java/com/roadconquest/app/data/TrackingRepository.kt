@@ -17,6 +17,8 @@ import com.roadconquest.app.map.FogGrid
 class TrackingRepository(context: Context) {
     private val dbHelper = AppDatabase.get(context)
     private val historyGeneration = synchronized(dbHelper.historyLock) { dbHelper.historyGeneration }
+    // Capture provenance only; no GPS copies or persistent trust after restart.
+    private val skippedFixAnchors = LinkedHashMap<Long, Long>()
 
     private fun wrap(value: Double): Double =
         ((value + 180.0) % 360.0 + 360.0) % 360.0 - 180.0
@@ -127,11 +129,6 @@ class TrackingRepository(context: Context) {
         cells.map { it to (it.key in visited) }
     }
 
-    fun nearbyExploration(latitude: Double, longitude: Double): Pair<Int, Int> {
-        val tiles = nearbyExplorationTiles(latitude, longitude)
-        return tiles.count { it.second } to tiles.size
-    }
-
     /** Read the authoritative mile cells (as centers) with a padded viewport query. */
     @Synchronized
     fun getExploredGridInBounds(north: Double, east: Double, south: Double, west: Double): DoubleArray =
@@ -178,7 +175,16 @@ class TrackingRepository(context: Context) {
         synchronized(dbHelper.historyLock) {
             if (historyGeneration != dbHelper.historyGeneration) return
             val values = drivingValues(location, location.time.takeIf { it > 0L } ?: System.currentTimeMillis())
-            dbHelper.writableDatabase.insertOrThrow("skipped_driving_fixes", null, values)
+            val db = dbHelper.writableDatabase
+            val anchorId = db.rawQuery("SELECT id,timestamp_ms FROM track_points ORDER BY id DESC LIMIT 1", null).use {
+                if (it.moveToFirst() && requireNotNull(values.getAsLong("timestamp_ms")) - it.getLong(1) in 1..12_000L)
+                    it.getLong(0) else null
+            }
+            val id = db.insertOrThrow("skipped_driving_fixes", null, values)
+            if (anchorId != null) {
+                skippedFixAnchors[id] = anchorId
+                if (skippedFixAnchors.size > 512) skippedFixAnchors.remove(skippedFixAnchors.keys.first())
+            }
         }
     }
 
@@ -359,6 +365,66 @@ class TrackingRepository(context: Context) {
         val points: List<TrackPoint>,
         val markableIds: Set<Long>
     )
+
+    /** One extra saved approach fix can complete the strict five-fix local proof. */
+    @Synchronized
+    internal fun knownRoadApproach(points: List<TrackPoint>): List<TrackPoint> = synchronized(dbHelper.historyLock) {
+        if (historyGeneration != dbHelper.historyGeneration || points.size != 4 || points.first().id <= 1L)
+            return@synchronized points
+        val previous = dbHelper.readableDatabase.query(
+            "track_points", TRACK_COLUMNS, "id = ?", arrayOf((points.first().id - 1L).toString()),
+            null, null, null, "1"
+        ).use { if (it.moveToFirst()) it.toTrackPoint() else null }
+        if (previous == null || !previous.matched ||
+            points.first().timestampMillis - previous.timestampMillis !in 1..12_000L
+        ) return@synchronized points
+        listOf(previous) + points // Local-only context; never changes the provider window.
+    }
+
+    /** Original compressed-out fixes are local evidence only, never online work. */
+    @Synchronized
+    internal fun knownRoadEvidence(points: List<TrackPoint>): List<TrackPoint> = synchronized(dbHelper.historyLock) {
+        if (historyGeneration != dbHelper.historyGeneration || points.size !in 2..100 ||
+            points.any { it.id <= 0L } || points.zipWithNext().any { (a, b) ->
+                b.id != a.id + 1L || b.timestampMillis - a.timestampMillis !in 1..12_000L
+            }) return@synchronized points
+        // Compression retains at most four original fixes between queue points.
+        // Do not broaden across missing IDs, pauses, clock changes or noisy data.
+        val maximum = (points.size - 1) * 4
+        val skipped = ArrayList<TrackPoint>()
+        dbHelper.readableDatabase.rawQuery(
+            "SELECT id,latitude,longitude,accuracy_m,speed_mps,bearing_deg,timestamp_ms " +
+                "FROM skipped_driving_fixes WHERE timestamp_ms > ? AND timestamp_ms < ? " +
+                "ORDER BY timestamp_ms,id LIMIT ?",
+            arrayOf(points.first().timestampMillis.toString(), points.last().timestampMillis.toString(), (maximum + 1).toString())
+        ).use { cursor ->
+            while (cursor.moveToNext()) skipped += TrackPoint(
+                -cursor.getLong(0), cursor.getDouble(1), cursor.getDouble(2), cursor.getFloat(3),
+                cursor.getFloat(4), cursor.getFloat(5), cursor.getLong(6), matched = true)
+        }
+        val retainedTimes = points.mapTo(HashSet()) { it.timestampMillis }
+        if (skipped.isEmpty() || skipped.size > maximum ||
+            skipped.any { it.timestampMillis in retainedTimes } ||
+            skipped.zipWithNext().any { (a, b) -> a.timestampMillis == b.timestampMillis }
+        ) return@synchronized points
+        val evidence = ArrayList<TrackPoint>(points.size + skipped.size)
+        var next = 0
+        evidence += points.first()
+        for (i in 1 until points.size) {
+            val point = points[i]
+            val start = next
+            while (next < skipped.size && skipped[next].timestampMillis < point.timestampMillis) {
+                // A timestamp match is insufficient after clock rollback or an
+                // import. Only this capture's exact preceding retained ID proves
+                // the source interval; restart/eviction safely falls back online.
+                if (skippedFixAnchors[-skipped[next].id] != points[i - 1].id) return@synchronized points
+                evidence += skipped[next++]
+            }
+            if (next - start > 4) return@synchronized points
+            evidence += point
+        }
+        evidence
+    }
 
     /**
      * Returns the newest contiguous group of pending points with adjacent raw points as
@@ -702,15 +768,16 @@ class TrackingRepository(context: Context) {
                     )
                     check(count == ids.size) { "Local match changed during validation" }
                     recordRoadVisit(db, visit.segmentId, visit.firstTimestamp, visit.lastTimestamp)
-                    db.execSQL("UPDATE roads SET last_driven_at = MAX(last_driven_at, ?) WHERE segment_id = ?",
-                        arrayOf(visit.lastTimestamp, visit.segmentId))
+                    db.execSQL("UPDATE roads SET last_driven_at = MAX(last_driven_at, ?) " +
+                        "WHERE segment_id = ? AND last_driven_at < ?",
+                        arrayOf<Any>(visit.lastTimestamp, visit.segmentId, visit.lastTimestamp))
                     resolved += count
                 }
                 db.setTransactionSuccessful()
             } finally {
                 db.endTransaction()
             }
-            if (resolved > 0) dbHelper.invalidateRoadSummary()
+            // Visits change timestamps/counts, never segment or unlocked-road identities.
             resolved
         }
 
@@ -817,7 +884,7 @@ class TrackingRepository(context: Context) {
     ) {
         val coordinates = requireNotNull(runCatching { JSONArray(geometryJson) }.getOrNull()) { "Invalid road geometry JSON" }
         val bounds = requireNotNull(coordinateBounds(coordinates)) { "Invalid road coordinates" }
-        val segmentId = roadSegmentId(db, name, coordinates)
+        val segmentId = roadSegmentId(db, name, coordinates, geometryJson)
         val existing = db.query(
             "roads",
             arrayOf("first_unlocked_at", "last_driven_at", "road_group_id"),
@@ -865,7 +932,11 @@ class TrackingRepository(context: Context) {
         if (existing == null) {
             db.insertOrThrow("roads", null, values)
         } else {
-            check(db.update("roads", values, "segment_id = ?", arrayOf(segmentId)) == 1)
+            // This row was read under the write transaction. Zero means every
+            // persisted value already matches, including the exact geometry.
+            // Compare inside SQLite rather than loading another full geometry.
+            val args = arrayOf(segmentId, *ROAD_UPDATE_COLUMNS.map { values.getAsString(it) }.toTypedArray())
+            check(db.update("roads", values, ROAD_UPDATE_IF_CHANGED, args) in 0..1)
         }
         recordRoadVisit(db, segmentId, firstTimestamp, lastTimestamp)
     }
@@ -1125,22 +1196,37 @@ class TrackingRepository(context: Context) {
             }
         } while (changed)
 
-        merged.forEach { (start, end) ->
-            db.delete(
+        val single = merged.singleOrNull()
+        if (single != null) {
+            // Most overlapping batches extend one existing visit or are already
+            // contained in it. Keep that row rather than deleting and reinserting
+            // it. All merging/departure checks above and metadata repair below
+            // still run, including for legacy inaccurate drive counts.
+            if (single.first != mergedStart || single.second != mergedEnd) {
+                check(db.update("road_visits", ContentValues().apply {
+                    put("started_at", mergedStart)
+                    put("ended_at", mergedEnd)
+                }, "segment_id = ? AND started_at = ? AND ended_at = ?",
+                    arrayOf(segmentId, single.first.toString(), single.second.toString())) == 1)
+            }
+        } else {
+            merged.forEach { (start, end) ->
+                db.delete(
+                    "road_visits",
+                    "segment_id = ? AND started_at = ? AND ended_at = ?",
+                    arrayOf(segmentId, start.toString(), end.toString())
+                )
+            }
+            db.insertOrThrow(
                 "road_visits",
-                "segment_id = ? AND started_at = ? AND ended_at = ?",
-                arrayOf(segmentId, start.toString(), end.toString())
+                null,
+                ContentValues().apply {
+                    put("segment_id", segmentId)
+                    put("started_at", mergedStart)
+                    put("ended_at", mergedEnd)
+                }
             )
         }
-        db.insertOrThrow(
-            "road_visits",
-            null,
-            ContentValues().apply {
-                put("segment_id", segmentId)
-                put("started_at", mergedStart)
-                put("ended_at", mergedEnd)
-            }
-        )
         val count = db.rawQuery(
             "SELECT COUNT(*) FROM road_visits WHERE segment_id = ?",
             arrayOf(segmentId)
@@ -1156,9 +1242,9 @@ class TrackingRepository(context: Context) {
                 // of separate passes through a segment when GPS evidence is missing.
                 put("drive_count_exact", 0)
             },
-            "segment_id = ?",
-            arrayOf(segmentId)
-        ) == 1)
+            "segment_id = ? AND (drive_count IS NOT ? OR drive_count_exact IS NOT 0)",
+            arrayOf(segmentId, count.toString())
+        ) in 0..1)
     }
 
     private fun hasConfirmedDeparture(
@@ -1317,13 +1403,6 @@ class TrackingRepository(context: Context) {
     )
 
     /** Pending raw evidence can be time-bounded for display without deleting retryable fixes. */
-    fun getPendingRouteInBounds(
-        north: Double, east: Double, south: Double, west: Double,
-        visibleSinceMillis: Long = Long.MIN_VALUE
-    ): List<RoadRecord> = getPendingRouteInBoundsResult(
-        north, east, south, west, visibleSinceMillis
-    ).roads
-
     @Synchronized
     fun getPendingRouteInBoundsResult(
         north: Double, east: Double, south: Double, west: Double,
@@ -1486,8 +1565,11 @@ class TrackingRepository(context: Context) {
                     destination.execSQL(createSql)
                     source.query(table, null, null, null, null, null, null).use { cursor ->
                         val columnNames = cursor.columnNames
+                        // Inserts bind synchronously. Reuse one row buffer per table
+                        // rather than allocating a map for every saved GPS record.
+                        val row = ContentValues(columnNames.size)
                         while (cursor.moveToNext()) {
-                            val row = ContentValues(columnNames.size)
+                            row.clear()
                             columnNames.forEachIndexed { index, name ->
                                 when (cursor.getType(index)) {
                                     Cursor.FIELD_TYPE_NULL -> row.putNull(name)
@@ -1505,6 +1587,20 @@ class TrackingRepository(context: Context) {
             } finally { destination.endTransaction() }
             source.setTransactionSuccessful()
         } finally { source.endTransaction() }
+    }
+
+    /** Only the explicit stopped-data deletion flow calls this, after its deletes commit. */
+    internal fun reclaimDeletedStorage() = synchronized(dbHelper.historyLock) {
+        val db = dbHelper.writableDatabase
+        check(!db.inTransaction())
+        val freePages = db.rawQuery("PRAGMA freelist_count", null).use {
+            check(it.moveToFirst()); it.getLong(0)
+        }
+        if (freePages == 0L) return@synchronized
+        db.execSQL("VACUUM")
+        // VACUUM can shrink the logical DB while its WAL still occupies the old
+        // space. An active reader may defer truncation; never invalidate it.
+        db.rawQuery("PRAGMA wal_checkpoint(TRUNCATE)", null).use { it.moveToFirst() }
     }
 
     /** Queued pre-deletion writes become no-ops after the history generation changes. */
@@ -1586,7 +1682,8 @@ class TrackingRepository(context: Context) {
     @Synchronized
     fun findUnambiguousPreviouslyDrivenRoadNear(
         latitude: Double, longitude: Double,
-        snapRadiusMeters: Double = 3.0, exclusionRadiusMeters: Double = 12.0
+        snapRadiusMeters: Double = 3.0, exclusionRadiusMeters: Double = 12.0,
+        geometryReader: (String) -> JSONArray? = { runCatching { JSONArray(it) }.getOrNull() }
     ): RoadRecord? {
         if (!latitude.isFinite() || !longitude.isFinite() ||
             latitude !in -90.0..90.0 || longitude !in -180.0..180.0 ||
@@ -1596,7 +1693,7 @@ class TrackingRepository(context: Context) {
         var single: RoadRecord? = null
         var nearbyCount = 0
         for (road in roads) {
-            val distance = distanceToRoadMeters(latitude, longitude, road.geometryJson)
+            val distance = distanceToRoadMeters(latitude, longitude, geometryReader(road.geometryJson))
             if (distance > exclusionRadiusMeters) continue
             // Count even candidates outside the tight snap radius. They still make
             // the claimed road identity ambiguous at a junction/parallel street.
@@ -1725,18 +1822,22 @@ class TrackingRepository(context: Context) {
         return RoadBounds(minLat, maxLat, wrap(gapEnd), wrap(gapStart))
     }
 
-    private fun roadSegmentId(db: SQLiteDatabase, name: String, coordinates: JSONArray): String {
+    private fun roadSegmentId(db: SQLiteDatabase, name: String, coordinates: JSONArray,
+                              geometryJson: String): String {
         val primary = stableRoadSegmentId(name, coordinates)
+        val storedGeometry = db.query(
+            "roads", arrayOf("geometry_json"), "segment_id = ?", arrayOf(primary),
+            null, null, null
+        ).use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
+        // Both values describe the already-validated input coordinates. Exact text
+        // equality proves the same canonical geometry without parsing/formatting it again.
+        if (storedGeometry == geometryJson) return primary
         val incomingKey = canonicalGeometryKey(coordinates)
         val normalizedName = name.trim().lowercase(Locale.US).ifBlank { "unnamed road" }
         fun alternateId(): String {
             return "g" + roadHashPrefix("$normalizedName|$incomingKey", 31)
         }
 
-        val storedGeometry = db.query(
-            "roads", arrayOf("geometry_json"), "segment_id = ?", arrayOf(primary),
-            null, null, null
-        ).use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
         if (storedGeometry != null) {
             val storedKey = runCatching { canonicalGeometryKey(JSONArray(storedGeometry)) }.getOrNull()
             return if (storedKey == incomingKey) primary else alternateId()
@@ -1770,13 +1871,14 @@ class TrackingRepository(context: Context) {
 
     private fun canonicalGeometryKey(coordinates: JSONArray): String {
         val rounded = ArrayList<String>(coordinates.length())
-        for (i in 0 until coordinates.length()) {
-            val coordinate = coordinates.getJSONArray(i)
-            rounded += "%.5f,%.5f".format(
-                Locale.US,
-                coordinate.getDouble(0),
-                coordinate.getDouble(1)
-            )
+        val text = StringBuilder(32)
+        java.util.Formatter(text, Locale.US).use { formatter ->
+            for (i in 0 until coordinates.length()) {
+                val coordinate = coordinates.getJSONArray(i)
+                text.setLength(0)
+                formatter.format("%.5f,%.5f", coordinate.getDouble(0), coordinate.getDouble(1))
+                rounded += text.toString()
+            }
         }
         val forward = rounded.joinToString(";")
         val reverse = rounded.asReversed().joinToString(";")
@@ -1807,7 +1909,7 @@ class TrackingRepository(context: Context) {
     private fun isMatchingContinuation(older: TrackPoint, newer: TrackPoint, ordinaryGapMs: Long): Boolean {
         val gap = newer.timestampMillis - older.timestampMillis
         if (gap <= 0L || gap > MAX_STOP_CONTINUATION_MS) return false
-        val distance = MATCH_DISTANCE_RESULT.get()
+        val distance = requireNotNull(MATCH_DISTANCE_RESULT.get())
         Location.distanceBetween(older.latitude, older.longitude, newer.latitude, newer.longitude, distance)
         if (!distance[0].isFinite() || distance[0] > gap / 1_000f * MAX_MATCH_SPEED_MPS) return false
         if (gap <= ordinaryGapMs) return true
@@ -1822,6 +1924,13 @@ class TrackingRepository(context: Context) {
     }
 
     companion object {
+        private val ROAD_UPDATE_COLUMNS = listOf(
+            "name", "geometry_json", "first_unlocked_at", "last_driven_at", "road_group_id",
+            "min_lat", "max_lat", "min_lon", "max_lon"
+        )
+        private val ROAD_UPDATE_IF_CHANGED = "segment_id = ? AND (" +
+            ROAD_UPDATE_COLUMNS.joinToString(" OR ") { "$it IS NOT ?" } + ")"
+
         /**
          * Stable 50 m Web-Mercator cell key shared by tracking and persistence. Keeping this
          * calculation outside SQLite lets the foreground service suppress repeat writes to a

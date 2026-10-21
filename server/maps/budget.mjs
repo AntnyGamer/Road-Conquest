@@ -1,4 +1,5 @@
 const DAY = 86_400_000;
+const USAGE_TABLE = 'CREATE TABLE IF NOT EXISTS usage (day TEXT, bucket TEXT, used INTEGER NOT NULL, PRIMARY KEY(day,bucket)) WITHOUT ROWID';
 const json = (body, status = 200, extra = {}) => Response.json(body, {
   status, headers: { 'Cache-Control': 'no-store', ...extra }
 });
@@ -6,6 +7,12 @@ const denied = (code, message, status, seconds) => json({ error: message, code }
   { 'Retry-After': String(seconds), 'X-RoadConquest-Error': code });
 const validId = id => typeof id === 'string' && /^[a-f0-9-]{36}$/.test(id);
 const validKey = key => typeof key === 'string' && /^[a-f0-9]{64}$/.test(key);
+function remember(cache, key, value, limit) {
+  cache.delete(key);
+  cache.set(key, value);
+  if (cache.size > limit) cache.delete(cache.keys().next().value);
+  return value;
+}
 
 /** No traces or responses are stored: only daily counters, attempt IDs and provider cooldowns. */
 export class MapBudget {
@@ -15,7 +22,11 @@ export class MapBudget {
     this.atomic = ctx.storage.transactionSync?.bind(ctx.storage) || (fn => fn());
     this.lastPrunedDay = null;
     this.healthCache = new Map();
-    this.sql.exec('CREATE TABLE IF NOT EXISTS usage (day TEXT, bucket TEXT, used INTEGER NOT NULL, PRIMARY KEY(day,bucket))');
+    // The object is the sole writer of its SQLite storage. Cache only metadata
+    // read/written in synchronous transactions; eviction/restart falls back to SQL.
+    this.counterCache = new Map();
+    this.permitCache = new Map();
+    this.sql.exec(USAGE_TABLE);
     this.sql.exec(`CREATE TABLE IF NOT EXISTS map_permits (
       id TEXT PRIMARY KEY, day TEXT NOT NULL, bucket TEXT NOT NULL, cost INTEGER NOT NULL,
       slot INTEGER NOT NULL, state TEXT NOT NULL) WITHOUT ROWID`);
@@ -30,6 +41,8 @@ export class MapBudget {
     catch (error) {
       this.lastPrunedDay = null;
       this.healthCache.clear();
+      this.counterCache.clear();
+      this.permitCache.clear();
       throw error;
     }
   }
@@ -49,13 +62,24 @@ export class MapBudget {
         this.sql.exec('DELETE FROM usage WHERE day < ?', day);
         this.sql.exec('DELETE FROM map_permits WHERE day < ?', day);
         this.sql.exec('DELETE FROM map_health WHERE until_ms < ? AND probe_until < ?', now - DAY, now - DAY);
+        // Upgrade the original rowid layout only after normal retention leaves
+        // it empty. Current-day/legacy credits are never copied, reset or lost.
+        // This runs in the reservation transaction, so a failed commit restores
+        // both the old table and every expired row removed above.
+        if (![...this.sql.exec('SELECT 1 FROM usage LIMIT 1')].length &&
+            ![...this.sql.exec('PRAGMA index_info(usage)')].length) {
+          this.sql.exec('DROP TABLE usage');
+          this.sql.exec(USAGE_TABLE);
+        }
         this.sql.exec("INSERT INTO usage(day,bucket,used) VALUES(?,'maintenance:pruned',0)", day);
       }
       this.healthCache.clear();
+      this.counterCache.clear();
+      this.permitCache.clear();
       this.lastPrunedDay = day;
     }
     if (attemptId) {
-      const prior = [...this.sql.exec('SELECT * FROM map_permits WHERE id = ?', attemptId)][0];
+      const prior = this.permit(attemptId);
       if (prior) {
         if (prior.day !== day || prior.bucket !== bucket || prior.cost !== costUnits || prior.state === 'cancelled')
           return denied('budget_conflict', 'Map attempt is no longer available', 409, 1);
@@ -69,11 +93,29 @@ export class MapBudget {
       const until = Math.max(health?.until_ms || 0, health?.probe_until || 0);
       if (until > now) return denied('provider_cooldown', 'Map provider is recovering', 503, Math.ceil((until - now) / 1000));
     }
-    const counters = new Map([...this.sql.exec(
-      'SELECT bucket,used FROM usage WHERE day = ? AND bucket IN (?,?,?,?,?,?,?)',
-      day, 'all', 'units:all', bucket, 'units:' + bucket, 'next-slot', 'attempts:all', 'attempts:' + bucket
-    )].map(row => [row.bucket, row.used]));
+    const keys = ['all', 'units:all', bucket, 'units:' + bucket, 'next-slot'];
+    // Tiles never consume matching-attempt counters. Loading their unused zero
+    // balances evicts useful client credit metadata from the same bounded cache.
+    if (attemptId) keys.push('attempts:all', 'attempts:' + bucket);
+    const counters = new Map();
+    const missing = [];
+    for (const key of keys) {
+      if (this.counterCache.has(key)) counters.set(key,
+        remember(this.counterCache, key, this.counterCache.get(key), 512));
+      else missing.push(key);
+    }
     const used = key => counters.get(key) || 0;
+    // Known global balances can prove rejection without loading a new/evicted
+    // client's counters. Refunds invalidate units:all, forcing a fresh read.
+    const globalExhausted = counters.has('all') && counters.has('units:all') &&
+      used('all') * 4 + used('units:all') + costUnits > limit;
+    if (missing.length && !globalExhausted) {
+      const stored = new Map([...this.sql.exec(
+        'SELECT bucket,used FROM usage WHERE day = ? AND bucket IN (' + missing.map(() => '?').join(',') + ')',
+        day, ...missing
+      )].map(row => [row.bucket, row.used]));
+      for (const key of missing) counters.set(key, remember(this.counterCache, key, stored.get(key) || 0, 512));
+    }
     if (used('all') * 4 + used('units:all') + costUnits > limit)
       return denied('budget_global', 'Daily map allowance exhausted', 429, Math.ceil((DAY - now % DAY) / 1000));
     if (used(bucket) * 4 + used('units:' + bucket) + costUnits > ipLimit)
@@ -95,9 +137,14 @@ export class MapBudget {
         "ON CONFLICT(day,bucket) DO UPDATE SET used = CASE WHEN excluded.bucket = 'next-slot' " +
         'THEN excluded.used ELSE used + excluded.used END',
       ...values);
+    for (let i = 0; i < values.length; i += 3) {
+      const key = values[i + 1], added = values[i + 2];
+      remember(this.counterCache, key, key === 'next-slot' ? added : used(key) + added, 512);
+    }
     if (attemptId) {
       this.sql.exec("INSERT INTO map_permits(id,day,bucket,cost,slot,state) VALUES(?,?,?,?,?,'reserved')",
         attemptId, day, bucket, costUnits, slot);
+      remember(this.permitCache, attemptId, { id: attemptId, day, bucket, cost: costUnits, slot, state: 'reserved' }, 64);
       if (health) {
         this.sql.exec('UPDATE map_health SET probe_id = ?, probe_until = ? WHERE key = ?', attemptId, now + 35_000, healthKey);
         this.healthCache.delete(healthKey);
@@ -112,9 +159,14 @@ export class MapBudget {
     }
     return this.healthCache.get(key);
   }
+  permit(id) {
+    const value = this.permitCache.get(id) || [...this.sql.exec('SELECT * FROM map_permits WHERE id = ?', id)][0];
+    // Do not retain negative lookups or arbitrary caller-supplied unknown IDs.
+    return value ? remember(this.permitCache, id, value, 64) : undefined;
+  }
   finish(action, { attemptId, healthKey, status, retryAfterMs = 0 }) {
     if (!validId(attemptId)) return json({ error: 'Invalid attempt' }, 400);
-    const permit = [...this.sql.exec('SELECT * FROM map_permits WHERE id = ?', attemptId)][0];
+    const permit = this.permit(attemptId);
     if (!permit) return denied('budget_conflict', 'Unknown map attempt', 409, 1);
     const now = this.now();
     if (action === '/cancel') {
@@ -122,6 +174,11 @@ export class MapBudget {
         this.sql.exec("UPDATE map_permits SET state = 'cancelled' WHERE id = ?", attemptId);
         this.sql.exec('UPDATE usage SET used = MAX(0,used - ?) WHERE day = ? AND bucket IN (?,?)',
           permit.cost, permit.day, 'units:all', 'units:' + permit.bucket);
+        permit.state = 'cancelled';
+        // A refund can concern an evicted client or a prior-day reservation.
+        // Reload these exact counters rather than inferring missing balances.
+        this.counterCache.delete('units:all');
+        this.counterCache.delete('units:' + permit.bucket);
       }
       if (validKey(healthKey)) {
         this.sql.exec('UPDATE map_health SET probe_id = NULL, probe_until = 0 WHERE key = ? AND probe_id = ?', healthKey, attemptId);
@@ -141,6 +198,7 @@ export class MapBudget {
         return denied('provider_cooldown', 'Map provider is recovering', 503, Math.ceil((until - now) / 1000));
       }
       this.sql.exec("UPDATE map_permits SET state = 'dispatched' WHERE id = ?", attemptId);
+      permit.state = 'dispatched';
       return json({ ok: true });
     }
     if (!validKey(healthKey) || permit.state !== 'dispatched') return json({ error: 'Invalid provider report' }, 400);

@@ -26,9 +26,11 @@ class WeeklyReminderReceiver : BroadcastReceiver() {
             val pending = PendingIntent.getBroadcast(context, 9102, Intent(context, WeeklyReminderReceiver::class.java).setAction(ACTION),
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
             val alarm = context.getSystemService(AlarmManager::class.java)
-            alarm.cancel(pending)
             if (OptionalNotifications.weeklyEnabled(context) && OptionalNotifications.permission(context)) {
+                // Setting the same PendingIntent replaces its previous alarm.
                 alarm.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, nextReminder(ZonedDateTime.now()).toInstant().toEpochMilli(), pending)
+            } else {
+                alarm.cancel(pending)
             }
         }
     }

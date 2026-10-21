@@ -99,4 +99,32 @@ class MapProviderTest {
         val client = GeoBoundariesClient { _, _ -> throw AssertionError("Municipal backup must not be queried") }
         assertNull(client.fetch(PlaceDiscovery(PlaceKind.TOWN,"us|nj|town","Town","New Jersey","United States",1L,40.0,-74.0),true))
     }
+
+    @Test fun refreshingOneBoundaryDatasetKeepsTheOtherStillValidDataset() {
+        var calls = 0
+        val geometry = JSONObject("""{"type":"FeatureCollection","features":[{"properties":{"shapeName":"Test Region"},"geometry":{"type":"Polygon","coordinates":[[[0,0],[2,0],[2,2],[0,2],[0,0]]]}}]}""")
+        val client = GeoBoundariesClient { url, _ ->
+            calls++
+            if (url.endsWith(".geojson")) geometry else {
+                val country = if ("USA" in url) "USA" else "CAN"
+                JSONObject().put("boundaryISO", country).put("boundaryType", "ADM1")
+                    .put("boundaryLicense", "public domain").put("simplifiedGeometryGeoJSON",
+                        "https://github.com/wmgeolab/geoBoundaries/raw/abc/releaseData/gbOpen/$country/ADM1/file.geojson")
+            }
+        }
+        val first = PlaceDiscovery(PlaceKind.STATE, "us|test", "Test Region", "", "United States", 1L, 1.0, 1.0)
+        val second = first.copy(key = "ca|test", countryName = "Canada")
+        assertNotNull(client.fetch(first, true))
+        assertNotNull(client.fetch(second, true))
+        @Suppress("UNCHECKED_CAST")
+        val cache = GeoBoundariesClient::class.java.getDeclaredField("datasets").apply { isAccessible = true }
+            .get(client) as MutableMap<String, Pair<Long, JSONObject>>
+        cache["CAN/ADM1"] = System.currentTimeMillis() - 16 * 60_000L to geometry
+        assertNotNull(client.fetch(second, true))
+        assertNotNull(client.fetch(first, true))
+        assertEquals("Only the expired dataset needs metadata and geometry downloads", 6, calls)
+        assertEquals(2, cache.size)
+        assertNull(client.fetch(first.copy(latitude = 5.0), true))
+        assertEquals(6, calls)
+    }
 }

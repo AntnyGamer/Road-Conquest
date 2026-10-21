@@ -146,6 +146,64 @@ test("batch preflight shares one read while retaining retry, eligibility and lat
   } finally { await pool.end(); }
 });
 
+test("empty derived-cell batches skip the empty insert but retain attestation, continuity, receipts and rollback", { skip: !connectionString }, async () => {
+  const pool = new pg.Pool({ connectionString });
+  try {
+    await pool.query(await readFile(new URL('../schema.sql', import.meta.url), 'utf8'));
+    await pool.query('TRUNCATE users CASCADE');
+    const user = (await pool.query(`INSERT INTO users(username_display,username_key,password_salt,password_hash)
+      VALUES ('EmptyCells','emptycells',$1,$2) RETURNING id`, [Buffer.alloc(16), Buffer.alloc(64)])).rows[0];
+    const queries = [];
+    let verifications = 0, failCheckpoint = false;
+    const tracked = {
+      query(...args) { queries.push(args[0]); return pool.query(...args); },
+      async connect() {
+        const db = await pool.connect();
+        return { query(...args) {
+          queries.push(args[0]);
+          if (failCheckpoint && args[0].includes('UPDATE cell_scores SET cells=')) {
+            failCheckpoint = false;
+            throw new Error('injected checkpoint write failure');
+          }
+          return db.query(...args);
+        }, release() { db.release(); } };
+      }
+    };
+    const service = await createCompetition(tracked, config, { verify: async () => { verifications++; } });
+    const run = await service.begin(user);
+    const raw = fixes(), cell = cellFor(raw[0].lat, raw[0].lon);
+    // Real movement near a cell edge cannot establish an unambiguous cell visit.
+    const edge = -90 + cell.row * LATITUDE_STEP + 4 / 111195;
+    const points = raw.map(p => ({ ...p, lat: edge }));
+    const evidence = JSON.stringify({ ...run, fixes: points });
+    failCheckpoint = true;
+    await assert.rejects(service.submit(user, evidence, 'test'), /injected checkpoint/);
+    for (const table of ['cell_scores', 'competition_cells', 'cell_receipts', 'cell_weeks'])
+      assert.equal((await pool.query(`SELECT COUNT(*) AS count FROM ${table} WHERE user_id=$1`, [user.id])).rows[0].count, '0');
+    assert.equal((await pool.query('SELECT sequence FROM cell_runs WHERE user_id=$1', [user.id])).rows[0].sequence, 0);
+    queries.length = 0;
+    const result = await service.submit(user, evidence, 'test');
+    assert.equal(queries.length, 9, 'No empty unnest/INSERT database round trip');
+    assert.equal(queries.some(q => q.includes('INSERT INTO competition_cells')), false);
+    assert.deepEqual(result, { sequence: 1, credited_cells: 0, accepted_cells: [], verified: true,
+      scoring_policy: 3, dataset, cells: 0 });
+    assert.equal(verifications, 2, 'Both new/uncommitted attempts require attestation');
+    const checkpoint = (await pool.query('SELECT last_verified_fix FROM cell_scores WHERE user_id=$1', [user.id])).rows[0].last_verified_fix;
+    assert.equal(checkpoint.time, points.at(-1).time);
+    queries.length = 0;
+    assert.deepEqual(await service.submit(user, evidence, 'test'), result);
+    assert.equal(queries.length, 1, 'Committed retries retain the exact receipt path');
+    assert.equal(verifications, 2);
+    const next = { ...points[1], lon: points[1].lon + 0.0005, time: points[1].time + 5000, elapsed: points[1].elapsed + 5000 };
+    await assert.rejects(service.submit(user, JSON.stringify({ ...run, sequence: 1,
+      fixes: [{ ...points[1], lon: points[1].lon + 0.00001 }, next] }), 'test'), /Overlapping/);
+    await pool.query('UPDATE users SET leaderboard_eligible=FALSE WHERE id=$1', [user.id]);
+    queries.length = 0;
+    await assert.rejects(service.submit(user, evidence, 'test'), error => error.status === 403);
+    assert.equal(queries.length, 1, 'Empty batches and receipts still require current eligibility');
+  } finally { await pool.end(); }
+});
+
 test("a weekly write failure rolls back new cells, totals, checkpoint, sequence and receipt together", { skip: !connectionString }, async () => {
   const pool = new pg.Pool({ connectionString });
   try {

@@ -152,10 +152,13 @@ object DataImporter {
                                 legacyGridColumns else columns.getValue(table)
                             require(header == spec.map { it.first }) { "Invalid $table columns" }
                             var rows = 0L
+                            val row = ContentValues()
                             while (true) {
                                 val fields = csv.next() ?: break
                                 require(fields.size == spec.size && ++rows <= 10_000_000) { "Invalid $table row" }
-                                val row = ContentValues()
+                                // SQLite consumes each row synchronously. Clear derived
+                                // fields too before reusing the buffer for the next row.
+                                row.clear()
                                 spec.forEachIndexed { index, (_, destination, type) ->
                                     val field = CsvUtil.unescape(fields[index], schema)
                                     when (type) {
@@ -233,9 +236,10 @@ object DataImporter {
                     live.delete("sqlite_sequence", "name = ?", arrayOf("track_points"))
                     for (table in tables) source.query(table, null, null, null, null, null, null).use { cursor ->
                         val columnNames = cursor.columnNames
+                        val values = ContentValues(columnNames.size)
                         while (cursor.moveToNext()) {
                             check(!Thread.currentThread().isInterrupted) { "Restore cancelled" }
-                            val values = ContentValues()
+                            values.clear()
                             columnNames.forEachIndexed { i, column -> when (cursor.getType(i)) {
                                 Cursor.FIELD_TYPE_INTEGER -> values.put(column, cursor.getLong(i))
                                 Cursor.FIELD_TYPE_FLOAT -> values.put(column, cursor.getDouble(i))

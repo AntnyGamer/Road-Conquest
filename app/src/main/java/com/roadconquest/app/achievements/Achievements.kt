@@ -121,10 +121,12 @@ object Achievements {
         }.map { item ->
             // Road/place deduplication can reduce current totals. The durable
             // reward ledger preserves earned milestones across full restores.
-            if (item.id in metrics.rewardedAchievements) item.copy(
-                progress = maxOf(item.progress, item.goal),
-                rewardPoints = metrics.rewardedAchievementPoints[item.id] ?: item.rewardPoints
-            ) else item
+            if (item.id in metrics.rewardedAchievements) {
+                val progress = maxOf(item.progress, item.goal)
+                val points = metrics.rewardedAchievementPoints[item.id] ?: item.rewardPoints
+                if (progress == item.progress && points == item.rewardPoints) item
+                else item.copy(progress = progress, rewardPoints = points)
+            } else item
         }.toList()
     }
 

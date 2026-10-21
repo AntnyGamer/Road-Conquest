@@ -35,13 +35,11 @@ object AccountStore {
         return runCatching {
             val bytes = Base64.decode(encoded, Base64.NO_WRAP)
             require(bytes.size > 12)
-            val iv = bytes.copyOfRange(0, 12)
-            val ciphertext = bytes.copyOfRange(12, bytes.size)
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-            cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, iv))
+            cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, bytes, 0, 12))
             Session(
                 username,
-                cipher.doFinal(ciphertext).toString(Charsets.UTF_8),
+                cipher.doFinal(bytes, 12, bytes.size - 12).toString(Charsets.UTF_8),
                 prefs.getBoolean(KEY_LEADERBOARD_VISIBLE, false)
             )
         }.getOrElse {
@@ -77,7 +75,11 @@ object AccountStore {
     fun updateIfToken(context: Context, token: String, update: (Session) -> Session): Session? {
         val current = load(context) ?: return null
         if (current.token != token) return null
-        return update(current).also { save(context, it) }
+        return update(current).also {
+            // An unchanged /me refresh needs no new AES-GCM ciphertext or disk
+            // write. Still decrypt/recheck the current session on every update.
+            if (it != current) save(context, it)
+        }
     }
 
     /**

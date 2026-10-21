@@ -29,6 +29,20 @@ export async function createCompetition(pool, config, dependencies = {}) {
   if (!config) return null;
   if (config.dataset !== GRID_ID) throw new Error("Unsupported exploration grid");
   const verify = dependencies.verify || await createIntegrityVerifier(config);
+  const pendingVerifications = new Map();
+  async function verifyBatch(user, token, hash) {
+    // Share only an identical authenticated operation that is ALREADY in flight.
+    // Never retain a completed verdict or share it across users, evidence or tokens.
+    const key = evidenceHash(JSON.stringify([user.id, hash, token]));
+    const existing = pendingVerifications.get(key);
+    if (existing) return existing;
+    const pending = verify(token, hash);
+    // At capacity, keep the ordinary verification path; do not evict active work.
+    if (pendingVerifications.size >= 64) return pending;
+    pendingVerifications.set(key, pending);
+    try { return await pending; }
+    finally { pendingVerifications.delete(key); }
+  }
   async function eligible(db, user, lock = false) {
     const result = await db.query(`SELECT leaderboard_eligible FROM users WHERE id=$1${lock ? " FOR UPDATE" : ""}`, [user.id]);
     if (result.rows[0]?.leaderboard_eligible !== true) throw new EvidenceError("Account is not eligible for verified competition.", 403);
@@ -122,7 +136,7 @@ export async function createCompetition(pool, config, dependencies = {}) {
         if (committed) return committed;
         throw new EvidenceError("Drive challenge expired or changed.", 409);
       }
-      await verify(integrityToken, hash);
+      await verifyBatch(user, integrityToken, hash);
       const cells = scoreCells(body.fixes);
       const db = await pool.connect();
       try {
@@ -154,14 +168,19 @@ export async function createCompetition(pool, config, dependencies = {}) {
         const scope = `3:${user.id}:${config.dataset}`;
         const checkpoint = createCheckpointCodec(scope, config.checkpointKey);
         checkpoint.verify(old.rows[0].last_verified_fix, body.fixes[0], body.run);
-        const inserted = await db.query(
-          `WITH added AS (INSERT INTO competition_cells(user_id,dataset,grid_row,grid_col)
-           SELECT $1,$2,* FROM unnest($3::integer[],$4::integer[])
-           ON CONFLICT DO NOTHING RETURNING 1)
-           SELECT COUNT(*)::integer AS count FROM added HAVING COUNT(*)>0`,
-          [user.id, config.dataset, cells.map(c => c.row), cells.map(c => c.column)]
-        );
-        const newCells = inserted.rows[0]?.count || 0;
+        let newCells = 0;
+        // An empty server-derived set cannot insert or conflict with any cell.
+        // Still verify/store continuity and advance the receipt transaction below.
+        if (cells.length) {
+          const inserted = await db.query(
+            `WITH added AS (INSERT INTO competition_cells(user_id,dataset,grid_row,grid_col)
+             SELECT $1,$2,* FROM unnest($3::integer[],$4::integer[])
+             ON CONFLICT DO NOTHING RETURNING 1)
+             SELECT COUNT(*)::integer AS count FROM added HAVING COUNT(*)>0`,
+            [user.id, config.dataset, cells.map(c => c.row), cells.map(c => c.column)]
+          );
+          newCells = inserted.rows[0]?.count || 0;
+        }
         // Batches spanning Monday midnight belong to the week of their final fix.
         // The timestamp is already freshness-checked and bound by Play Integrity.
         let weekStart;

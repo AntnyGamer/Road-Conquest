@@ -92,6 +92,13 @@ export async function boundedJson(response, limit = 1024 * 1024) {
     if (size > limit) throw new EvidenceError("Verification response too large.", 503);
     chunks.push(chunk);
   }
-  try { return JSON.parse(Buffer.concat(chunks).toString("utf8")); }
+  // OAuth and Integrity replies commonly arrive as one chunk. Decode its exact
+  // byte range directly; split UTF-8 still joins only after the byte-limit check.
+  try {
+    const bytes = chunks.length === 1
+      ? Buffer.from(chunks[0].buffer, chunks[0].byteOffset, chunks[0].byteLength)
+      : Buffer.concat(chunks);
+    return JSON.parse(bytes.toString("utf8"));
+  }
   catch { throw new EvidenceError("Invalid verification response.", 503); }
 }

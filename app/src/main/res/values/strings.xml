@@ -15,7 +15,6 @@
         <item quantity="one">%1$d road unlocked</item>
         <item quantity="other">%1$d roads unlocked</item>
     </plurals>
-    <string name="stats_initial">0.0 mi traveled\n0 roads unlocked</string>
     <!-- Compact overview: full categorized breakdown is in Settings. -->
     <string name="map_stats_grouped">Driving · %1$.1f mi · %2$s\nExplore · %3$s</string>
     <plurals name="roads_short">

@@ -7,6 +7,8 @@ const DAY = 86_400_000;
 const json = (body, status = 200, extra = {}) => Response.json(body, {
   status, headers: { 'Cache-Control': 'no-store', ...extra }
 });
+const unavailable = cancelled => json({ error: 'Map service temporarily unavailable' }, 503,
+  { 'Retry-After': '60', 'X-RoadConquest-Error': cancelled ? 'request_cancelled' : 'provider_unavailable' });
 function waitForSlot(ms, signal) {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) return reject(signal.reason);
@@ -42,6 +44,20 @@ function waypointSeconds(body) {
 
 export function createMapsGateway(fetchUpstream = fetch, { wait = waitForSlot, upstreamTimeoutMs = 20_000 } = {}) {
   const sign = createHmacSigner(2); // Geoapify + LocationIQ; bounded across rotations.
+  // This fixed provider scope contains no request, IP or GPS data. Reuse its
+  // deterministic digest, while still signing each daily client bucket afresh.
+  const healthKeys = new Map();
+  const healthKeyFor = secret => {
+    let pending = healthKeys.get(secret);
+    if (!pending) {
+      pending = sign(secret, 'health:matching')
+        .then(bytes => Array.from(bytes, x => x.toString(16).padStart(2, '0')).join(''));
+      healthKeys.set(secret, pending);
+      if (healthKeys.size > 2) healthKeys.delete(healthKeys.keys().next().value);
+      pending.catch(() => { if (healthKeys.get(secret) === pending) healthKeys.delete(secret); });
+    }
+    return pending;
+  };
   return { async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname === '/health' && ['GET', 'HEAD'].includes(request.method)) {
@@ -50,6 +66,7 @@ export function createMapsGateway(fetchUpstream = fetch, { wait = waitForSlot, u
     }
     if (url.pathname === '/v1/config' && request.method === 'GET') return json({ version: 1,
       providers: await serviceSwitches(env) }, 200, { 'Cache-Control': 'public, max-age=300', 'X-Content-Type-Options': 'nosniff' });
+    if (request.signal.aborted) return unavailable(true);
     if (!env.MAP_BUDGET) return json({ error: 'Map service is not configured' }, 503);
     const locationiq = url.pathname === '/v1/locationiq/mapmatching';
     const secret = locationiq ? env.LOCATIONIQ_API_KEY : env.GEOAPIFY_API_KEY;
@@ -96,7 +113,11 @@ export function createMapsGateway(fetchUpstream = fetch, { wait = waitForSlot, u
       if (+z > 19 || +x >= 2 ** +z || +y >= 2 ** +z) return json({ error: 'Invalid tile' }, 400);
       target = new URL(`https://maps.geoapify.com/v1/tile/${style}/${z}/${x}/${y}.png`);
     }
+    // Reading a trace or refreshing configuration can outlive its caller.
+    // Stop abandoned work before starting the next remote/accounting stage.
+    if (request.signal.aborted) return unavailable(true);
     const switches = await serviceSwitches(env);
+    if (request.signal.aborted) return unavailable(true);
     if (!switches[locationiq ? 'locationiq-matching' : payload ? 'geoapify-matching' : 'geoapify-tiles']) {
       return json({ error: 'Provider temporarily disabled' }, 503, { 'Retry-After': '300' });
     }
@@ -108,8 +129,10 @@ export function createMapsGateway(fetchUpstream = fetch, { wait = waitForSlot, u
     const bytes = await sign(secret, new Date().toISOString().slice(0, 10) + '\n' + ip);
     const bucket = Array.from(bytes, x => x.toString(16).padStart(2, '0')).join('');
     // Public tiles retain their existing lightweight accounting/cache path.
-    const healthBytes = payload ? await sign(secret, 'health:matching') : null;
-    const healthKey = healthBytes && Array.from(healthBytes, x => x.toString(16).padStart(2, '0')).join('');
+    const healthKey = payload ? await healthKeyFor(secret) : null;
+    // Crypto is asynchronous too. No reservation has started at this point,
+    // so there is nothing to cancel/refund and no attempt allowance to spend.
+    if (request.signal.aborted) return unavailable(true);
     const attemptId = payload ? crypto.randomUUID() : null;
     let budget, managed = Boolean(payload), dispatched = false, probing = false;
     const report = async (action, extra = {}) => {
@@ -189,8 +212,7 @@ export function createMapsGateway(fetchUpstream = fetch, { wait = waitForSlot, u
       if (!dispatched || request.signal.aborted) await report('cancel').catch(() => {});
       else if (!request.signal.aborted) await report('failure', { status: 503 }).catch(() => {});
       if (error instanceof BudgetDenied) return error.response;
-      return json({ error: 'Map service temporarily unavailable' }, 503,
-        { 'Retry-After': '60', 'X-RoadConquest-Error': request.signal.aborted ? 'request_cancelled' : 'provider_unavailable' });
+      return unavailable(request.signal.aborted);
     }
   } };
 }

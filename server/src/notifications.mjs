@@ -23,7 +23,12 @@ export function createFcmSender(raw, fetcher = fetch, now = Date.now) {
       const response = await fetcher('https://oauth2.googleapis.com/token', { method: 'POST', redirect: 'error',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, signal: AbortSignal.timeout(3000),
         body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: jwt }).toString() });
-      if (!response.ok) throw new Error('Notification authorization unavailable');
+      if (!response.ok) {
+        // No error body is needed. Release its connection without waiting on
+        // cleanup or replacing the original retryable authorization failure.
+        void response.body?.cancel().catch(() => {});
+        throw new Error('Notification authorization unavailable');
+      }
       const value = await response.json();
       if (typeof value.access_token !== 'string' || !Number.isFinite(value.expires_in) || value.expires_in < 120) throw new Error('Invalid notification authorization');
       cached = { token: value.access_token, expires: now() + (Math.min(3600, value.expires_in) - 60) * 1000 };
@@ -63,7 +68,9 @@ export function createNotifications(pool, { pepper, sender, deliveryLimit }) {
     const cipher = createDecipheriv('aes-256-gcm', key, bytes.subarray(0, 12));
     cipher.setAAD(aad);
     cipher.setAuthTag(bytes.subarray(-16));
-    return Buffer.concat([cipher.update(bytes.subarray(12, -16)), cipher.final()]).toString('utf8').replace(/\0+$/, '');
+    const plaintext = cipher.update(bytes.subarray(12, -16));
+    const tail = cipher.final(); // Authentication still completes before a token is exposed.
+    return (tail.length ? Buffer.concat([plaintext, tail]) : plaintext).toString('utf8').replace(/\0+$/, '');
   };
   return {
     configured: Boolean(sender),

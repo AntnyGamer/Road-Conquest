@@ -1,0 +1,273 @@
+{
+  "baseline": "e1a718cfd4d3e1248773daf39cca54b524eb7c3e",
+  "scope": "One local allocation optimization: avoid copying exact-size final road-overlay coordinate and chain-start arrays",
+  "exact_buffers": {
+    "baseline_final_array_copies": 2,
+    "current_final_array_copies": 0,
+    "fixture_roads": 128,
+    "points_per_road": 256,
+    "coordinate_values": 65536,
+    "chain_starts": 129,
+    "raw_array_payload_bytes_no_longer_copied": 524804,
+    "jvm_allocated_bytes_avoided": 524840
+  },
+  "trimmed_buffers": {
+    "logical_sizes_unchanged": true,
+    "defensive_trim_copies_retained": true,
+    "joined_control_allocation_unchanged": true
+  },
+  "ownership": {
+    "producer_is_local_and_abandoned_after_return": true,
+    "return_only_full_arrays": true,
+    "input_segment_arrays_not_shared": true,
+    "reused_split_buffers_still_copy": true,
+    "preparations_do_not_share_mutable_output_arrays": true,
+    "no_spare_capacity_retained": true
+  },
+  "geometry": {
+    "before_after_signatures": [
+      {
+        "sdk": 31,
+        "cases": 240,
+        "sha256": "4d5ed48207ed4ab17c11273bf39c377a8639bf87cfebad7148bd7e82f20c63ba"
+      },
+      {
+        "sdk": 37,
+        "cases": 240,
+        "sha256": "4d5ed48207ed4ab17c11273bf39c377a8639bf87cfebad7148bd7e82f20c63ba"
+      }
+    ],
+    "raw_coordinate_bits_and_chain_start_order_match": true,
+    "scene_types": [
+      "separate roads",
+      "joined roads",
+      "repeated date-line crossings",
+      "real T junctions",
+      "closed loops",
+      "duplicate points"
+    ],
+    "sdk_versions": [
+      31,
+      37
+    ],
+    "cases_per_sdk": 240
+  },
+  "allocation_fixture": {
+    "runtime": "JDK 21.0.10 / Robolectric SDKs 31 and 37",
+    "method": "ThreadMXBean calling-thread allocated bytes around actual OverlayRoads.prepare; inputs built outside measurement; four warmups then three measured preparations per fixture and SDK.",
+    "allocations": [
+      {
+        "sdk": 31,
+        "fixture": "separate",
+        "coordinates": 65536,
+        "chains": 128,
+        "baseline_rounds": [
+          15315352,
+          15315352,
+          15315352
+        ],
+        "current_rounds": [
+          14790512,
+          14790512,
+          14790512
+        ],
+        "baseline_median_bytes": 15315352,
+        "current_median_bytes": 14790512,
+        "fewer_allocated_bytes": 524840
+      },
+      {
+        "sdk": 31,
+        "fixture": "joined",
+        "coordinates": 4034,
+        "chains": 1,
+        "baseline_rounds": [
+          945112,
+          945112,
+          945112
+        ],
+        "current_rounds": [
+          945112,
+          945112,
+          945112
+        ],
+        "baseline_median_bytes": 945112,
+        "current_median_bytes": 945112,
+        "fewer_allocated_bytes": 0
+      },
+      {
+        "sdk": 37,
+        "fixture": "separate",
+        "coordinates": 65536,
+        "chains": 128,
+        "baseline_rounds": [
+          15315352,
+          15315352,
+          15315352
+        ],
+        "current_rounds": [
+          14790512,
+          14790512,
+          14790512
+        ],
+        "baseline_median_bytes": 15315352,
+        "current_median_bytes": 14790512,
+        "fewer_allocated_bytes": 524840
+      },
+      {
+        "sdk": 37,
+        "fixture": "joined",
+        "coordinates": 4034,
+        "chains": 1,
+        "baseline_rounds": [
+          945112,
+          945112,
+          945112
+        ],
+        "current_rounds": [
+          945112,
+          945112,
+          945112
+        ],
+        "baseline_median_bytes": 945112,
+        "current_median_bytes": 945112,
+        "fewer_allocated_bytes": 0
+      }
+    ],
+    "limitations": "Includes unchanged JSON parsing and graph work. Excludes other-thread/native-heap allocations. Not Android peak memory, speed, battery, storage, provider quota or driving-hour measurements."
+  },
+  "validation": {
+    "suites": 6,
+    "skipped": 0,
+    "failures": 0,
+    "errors": 0,
+    "apks": [
+      {
+        "bytes": 69126003,
+        "last_write": "2026-10-20T16:26:29.2136406-04:00",
+        "path": "app/build/outputs/apk/debug/app-debug.apk"
+      },
+      {
+        "bytes": 1173454,
+        "last_write": "2026-10-19T22:47:59.8897864-04:00",
+        "path": "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk"
+      }
+    ],
+    "build": "BUILD SUCCESSFUL in 2m 16s",
+    "lint": {
+      "errors": 0,
+      "warnings": 299
+    },
+    "suite_results": [
+      {
+        "skipped": 0,
+        "tests": 30,
+        "failures": 0,
+        "name": "com.roadconquest.app.data.TravelStatsTest",
+        "errors": 0
+      },
+      {
+        "skipped": 0,
+        "tests": 2,
+        "failures": 0,
+        "name": "com.roadconquest.app.FogProgressTest",
+        "errors": 0
+      },
+      {
+        "skipped": 0,
+        "tests": 10,
+        "failures": 0,
+        "name": "com.roadconquest.app.map.FogGeoRasterTest",
+        "errors": 0
+      },
+      {
+        "skipped": 0,
+        "tests": 82,
+        "failures": 0,
+        "name": "com.roadconquest.app.map.FogOverlayTest",
+        "errors": 0
+      },
+      {
+        "skipped": 0,
+        "tests": 6,
+        "failures": 0,
+        "name": "com.roadconquest.app.map.OverlayBufferTest",
+        "errors": 0
+      },
+      {
+        "skipped": 0,
+        "tests": 74,
+        "failures": 0,
+        "name": "com.roadconquest.app.matching.RoadGeometryTurnTest",
+        "errors": 0
+      }
+    ],
+    "tests": 204
+  },
+  "source_comparisons": {
+    "baseline": "e1a718cfd4d3e1248773daf39cca54b524eb7c3e",
+    "checks": [
+      {
+        "path": "app/src/main/java/com/roadconquest/app/map/FogBitmapRenderer.kt",
+        "scope": "Entire renderer, graph, parsing, time/distance/visit gates, coordinate math and split-buffer copies outside the two final array ownership decisions",
+        "identical": true
+      },
+      {
+        "path": "app/src/main",
+        "scope": "Every other source file, asset and manifest",
+        "identical": true
+      },
+      {
+        "path": "server/src",
+        "scope": "Complete implementation/configuration",
+        "identical": true
+      },
+      {
+        "path": "server/maps",
+        "scope": "Complete implementation/configuration",
+        "identical": true
+      },
+      {
+        "path": ".github",
+        "scope": "Complete implementation/configuration",
+        "identical": true
+      },
+      {
+        "path": "app/build.gradle.kts",
+        "scope": "Complete implementation/configuration",
+        "identical": true
+      }
+    ]
+  },
+  "previous_head_ci": {
+    "run": 39488244177,
+    "conclusion": "success",
+    "all_verification_jobs_passed": true,
+    "downloaded_reports": {
+      "verify": {
+        "skipped": 0,
+        "failures": 0,
+        "errors": 0,
+        "tests": 1138,
+        "suites": 73
+      },
+      "startup": {
+        "status_ok": 4,
+        "launches": 4
+      },
+      "native": {
+        "skipped": 0,
+        "failures": 0,
+        "errors": 0,
+        "tests": 27,
+        "suites": 12
+      }
+    }
+  },
+  "current_head_ci": "Tracked separately in PR #105; the full new-head suite and device/release checks are pending at publication.",
+  "caveats": [
+    "Savings require a final buffer to already fit exactly; trim paths retain their original copies.",
+    "The new-head local run is the 204-case geometry/rendering/travel suite; the preceding full CI covers 1138 cases. Do not label those 1138 as a new-head full run.",
+    "No server/gateway, GPS recording, matching, geometry rules, provider request, quota, build or deployment changes.",
+    "No production/provider traffic, new cache, retained spare capacity, release or version bump."
+  ]
+}

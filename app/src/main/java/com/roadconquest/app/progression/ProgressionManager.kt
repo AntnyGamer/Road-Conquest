@@ -1,7 +1,6 @@
 package com.roadconquest.app.progression
 
 import android.content.Context
-import android.os.BatteryManager
 import com.roadconquest.app.achievements.AchievementMetrics
 import com.roadconquest.app.achievements.Achievements
 import com.roadconquest.app.data.DataSummary
@@ -48,13 +47,6 @@ object ProgressionManager {
         }
         val weeklyChanged = com.roadconquest.app.data.WeeklyChallenges.sync(context, summary, snapshot)
         return if (changed || weeklyChanged) repository.snapshot() else snapshot
-    }
-
-    fun recordBatteryFromSystem(context: Context): Boolean {
-        val percent = context.getSystemService(BatteryManager::class.java)
-            ?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: return false
-        if (percent !in 0..5) return false
-        return recordBatteryPercent(context, percent)
     }
 
     fun recordBatteryPercent(context: Context, percent: Int): Boolean {

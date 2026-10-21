@@ -1,0 +1,537 @@
+{
+  "baseline": "889ba9cd61baf64f61ffe51105ca113e9df247ba",
+  "scope": "Avoid full response byte-array copies immediately followed by UTF-8 decoding across five response paths",
+  "paths": [
+    {
+      "name": "Account API",
+      "byte_cap": 65536
+    },
+    {
+      "name": "Service switches",
+      "byte_cap": 4096
+    },
+    {
+      "name": "Geoapify matching",
+      "byte_cap": 4194304
+    },
+    {
+      "name": "LocationIQ matching",
+      "byte_cap": 4194304
+    },
+    {
+      "name": "Fallback geoBoundaries display",
+      "metadata_byte_cap": 65536,
+      "geometry_byte_cap": 4194304
+    }
+  ],
+  "source_copy_count": {
+    "per_nonnull_successfully_decoded_response": {
+      "before": 1,
+      "after": 0
+    },
+    "payload_bytes_avoided": "Exact original response byte count",
+    "no_new_retained_buffer_or_cache": true
+  },
+  "decoding": {
+    "signatures": [
+      {
+        "sdk": 31,
+        "cases": 21,
+        "sha256": "74c874a0a0a6a46e997ea6e9d32140f1cc73f8570fe96ce6dab68477526bd9f3"
+      },
+      {
+        "sdk": 37,
+        "cases": 21,
+        "sha256": "74c874a0a0a6a46e997ea6e9d32140f1cc73f8570fe96ce6dab68477526bd9f3"
+      }
+    ],
+    "all_65536_two_byte_combinations_included": true,
+    "split_unicode_and_malformed_sequences": true,
+    "exact_byte_limits_and_read_amounts_preserved": true,
+    "oversize_rejection_and_original_io_errors_preserved": true,
+    "caller_owns_shared_reader_stream": true,
+    "actual_account_and_async_switch_http_paths_tested": true,
+    "response_status_errors_absent_bodies_cleanup_and_offline_defaults_tested": true,
+    "baseline_checks_passed": 14,
+    "current_new_checks_passed": 14
+  },
+  "allocation_fixture": {
+    "runtime": "JDK 21.0.10 / Robolectric SDKs 31 and 37",
+    "method": "ThreadMXBean calling-thread allocated bytes around compiled account requests (50 warmups, 20 calls/round) and the compiled bounded reader (5 warmups, 5 calls/round), three measured rounds; inputs built outside measurement.",
+    "account": [
+      {
+        "sdk": 31,
+        "response_bytes": 128,
+        "calls_per_round": 20,
+        "baseline_rounds": [
+          124800,
+          124800,
+          124800
+        ],
+        "current_rounds": [
+          121920,
+          121920,
+          121920
+        ],
+        "baseline_median": 124800,
+        "current_median": 121920,
+        "fewer_allocated_bytes_per_call": 144,
+        "payload_bytes_no_longer_copied_per_call": 128
+      },
+      {
+        "sdk": 31,
+        "response_bytes": 4096,
+        "calls_per_round": 20,
+        "baseline_rounds": [
+          442880,
+          442880,
+          442880
+        ],
+        "current_rounds": [
+          360640,
+          360640,
+          360640
+        ],
+        "baseline_median": 442880,
+        "current_median": 360640,
+        "fewer_allocated_bytes_per_call": 4112,
+        "payload_bytes_no_longer_copied_per_call": 4096
+      },
+      {
+        "sdk": 31,
+        "response_bytes": 65536,
+        "calls_per_round": 20,
+        "baseline_rounds": [
+          6588160,
+          6588160,
+          6588160
+        ],
+        "current_rounds": [
+          5277120,
+          5277120,
+          5277120
+        ],
+        "baseline_median": 6588160,
+        "current_median": 5277120,
+        "fewer_allocated_bytes_per_call": 65552,
+        "payload_bytes_no_longer_copied_per_call": 65536
+      },
+      {
+        "sdk": 37,
+        "response_bytes": 128,
+        "calls_per_round": 20,
+        "baseline_rounds": [
+          123840,
+          123840,
+          123840
+        ],
+        "current_rounds": [
+          120960,
+          120960,
+          120960
+        ],
+        "baseline_median": 123840,
+        "current_median": 120960,
+        "fewer_allocated_bytes_per_call": 144,
+        "payload_bytes_no_longer_copied_per_call": 128
+      },
+      {
+        "sdk": 37,
+        "response_bytes": 4096,
+        "calls_per_round": 20,
+        "baseline_rounds": [
+          441920,
+          442808,
+          441920
+        ],
+        "current_rounds": [
+          359680,
+          360568,
+          359680
+        ],
+        "baseline_median": 441920,
+        "current_median": 359680,
+        "fewer_allocated_bytes_per_call": 4112,
+        "payload_bytes_no_longer_copied_per_call": 4096
+      },
+      {
+        "sdk": 37,
+        "response_bytes": 65536,
+        "calls_per_round": 20,
+        "baseline_rounds": [
+          6587200,
+          6587200,
+          6587200
+        ],
+        "current_rounds": [
+          5276160,
+          5276160,
+          5276160
+        ],
+        "baseline_median": 6587200,
+        "current_median": 5276160,
+        "fewer_allocated_bytes_per_call": 65552,
+        "payload_bytes_no_longer_copied_per_call": 65536
+      }
+    ],
+    "bounded_reader": [
+      {
+        "sdk": 31,
+        "response_bytes": 128,
+        "calls_per_round": 5,
+        "baseline_rounds": [
+          44000,
+          44000,
+          44000
+        ],
+        "current_rounds": [
+          43280,
+          43280,
+          43280
+        ],
+        "baseline_median": 44000,
+        "current_median": 43280,
+        "fewer_allocated_bytes_per_call": 144,
+        "payload_bytes_no_longer_copied_per_call": 128
+      },
+      {
+        "sdk": 31,
+        "response_bytes": 4096,
+        "calls_per_round": 5,
+        "baseline_rounds": [
+          103520,
+          103520,
+          103520
+        ],
+        "current_rounds": [
+          82960,
+          82960,
+          82960
+        ],
+        "baseline_median": 103520,
+        "current_median": 82960,
+        "fewer_allocated_bytes_per_call": 4112,
+        "payload_bytes_no_longer_copied_per_call": 4096
+      },
+      {
+        "sdk": 31,
+        "response_bytes": 65536,
+        "calls_per_round": 5,
+        "baseline_rounds": [
+          1312080,
+          1312080,
+          1312080
+        ],
+        "current_rounds": [
+          984320,
+          984320,
+          984320
+        ],
+        "baseline_median": 1312080,
+        "current_median": 984320,
+        "fewer_allocated_bytes_per_call": 65552,
+        "payload_bytes_no_longer_copied_per_call": 65536
+      },
+      {
+        "sdk": 31,
+        "response_bytes": 1048576,
+        "calls_per_round": 5,
+        "baseline_rounds": [
+          20973200,
+          20973200,
+          20973200
+        ],
+        "current_rounds": [
+          15730240,
+          15730240,
+          15730240
+        ],
+        "baseline_median": 20973200,
+        "current_median": 15730240,
+        "fewer_allocated_bytes_per_call": 1048592,
+        "payload_bytes_no_longer_copied_per_call": 1048576
+      },
+      {
+        "sdk": 31,
+        "response_bytes": 4194304,
+        "calls_per_round": 5,
+        "baseline_rounds": [
+          83887920,
+          83887920,
+          83887920
+        ],
+        "current_rounds": [
+          62916320,
+          62916320,
+          62916320
+        ],
+        "baseline_median": 83887920,
+        "current_median": 62916320,
+        "fewer_allocated_bytes_per_call": 4194320,
+        "payload_bytes_no_longer_copied_per_call": 4194304
+      },
+      {
+        "sdk": 37,
+        "response_bytes": 128,
+        "calls_per_round": 5,
+        "baseline_rounds": [
+          44000,
+          44000,
+          44000
+        ],
+        "current_rounds": [
+          43280,
+          43280,
+          43280
+        ],
+        "baseline_median": 44000,
+        "current_median": 43280,
+        "fewer_allocated_bytes_per_call": 144,
+        "payload_bytes_no_longer_copied_per_call": 128
+      },
+      {
+        "sdk": 37,
+        "response_bytes": 4096,
+        "calls_per_round": 5,
+        "baseline_rounds": [
+          103520,
+          103520,
+          103520
+        ],
+        "current_rounds": [
+          82960,
+          82960,
+          82960
+        ],
+        "baseline_median": 103520,
+        "current_median": 82960,
+        "fewer_allocated_bytes_per_call": 4112,
+        "payload_bytes_no_longer_copied_per_call": 4096
+      },
+      {
+        "sdk": 37,
+        "response_bytes": 65536,
+        "calls_per_round": 5,
+        "baseline_rounds": [
+          1312080,
+          1312080,
+          1312080
+        ],
+        "current_rounds": [
+          984320,
+          984320,
+          984320
+        ],
+        "baseline_median": 1312080,
+        "current_median": 984320,
+        "fewer_allocated_bytes_per_call": 65552,
+        "payload_bytes_no_longer_copied_per_call": 65536
+      },
+      {
+        "sdk": 37,
+        "response_bytes": 1048576,
+        "calls_per_round": 5,
+        "baseline_rounds": [
+          20973200,
+          20973200,
+          20973200
+        ],
+        "current_rounds": [
+          15730240,
+          15730240,
+          15730240
+        ],
+        "baseline_median": 20973200,
+        "current_median": 15730240,
+        "fewer_allocated_bytes_per_call": 1048592,
+        "payload_bytes_no_longer_copied_per_call": 1048576
+      },
+      {
+        "sdk": 37,
+        "response_bytes": 4194304,
+        "calls_per_round": 5,
+        "baseline_rounds": [
+          83887920,
+          83887800,
+          83887800
+        ],
+        "current_rounds": [
+          62916320,
+          62916320,
+          62916320
+        ],
+        "baseline_median": 83887800,
+        "current_median": 62916320,
+        "fewer_allocated_bytes_per_call": 4194296,
+        "payload_bytes_no_longer_copied_per_call": 4194304
+      }
+    ],
+    "caveat": "Raw 4 MiB SDK-37 baseline rounds differ by 120 bytes per five calls; median reductions are reported as measured, rather than forced to equal array-payload/header arithmetic. These are JVM allocated-byte measurements, not Android peak memory, speed, battery, network or quota measurements."
+  },
+  "source_comparisons": {
+    "baseline": "889ba9cd61baf64f61ffe51105ca113e9df247ba",
+    "checks": [
+      {
+        "path": "app/src/main/java/com/roadconquest/app/account/AccountClient.kt",
+        "scope": "Complete request, authentication, limits, errors and endpoint behavior outside direct response decoding",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/services/ServiceConfig.kt",
+        "scope": "Complete provider switches, freshness, retry, persistence and notifications outside direct bounded decoding",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/services/BoundedInput.kt",
+        "scope": "Complete byte read loop, buffer size, byte limit, exceptions and stream ownership outside final UTF-8 decoding",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/matching/GeoapifyMatcher.kt",
+        "scope": "Complete requests, parser, validation, cache, health, redirects and matching/geometry decisions outside direct response decoding",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/matching/LocationIqMatcher.kt",
+        "scope": "Complete requests, parser, validation, cache, health, redirects and matching/geometry decisions outside direct response decoding",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/map/GeoBoundariesClient.kt",
+        "scope": "Complete requests, parser, validation, cache, health, redirects and matching/geometry decisions outside direct response decoding",
+        "identical": true
+      },
+      {
+        "path": "app/src/main",
+        "scope": "Every other source, asset and manifest, including GPS recording, geometry validation, town borders and prior optimizations",
+        "identical": true
+      },
+      {
+        "path": "server/src",
+        "scope": "Complete implementation/configuration",
+        "identical": true
+      },
+      {
+        "path": "server/maps",
+        "scope": "Complete implementation/configuration",
+        "identical": true
+      },
+      {
+        "path": ".github",
+        "scope": "Complete implementation/configuration",
+        "identical": true
+      },
+      {
+        "path": "app/build.gradle.kts",
+        "scope": "Complete implementation/configuration",
+        "identical": true
+      }
+    ]
+  },
+  "validation": {
+    "tests": 293,
+    "suites": 12,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "lint": {
+      "errors": 0,
+      "warnings": 299
+    },
+    "build": "BUILD SUCCESSFUL in 2m 57s",
+    "test_scope": [
+      {
+        "name": "com.roadconquest.app.account.VerifiedDrivingTest",
+        "tests": 12
+      },
+      {
+        "name": "com.roadconquest.app.AccountActivityTest",
+        "tests": 40
+      },
+      {
+        "name": "com.roadconquest.app.AccountOnboardingTest",
+        "tests": 6
+      },
+      {
+        "name": "com.roadconquest.app.map.MapProviderTest",
+        "tests": 18
+      },
+      {
+        "name": "com.roadconquest.app.matching.LocationIqMatcherTest",
+        "tests": 16
+      },
+      {
+        "name": "com.roadconquest.app.matching.ProviderFallbackTest",
+        "tests": 56
+      },
+      {
+        "name": "com.roadconquest.app.matching.RoadGeometryTurnTest",
+        "tests": 74
+      },
+      {
+        "name": "com.roadconquest.app.matching.RoadGeometryValidatorTest",
+        "tests": 26
+      },
+      {
+        "name": "com.roadconquest.app.MatchingCachedEligibilityTest",
+        "tests": 10
+      },
+      {
+        "name": "com.roadconquest.app.OptionalServicesTest",
+        "tests": 21
+      },
+      {
+        "name": "com.roadconquest.app.services.BoundedInputTest",
+        "tests": 6
+      },
+      {
+        "name": "com.roadconquest.app.services.ResponseDecodingTest",
+        "tests": 8
+      }
+    ],
+    "apks": [
+      {
+        "path": "app/build/outputs/apk/debug/app-debug.apk",
+        "last_write": "2026-10-20T16:45:24.69067-04:00",
+        "bytes": 69125979
+      },
+      {
+        "path": "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk",
+        "last_write": "2026-10-19T22:47:59.8897864-04:00",
+        "bytes": 1173454
+      }
+    ],
+    "additional_test_harness_check": {
+      "skipped": 0,
+      "tests": 8,
+      "failures": 0,
+      "reason": "Allow Robolectric Maven SDK downloads through the original JDK HTTPS handler; all application responses remain local fixtures.",
+      "errors": 0
+    }
+  },
+  "preceding_head_native_ci": {
+    "run": 39492509088,
+    "head": "889ba9c",
+    "native_jobs_passed": [
+      31,
+      35,
+      37
+    ],
+    "downloaded_reports": {
+      "skipped": 0,
+      "tests": 27,
+      "errors": 0,
+      "suites": 12,
+      "failures": 0
+    },
+    "full_unit_release_result": "Tracked separately in PR #105; not assumed from completed native jobs."
+  },
+  "current_head_ci": "Tracked separately in PR #105; fresh full unit/device/release checks pending at publication.",
+  "caveats": [
+    "No requests, provider credits, server quota, maximum driving hours or network payload sizes change.",
+    "The complete provider request/parse/cache/failure logic is identical outside response decoding; GPS, confidence/geometry rules, distance, turns/gaps and town-border code are unchanged.",
+    "Six production files change only the bounded-response result construction/call sites; all other app/server/gateway/build/workflow code matches baseline.",
+    "New local verification is 293 targeted tests, not a new full Android-suite execution.",
+    "No production/provider traffic, version bump, release, merge or deployment."
+  ]
+}

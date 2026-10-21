@@ -1,0 +1,87 @@
+{
+  "baseline_commit": "31e09840d2e60a2312162a1cc7ba6be7dd85bfc8",
+  "changes": 5,
+  "road_visit_writes": {
+    "contained_match_completions": 20,
+    "before_interval_deletes": 20,
+    "before_interval_inserts": 20,
+    "after_interval_writes": 0,
+    "extending_one_interval_after": { "updates": 1, "deletes": 0, "inserts": 0 },
+    "merging_two_intervals_after": { "updates": 0, "deletes": 2, "inserts": 1 },
+    "legacy_count_and_exactness_repaired": true,
+    "baseline_expected_failures": 2,
+    "regression": "app/src/test/java/com/roadconquest/app/data/TrackingRepositoryTest.kt",
+    "limits": "SQLite trigger counts for the interval table, not total database writes or measured battery/WAL bytes. Point resolution and road metadata updates remain. Existing departure/merge/legacy regression cases are retained."
+  },
+  "friend_accept_retries": {
+    "repeated_accepts_per_id_orientation": 20,
+    "id_orientations": 2,
+    "before": "The accepted row's xmin changes after the repeated accepts; the new regression fails.",
+    "after": "xmin, requester, creation timestamp and consent remain identical; every retry succeeds.",
+    "incoming_consent_and_missing_request_errors_preserved": true,
+    "participant_locks_and_database_round_trips_preserved": true,
+    "regression": "server/test/friends.test.mjs",
+    "limits": "Avoids unchanged friendship tuple versions. Does not skip authenticated request reservations, user locks, attestation or provider credits."
+  },
+  "municipal_cache": {
+    "entries": 200,
+    "states": 4,
+    "fixes_in_one_state": 6,
+    "before_eager_geometry_loader_calls_from_source": 200,
+    "after_geometry_loader_calls": 50,
+    "after_calls_in_other_three_states": 0,
+    "next_state_ambiguity_loader_calls": 2,
+    "holes_boundary_points_state_aliases_and_ambiguity_covered": true,
+    "cache_lifetime": "One foreground discovery batch; no cross-batch stale geometry cache.",
+    "regression": "app/src/test/java/com/roadconquest/app/progression/PlaceResolverTest.kt",
+    "limits": "Counts loader invocations, including missing data, using a local fixture. The old eager count follows its source loop; the new state-filtered loader count is asserted. No provider traffic, physical file-I/O count or battery measurement. Adds small metadata/lazy wrappers per town instead of loading every full polygon."
+  },
+  "replay_break_index": {
+    "route_points": 5000,
+    "forward_and_backward_seeks": 10000,
+    "before_break_flag_reads_computed_from_original_loop": 24995000,
+    "after_preparation_break_flag_reads": 4999,
+    "after_seeking_point_reads": 0,
+    "exhaustive_comparison_max_route_size": 9,
+    "comparison": "Every break mask for sizes zero through nine and every prefix/backward position matches the frozen original implementation.",
+    "regression": "app/src/test/java/com/roadconquest/app/data/TripReplayRouteTest.kt",
+    "limits": "Break-scan work only. Retains one range per drawable segment; visible native GeoJSON still updates. Existing route sampling, exact coordinates, gaps and endpoints are unchanged."
+  },
+  "weekly_reminders": {
+    "explicit_alarm_manager_calls_when_enabled_before": 2,
+    "explicit_alarm_manager_calls_when_enabled_after": 1,
+    "disabled_or_permission_revoked_cancel_calls_before_and_after": 1,
+    "evidence": "Source comparison plus Android's documented same-IntentSender replacement semantics; no OS IPC profiler was used.",
+    "official_reference": "https://developer.android.com/reference/android/app/AlarmManager",
+    "regression": "app/src/test/java/com/roadconquest/app/OptionalServicesTest.kt",
+    "guards": ["Duplicate initialization leaves one alarm", "Opt-out cancels", "Permission revocation cancels", "Monday and DST calculations unchanged", "Boot/package rescheduling unchanged"]
+  },
+  "source_audit": {
+    "original_baseline": "137e398706c0caf591ac13c091634a3711fc15e2",
+    "original_driving_and_matching_invariants_identical": 14,
+    "additional_scopes_identical_to_31e0984": 10,
+    "additional_scopes": ["Visit merging before persistence", "Visit count repair and departure checks", "Known-road completion", "Road upsert decisions", "Exact polygon containment", "Resolver logic after the cache class", "Official Census point lookup", "Official Census boundary lookup", "Map renderer", "Trip history repository"]
+  },
+  "validation": {
+    "server_tests": 124,
+    "server_failures": 0,
+    "server_skipped": 0,
+    "server_database": "Isolated local PostgreSQL 17",
+    "server_function_bundle": "passed",
+    "android_unit_tests": 1088,
+    "android_suites": 68,
+    "android_failures": 0,
+    "android_errors": 0,
+    "android_skipped": 0,
+    "android_lint_errors": 0,
+    "android_lint_warnings": 299,
+    "android_debug_app_build": "passed",
+    "android_debug_device_test_apk_build": "passed",
+    "previous_complete_ci_head": "31e09840d2e60a2312162a1cc7ba6be7dd85bfc8",
+    "previous_complete_ci": "https://github.com/AntnyGamer/RoadConquest-Beta/actions/runs/39314700779",
+    "previous_ci_native_tests": 27,
+    "previous_ci_release_packaging_and_startup_apis_31_37": "passed; publication skipped"
+  },
+  "production_changes": false,
+  "limits": "No measured physical-device battery percentage, whole-app speedup, provider allowance increase, DAU capacity or daily driving-hours gain. No GPS sampling, matching confidence, geometry precision, history retention, quota or version changes."
+}

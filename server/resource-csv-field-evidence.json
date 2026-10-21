@@ -1,0 +1,172 @@
+{
+  "baseline": "528813a49d0677c287726671d700711adefed11a",
+  "scope": "Avoid a second escaped string for large quote-free array fields while writing backup CSV",
+  "eligibility": "At least 1024 UTF-16 code units, first character [, last character ], at least one comma, and no double quote. The leading [ cannot trigger spreadsheet formula protection, and the comma requires CSV quoting. Emit quote, original string, quote to the existing writer.",
+  "fallback": "All other fields use the unchanged escape() implementation. Escaping/unescaping, formula protection, schema, UTF-8 encoding, ZIP buffering and flushes remain unchanged.",
+  "measurement_method": {
+    "runtime": "JDK21 Windows host, Robolectric SDKs31/37; calling-thread allocated heap bytes and wall/CPU nanoseconds",
+    "method": "Actual old/current compiled DataExporter.writeRoads, both invoked reflectively; 1000 SQLite road rows with 400-coordinate geometry each, including formula/quoted/Unicode names. Finish the ZIP and compare every byte; only fixture entry times are fixed to zero.",
+    "samples": "Six warmup pairs, eleven alternating before/after rounds, per-fixture medians",
+    "measurements": [
+      {
+        "fixture": "CSV_FIELD_ZIP",
+        "rows": 1000,
+        "coordinates": 400,
+        "sdk": 31,
+        "bytesBefore": 13820296,
+        "bytesAfter": 7884296,
+        "wallBefore": 107984800,
+        "wallAfter": 105328800,
+        "cpuBefore": 109375000,
+        "cpuAfter": 109375000,
+        "allocationReductionPercent": 42.95
+      },
+      {
+        "fixture": "CSV_FIELD_OUTPUT",
+        "sdk": 31,
+        "zipBytes": 81978,
+        "sha256": "54c8e15d3682430e203b1be5590c65b7e6510f40be53f1054c0be61143e0598a"
+      },
+      {
+        "fixture": "CSV_SMALL_CONTROL",
+        "rows": 10000,
+        "fields": 9,
+        "sdk": 31,
+        "bytesBefore": 4830600,
+        "bytesAfter": 4830600,
+        "wallBefore": 3970900,
+        "wallAfter": 4236900,
+        "cpuBefore": 0,
+        "cpuAfter": 0,
+        "allocationReductionPercent": 0.0
+      },
+      {
+        "fixture": "CSV_FIELD_ZIP",
+        "rows": 1000,
+        "coordinates": 400,
+        "sdk": 37,
+        "bytesBefore": 13818792,
+        "bytesAfter": 7882792,
+        "wallBefore": 85250900,
+        "wallAfter": 84879800,
+        "cpuBefore": 78125000,
+        "cpuAfter": 78125000,
+        "allocationReductionPercent": 42.96
+      },
+      {
+        "fixture": "CSV_FIELD_OUTPUT",
+        "sdk": 37,
+        "zipBytes": 81978,
+        "sha256": "54c8e15d3682430e203b1be5590c65b7e6510f40be53f1054c0be61143e0598a"
+      },
+      {
+        "fixture": "CSV_SMALL_CONTROL",
+        "rows": 10000,
+        "fields": 9,
+        "sdk": 37,
+        "bytesBefore": 5070600,
+        "bytesAfter": 5070600,
+        "wallBefore": 4065900,
+        "wallAfter": 4395500,
+        "cpuBefore": 0,
+        "cpuAfter": 0,
+        "allocationReductionPercent": 0.0
+      }
+    ]
+  },
+  "tradeoff": {
+    "work": "One eligibility test per field and two additional buffered quote writes per qualifying field; no new buffer, cache, timer, persistent state or flush.",
+    "small_control": "10000 rows, nine ordinary/quoted/formula/Unicode fields each: allocation unchanged; median host wall time increases by 0.266 ms on SDK31 and 0.3296 ms on SDK37. This tiny cost is accepted for eliminating large field copies. No global zero-cost or speed claim."
+  },
+  "validation": {
+    "targeted": {
+      "suites": 7,
+      "tests": 196,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "actualCsvBaselineComparisonCases": 4,
+    "discardedArrayComparisonCases": 2,
+    "lint": {
+      "Warning": 298
+    },
+    "warningIdsAndMessagesUnchanged": true,
+    "debugAppAndDeviceTestBuildsPassed": true,
+    "roadArrayChangeFullyReverted": true
+  },
+  "csv_cases": {
+    "newPropertyFields": 2066,
+    "coverage": "Exact UTF-16 escaped text and parser/unescape round trips across size thresholds, missing commas, quotes, CR/LF, formula prefixes, apostrophes, Unicode format/control characters and surrogate code units. Existing large geometry writer assertion now requires the original field length rather than an assembled quoted field.",
+    "zipBytes": 81978,
+    "zipSha256": "54c8e15d3682430e203b1be5590c65b7e6510f40be53f1054c0be61143e0598a",
+    "sdks": [
+      31,
+      37
+    ]
+  },
+  "source_comparison": {
+    "baseline": "528813a49d0677c287726671d700711adefed11a",
+    "checks": {
+      "entire_repository_unchanged": true,
+      "complete_csv_except_proven_quote_free_array_handoff": true,
+      "all_other_protected_files_unchanged": true
+    },
+    "protectedFileCount": 215,
+    "unexpectedChanges": [],
+    "pass": true
+  },
+  "rejected_experiment": {
+    "name": "Direct road-update argument-array construction",
+    "status": "Fully reverted before final validation; complete TrackingRepository matches baseline.",
+    "reason": "Only about 33 KB saved per 100 short-road saves, without a convincing timing improvement. The gain was too small to justify keeping it.",
+    "measurements": [
+      {
+        "fixture": "ROAD_ARGUMENT_ARRAY",
+        "coordinates": 2,
+        "calls": 100,
+        "sdk": 31,
+        "bytesBefore": 3866360,
+        "bytesAfter": 3832928,
+        "wallBefore": 24844900,
+        "wallAfter": 26569800,
+        "cpuBefore": 31250000,
+        "cpuAfter": 31250000,
+        "allocationReductionPercent": 0.86
+      },
+      {
+        "fixture": "ROAD_ARGUMENT_ARRAY",
+        "coordinates": 2,
+        "calls": 100,
+        "sdk": 37,
+        "bytesBefore": 3613640,
+        "bytesAfter": 3580840,
+        "wallBefore": 21107000,
+        "wallAfter": 21848800,
+        "cpuBefore": 31250000,
+        "cpuAfter": 15625000,
+        "allocationReductionPercent": 0.91
+      }
+    ]
+  },
+  "preceding_ci": {
+    "revision": "528813a",
+    "url": "https://github.com/AntnyGamer/RoadConquest-Beta/actions/runs/39540896211",
+    "allVerificationJobsPassed": true,
+    "downloadedUnitReports": {
+      "suites": 82,
+      "tests": 1207,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "publication": "skipped"
+  },
+  "limits": [
+    "The kept change only reduces temporary export allocation for qualifying fields. It does not reduce archive size, stored history, provider calls or quota use.",
+    "Calling-thread JVM allocation and host timing are not Android peak RAM, native compression allocation, physical battery life or fleet-capacity measurements.",
+    "The CPU clock is coarse; zero means below resolution. Whole-ZIP timing does not establish a reliable speed improvement.",
+    "GPS capture, matching, distance, road identity, town geometry, schema, restore validation, server/gateway and other production code are unchanged. No additional storage deletion was selected.",
+    "Fresh-head CI is tracked separately in the draft PR."
+  ]
+}

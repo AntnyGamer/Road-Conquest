@@ -10,6 +10,47 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31, 37], manifest = Config.NONE)
 class TripHistoryRepositoryTest {
+    @Test fun limitedRecentTripsKeepExactIdsCountsTimesAndDistanceWithALargeOlderArchive() {
+        val context = RuntimeEnvironment.getApplication()
+        TrackingRepository(context).clearHistory()
+        val db = AppDatabase.get(context).writableDatabase
+        db.execSQL("""WITH RECURSIVE n(x) AS (SELECT 0 UNION ALL SELECT x+1 FROM n WHERE x<19999)
+            INSERT INTO track_points(latitude,longitude,accuracy_m,speed_mps,bearing_deg,timestamp_ms,distance_m)
+            SELECT 40,-74,3,8,90,1000000+(x/2)*1000000+(x%2)*1000,1.5 FROM n""")
+        val maxId = db.rawQuery("SELECT MAX(id) FROM track_points", null).use { check(it.moveToFirst()); it.getLong(0) }
+        val trips = TripHistoryRepository(context).recentTrips(100)
+        assertEquals(100, trips.size)
+        trips.forEachIndexed { i, trip ->
+            assertEquals(maxId - 2*i, trip.lastId)
+            assertEquals(maxId - 2*i - 1, trip.firstId)
+            assertEquals(1_000_000L + (9999-i)*1_000_000L, trip.startedAt)
+            assertEquals(trip.startedAt + 1000, trip.endedAt)
+            assertEquals(2, trip.pointCount)
+            assertEquals(3.0, trip.distanceMeters, 0.0)
+        }
+    }
+
+    @Test fun longTripsSpanPagesAndSingletonsBetweenTripsNeverConsumeTheTripLimit() {
+        val context = RuntimeEnvironment.getApplication()
+        TrackingRepository(context).clearHistory()
+        val db = AppDatabase.get(context).writableDatabase
+        fun insert(count: Int, start: Long, interval: Long) {
+            db.execSQL("""WITH RECURSIVE n(x) AS (SELECT 0 UNION ALL SELECT x+1 FROM n WHERE x<?)
+                INSERT INTO track_points(latitude,longitude,accuracy_m,speed_mps,bearing_deg,timestamp_ms,distance_m)
+                SELECT 40,-74,3,8,90,?+x*?,0.5 FROM n""", arrayOf<Any>(count-1,start,interval))
+        }
+        insert(20, 1_000_000, 1000)
+        insert(3, 10_000_000, 2_000_000) // Three singletons, each separated by a parked stop.
+        insert(20000, 100_000_000, 3000)
+        val history = TripHistoryRepository(context)
+        val trips = history.recentTrips(2)
+        assertEquals(listOf(20000, 20), trips.map { it.pointCount })
+        assertEquals(listOf(10000.0, 10.0), trips.map { it.distanceMeters })
+        assertEquals(listOf(100_000_000L, 1_000_000L), trips.map { it.startedAt })
+        assertEquals(159_997_000L, trips.first().endedAt)
+        assertEquals(trips.take(1), history.recentTrips(1))
+    }
+
     @Test fun stoplightsStayInOneTripButLongParkedStopsSplit() {
         val gap = TripHistoryRepository.TRIP_GAP_MS
         assertFalse(TripHistoryRepository.isTripBoundary(1_000_000L, 1_000_000L - 120_000L))
@@ -30,7 +71,7 @@ class TripHistoryRepositoryTest {
         times.forEachIndexed { index, time ->
             db.execSQL(
                 "INSERT INTO track_points(latitude, longitude, accuracy_m, speed_mps, bearing_deg, timestamp_ms) VALUES (?,?,?,?,?,?)",
-                arrayOf(40.0, -74.0 + index * 0.001, 5.0, 10.0, 0.0, time)
+                arrayOf<Any>(40.0, -74.0 + index * 0.001, 5.0, 10.0, 0.0, time)
             )
         }
 
@@ -40,7 +81,7 @@ class TripHistoryRepositoryTest {
         assertEquals(2, downsampled.size)
         assertFalse(downsampled.first().breakBefore)
         assertTrue(downsampled.last().breakBefore)
-        assertTrue(TripReplayRoute.visibleRanges(downsampled, 1).isEmpty())
+        assertTrue(TripReplayRoute.prepare(downsampled).visibleRanges(1).isEmpty())
     }
 
     @Test fun replayDownsamplingPreservesSampleTimesAndTrueEndpoint() {
@@ -117,7 +158,7 @@ class TripHistoryRepositoryTest {
         val privateOutput = java.io.ByteArrayOutputStream()
         val visible = history.exportGpx(trip, privateOutput)
         val hiddenXml = privateOutput.toString("UTF-8")
-        assertTrue(visible > 0)
+        assertEquals(13, visible) // Both privacy cutoffs remain inclusive.
         assertTrue(hiddenXml.startsWith("<?xml version="))
         assertTrue(hiddenXml.contains("<gpx version="))
         assertTrue(hiddenXml.contains("<trkseg>"))

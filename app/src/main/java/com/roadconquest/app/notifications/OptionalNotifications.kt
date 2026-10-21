@@ -32,8 +32,16 @@ object OptionalNotifications {
         now - cachedAt !in 0 until REGISTER_REFRESH_MS
     private val executor = Executors.newSingleThreadExecutor()
     private val displayLock = Any()
-    private fun sessionDigest(token: String) = java.security.MessageDigest.getInstance("SHA-256")
-        .digest(token.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+    internal fun sessionDigest(token: String): String {
+        val digest = java.security.MessageDigest.getInstance("SHA-256").digest(token.toByteArray(Charsets.UTF_8))
+        val hex = CharArray(digest.size * 2)
+        for (index in digest.indices) {
+            val byte = digest[index].toInt() and 0xff
+            hex[index * 2] = "0123456789abcdef"[byte ushr 4]
+            hex[index * 2 + 1] = "0123456789abcdef"[byte and 0x0f]
+        }
+        return String(hex)
+    }
     @Volatile private var deletion: com.google.android.gms.tasks.Task<Void>? = null
     private var lastRegistrationBinding: String? = null
     private var lastRegistrationAt = 0L

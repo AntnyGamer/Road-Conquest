@@ -24,6 +24,38 @@ test("friend status compaction preserves accepted priority, both ID orientations
   }finally{await pool.end();}
 });
 
+test("repeated incoming acceptance is idempotent without rewriting an accepted friendship", { skip: !process.env.DATABASE_URL }, async () => {
+  const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    await pool.query(await readFile(new URL('../schema.sql', import.meta.url), 'utf8'));
+    await pool.query('TRUNCATE users CASCADE');
+    const users = (await pool.query(`INSERT INTO users(username_display,username_key,password_salt,password_hash)
+      SELECT 'Accept_'||g,'accept_'||g,$1,$2 FROM generate_series(0,2) g ORDER BY g RETURNING id,username_display`,
+      [Buffer.alloc(16), Buffer.alloc(64)])).rows;
+    const pushed = [];
+    const service = createFriends(pool, async target => pushed.push(target));
+    for (const [requester, recipient] of [[users[0], users[1]], [users[2], users[1]]]) {
+      await service.change(requester, recipient.username_display, 'request');
+      await assert.rejects(service.change(requester, recipient.username_display, 'accept'), /incoming/);
+      await service.change(recipient, requester.username_display, 'accept');
+      const pair = [requester.id, recipient.id].sort((a,b) => Number(a)-Number(b));
+      const saved = async () => (await pool.query(
+        'SELECT xmin::text,accepted,requested_by,created_at FROM friendships WHERE user_low=$1 AND user_high=$2', pair
+      )).rows[0];
+      const accepted = await saved();
+      assert.equal(accepted.accepted, true);
+      const retried = await Promise.all(Array.from({ length: 20 }, () =>
+        service.change(recipient, requester.username_display, 'accept')));
+      assert.ok(retried.every(result => result.ok === true));
+      assert.deepEqual(await saved(), accepted, 'Retries must retain the same PostgreSQL tuple and consent');
+      await assert.rejects(service.change(requester, recipient.username_display, 'accept'), /incoming/);
+      await service.change(requester, recipient.username_display, 'remove');
+      await assert.rejects(service.change(recipient, requester.username_display, 'accept'), /incoming/);
+    }
+    assert.equal(pushed.length, 2);
+  } finally { await pool.end(); }
+});
+
 test("concurrent requests preserve both users' fifty-relationship cap and notify only once", { skip: !process.env.DATABASE_URL }, async () => {
   const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
   try {

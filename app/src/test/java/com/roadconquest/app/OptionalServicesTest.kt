@@ -35,6 +35,7 @@ class OptionalServicesTest {
         assertFalse(CrashReporting.enabled(app))
         assertFalse(OptionalNotifications.acceptsFriend(app, "friend_request", "stale"))
         OptionalNotifications.initialize(app)
+        OptionalNotifications.initialize(app)
         assertEquals(1, Shadows.shadowOf(app.getSystemService(AlarmManager::class.java)).scheduledAlarms.size)
         assertTrue(FirebaseApp.getApps(app).isEmpty())
     }
@@ -63,9 +64,24 @@ class OptionalServicesTest {
         Shadows.shadowOf(app).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
         OptionalNotifications.initialize(app)
         assertEquals(1, alarms.scheduledAlarms.size)
+        Shadows.shadowOf(app).denyPermissions(Manifest.permission.POST_NOTIFICATIONS)
+        WeeklyReminderReceiver.schedule(app)
+        assertTrue("Revoking permission must cancel an already scheduled reminder", alarms.scheduledAlarms.isEmpty())
+        Shadows.shadowOf(app).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
         assertNotNull(OptionalNotifications.prepareBinding(app, "a-login"))
         assertFalse(CrashReporting.enabled(app))
     }
+    @Test fun notificationSessionDigestPreservesExactExistingHexValues() {
+        assertEquals("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            OptionalNotifications.sessionDigest("abc"))
+        for (token in listOf("", "a".repeat(43), "é\u0000🚗".repeat(8)) +
+            (0..255).map { "session-$it-${it.toChar()}" }) {
+            val expected = java.security.MessageDigest.getInstance("SHA-256")
+                .digest(token.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+            assertEquals(expected, OptionalNotifications.sessionDigest(token))
+        }
+    }
+
     @Test fun logoutClearsBindingAndNewLoginGetsADifferentOne() {
         val app = RuntimeEnvironment.getApplication()
         val first = OptionalNotifications.prepareBinding(app, "first-login")

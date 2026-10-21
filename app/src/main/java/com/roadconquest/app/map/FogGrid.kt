@@ -99,14 +99,15 @@ internal object FogGrid {
     /** Project date-line cells into the same copy of the world as the camera. */
     fun nearLongitude(corners: DoubleArray, centerLongitude: Double): DoubleArray {
         if (corners.isEmpty() || !centerLongitude.isFinite()) return corners
-        val shifted = corners.copyOf()
-        for (i in 0 until shifted.size - 7 step 8) {
-            val longitude = (shifted[i + 1] + shifted[i + 3]) / 2.0
+        var shifted: DoubleArray? = null
+        for (i in 0 until corners.size - 7 step 8) {
+            val longitude = (corners[i + 1] + corners[i + 3]) / 2.0
             val offset = floor((centerLongitude - longitude) / 360.0 + 0.5) * 360.0
             if (offset == 0.0) continue
-            for (corner in 0..3) shifted[i + 2 * corner + 1] += offset
+            val output = shifted ?: corners.copyOf().also { shifted = it }
+            for (corner in 0..3) output[i + 2 * corner + 1] += offset
         }
-        return shifted
+        return shifted ?: corners
     }
 
     private fun writeCorners(cell: Cell, output: DoubleArray, i: Int) {

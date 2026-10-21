@@ -1,0 +1,263 @@
+{
+  "runtime": "local Cloudflare workerd via Miniflare 5.20261012.1-beta",
+  "baseline": "da9bae5",
+  "sourceInvariants": [
+    {
+      "file": "server/maps/worker.mjs",
+      "scope": "complete file",
+      "identical": true
+    },
+    {
+      "file": "server/maps/config.mjs",
+      "scope": "complete file",
+      "identical": true
+    },
+    {
+      "file": "server/src/integrity.mjs",
+      "scope": "complete file",
+      "identical": true
+    },
+    {
+      "file": "server/src/scoring.mjs",
+      "scope": "complete file",
+      "identical": true
+    },
+    {
+      "file": "server/maps/budget.mjs",
+      "scope": "all reservation and finish logic after maintenance",
+      "identical": true
+    },
+    {
+      "file": "server/src/competition.mjs",
+      "scope": "complete submission except its single call through the scoped pending verifier",
+      "identical": true
+    }
+  ],
+  "before": {
+    "/primary": {
+      "matches": 2400,
+      "firstDay": {
+        "reads": 25607,
+        "writes": 17212,
+        "statements": 12009,
+        "bytes": 483328
+      },
+      "rejection": {
+        "status": 429,
+        "body": {
+          "error": "Daily map allowance exhausted",
+          "code": "budget_global"
+        },
+        "retryAfter": "39600"
+      },
+      "stateDigest": "f4ea64feb65f61fd7a2d361c58f402b3f8bf6e627d39a9cfb03c98ae0bf003d2",
+      "afterCleanup": {
+        "reads": 2813,
+        "writes": 2818,
+        "statements": 12
+      },
+      "rollbackVerified": true,
+      "restartVerified": true,
+      "finalDigest": "a15bac05e0c10076ccd9c66c28fd028fbb5e60e5cf7987e98301c0a2f926f1c6"
+    },
+    "/backup": {
+      "matches": 4000,
+      "firstDay": {
+        "reads": 43207,
+        "writes": 28412,
+        "statements": 20009,
+        "bytes": 737280
+      },
+      "rejection": {
+        "status": 429,
+        "body": {
+          "error": "Daily map allowance exhausted",
+          "code": "budget_global"
+        },
+        "retryAfter": "37200"
+      },
+      "stateDigest": "70def2e0e2c0fad3613cba82bc0bb6c2976d86cd2b850a8f19f8e1c2a4b6eb27",
+      "afterCleanup": {
+        "reads": 4413,
+        "writes": 4418,
+        "statements": 12
+      },
+      "rollbackVerified": true,
+      "restartVerified": true,
+      "finalDigest": "d537b5b925d687ef49dd8a920b0dedae5fea91ce22bd89407ee912a5c8ac54c2"
+    },
+    "/primary/repeat": {
+      "matches": 600,
+      "firstDay": {
+        "reads": 3608,
+        "writes": 4214,
+        "statements": 2410,
+        "bytes": 110592
+      },
+      "rejection": {
+        "status": 429,
+        "body": {
+          "error": "Daily client map allowance exhausted",
+          "code": "budget_client"
+        },
+        "retryAfter": "42300"
+      },
+      "stateDigest": "409d1fae52127305fa471d951b3a1a00c56e8528341a354328c4f78e301e37b5",
+      "afterCleanup": {
+        "reads": 615,
+        "writes": 620,
+        "statements": 12
+      },
+      "rollbackVerified": true,
+      "restartVerified": true,
+      "finalDigest": "db668ac72af55b2ec9136f682aea9cc8898ec4ce4828201f33e60bddd7b78b36"
+    },
+    "/backup/repeat": {
+      "matches": 1000,
+      "firstDay": {
+        "reads": 6008,
+        "writes": 7014,
+        "statements": 4010,
+        "bytes": 180224
+      },
+      "rejection": {
+        "status": 429,
+        "body": {
+          "error": "Daily client map allowance exhausted",
+          "code": "budget_client"
+        },
+        "retryAfter": "41700"
+      },
+      "stateDigest": "dccdb6c8270ac55cf8d9a91afc16588900a024162f525f059e918f21057c7e76",
+      "afterCleanup": {
+        "reads": 1015,
+        "writes": 1020,
+        "statements": 12
+      },
+      "rollbackVerified": true,
+      "restartVerified": true,
+      "finalDigest": "0633dc9faab54dc9fcb3540d8d244309240d39af86293847ee2631cd73c66432"
+    },
+    "/migration": {
+      "legacyBalancesPreserved": true,
+      "rollbackVerified": true,
+      "upgradedAfterRollover": false,
+      "oldCodeCanRead": true,
+      "stateDigest": "9855c68eeb53b81d140a86734d57beb259a3999ae1ce7de466008e10f319c8fe"
+    }
+  },
+  "after": {
+    "/primary": {
+      "matches": 2400,
+      "firstDay": {
+        "reads": 14011,
+        "writes": 16807,
+        "statements": 12011,
+        "bytes": 438272
+      },
+      "rejection": {
+        "status": 429,
+        "body": {
+          "error": "Daily map allowance exhausted",
+          "code": "budget_global"
+        },
+        "retryAfter": "39600"
+      },
+      "stateDigest": "f4ea64feb65f61fd7a2d361c58f402b3f8bf6e627d39a9cfb03c98ae0bf003d2",
+      "afterCleanup": {
+        "reads": 2814,
+        "writes": 2812,
+        "statements": 14
+      },
+      "rollbackVerified": true,
+      "restartVerified": true,
+      "finalDigest": "a15bac05e0c10076ccd9c66c28fd028fbb5e60e5cf7987e98301c0a2f926f1c6"
+    },
+    "/backup": {
+      "matches": 4000,
+      "firstDay": {
+        "reads": 23611,
+        "writes": 28007,
+        "statements": 20011,
+        "bytes": 688128
+      },
+      "rejection": {
+        "status": 429,
+        "body": {
+          "error": "Daily map allowance exhausted",
+          "code": "budget_global"
+        },
+        "retryAfter": "37200"
+      },
+      "stateDigest": "70def2e0e2c0fad3613cba82bc0bb6c2976d86cd2b850a8f19f8e1c2a4b6eb27",
+      "afterCleanup": {
+        "reads": 4414,
+        "writes": 4412,
+        "statements": 14
+      },
+      "rollbackVerified": true,
+      "restartVerified": true,
+      "finalDigest": "d537b5b925d687ef49dd8a920b0dedae5fea91ce22bd89407ee912a5c8ac54c2"
+    },
+    "/primary/repeat": {
+      "matches": 600,
+      "firstDay": {
+        "reads": 614,
+        "writes": 4207,
+        "statements": 2412,
+        "bytes": 106496
+      },
+      "rejection": {
+        "status": 429,
+        "body": {
+          "error": "Daily client map allowance exhausted",
+          "code": "budget_client"
+        },
+        "retryAfter": "42300"
+      },
+      "stateDigest": "409d1fae52127305fa471d951b3a1a00c56e8528341a354328c4f78e301e37b5",
+      "afterCleanup": {
+        "reads": 616,
+        "writes": 614,
+        "statements": 14
+      },
+      "rollbackVerified": true,
+      "restartVerified": true,
+      "finalDigest": "db668ac72af55b2ec9136f682aea9cc8898ec4ce4828201f33e60bddd7b78b36"
+    },
+    "/backup/repeat": {
+      "matches": 1000,
+      "firstDay": {
+        "reads": 1014,
+        "writes": 7007,
+        "statements": 4012,
+        "bytes": 176128
+      },
+      "rejection": {
+        "status": 429,
+        "body": {
+          "error": "Daily client map allowance exhausted",
+          "code": "budget_client"
+        },
+        "retryAfter": "41700"
+      },
+      "stateDigest": "dccdb6c8270ac55cf8d9a91afc16588900a024162f525f059e918f21057c7e76",
+      "afterCleanup": {
+        "reads": 1016,
+        "writes": 1014,
+        "statements": 14
+      },
+      "rollbackVerified": true,
+      "restartVerified": true,
+      "finalDigest": "0633dc9faab54dc9fcb3540d8d244309240d39af86293847ee2631cd73c66432"
+    },
+    "/migration": {
+      "legacyBalancesPreserved": true,
+      "rollbackVerified": true,
+      "upgradedAfterRollover": true,
+      "oldCodeCanRead": true,
+      "stateDigest": "9855c68eeb53b81d140a86734d57beb259a3999ae1ce7de466008e10f319c8fe"
+    }
+  },
+  "limitations": "Synthetic local SQL counters, not invoices, physical-drive throughput or a DAU/hour increase. No provider or production traffic. Existing live counters upgrade only after ordinary retention leaves the table empty."
+}

@@ -18,13 +18,18 @@ import java.util.Locale
 object PlaceResolver {
     /**
      * The foreground worker processes up to six GPS candidates per batch.
-     * Parse official cached town geometry once per batch, not once per fix.
+     * Parse relevant official cached town geometry once per batch, not once per fix.
      * A new verified town is immediately available to later fixes in the batch.
      * No location, town matching, or reward criteria are changed.
      */
     internal class VerifiedMunicipalCache(
-        private val load: () -> MutableList<Pair<PlaceDiscovery, JSONObject>>
+        private val load: () -> MutableList<CachedPolygon>
     ) {
+        class CachedPolygon(val place: PlaceDiscovery, loadGeometry: () -> JSONObject?) {
+            val geometry: JSONObject? by lazy(loadGeometry)
+            val stateCode = UnitedStatesMunicipalBoundaries.stateCode(place.countryName, place.parentName)
+        }
+
         constructor(context: Context) : this({
             val appContext = context.applicationContext
             ProgressionRepository(appContext).visitedPlaces(PlaceKind.TOWN)
@@ -33,12 +38,14 @@ object PlaceResolver {
                 // Only incorporated (layer 4) keys are safe shortcut candidates.
                 // Avoid loading and parsing polygons we must validate online anyway.
                 .filter { it.key.substringAfterLast('|').startsWith("census-4-") }
-                .mapNotNull { place ->
-                    PlaceOverlayCache.readOfficialUs(appContext, place).data?.let { overlay ->
-                        try {
-                            place to JSONObject(overlay.geometryJson)
-                        } catch (_: org.json.JSONException) {
-                            null
+                .map { place ->
+                    CachedPolygon(place) {
+                        PlaceOverlayCache.readOfficialUs(appContext, place).data?.let { overlay ->
+                            try {
+                                JSONObject(overlay.geometryJson)
+                            } catch (_: org.json.JSONException) {
+                                null
+                            }
                         }
                     }
                 }
@@ -52,20 +59,20 @@ object PlaceResolver {
             val candidateState = UnitedStatesMunicipalBoundaries.stateCode(
                 seed.countryName, seed.parentName
             )
-            for ((place, polygon) in polygons) {
+            for (cached in polygons) {
+                val place = cached.place
                 // Incorporated places have priority over county subdivisions in
                 // the authoritative point lookup. A cached subdivision may extend
                 // over an as-yet-unvisited city: never let it bypass that lookup.
                 // Legacy name-only keys have no recorded source layer either.
                 if (!place.key.substringAfterLast('|').startsWith("census-4-")) continue
                 val sameState = place.parentName == seed.parentName ||
-                    (candidateState != null && candidateState ==
-                        UnitedStatesMunicipalBoundaries.stateCode(
-                            place.countryName, place.parentName
-                        ))
-                if (!sameState ||
-                    !PlaceGeometry.contains(polygon, seed.latitude, seed.longitude)
-                ) continue
+                    (candidateState != null && candidateState == cached.stateCode)
+                // Avoid file reads, decompression and JSON parsing for other
+                // states. Geometry is still exact and reused only in this batch.
+                if (!sameState) continue
+                val polygon = cached.geometry ?: continue
+                if (!PlaceGeometry.contains(polygon, seed.latitude, seed.longitude)) continue
                 // County subdivisions can overlap incorporated places. The cache
                 // is ordered by visit time, not by Census layer precedence, so
                 // different matching towns require a fresh authoritative lookup.
@@ -77,7 +84,10 @@ object PlaceResolver {
         }
 
         fun remember(result: UnitedStatesMunicipalityAtPoint.Result) {
-            polygons += result.place to JSONObject(result.overlay.geometryJson)
+            // Subdivisions and legacy keys can never be shortcut candidates.
+            if (!result.place.key.substringAfterLast('|').startsWith("census-4-")) return
+            val polygon = JSONObject(result.overlay.geometryJson)
+            polygons += CachedPolygon(result.place) { polygon }
         }
     }
 

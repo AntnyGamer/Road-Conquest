@@ -134,7 +134,7 @@ class AppearanceTest {
         assertEquals(MapMode.STREETS, Prefs.mapMode(app))
         assertEquals("Road Conquest", app.getString(R.string.app_name))
         assertEquals("com.roadconquest.app", app.packageName)
-        assertFalse(app.getString(R.string.stats_initial).contains("GPS"))
+        assertFalse(app.getString(R.string.stats_grouped_initial).contains("GPS"))
     }
 
     @Test fun fogSwitchPersistsWithoutChangingTrackingModeOrStoppingTracking() {

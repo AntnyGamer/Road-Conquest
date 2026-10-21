@@ -78,6 +78,13 @@ class AccountStoreDeviceTest {
             assertFalse(firstCiphertext.contains(session.token))
             assertEquals(session, AccountStore.load(context))
 
+            repeat(20) {
+                assertEquals(session, AccountStore.refreshIfUnchanged(context, session,
+                    session.username, session.leaderboardVisible))
+            }
+            assertEquals("Unchanged profile refreshes must not rewrite encrypted preferences",
+                firstCiphertext, prefs.getString("token", null))
+
             assertNull(AccountStore.updateIfToken(context, "an-old-session-token") { it.copy(username = "WrongDriver") })
             assertEquals(session, AccountStore.load(context))
             val renamed = AccountStore.updateIfToken(context, session.token) { it.copy(username = "NewDriver") }
@@ -88,6 +95,17 @@ class AccountStoreDeviceTest {
             val secondCiphertext = requireNotNull(prefs.getString("token", null))
             assertNotEquals("AES-GCM must use a fresh IV for every save", firstCiphertext, secondCiphertext)
             assertEquals(session, AccountStore.load(context))
+
+            val unicode = session.copy(token = "session-驾驶🚙é")
+            AccountStore.save(context, unicode)
+            assertEquals(unicode, AccountStore.load(context))
+            val corrupted = android.util.Base64.decode(requireNotNull(prefs.getString("token", null)), android.util.Base64.NO_WRAP)
+            corrupted[corrupted.lastIndex] = (corrupted.last().toInt() xor 1).toByte()
+            prefs.edit().putString("token", android.util.Base64.encodeToString(corrupted, android.util.Base64.NO_WRAP)).commit()
+            Prefs.setDriveVerificationEnabled(context, true)
+            assertNull("Unauthenticated plaintext must not become a session", AccountStore.load(context))
+            assertFalse(Prefs.isDriveVerificationEnabled(context))
+            assertFalse(prefs.contains("token"))
         } finally {
             AccountStore.clear(context)
         }

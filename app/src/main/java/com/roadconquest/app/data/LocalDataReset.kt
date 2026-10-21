@@ -47,6 +47,11 @@ object LocalDataReset {
             )) {
                 app.sendBroadcast(Intent(action).setPackage(app.packageName))
             }
+            // Reclaim empty database pages only during this explicit deletion,
+            // never on a drive, app launch or ordinary repository clear. A full
+            // disk/busy snapshot must not turn committed deletion into failure.
+            runCatching { TrackingRepository(app).reclaimDeletedStorage() }
+                .onFailure { android.util.Log.w("RoadConquest", "Deleted database space will be reused", it) }
             cleared = true
         } finally {
             if (cleared) {

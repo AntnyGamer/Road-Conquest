@@ -63,6 +63,33 @@ class WeeklyChallengesTest {
         assertEquals(startingBalance + 150L, repository.snapshot().balance)
     }
 
+    @Test fun ownedRewardsDoNotAttemptAnotherInsertAndMissingRewardsStillEarnNormally() {
+        repeat(25) { road("repeat$it", "repeat-group$it", monday + 10) }
+        val db = AppDatabase.get(context).writableDatabase
+        WeeklyChallenges.status(context, monday + 100)
+        val points = ProgressionRepository(context).snapshot().balance
+        db.execSQL("CREATE TABLE weekly_insert_probe(reward_key TEXT)")
+        db.execSQL("""CREATE TRIGGER weekly_insert_probe BEFORE INSERT ON progression_rewards
+            WHEN NEW.reward_key LIKE 'weekly:%' BEGIN
+              INSERT INTO weekly_insert_probe VALUES(NEW.reward_key);
+            END""")
+        try {
+            repeat(20) { WeeklyChallenges.status(context, monday + 200 + it) }
+            fun attempts() = db.rawQuery("SELECT COUNT(*) FROM weekly_insert_probe", null)
+                .use { check(it.moveToFirst()); it.getLong(0) }
+            assertEquals("Already-owned milestones need no conflicting INSERT attempts", 0L, attempts())
+            assertEquals(points, ProgressionRepository(context).snapshot().balance)
+            db.execSQL("DELETE FROM progression_rewards WHERE reward_key=?", arrayOf("weekly:$monday:roads"))
+            val restored = WeeklyChallenges.status(context, monday + 1000)
+            assertTrue(restored.challenges.take(2).all { it.rewarded })
+            assertEquals(1L, attempts())
+            assertEquals(points, ProgressionRepository(context).snapshot().balance)
+        } finally {
+            db.execSQL("DROP TRIGGER weekly_insert_probe")
+            db.execSQL("DROP TABLE weekly_insert_probe")
+        }
+    }
+
     @Test fun utcMondayBoundaryIsStableAcrossYearAndFutureDatesDoNotCount() {
         assertEquals(Instant.parse("2025-12-29T00:00:00Z").toEpochMilli(), WeeklyChallenges.weekStart(Instant.parse("2026-01-01T16:00:00Z").toEpochMilli()))
         road("future", "new", monday + 1000)

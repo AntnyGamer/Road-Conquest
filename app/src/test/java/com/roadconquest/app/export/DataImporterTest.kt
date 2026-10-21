@@ -80,6 +80,24 @@ class DataImporterTest {
         assertEquals(points, ProgressionRepository(context).snapshot().balance)
     }
 
+    @Test fun manyDistinctTypedRowsAndDerivedBoundsSurviveCsvRestoreExactly() {
+        val tracker = TrackingRepository(context)
+        tracker.insertLocations((0 until 500).map { i -> fix(1_000_000L + i * 3_000L, -74.0 + i * 0.00001).apply {
+            accuracy = 1f + i % 20; speed = (i % 10).toFloat(); bearing = (i % 359).toFloat()
+        } })
+        tracker.readableDatabase().execSQL("UPDATE track_points SET matched=id%2, " +
+            "next_match_attempt_ms=CASE WHEN id%3=0 THEN 4000000 ELSE 0 END")
+        tracker.upsertRoads((0 until 4).map { i -> MatchedRoad(
+            "CSV $i, \"quoted\"\né", "[[${-74.0 + i * 0.01},40],[${-73.999 + i * 0.01},${40.001 + i * 0.001}]]",
+            1_000_000L + i * 10_000L, 1_005_000L + i * 10_000L, 0.99
+        ) })
+        val bytes = export()
+        val original = entries(bytes).filterKeys { it != "metadata.json" }
+        DataImporter.prepare(context, ByteArrayInputStream(bytes)).use { DataImporter.restore(context, it) }
+        assertEquals(original, entries(export()).filterKeys { it != "metadata.json" })
+        assertEquals(500L, TrackingRepository(context).getSummary().trackPointCount)
+    }
+
     @Test fun restoringProgressDoesNotClaimItWasAlreadyExported() {
         TrackingRepository(context).insertLocation(fix(1_000_000))
         val backup = export()

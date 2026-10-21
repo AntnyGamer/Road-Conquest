@@ -86,6 +86,7 @@ class TripHistoryActivity : Activity() {
     }
     private var points: List<SavedTripPoint> = emptyList()
     private var routeCoordinates: List<Point> = emptyList()
+    private var replayRoute = TripReplayRoute.prepare(emptyList())
     private var playing = false
     @Volatile private var generation = 0
     private var lastRenderedIndex = -1
@@ -514,6 +515,7 @@ class TripHistoryActivity : Activity() {
                     // Cache MapLibre geometries once instead of reconstructing
                     // every previously travelled point on every animation tick.
                     routeCoordinates = loaded.map { Point.fromLngLat(it.longitude, it.latitude) }
+                    replayRoute = TripReplayRoute.prepare(loaded)
                     lastRenderedIndex = -1
                     seek?.isEnabled = loaded.size >= 2
                     playButton?.isEnabled = loaded.size >= 2
@@ -541,6 +543,7 @@ class TripHistoryActivity : Activity() {
     private fun resetReplayDisplay() {
         points = emptyList()
         routeCoordinates = emptyList()
+        replayRoute = TripReplayRoute.prepare(emptyList())
         lastRenderedIndex = -1
         seek?.isEnabled = false
         playButton?.isEnabled = false
@@ -591,7 +594,7 @@ class TripHistoryActivity : Activity() {
         val totalSeconds = ((points.last().timestamp - firstTimestamp).coerceAtLeast(0L)) / 1000L
         val elapsedSeconds = ((point.timestamp - firstTimestamp).coerceIn(0L, totalSeconds * 1000L)) / 1000L
         replayProgress?.text = "${DateUtils.formatElapsedTime(elapsedSeconds)} / ${DateUtils.formatElapsedTime(totalSeconds)}"
-        val visible = TripReplayRoute.visibleRanges(points, index).map { range ->
+        val visible = replayRoute.visibleRanges(index).map { range ->
             routeCoordinates.subList(range.first, range.last + 1)
         }
         val source = style.getSourceAs<GeoJsonSource>(ROUTE) ?: return

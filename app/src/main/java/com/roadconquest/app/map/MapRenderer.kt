@@ -125,9 +125,11 @@ class MapRenderer(
     private var nearbyVisitedFeatures = EMPTY_FEATURES.toJson()
     private var nearbyUnvisitedFeatures = EMPTY_FEATURES.toJson()
     private var nearbyNumberFeatures = EMPTY_FEATURES.toJson()
+    private val nearbyVisitedPublisher = DistinctGeoJson(nearbyVisitedFeatures)
+    private val nearbyUnvisitedPublisher = DistinctGeoJson(nearbyUnvisitedFeatures)
+    private val nearbyNumbersPublisher = DistinctGeoJson(nearbyNumberFeatures)
     private val nearbyMarkerImages = HashMap<String, Bitmap>()
-    @Volatile private var shownOverlayKeys = emptyList<String>()
-    @Volatile private var shownOverlayCacheGeneration = -1L
+    private val overlayPublication = OverlayPublication()
     private val overlayClient = PlaceOverlayClient()
     @Volatile private var overlayGeneration = 0
     @Volatile private var visibleTownViewport: OverlayViewport? = null
@@ -137,14 +139,14 @@ class MapRenderer(
     private var loadedOverlayKind: PlaceKind? = null
     private var loadedOverlayCacheGeneration = -1L
     private var loadedOverlayData: List<PlaceOverlayData> = emptyList()
-    private val overlayBounds = HashMap<String, OverlayViewport?>()
+    private val overlayBounds = OverlayBoundsCache()
     @Volatile private var destroyed = false
     private val liveLocation = LiveLocation()
     private var displayedRoads = OverlayRoads.EMPTY
     private var displayedRoadFeatures = EMPTY_FEATURES
     // A newly installed GeoJSON source already contains EMPTY_FEATURES. Avoid sending the
     // same empty data over the native bridge on every viewport/GPS refresh.
-    private var pendingRouteSourceIsEmpty = true
+    private val pendingRoutePublisher = DistinctGeoJson(EMPTY_FEATURES)
     private var displayedPlaces = doubleArrayOf()
     private var savedGridCoordinates = doubleArrayOf()
     private var loadedRoadBounds: RoadQueryBounds? = null
@@ -382,9 +384,21 @@ class MapRenderer(
 
     private fun applyNearbyExploration() {
         val style = map.style ?: return
-        (style.getSource(NEARBY_VISITED_SOURCE_ID) as? GeoJsonSource)?.setGeoJson(nearbyVisitedFeatures)
-        (style.getSource(NEARBY_UNVISITED_SOURCE_ID) as? GeoJsonSource)?.setGeoJson(nearbyUnvisitedFeatures)
-        (style.getSource(NEARBY_NUMBERS_SOURCE_ID) as? GeoJsonSource)?.setGeoJson(nearbyNumberFeatures)
+        nearbyVisitedPublisher.publish(nearbyVisitedFeatures) { next ->
+            val source = style.getSource(NEARBY_VISITED_SOURCE_ID) as? GeoJsonSource ?: return@publish false
+            source.setGeoJson(next)
+            true
+        }
+        nearbyUnvisitedPublisher.publish(nearbyUnvisitedFeatures) { next ->
+            val source = style.getSource(NEARBY_UNVISITED_SOURCE_ID) as? GeoJsonSource ?: return@publish false
+            source.setGeoJson(next)
+            true
+        }
+        nearbyNumbersPublisher.publish(nearbyNumberFeatures) { next ->
+            val source = style.getSource(NEARBY_NUMBERS_SOURCE_ID) as? GeoJsonSource ?: return@publish false
+            source.setGeoJson(next)
+            true
+        }
     }
 
     private data class NearbyOverlaySnapshot(
@@ -423,8 +437,11 @@ class MapRenderer(
 
     private fun installNearbyExploration(style: Style) {
         style.addSource(GeoJsonSource(NEARBY_VISITED_SOURCE_ID, nearbyVisitedFeatures))
+        nearbyVisitedPublisher.reset(nearbyVisitedFeatures)
         style.addSource(GeoJsonSource(NEARBY_UNVISITED_SOURCE_ID, nearbyUnvisitedFeatures))
+        nearbyUnvisitedPublisher.reset(nearbyUnvisitedFeatures)
         style.addSource(GeoJsonSource(NEARBY_NUMBERS_SOURCE_ID, nearbyNumberFeatures))
+        nearbyNumbersPublisher.reset(nearbyNumberFeatures)
         // Local bitmap numbers work even with the offline fallback style, which
         // intentionally has no glyph endpoint or text-font network requests.
         nearbyMarkerImages.forEach { (id, image) -> style.addImage(id, image) }
@@ -477,6 +494,8 @@ class MapRenderer(
         visibleTownViewport = if (kind == PlaceKind.TOWN) captureTownViewport() else null
         val cacheGeneration = PlaceOverlayCache.generation()
         overlayExecutor.execute {
+            if (destroyed || generation != overlayGeneration ||
+                cacheGeneration != PlaceOverlayCache.generation()) return@execute
             val places = runCatching { ProgressionRepository(context).visitedPlaces(kind) }
                 .getOrElse {
                     Log.e("RoadConquest", "Could not load discovered places for overlay", it)
@@ -489,6 +508,8 @@ class MapRenderer(
             val loaded = ArrayList<PlaceOverlayData>(places.size)
             val missing = ArrayList<com.roadconquest.app.data.PlaceDiscovery>()
             for (place in places) {
+                if (destroyed || generation != overlayGeneration ||
+                    cacheGeneration != PlaceOverlayCache.generation()) return@execute
                 val cached = if (UnitedStatesMunicipalBoundaries.applies(place)) {
                     PlaceOverlayCache.readOfficialUs(context, place)
                 } else PlaceOverlayCache.read(context, place)
@@ -957,8 +978,7 @@ class MapRenderer(
 
     private fun installPlaceOverlayLayers(style: Style) {
         // A new MapLibre style has new empty GeoJSON sources even if the names match.
-        shownOverlayKeys = emptyList()
-        shownOverlayCacheGeneration = -1L
+        overlayPublication.reset()
         for (mode in listOf(PlaceOverlayMode.COUNTRY, PlaceOverlayMode.STATE, PlaceOverlayMode.TOWN)) {
             style.addSource(GeoJsonSource(overlaySourceId(mode), EMPTY_FEATURES))
             style.addSource(GeoJsonSource(overlayBoundarySourceId(mode), EMPTY_FEATURES))
@@ -1013,8 +1033,7 @@ class MapRenderer(
     }
 
     private fun clearPlaceOverlaySources() {
-        shownOverlayKeys = emptyList()
-        shownOverlayCacheGeneration = -1L
+        overlayPublication.reset()
         for (mode in listOf(PlaceOverlayMode.COUNTRY, PlaceOverlayMode.STATE, PlaceOverlayMode.TOWN)) {
             (map.style?.getSource(overlaySourceId(mode)) as? GeoJsonSource)?.setGeoJson(EMPTY_FEATURES)
             (map.style?.getSource(overlayBoundarySourceId(mode)) as? GeoJsonSource)?.setGeoJson(EMPTY_FEATURES)
@@ -1027,26 +1046,22 @@ class MapRenderer(
         data: List<PlaceOverlayData>,
         expectedCacheGeneration: Long
     ) {
+        if (destroyed || generation != overlayGeneration ||
+            expectedCacheGeneration != PlaceOverlayCache.generation()) return
         // Polygon conversion can be expensive for many visited municipalities.
         // Build immutable GeoJSON on overlayExecutor instead of blocking the map's UI thread.
         val viewport = if (kind == PlaceKind.TOWN && data.size >= 200) visibleTownViewport else null
         val snapshot = if (viewport != null) {
             data.filter { place ->
-                val key = "${place.key}:${place.geometryJson.hashCode()}"
-                viewport.intersects(overlayBounds.getOrPut(key) {
-                    OverlayViewport.ofGeometry(place.geometryJson)
-                })
+                viewport.intersects(overlayBounds.get(place))
             }
         } else data.toList()
-        val keys = snapshot.map { "${it.key}:${it.geometryJson.hashCode()}" }
         // This gets called after normal activity refreshes as well as during
         // incremental downloads. If the complete geometry set is already drawn,
         // skip costly JTS polygon clipping and GeoJSON serialization altogether.
-        // These state fields are written on the UI thread and read here on the
-        // serial overlay executor; volatility keeps the early check up to date.
-        if (keys == shownOverlayKeys &&
-            expectedCacheGeneration == shownOverlayCacheGeneration
-        ) return
+        // Full data equality includes coordinates and popup properties. Equal
+        // hashes alone cannot prove that a boundary is unchanged.
+        if (overlayPublication.matches(snapshot, expectedCacheGeneration)) return
         // Existing boundaries can overlap due to mismatched or historical OSM
         // polygons. Partition only town shapes so their translucent fills never
         // stack or paint an overlapping boundary twice.
@@ -1062,33 +1077,29 @@ class MapRenderer(
         val otherPartition = if (kind == com.roadconquest.app.data.PlaceKind.TOWN &&
             other.isNotEmpty()
         ) TownOverlayPartition.render(other) else null
-        val censusLayers = officialUs.mapNotNull {
-            when {
-                "|census-4-" in it.key -> 4
-                "|census-3-" in it.key -> 3
-                "|census-1-" in it.key -> 1
-                else -> null
-            }
-        }.toSet()
-        // A single layer cannot overlap itself in normal Census geography.
-        // Avoid unnecessary polygon differences on ordinary single-layer maps.
-        val officialPartition = if (censusLayers.size > 1) {
-            TownOverlayPartition.renderOfficialUs(officialUs)
-        } else null
-        val officialFills = officialPartition?.fills ?: overlayFeatureCollection(officialUs)
-        val officialBorders = officialPartition?.outlines ?:
-            TownOverlayPartition.authoritativeOutlines(officialUs)
-        val fillFeatures = when {
-            officialUs.isNotEmpty() && otherPartition != null ->
-                mergeOverlayCollections(officialFills, otherPartition.fills)
-            officialUs.isNotEmpty() -> officialFills
-            else -> otherPartition?.fills ?: overlayFeatureCollection(snapshot)
-        }
-        val boundaries = when {
-            officialUs.isNotEmpty() && otherPartition != null ->
-                mergeOverlayCollections(officialBorders, otherPartition.outlines)
-            officialUs.isNotEmpty() -> officialBorders
-            else -> otherPartition?.outlines ?: overlayBoundaryFeatureCollection(snapshot)
+        val (fillFeatures, boundaries) = if (officialUs.isNotEmpty()) {
+            val censusLayers = officialUs.mapNotNull {
+                when {
+                    "|census-4-" in it.key -> 4
+                    "|census-3-" in it.key -> 3
+                    "|census-1-" in it.key -> 1
+                    else -> null
+                }
+            }.toSet()
+            // A single layer cannot overlap itself in normal Census geography.
+            // Avoid unnecessary polygon differences on ordinary single-layer maps.
+            val officialPartition = if (censusLayers.size > 1) {
+                TownOverlayPartition.renderOfficialUs(officialUs)
+            } else null
+            val officialFills = officialPartition?.fills ?: overlayFeatureCollection(officialUs)
+            val officialBorders = officialPartition?.outlines ?:
+                TownOverlayPartition.authoritativeOutlines(officialUs)
+            if (otherPartition != null) {
+                mergeOverlayCollections(officialFills, otherPartition.fills) to
+                    mergeOverlayCollections(officialBorders, otherPartition.outlines)
+            } else officialFills to officialBorders
+        } else {
+            otherPartition?.let { it.fills to it.outlines } ?: overlayFeatureCollections(snapshot)
         }
         mainHandler.post {
             if (destroyed || generation != overlayGeneration || overlayMode.kind != kind ||
@@ -1099,13 +1110,16 @@ class MapRenderer(
                 com.roadconquest.app.data.PlaceKind.TOWN -> PlaceOverlayMode.TOWN
             }
             val cacheGeneration = PlaceOverlayCache.generation()
-            if (keys == shownOverlayKeys && cacheGeneration == shownOverlayCacheGeneration) return@post
-            (map.style?.getSource(overlaySourceId(mode)) as? GeoJsonSource)
-                ?.setGeoJson(fillFeatures)
-            (map.style?.getSource(overlayBoundarySourceId(mode)) as? GeoJsonSource)
-                ?.setGeoJson(boundaries)
-            shownOverlayKeys = keys
-            shownOverlayCacheGeneration = cacheGeneration
+            overlayPublication.publish(snapshot, cacheGeneration) {
+                val style = map.style ?: return@publish false
+                val fillSource = style.getSource(overlaySourceId(mode)) as? GeoJsonSource
+                    ?: return@publish false
+                val boundarySource = style.getSource(overlayBoundarySourceId(mode)) as? GeoJsonSource
+                    ?: return@publish false
+                fillSource.setGeoJson(fillFeatures)
+                boundarySource.setGeoJson(boundaries)
+                true
+            }
         }
     }
 
@@ -1121,37 +1135,6 @@ class MapRenderer(
     private fun overlayFeatureCollection(data: List<PlaceOverlayData>): String {
         val features = JSONArray()
         data.forEach { features.put(it.featureJson()) }
-        return JSONObject().put("type", "FeatureCollection").put("features", features).toString()
-    }
-
-    private fun overlayBoundaryFeatureCollection(data: List<PlaceOverlayData>): String {
-        val features = JSONArray()
-        fun addRings(rings: JSONArray) {
-            for (ringIndex in 0 until rings.length()) {
-                val ring = rings.optJSONArray(ringIndex) ?: continue
-                if (ring.length() < 2) continue
-                features.put(
-                    JSONObject()
-                        .put("type", "Feature")
-                        .put("properties", JSONObject())
-                        .put("geometry", JSONObject()
-                            .put("type", "LineString")
-                            .put("coordinates", ring))
-                )
-            }
-        }
-        for (overlay in data) {
-            val geometry = runCatching { JSONObject(overlay.geometryJson) }.getOrNull() ?: continue
-            val coordinates = geometry.optJSONArray("coordinates") ?: continue
-            when (geometry.optString("type")) {
-                "Polygon" -> addRings(coordinates)
-                "MultiPolygon" -> {
-                    for (polygonIndex in 0 until coordinates.length()) {
-                        coordinates.optJSONArray(polygonIndex)?.let(::addRings)
-                    }
-                }
-            }
-        }
         return JSONObject().put("type", "FeatureCollection").put("features", features).toString()
     }
 
@@ -1261,18 +1244,19 @@ class MapRenderer(
     }
 
     private fun applyPendingRoute(features: FeatureCollection, hasPending: Boolean) {
-        // The native source starts empty after each style install. Only upload an empty
-        // collection once when clearing a previously nonempty preview; preserve every
-        // nonempty update so new/changed corners are still shown immediately.
-        if (!hasPending && pendingRouteSourceIsEmpty) return
-        val source = map.style?.getSource(PENDING_ROUTE_SOURCE_ID) as? GeoJsonSource ?: return
-        source.setGeoJson(if (hasPending) features else EMPTY_FEATURES)
-        pendingRouteSourceIsEmpty = !hasPending
+        // Equality checks every feature/coordinate, without a lossy fingerprint.
+        // An unchanged retry trail needs no new JNI serialization/native retiling.
+        pendingRoutePublisher.publish(if (hasPending) features else EMPTY_FEATURES) { next ->
+            val source = map.style?.getSource(PENDING_ROUTE_SOURCE_ID) as? GeoJsonSource
+                ?: return@publish false
+            source.setGeoJson(next)
+            true
+        }
     }
 
     private fun installRecordedRouteLayer(style: Style) {
         style.addSource(GeoJsonSource(PENDING_ROUTE_SOURCE_ID, EMPTY_FEATURES))
-        pendingRouteSourceIsEmpty = true
+        pendingRoutePublisher.reset()
         // Pending evidence is raw GPS, not final road geometry. Keep a faint, narrow
         // provisional trace so the map never appears to have a random hole while the online matcher is
         // resolving the interval. Confirmed traveled roads remain thicker and nearly opaque,

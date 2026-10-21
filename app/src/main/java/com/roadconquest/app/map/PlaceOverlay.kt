@@ -48,7 +48,14 @@ data class PlaceOverlayData(
     val areaSquareKilometers: Double,
     val geometryJson: String
 ) {
-    fun featureJson(): JSONObject = JSONObject()
+    fun featureJson(): JSONObject = featureJsonFromGeometry(JSONObject(geometryJson))
+
+    /** Reuse a fresh 2D polygon while preserving the old parser's signed-zero normalization. */
+    internal fun featureJson(geometry: JSONObject): JSONObject = featureJsonFromGeometry(
+        if ("[-0," in geometryJson || ",-0]" in geometryJson) JSONObject(geometryJson) else geometry
+    )
+
+    private fun featureJsonFromGeometry(geometry: JSONObject): JSONObject = JSONObject()
         .put("type", "Feature")
         .put("properties", JSONObject()
             .put("overlay_key", key)
@@ -56,7 +63,42 @@ data class PlaceOverlayData(
             .put("overlay_kind", kind.name)
             .put("area_sq_km", areaSquareKilometers)
             .also { properties -> population?.let { properties.put("population", it) } })
-        .put("geometry", JSONObject(geometryJson))
+        .put("geometry", geometry)
+}
+
+/** Fill and raw outlines share a local parsed geometry; neither mutates its coordinate arrays. */
+internal fun overlayFeatureCollections(data: List<PlaceOverlayData>): Pair<String, String> {
+    val fills = JSONArray()
+    val features = JSONArray()
+    fun addRings(rings: JSONArray) {
+        for (ringIndex in 0 until rings.length()) {
+            val ring = rings.optJSONArray(ringIndex) ?: continue
+            if (ring.length() < 2) continue
+            features.put(
+                JSONObject()
+                    .put("type", "Feature")
+                    .put("properties", JSONObject())
+                    .put("geometry", JSONObject()
+                        .put("type", "LineString")
+                        .put("coordinates", ring))
+            )
+        }
+    }
+    for (overlay in data) {
+        val geometry = JSONObject(overlay.geometryJson)
+        fills.put(overlay.featureJson(geometry))
+        val coordinates = geometry.optJSONArray("coordinates") ?: continue
+        when (geometry.optString("type")) {
+            "Polygon" -> addRings(coordinates)
+            "MultiPolygon" -> {
+                for (polygonIndex in 0 until coordinates.length()) {
+                    coordinates.optJSONArray(polygonIndex)?.let(::addRings)
+                }
+            }
+        }
+    }
+    return JSONObject().put("type", "FeatureCollection").put("features", fills).toString() to
+        JSONObject().put("type", "FeatureCollection").put("features", features).toString()
 }
 
 /** A saved town name alone is not proof that its recorded GPS fix was inside its polygon.
@@ -80,6 +122,8 @@ object PlaceOverlayCache {
     private const val TOWN_DIRECTORY = "place-overlays-v5-world-admin"
     // All states use one Census cache, independent of the worldwide OSM cache.
     private const val US_OFFICIAL_DIRECTORY = "place-overlays-us-census-v1"
+    // These formats were retired in Betas 9 and 37/38 and are never read now.
+    private val retiredDirectories = listOf("place-overlays-v2", "place-overlays-v4-towns")
     private const val NEGATIVE_CACHE_MS = 15L * 60L * 1000L
     private const val HEX_DIGITS = "0123456789abcdef"
     private val generation = AtomicLong()
@@ -111,7 +155,7 @@ object PlaceOverlayCache {
         }
         // The oldest cached outlines go first. The destination currently being
         // written stays readable, even if it alone exceeds the cache budget.
-        for (candidate in files.sortedWith(compareBy<File> { it.lastModified() }.thenBy { it.name })) {
+        for (candidate in oldestCacheFiles(files)) {
             if (bytes <= maxBytes && count <= maxFiles) break
             if (candidate == keep) continue
             val length = candidate.length()
@@ -124,14 +168,28 @@ object PlaceOverlayCache {
         cacheFiles = count
     }
 
+    /** Snapshot timestamps under mutationLock instead of re-statting files during every comparison. */
+    internal fun oldestCacheFiles(files: List<File>): List<File> {
+        if (files.size < 2) return files
+        data class Candidate(val file: File, val modified: Long)
+        return files.map { Candidate(it, it.lastModified()) }
+            .sortedWith(compareBy<Candidate> { it.modified }.thenBy { it.file.name })
+            .map { it.file }
+    }
+
     internal fun trimForTest(context: Context, maxBytes: Long, maxFiles: Int) =
         synchronized(mutationLock) { trimCache(context, maxBytes = maxBytes, maxFiles = maxFiles) }
 
     private fun initialTrim(context: Context) {
         if (!initialTrimDone) {
+            clearRetiredCaches(context)
             trimCache(context)
             initialTrimDone = true
         }
+    }
+
+    private fun clearRetiredCaches(context: Context) {
+        for (name in retiredDirectories) File(context.applicationContext.filesDir, name).deleteRecursively()
     }
 
     private fun writeCacheFile(context: Context, target: File, json: JSONObject): Boolean {
@@ -166,9 +224,11 @@ object PlaceOverlayCache {
     }
 
     private fun forgetCacheFile(file: File) {
-        val bytes = if (file.isFile) file.length() else 0L
+        val existed = file.isFile
+        val bytes = if (existed) file.length() else 0L
         AtomicFile(file).delete()
-        if (bytes > 0L && initialTrimDone) {
+        // Count empty corrupt files too, and retain charges when deletion failed.
+        if (existed && !file.isFile && initialTrimDone) {
             cacheBytes = (cacheBytes - bytes).coerceAtLeast(0L)
             cacheFiles = (cacheFiles - 1).coerceAtLeast(0)
         }
@@ -327,6 +387,7 @@ object PlaceOverlayCache {
         initialTrimDone = false
         cacheBytes = 0L
         cacheFiles = 0
+        clearRetiredCaches(context)
         File(context.applicationContext.filesDir, DIRECTORY).deleteRecursively()
         File(context.applicationContext.filesDir, TOWN_DIRECTORY).deleteRecursively()
         File(context.applicationContext.filesDir, US_OFFICIAL_DIRECTORY).deleteRecursively()

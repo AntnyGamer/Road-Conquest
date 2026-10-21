@@ -1,0 +1,465 @@
+{
+  "baseline": "93ff4e694b1c07883f2caf4795a83f9f2dad8397",
+  "scope": "Three local-phone changes; no new provider/server quota saving",
+  "account_session": {
+    "explicit_temporary_input_slices": {
+      "baseline": 2,
+      "current": 0
+    },
+    "basis": "Source comparison: IV copyOfRange(0,12) and ciphertext copyOfRange(12,size) replaced by GCMParameterSpec/Cipher offset-length APIs.",
+    "copied_bytes_removed_per_load": "12 + ciphertext-and-tag size = decoded encrypted record size",
+    "internal_provider_allocations_not_measured": true,
+    "encryption_algorithm_iv_length_tag_length_key_alias_storage_format_and_clear_on_failure_unchanged": true,
+    "local_fixture": {
+      "sdk_versions": [
+        31,
+        37
+      ],
+      "tests": 4,
+      "failures": 0,
+      "valid_plaintexts": [
+        "empty",
+        "ASCII",
+        "Unicode with emoji/NUL",
+        "4096 characters"
+      ],
+      "invalid_cases_per_sdk": 32,
+      "cases": [
+        "changed IV",
+        "changed tag",
+        "wrong key",
+        "truncation lengths 0 through 28"
+      ],
+      "invalid_data_clears_session_and_revokes_verification_consent": true,
+      "key_store": "Fixture KeyStoreSpi supplies a fixed software AES key; actual AccountStore.load and real JVM AES-GCM execute. Conscrypt is disabled in this fixture to avoid JVM custom-provider verification conflicts.",
+      "android_hardware_keystore_not_exercised_by_local_fixture": true
+    },
+    "device_test": "Existing production Android Keystore round trip/fresh-IV test extended with Unicode and corrupted-tag fail-closed checks. APK builds locally; fresh head device execution is tracked by CI.",
+    "api_references": [
+      "https://developer.android.com/reference/javax/crypto/spec/GCMParameterSpec",
+      "https://developer.android.com/reference/javax/crypto/Cipher"
+    ]
+  },
+  "shop_balance": {
+    "actual_android_balance_cursors_for_not_yet_owned_item": {
+      "baseline": 2,
+      "current": 1
+    },
+    "already_owned_balance_cursors": {
+      "baseline": 0,
+      "current": 0
+    },
+    "both_sum_scans_remain": true,
+    "sql_values_returned_separately_and_subtraction_remains_kotlin_long": true,
+    "ownership_free_purchase_insufficient_funds_exact_balance_negative_balance_and_integer_overflow_preserved": true,
+    "sdk_versions": [
+      31,
+      37
+    ],
+    "tests": 4,
+    "failures": 0,
+    "baseline_regression_tests": {
+      "tests": 4,
+      "expected_cursor_failures": 2,
+      "arithmetic_tests_passed": 2
+    },
+    "limitation": "Counts statement/cursor openings, not rows read, physical I/O, speed, battery or server requests."
+  },
+  "gpx": {
+    "behavior": "Reuse one export-local StringBuilder(160); retain a point String and one buffered write per point.",
+    "real_export_bytes_match_original": true,
+    "privacy_endpoints_and_segment_breaks_match": true,
+    "allocation_fixture": {
+      "runtime": "JDK 21.0.10 with Robolectric SDKs 31 and 37",
+      "method": "ThreadMXBean calling-thread allocated bytes around actual full exportGpx on an actual snapshot SQLite database and ByteArrayOutputStream; 3 warmup exports then 3 measured exports per SDK.",
+      "same_fixture_before_after": true,
+      "allocations": [
+        {
+          "execution_index": 0,
+          "points": 10000,
+          "sha256": "5bf45ab27a5ae8b650bb1bcba50c67ae4d84e470c928ab3006258af653347f71",
+          "baseline_bytes": [
+            13770704,
+            13783864,
+            13770656
+          ],
+          "current_bytes": [
+            13530904,
+            13544064,
+            13530856
+          ],
+          "baseline_median_bytes": 13770704,
+          "current_median_bytes": 13530904,
+          "fewer_allocated_bytes": 239800
+        },
+        {
+          "execution_index": 1,
+          "points": 10000,
+          "sha256": "5bf45ab27a5ae8b650bb1bcba50c67ae4d84e470c928ab3006258af653347f71",
+          "baseline_bytes": [
+            13292784,
+            13292816,
+            13292752
+          ],
+          "current_bytes": [
+            13052984,
+            13053288,
+            13052952
+          ],
+          "baseline_median_bytes": 13292784,
+          "current_median_bytes": 13052984,
+          "fewer_allocated_bytes": 239800
+        }
+      ],
+      "limitations": "Includes SQL/formatting/output stream and final byte-array copies; excludes allocations on other threads and native heap. It is not Android peak memory, real-device speed, battery, file size or a quota improvement."
+    }
+  },
+  "focused_tests": [
+    {
+      "errors": 0,
+      "failures": 0,
+      "name": "com.roadconquest.app.account.AccountStoreDecryptionTest",
+      "tests": 4,
+      "skipped": 0
+    },
+    {
+      "errors": 0,
+      "failures": 0,
+      "name": "com.roadconquest.app.data.GpxResourceTest",
+      "tests": 4,
+      "skipped": 0
+    },
+    {
+      "errors": 0,
+      "failures": 0,
+      "name": "com.roadconquest.app.data.PurchaseBalanceResourceTest",
+      "tests": 4,
+      "skipped": 0
+    }
+  ],
+  "source_comparisons": {
+    "baseline": "93ff4e694b1c07883f2caf4795a83f9f2dad8397",
+    "checks": [
+      {
+        "path": "app/src/main/java/com/roadconquest/app/account/AccountStore.kt",
+        "scope": "Entire session storage except replacing two explicit input slices with documented range APIs; save, key, authentication, errors and consent unchanged",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/data/ProgressionRepository.kt",
+        "scope": "Entire progression implementation outside the two-total balance cursor; purchases/locks, arithmetic, rewards, baseline and municipal matching retained",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/data/TripHistoryRepository.kt",
+        "scope": "Entire trip implementation except local GPX point formatting; exact SQL/privacy, entitlement, validation, breaks, history checks, buffering, flush and replay retained",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/TrackingService.kt",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/data/TrackingRepository.kt",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/data/AppDatabase.kt",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/data/TravelDistance.kt",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/matching/KnownRoadReuse.kt",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/map/MapRenderer.kt",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/progression/PlaceResolver.kt",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/map/PlaceOverlay.kt",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/util/Prefs.kt",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/progression/Cosmetics.kt",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/data/WeeklyChallenges.kt",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/account/VerifiedDriving.kt",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "server/src",
+        "scope": "Complete server implementation/configuration",
+        "identical": true
+      },
+      {
+        "path": "server/maps",
+        "scope": "Complete server implementation/configuration",
+        "identical": true
+      }
+    ]
+  },
+  "original_driving_comparisons": {
+    "baseline": "137e398706c0caf591ac13c091634a3711fc15e2",
+    "checked_head": "93ff4e694b1c07883f2caf4795a83f9f2dad8397",
+    "checked_worktree": true,
+    "checks": [
+      {
+        "path": "matching/RoadGeometryValidator.kt",
+        "scope": "complete file",
+        "identical": true
+      },
+      {
+        "path": "matching/GeoapifyMatcher.kt",
+        "scope": "complete file",
+        "identical": true
+      },
+      {
+        "path": "matching/LocationIqMatcher.kt",
+        "scope": "complete file",
+        "identical": true
+      },
+      {
+        "path": "services/ProviderHealth.kt",
+        "scope": "complete file",
+        "identical": true
+      },
+      {
+        "path": "data/TravelDistance.kt",
+        "scope": "complete file",
+        "identical": true
+      },
+      {
+        "path": "data/AppDatabase.kt",
+        "scope": "complete file",
+        "identical": true
+      },
+      {
+        "path": "matching/KnownRoadReuse.kt",
+        "scope": "    /** Require a sustained",
+        "identical": true
+      },
+      {
+        "path": "TrackingService.kt",
+        "scope": "    private fun isUsableDrivingLocation(",
+        "identical": true
+      },
+      {
+        "path": "TrackingService.kt",
+        "scope": "    internal fun skippedFixCarriesGeometry(",
+        "identical": true
+      },
+      {
+        "path": "TrackingService.kt",
+        "scope": "    companion object {",
+        "identical": true
+      },
+      {
+        "path": "data/TrackingRepository.kt",
+        "scope": "    private fun drivingValues(",
+        "identical": true
+      },
+      {
+        "path": "data/TrackingRepository.kt",
+        "scope": "    fun insertLocation(",
+        "identical": true
+      },
+      {
+        "path": "data/TrackingRepository.kt",
+        "scope": "    private fun insertLocationInTransaction(",
+        "identical": true
+      },
+      {
+        "path": "data/TrackingRepository.kt",
+        "scope": "    fun findUnambiguousPreviouslyDrivenRoadNear(",
+        "identical": true
+      }
+    ],
+    "limit": "Source invariants and regression checks do not establish accuracy parity on every physical drive."
+  },
+  "preceding_copy_comparisons": {
+    "baseline": "491e4e59bb7fca1aea9edc64b675eb17af3953fb",
+    "checks": [
+      {
+        "path": "app/src/main/java/com/roadconquest/app/map/FogGrid.kt",
+        "scope": "All grid identity, cell coordinates and corner calculations outside copy-on-first-shift",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/map/DistinctGeoJson.kt",
+        "scope": "Entire publisher except refreshing an equal immutable payload reference",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/achievements/Achievements.kt",
+        "scope": "Every achievement definition, value calculation, filtering, prefs and reset rule outside guarded identical-value copy",
+        "identical": true
+      },
+      {
+        "path": "server/src/security.mjs",
+        "scope": "All password input, scrypt parameters, validation, random salts and constant-time comparison; only owned-result wrappers removed",
+        "identical": true
+      },
+      {
+        "path": "server/src/checkpoints.mjs",
+        "scope": "All checkpoint crypto parameters, key/AAD, fingerprint and continuity checks outside byte assembly",
+        "identical": true
+      },
+      {
+        "path": "server/src/notifications.mjs",
+        "scope": "All notification authorization, encryption, registration, selection, limits and delivery outside authenticated plaintext assembly",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/map/MapRenderer.kt",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/data/TrackingRepository.kt",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/data/AppDatabase.kt",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/TrackingService.kt",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/matching/KnownRoadReuse.kt",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "app/src/main/java/com/roadconquest/app/data/TravelDistance.kt",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "server/src/competition.mjs",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "server/src/scoring.mjs",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "server/src/cells.mjs",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "server/src/integrity.mjs",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "server/src/application.mjs",
+        "scope": "Complete file",
+        "identical": true
+      },
+      {
+        "path": "server/maps",
+        "scope": "Complete provider gateway, caps, reservations and deployment config",
+        "identical": true
+      }
+    ]
+  },
+  "full_android_validation": {
+    "tests": 1138,
+    "failures": 0,
+    "errors": 0,
+    "suites": 73,
+    "skipped": 0,
+    "apks": [
+      {
+        "bytes": 69125887,
+        "path": "app/build/outputs/apk/debug/app-debug.apk",
+        "last_write": "2026-10-19T23:00:48.3152648-04:00"
+      },
+      {
+        "bytes": 1173454,
+        "path": "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk",
+        "last_write": "2026-10-19T22:47:59.8897864-04:00"
+      }
+    ],
+    "build": "BUILD SUCCESSFUL in 12m 52s",
+    "lint": {
+      "errors": 0,
+      "warnings": 299
+    }
+  },
+  "server": {
+    "entire_implementation_and_gateway_unchanged": true,
+    "server_suite_not_repeated_this_pass": true,
+    "previous_local_tests_passed": 137
+  },
+  "prior_head_ci": {
+    "run": 39359376257,
+    "initial_android35_failure": "adb could not connect to TCP port 5554: Connection refused; emulator exited before instrumentation tests started",
+    "same_source_rerun_status": "passed",
+    "downloaded_reports": {
+      "startup": {
+        "launches": 4,
+        "status_ok": 4
+      },
+      "unit": {
+        "suites": 70,
+        "errors": 0,
+        "skipped": 0,
+        "failures": 0,
+        "tests": 1126
+      },
+      "native": {
+        "errors": 0,
+        "suites": 12,
+        "tests": 27,
+        "failures": 0,
+        "skipped": 0
+      },
+      "run": 39359376257,
+      "attempt": 2,
+      "conclusion": "success"
+    }
+  },
+  "caveats": [
+    "No production/provider traffic.",
+    "No deployment, version bump or release.",
+    "No whole-app speed, battery, physical-drive accuracy parity or DAU/driving-hours claim."
+  ]
+}

@@ -92,14 +92,20 @@ object ShopCatalog {
 }
 
 object Cosmetics {
-    fun carStyle(context: Context): CarStyle =
-        CarStyle.entries.firstOrNull { it.id == Prefs.carStyle(context) } ?: CarStyle.CLASSIC
+    fun carStyle(context: Context): CarStyle {
+        val saved = Prefs.carStyle(context)
+        return CarStyle.entries.firstOrNull { it.id == saved } ?: CarStyle.CLASSIC
+    }
 
-    fun carColor(context: Context): CarColor =
-        CarColor.entries.firstOrNull { it.id == Prefs.carColor(context) } ?: CarColor.BLUE
+    fun carColor(context: Context): CarColor {
+        val saved = Prefs.carColor(context)
+        return CarColor.entries.firstOrNull { it.id == saved } ?: CarColor.BLUE
+    }
 
-    fun roadColor(context: Context): RoadColor =
-        RoadColor.entries.firstOrNull { it.id == Prefs.roadColor(context) } ?: RoadColor.BLUE
+    fun roadColor(context: Context): RoadColor {
+        val saved = Prefs.roadColor(context)
+        return RoadColor.entries.firstOrNull { it.id == saved } ?: RoadColor.BLUE
+    }
 
     fun isEquipped(context: Context, item: ShopItem): Boolean = when (item.type) {
         CosmeticType.CAR_STYLE -> Prefs.carStyle(context) == item.value

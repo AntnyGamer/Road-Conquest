@@ -1,0 +1,989 @@
+{
+  "baseline_commit": "8df48c77e33804cd2e1033c17236f368c4d5bfe6",
+  "gateway_fixture": {
+    "runtime": "local Cloudflare workerd via Miniflare 5.20261012.1-beta",
+    "requests": 200,
+    "providers": 2,
+    "concurrent": true,
+    "before": {
+      "health_derivations": 200,
+      "client_signatures": 200,
+      "total_hmac_operations": 400,
+      "upstream_calls": 200,
+      "reservations": 200
+    },
+    "after": {
+      "health_derivations": 2,
+      "client_signatures": 200,
+      "total_hmac_operations": 202,
+      "upstream_calls": 200,
+      "reservations": 200
+    },
+    "limitations": "Synthetic requests with stable keys in one warm handler. Reservations and upstream are stubbed. No actual provider credits or production traffic. Counts are not whole-request CPU, latency or capacity. Cache retains at most two fixed identities and re-derives evicted/rotated keys."
+  },
+  "verified_fixture": {
+    "runtime": "isolated local PostgreSQL",
+    "case": "Valid moving GPS near a cell edge; no server-derived qualifying cells",
+    "statements_including_transaction_boundaries": {
+      "before": 10,
+      "after": 9
+    },
+    "exact_committed_retry_statements": {
+      "before": 1,
+      "after": 1
+    },
+    "limitations": "Excludes HTTP authentication and maintenance. Saves an empty insertion statement, not an inserted row. Nonempty qualifying sets, including revisits, retain their original insertion/conflict path. Verified scoring is optional and currently disabled in the Android build."
+  },
+  "validation": {
+    "node": "v24.19.0",
+    "server_tests": 118,
+    "failures": 0,
+    "skips": 0,
+    "gateway_wrangler_dry_run": "passed with Wrangler 4.151.1"
+  },
+  "production_changes": false,
+  "budget_fixture": {
+    "baseline_commit": "9086a6cbfa06bbea816054f398be1d90ef874a95",
+    "runtime": "local Cloudflare workerd via Miniflare 5.20261012.1-beta",
+    "client_buckets_per_provider": 200,
+    "counter_cache_entries": 512,
+    "permit_cache_entries": 64,
+    "before": {
+      "/primary": {
+        "matches": 2400,
+        "firstDay": {
+          "reads": 44800,
+          "writes": 17212,
+          "statements": 14409,
+          "bytes": 483328,
+          "elapsedMs": 2649
+        },
+        "rejection": {
+          "status": 429,
+          "body": {
+            "error": "Daily map allowance exhausted",
+            "code": "budget_global"
+          },
+          "retryAfter": "39600"
+        },
+        "stateDigest": "f4ea64feb65f61fd7a2d361c58f402b3f8bf6e627d39a9cfb03c98ae0bf003d2",
+        "afterCleanup": {
+          "reads": 2826,
+          "writes": 2818,
+          "statements": 14
+        },
+        "rollbackVerified": true,
+        "restartVerified": true,
+        "finalDigest": "a15bac05e0c10076ccd9c66c28fd028fbb5e60e5cf7987e98301c0a2f926f1c6"
+      },
+      "/backup": {
+        "matches": 4000,
+        "firstDay": {
+          "reads": 75200,
+          "writes": 28412,
+          "statements": 24009,
+          "bytes": 737280,
+          "elapsedMs": 4405
+        },
+        "rejection": {
+          "status": 429,
+          "body": {
+            "error": "Daily map allowance exhausted",
+            "code": "budget_global"
+          },
+          "retryAfter": "37200"
+        },
+        "stateDigest": "70def2e0e2c0fad3613cba82bc0bb6c2976d86cd2b850a8f19f8e1c2a4b6eb27",
+        "afterCleanup": {
+          "reads": 4426,
+          "writes": 4418,
+          "statements": 14
+        },
+        "rollbackVerified": true,
+        "restartVerified": true,
+        "finalDigest": "d537b5b925d687ef49dd8a920b0dedae5fea91ce22bd89407ee912a5c8ac54c2"
+      },
+      "/primary/repeat": {
+        "matches": 600,
+        "firstDay": {
+          "reads": 11396,
+          "writes": 4214,
+          "statements": 3609,
+          "bytes": 110592,
+          "elapsedMs": 662
+        },
+        "rejection": {
+          "status": 429,
+          "body": {
+            "error": "Daily client map allowance exhausted",
+            "code": "budget_client"
+          },
+          "retryAfter": "42300"
+        },
+        "stateDigest": "409d1fae52127305fa471d951b3a1a00c56e8528341a354328c4f78e301e37b5",
+        "afterCleanup": {
+          "reads": 628,
+          "writes": 620,
+          "statements": 14
+        },
+        "rollbackVerified": true,
+        "restartVerified": true,
+        "finalDigest": "db668ac72af55b2ec9136f682aea9cc8898ec4ce4828201f33e60bddd7b78b36"
+      },
+      "/backup/repeat": {
+        "matches": 1000,
+        "firstDay": {
+          "reads": 18996,
+          "writes": 7014,
+          "statements": 6009,
+          "bytes": 180224,
+          "elapsedMs": 1127
+        },
+        "rejection": {
+          "status": 429,
+          "body": {
+            "error": "Daily client map allowance exhausted",
+            "code": "budget_client"
+          },
+          "retryAfter": "41700"
+        },
+        "stateDigest": "dccdb6c8270ac55cf8d9a91afc16588900a024162f525f059e918f21057c7e76",
+        "afterCleanup": {
+          "reads": 1028,
+          "writes": 1020,
+          "statements": 14
+        },
+        "rollbackVerified": true,
+        "restartVerified": true,
+        "finalDigest": "0633dc9faab54dc9fcb3540d8d244309240d39af86293847ee2631cd73c66432"
+      }
+    },
+    "after": {
+      "/primary": {
+        "matches": 2400,
+        "firstDay": {
+          "reads": 25607,
+          "writes": 17212,
+          "statements": 12009,
+          "bytes": 483328,
+          "elapsedMs": 2659
+        },
+        "rejection": {
+          "status": 429,
+          "body": {
+            "error": "Daily map allowance exhausted",
+            "code": "budget_global"
+          },
+          "retryAfter": "39600"
+        },
+        "stateDigest": "f4ea64feb65f61fd7a2d361c58f402b3f8bf6e627d39a9cfb03c98ae0bf003d2",
+        "afterCleanup": {
+          "reads": 2818,
+          "writes": 2818,
+          "statements": 13
+        },
+        "rollbackVerified": true,
+        "restartVerified": true,
+        "finalDigest": "a15bac05e0c10076ccd9c66c28fd028fbb5e60e5cf7987e98301c0a2f926f1c6"
+      },
+      "/backup": {
+        "matches": 4000,
+        "firstDay": {
+          "reads": 43207,
+          "writes": 28412,
+          "statements": 20009,
+          "bytes": 737280,
+          "elapsedMs": 4382
+        },
+        "rejection": {
+          "status": 429,
+          "body": {
+            "error": "Daily map allowance exhausted",
+            "code": "budget_global"
+          },
+          "retryAfter": "37200"
+        },
+        "stateDigest": "70def2e0e2c0fad3613cba82bc0bb6c2976d86cd2b850a8f19f8e1c2a4b6eb27",
+        "afterCleanup": {
+          "reads": 4418,
+          "writes": 4418,
+          "statements": 13
+        },
+        "rollbackVerified": true,
+        "restartVerified": true,
+        "finalDigest": "d537b5b925d687ef49dd8a920b0dedae5fea91ce22bd89407ee912a5c8ac54c2"
+      },
+      "/primary/repeat": {
+        "matches": 600,
+        "firstDay": {
+          "reads": 3608,
+          "writes": 4214,
+          "statements": 2410,
+          "bytes": 110592,
+          "elapsedMs": 653
+        },
+        "rejection": {
+          "status": 429,
+          "body": {
+            "error": "Daily client map allowance exhausted",
+            "code": "budget_client"
+          },
+          "retryAfter": "42300"
+        },
+        "stateDigest": "409d1fae52127305fa471d951b3a1a00c56e8528341a354328c4f78e301e37b5",
+        "afterCleanup": {
+          "reads": 615,
+          "writes": 620,
+          "statements": 12
+        },
+        "rollbackVerified": true,
+        "restartVerified": true,
+        "finalDigest": "db668ac72af55b2ec9136f682aea9cc8898ec4ce4828201f33e60bddd7b78b36"
+      },
+      "/backup/repeat": {
+        "matches": 1000,
+        "firstDay": {
+          "reads": 6008,
+          "writes": 7014,
+          "statements": 4010,
+          "bytes": 180224,
+          "elapsedMs": 1040
+        },
+        "rejection": {
+          "status": 429,
+          "body": {
+            "error": "Daily client map allowance exhausted",
+            "code": "budget_client"
+          },
+          "retryAfter": "41700"
+        },
+        "stateDigest": "dccdb6c8270ac55cf8d9a91afc16588900a024162f525f059e918f21057c7e76",
+        "afterCleanup": {
+          "reads": 1015,
+          "writes": 1020,
+          "statements": 12
+        },
+        "rollbackVerified": true,
+        "restartVerified": true,
+        "finalDigest": "0633dc9faab54dc9fcb3540d8d244309240d39af86293847ee2631cd73c66432"
+      }
+    },
+    "first_day_totals": {
+      "before": {
+        "rows_read": 120000,
+        "sql_executions": 38418,
+        "rows_written": 45624
+      },
+      "after": {
+        "rows_read": 68814,
+        "sql_executions": 32018,
+        "rows_written": 45624
+      }
+    },
+    "identical_state_and_quota_responses": true,
+    "real_sqlite_rollback_and_restart_checks": true,
+    "limitations": "Synthetic budget operations; no provider or production traffic. Runtime read counts are not whole-server CPU, billed savings or a matching-capacity increase. Warm bounded metadata caches; cold/evicted state reloads from SQLite."
+  },
+  "fallback_window_fixture": {
+    "baseline_commit": "cb16891",
+    "runtime": "Android tracking service and real LocationIQ client/parser via Robolectric SDK 31 and 37; local MockWebServer",
+    "target_selection": "Preserve existing provider prefix if it contains any eligible pending ID; otherwise select one contiguous provider-sized window at the first eligible ID, retaining up to three genuine approach fixes.",
+    "successful_middle_gap": {
+      "saved_fixes": 100,
+      "previously_matched": 98,
+      "pending_fixes": 2,
+      "primary_attempts": 1,
+      "backup_http_requests": 1,
+      "pending_after_valid_response": 0,
+      "saved_fixes_after": 100,
+      "backup_point_limit": 25,
+      "remote_gate_unchanged": true
+    },
+    "failed_middle_gap": {
+      "saved_fixes": 100,
+      "pending_fixes": 35,
+      "submitted_points": 25,
+      "submitted_context": 3,
+      "submitted_pending": 22,
+      "unsent_pending_still_eligible": 13,
+      "new_roads": 0,
+      "saved_fixes_after": 100
+    },
+    "cache_checks": [
+      "Complete exact answer resolves shifted pending fixes without another HTTP call or moving the network timestamp",
+      "Negative cached answer cannot bypass the network gate or defer pending fixes",
+      "Deferred unmatched context is not treated as eligible work",
+      "A provider prefix already containing eligible work remains unchanged"
+    ],
+    "limitations": "Synthetic GPS and mock provider responses. Measures useful request selection, not a fleet-wide percentage or physical-drive accuracy. No provider credits, production traffic, quota or validation-rule changes.",
+    "primary_outage": "Stubbed unavailable primary; backup responses use local MockWebServer",
+    "validation": {
+      "focused_android_tests": 225,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "sdk": [
+        31,
+        37
+      ],
+      "lint": "passed",
+      "debug_build": "passed"
+    }
+  },
+  "cancellation_fixture": {
+    "baseline_commit": "3cd438782e553b2aef4a13bba28c909484a6c6d8",
+    "runtime": "local Cloudflare workerd via Miniflare 5.20261012.1-beta",
+    "before": {
+      "/primary": {
+        "requests": 100,
+        "abandoned": {
+          "budget": 200,
+          "upstream": 0,
+          "config": 1,
+          "statements": 805,
+          "rowsRead": 1401,
+          "rowsWritten": 907,
+          "usedUnits": 0,
+          "attempts": 100,
+          "responseCodes": {
+            "request_cancelled": 100
+          }
+        },
+        "nextActive": {
+          "status": 200,
+          "budgetCalls": 2,
+          "upstreamCalls": 1,
+          "rowsRead": 10,
+          "rowsWritten": 7,
+          "statements": 6,
+          "usedUnits": 4,
+          "attempts": 101
+        }
+      },
+      "/backup": {
+        "requests": 100,
+        "abandoned": {
+          "budget": 200,
+          "upstream": 0,
+          "config": 1,
+          "statements": 805,
+          "rowsRead": 1401,
+          "rowsWritten": 907,
+          "usedUnits": 0,
+          "attempts": 100,
+          "responseCodes": {
+            "request_cancelled": 100
+          }
+        },
+        "nextActive": {
+          "status": 200,
+          "budgetCalls": 2,
+          "upstreamCalls": 1,
+          "rowsRead": 10,
+          "rowsWritten": 7,
+          "statements": 6,
+          "usedUnits": 1,
+          "attempts": 101
+        }
+      },
+      "/tile": {
+        "requests": 100,
+        "abandoned": {
+          "budget": 100,
+          "upstream": 0,
+          "config": 1,
+          "statements": 106,
+          "rowsRead": 307,
+          "rowsWritten": 305,
+          "usedUnits": 100,
+          "attempts": 0,
+          "responseCodes": {
+            "request_cancelled": 100
+          }
+        },
+        "nextActive": {
+          "status": 200,
+          "budgetCalls": 1,
+          "upstreamCalls": 1,
+          "rowsRead": 3,
+          "rowsWritten": 3,
+          "statements": 1,
+          "usedUnits": 101,
+          "attempts": 0
+        }
+      }
+    },
+    "after": {
+      "/primary": {
+        "requests": 100,
+        "abandoned": {
+          "budget": 0,
+          "upstream": 0,
+          "config": 0,
+          "statements": 0,
+          "rowsRead": 0,
+          "rowsWritten": 0,
+          "usedUnits": 0,
+          "attempts": 0,
+          "responseCodes": {
+            "request_cancelled": 100
+          }
+        },
+        "nextActive": {
+          "status": 200,
+          "budgetCalls": 2,
+          "upstreamCalls": 1,
+          "rowsRead": 11,
+          "rowsWritten": 14,
+          "statements": 11,
+          "usedUnits": 4,
+          "attempts": 1
+        }
+      },
+      "/backup": {
+        "requests": 100,
+        "abandoned": {
+          "budget": 0,
+          "upstream": 0,
+          "config": 0,
+          "statements": 0,
+          "rowsRead": 0,
+          "rowsWritten": 0,
+          "usedUnits": 0,
+          "attempts": 0,
+          "responseCodes": {
+            "request_cancelled": 100
+          }
+        },
+        "nextActive": {
+          "status": 200,
+          "budgetCalls": 2,
+          "upstreamCalls": 1,
+          "rowsRead": 11,
+          "rowsWritten": 14,
+          "statements": 11,
+          "usedUnits": 1,
+          "attempts": 1
+        }
+      },
+      "/tile": {
+        "requests": 100,
+        "abandoned": {
+          "budget": 0,
+          "upstream": 0,
+          "config": 0,
+          "statements": 0,
+          "rowsRead": 0,
+          "rowsWritten": 0,
+          "usedUnits": 0,
+          "attempts": 0,
+          "responseCodes": {
+            "request_cancelled": 100
+          }
+        },
+        "nextActive": {
+          "status": 200,
+          "budgetCalls": 1,
+          "upstreamCalls": 1,
+          "rowsRead": 10,
+          "rowsWritten": 8,
+          "statements": 7,
+          "usedUnits": 1,
+          "attempts": 0
+        }
+      }
+    },
+    "combined_abandoned": {
+      "requests": 300,
+      "internal_budget_requests": {
+        "before": 500,
+        "after": 0
+      },
+      "sqlite_rows_written": {
+        "before": 2119,
+        "after": 0
+      },
+      "upstream_requests": {
+        "before": 0,
+        "after": 0
+      }
+    },
+    "validation": {
+      "new_regressions": 8,
+      "full_server_tests": 118,
+      "failures": 0,
+      "skips": 0,
+      "wrangler_dry_run": "passed"
+    },
+    "limitations": "100 synthetic already-aborted requests per isolated case. No real provider or production traffic. Savings apply only before reservation starts; this is not a fleet-wide estimate. Existing post-reservation cancellation/refund and conservative dispatch accounting remain.",
+    "totals_including_active_followups": {
+      "requests": 303,
+      "internal_budget_requests": {
+        "before": 505,
+        "after": 5
+      },
+      "sqlite_rows_written": {
+        "before": 2136,
+        "after": 36
+      },
+      "note": "Includes daily maintenance performed on the first active request when no abandoned request has started accounting."
+    }
+  },
+  "global_denial_fixture": {
+    "baseline_commit": "510ac8694e2d9e8e37e9e4066c4d928f828e0cda",
+    "runtime": "local Cloudflare workerd via Miniflare 5.20261012.1-beta",
+    "case": "Global allowance filled across 300 clients; 100 evicted previous clients and 100 new clients rejected per provider/tile case",
+    "cases": {
+      "primary": {
+        "setup_reservations": 300,
+        "denied_requests": 200,
+        "before": {
+          "statements": 400,
+          "counterQueries": 200,
+          "permitQueries": 200,
+          "rowsRead": 800,
+          "rowsWritten": 0
+        },
+        "after": {
+          "statements": 200,
+          "counterQueries": 0,
+          "permitQueries": 200,
+          "rowsRead": 0,
+          "rowsWritten": 0
+        },
+        "identical_responses_including_headers": 200,
+        "unchanged_durable_state_on_denial": true,
+        "identical_initial_and_final_durable_state": true,
+        "cold_restart_counter_queries": 1,
+        "recovery_status": 200,
+        "next_utc_day_status": 200
+      },
+      "backup": {
+        "setup_reservations": 300,
+        "denied_requests": 200,
+        "before": {
+          "statements": 400,
+          "counterQueries": 200,
+          "permitQueries": 200,
+          "rowsRead": 800,
+          "rowsWritten": 0
+        },
+        "after": {
+          "statements": 200,
+          "counterQueries": 0,
+          "permitQueries": 200,
+          "rowsRead": 0,
+          "rowsWritten": 0
+        },
+        "identical_responses_including_headers": 200,
+        "unchanged_durable_state_on_denial": true,
+        "identical_initial_and_final_durable_state": true,
+        "cold_restart_counter_queries": 1,
+        "recovery_status": 200,
+        "next_utc_day_status": 200
+      },
+      "tile": {
+        "setup_reservations": 300,
+        "denied_requests": 200,
+        "before": {
+          "statements": 200,
+          "counterQueries": 200,
+          "permitQueries": 0,
+          "rowsRead": 700,
+          "rowsWritten": 0
+        },
+        "after": {
+          "statements": 0,
+          "counterQueries": 0,
+          "permitQueries": 0,
+          "rowsRead": 0,
+          "rowsWritten": 0
+        },
+        "identical_responses_including_headers": 200,
+        "unchanged_durable_state_on_denial": true,
+        "identical_initial_and_final_durable_state": true,
+        "cold_restart_counter_queries": 1,
+        "recovery_status": 200,
+        "next_utc_day_status": 200
+      }
+    },
+    "rejection_only_totals": {
+      "denied_requests": 600,
+      "caller_counter_queries": {
+        "before": 600,
+        "after": 0
+      },
+      "all_sql_executions": {
+        "before": 1000,
+        "after": 400
+      },
+      "sqlite_rows_read": {
+        "before": 2300,
+        "after": 0
+      },
+      "sqlite_rows_written": {
+        "before": 0,
+        "after": 0
+      }
+    },
+    "validation": {
+      "new_regressions": 3,
+      "full_server_tests": 121,
+      "failures": 0,
+      "skips": 0,
+      "wrangler_dry_run": "passed",
+      "prior_combined_ci": {
+        "commit": "510ac8694e2d9e8e37e9e4066c4d928f828e0cda",
+        "url": "https://github.com/AntnyGamer/RoadConquest-Beta/actions/runs/39200565032",
+        "conclusion": "success",
+        "android_unit_tests": 1019,
+        "android_failures": 0,
+        "android_errors": 0,
+        "android_skips": 0,
+        "native_map_android": [
+          12,
+          15,
+          17
+        ],
+        "release_startup_android": [
+          12,
+          17
+        ]
+      }
+    },
+    "limitations": "Synthetic exhausted-budget requests: 100 evicted previous clients plus 100 new clients per case after 300 allowed reservations. No upstream/provider/production traffic. Measures rejection-accounting SQL only, not normal-drive savings, total CPU, billing or provider capacity."
+  },
+  "known_highway_fixture": {
+    "baseline_commit": "3443ff4c03505d946a36b307e822e16a117c8c1e",
+    "runtime": "Real Android tracking service and SQLite repository through Robolectric SDK 31 and 37; online matcher stubbed",
+    "retained_fixes": 100,
+    "original_intermediate_fixes": 99,
+    "speed_mps": 30,
+    "original_raw_spacing_ms": 3000,
+    "retained_spacing_ms": 6000,
+    "retained_only_reference": {
+      "online_matcher_invocations": 1
+    },
+    "corroborated_evidence": {
+      "online_matcher_invocations": 0,
+      "resolved_retained_ids": 100,
+      "network_clock_updated": false
+    },
+    "unchanged_gps_records": 199,
+    "unchanged_existing_roads": 1,
+    "acceptance": "Existing five-actual-fix, 25-metre span, 5-metre accuracy, speed, heading, 160-metre step and road-ambiguity checks",
+    "provenance": "Capture-time association to exact preceding retained ID, bounded to 512 ID pairs per repository; no timestamp-only trust after restart or eviction",
+    "cost": "One small local anchor lookup per compressed-out fix and a bounded metadata map; no database schema or network cadence change",
+    "validation": {
+      "focused_android_tests": 281,
+      "new_sdk_expanded_cases": 24,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "lint": "passed",
+      "debug_build": "passed"
+    },
+    "planning": {
+      "planning_only": true,
+      "configured_caps": {
+        "primary_credits": 2400,
+        "backup_calls": 4000
+      },
+      "assumptions": {
+        "retained_fixes_per_hour": 900,
+        "fragment_hours": 1.25,
+        "context_slots": 3,
+        "budget_fraction": 0.8,
+        "primary_credits_per_online_hour": 10.4,
+        "backup_calls_per_online_hour": 69.6,
+        "tile_cache_misses": 0,
+        "repair_credits": 0,
+        "repair_backup_calls": 0
+      },
+      "selected": {
+        "local_paid_work_avoided": 0,
+        "driving_hours_per_day": 230.5923961096375,
+        "driving_users_per_day": 92,
+        "hours_per_user": 2.5
+      },
+      "scenarios": [
+        {
+          "local_paid_work_avoided": 0,
+          "driving_hours_per_day": 230.5923961096375,
+          "driving_users_per_day": 92,
+          "hours_per_user": 2.5
+        },
+        {
+          "local_paid_work_avoided": 0.25,
+          "driving_hours_per_day": 307.4565281461833,
+          "driving_users_per_day": 122,
+          "hours_per_user": 2.5
+        },
+        {
+          "local_paid_work_avoided": 0.5,
+          "driving_hours_per_day": 461.184792219275,
+          "driving_users_per_day": 184,
+          "hours_per_user": 2.5
+        },
+        {
+          "local_paid_work_avoided": 0.55,
+          "driving_hours_per_day": 512.4275469103056,
+          "driving_users_per_day": 204,
+          "hours_per_user": 2.5
+        },
+        {
+          "local_paid_work_avoided": 0.6,
+          "driving_hours_per_day": 576.4809902740936,
+          "driving_users_per_day": 230,
+          "hours_per_user": 2.5
+        }
+      ],
+      "limitations": "Matching-only planning model. Local share means whole paid work actually avoided, not familiar miles. Provider health, quality, trip shapes, repairs, bursts, shared IP caps and other service quotas can reduce supported usage. No production reuse share has been measured."
+    },
+    "limitations": "Synthetic accurate highway; online response stubbed. No physical drive, actual provider credit usage or fleet reuse-rate measurement. Local avoidance scenarios are conditional matching-only planning estimates, not whole-application DAU capacity.",
+    "official_sources_checked": "2026-10-19",
+    "sources": [
+      "https://www.geoapify.com/pricing-details/",
+      "https://locationiq.com/pricing",
+      "https://docs.locationiq.com/docs/routing-api",
+      "https://developers.cloudflare.com/workers/cache/",
+      "https://developers.cloudflare.com/durable-objects/platform/pricing/",
+      "https://developer.android.com/google/play/integrity/setup#increase-daily"
+    ]
+  },
+  "known_road_singleton_fixture": {
+    "baseline_commit": "b52fa5629611f75ea42245423702cb985c127117",
+    "runtime": "Real Android tracking service and SQLite repository via Robolectric SDK 31 and 37; online matcher stubbed",
+    "initial_matched_approach_fixes": 4,
+    "offered_saved_fixes": 100,
+    "before": {
+      "online_matcher_invocations": 2
+    },
+    "after": {
+      "online_matcher_invocations": 0,
+      "network_clock_updated": false
+    },
+    "retained_gps_records": 104,
+    "existing_roads": 1,
+    "new_context": "Only an unresolved four-fix window may read one immediately preceding matched record; the unchanged five-fix rule must accept it",
+    "unchanged_online_request_on_failed_proof": true,
+    "new_metadata_cache": false,
+    "new_schema": false,
+    "source_audit": {
+      "baseline": "137e398706c0caf591ac13c091634a3711fc15e2",
+      "checked_head": "b52fa5629611f75ea42245423702cb985c127117",
+      "checks": [
+        {
+          "path": "matching/RoadGeometryValidator.kt",
+          "scope": "complete file",
+          "identical": true
+        },
+        {
+          "path": "matching/GeoapifyMatcher.kt",
+          "scope": "complete file",
+          "identical": true
+        },
+        {
+          "path": "matching/LocationIqMatcher.kt",
+          "scope": "complete file",
+          "identical": true
+        },
+        {
+          "path": "services/ProviderHealth.kt",
+          "scope": "complete file",
+          "identical": true
+        },
+        {
+          "path": "matching/KnownRoadReuse.kt",
+          "scope": "/** Require a sustained",
+          "identical": true
+        },
+        {
+          "path": "TrackingService.kt",
+          "scope": "private fun isUsableDrivingLocation(",
+          "identical": true
+        },
+        {
+          "path": "TrackingService.kt",
+          "scope": "internal fun skippedFixCarriesGeometry(",
+          "identical": true
+        },
+        {
+          "path": "data/TrackingRepository.kt",
+          "scope": "private fun drivingValues(",
+          "identical": true
+        },
+        {
+          "path": "data/TrackingRepository.kt",
+          "scope": "fun insertLocation(",
+          "identical": true
+        },
+        {
+          "path": "data/TrackingRepository.kt",
+          "scope": "private fun insertLocationInTransaction(",
+          "identical": true
+        },
+        {
+          "path": "data/TrackingRepository.kt",
+          "scope": "fun findUnambiguousPreviouslyDrivenRoadNear(",
+          "identical": true
+        },
+        {
+          "path": "TrackingService.kt",
+          "scope": "companion object {",
+          "identical": true
+        },
+        {
+          "path": "data/TravelDistance.kt",
+          "scope": "complete file",
+          "identical": true
+        },
+        {
+          "path": "data/AppDatabase.kt",
+          "scope": "complete file",
+          "identical": true
+        }
+      ],
+      "limit": "Source invariants and regression checks do not establish accuracy parity on every physical drive."
+    },
+    "validation": {
+      "focused_android_tests": 411,
+      "suites": 13,
+      "new_sdk_expanded_cases": 10,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "lint": "passed",
+      "debug_build": "passed",
+      "previous_highway_ci": {
+        "url": "https://github.com/AntnyGamer/RoadConquest-Beta/actions/runs/39265811849",
+        "android_unit_tests": 1043,
+        "failures": 0,
+        "errors": 0,
+        "skips": 0
+      }
+    },
+    "limitations": "Synthetic known-road sequence and stubbed online reply. Measures targeted online-request avoidance; no measured fleet reuse share, additional daily-hour multiplier or physical-drive accuracy-parity claim."
+  },
+  "eligible_cached_matching_fixture": {
+    "baseline_commit": "3e5d32b175669e9ab148310cd1cda9261010909e",
+    "runtime": "Real Geoapify/LocationIQ HTTP clients, router, parsers, tracking service and SQLite repository via Robolectric SDK 31 and 37; MockWebServer provider responses",
+    "input_fixes": 3,
+    "eligible_fixes": 2,
+    "unresolved_deferred_context_fixes": 1,
+    "prepared_primary_cache_http_requests": 1,
+    "before": {
+      "extra_backup_http_requests": 1,
+      "service_eligible_fixes_completed_during_network_gates": 0
+    },
+    "after": {
+      "extra_backup_http_requests": 0,
+      "service_eligible_fixes_completed_during_network_gates": 2,
+      "deferred_context_completed": false,
+      "original_deferral_preserved": true,
+      "gps_records_preserved": true,
+      "distance_preserved": true,
+      "network_clock_updated": false
+    },
+    "unchanged": [
+      "provider payload and slice",
+      "exact cache key and expiry",
+      "parser and geometric validation",
+      "accepted road and point confidence thresholds",
+      "provider precedence",
+      "negative-cache and incomplete-eligible gates",
+      "GPS subscriptions, capture, retention and distance",
+      "server budgets and accounting"
+    ],
+    "new_cache_or_query": false,
+    "source_audit": {
+      "baseline": "137e398706c0caf591ac13c091634a3711fc15e2",
+      "checked_head": "3e5d32b175669e9ab148310cd1cda9261010909e",
+      "checked_worktree": true,
+      "checks": [
+        {
+          "path": "matching/RoadGeometryValidator.kt",
+          "scope": "complete file",
+          "identical": true
+        },
+        {
+          "path": "matching/GeoapifyMatcher.kt",
+          "scope": "complete file",
+          "identical": true
+        },
+        {
+          "path": "matching/LocationIqMatcher.kt",
+          "scope": "complete file",
+          "identical": true
+        },
+        {
+          "path": "services/ProviderHealth.kt",
+          "scope": "complete file",
+          "identical": true
+        },
+        {
+          "path": "data/TravelDistance.kt",
+          "scope": "complete file",
+          "identical": true
+        },
+        {
+          "path": "data/AppDatabase.kt",
+          "scope": "complete file",
+          "identical": true
+        },
+        {
+          "path": "matching/KnownRoadReuse.kt",
+          "scope": "    /** Require a sustained",
+          "identical": true
+        },
+        {
+          "path": "TrackingService.kt",
+          "scope": "    private fun isUsableDrivingLocation(",
+          "identical": true
+        },
+        {
+          "path": "TrackingService.kt",
+          "scope": "    internal fun skippedFixCarriesGeometry(",
+          "identical": true
+        },
+        {
+          "path": "TrackingService.kt",
+          "scope": "    companion object {",
+          "identical": true
+        },
+        {
+          "path": "data/TrackingRepository.kt",
+          "scope": "    private fun drivingValues(",
+          "identical": true
+        },
+        {
+          "path": "data/TrackingRepository.kt",
+          "scope": "    fun insertLocation(",
+          "identical": true
+        },
+        {
+          "path": "data/TrackingRepository.kt",
+          "scope": "    private fun insertLocationInTransaction(",
+          "identical": true
+        },
+        {
+          "path": "data/TrackingRepository.kt",
+          "scope": "    fun findUnambiguousPreviouslyDrivenRoadNear(",
+          "identical": true
+        }
+      ],
+      "limit": "Source invariants and regression checks do not establish accuracy parity on every physical drive."
+    },
+    "validation": {
+      "focused_android_tests": 423,
+      "suites": 14,
+      "new_sdk_expanded_cases": 12,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "lint": "passed",
+      "debug_build": "passed"
+    },
+    "limitations": "Targeted synthetic exact-cache case, including already-paid cache preparation. No provider credits or production traffic used. Cache-case fleet frequency is unmeasured; no additional daily-hour/driver multiplier or physical-drive accuracy-parity claim."
+  }
+}

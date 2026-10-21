@@ -3,7 +3,7 @@ package com.roadconquest.app.map
 import com.roadconquest.app.data.PlaceDiscovery
 import com.roadconquest.app.data.PlaceKind
 import com.roadconquest.app.services.ProviderHealth
-import com.roadconquest.app.services.readBounded
+import com.roadconquest.app.services.readBoundedUtf8
 import org.json.JSONObject
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -32,8 +32,11 @@ class GeoBoundariesClient(private val loadJson: (String, Int) -> JSONObject = ::
                 val download = metadata.getString("simplifiedGeometryGeoJSON")
                 require(validDownload(download, iso3, level))
                 loadJson(download, 4 * 1024 * 1024).also {
-                    if (datasets.size >= 2) datasets.remove(datasets.keys.first())
+                    // Refreshing an existing key must not evict the other still-valid
+                    // dataset. Keep the same two-entry bound and original expiry.
+                    datasets.remove(key)
                     datasets[key] = System.currentTimeMillis() to it
+                    if (datasets.size > 2) datasets.remove(datasets.keys.first())
                 }
             }
             parse(place, data, requireContainment)
@@ -88,8 +91,8 @@ class GeoBoundariesClient(private val loadJson: (String, Int) -> JSONObject = ::
                         url = next.toString()
                     } else {
                         if (connection.responseCode !in 200..299) throw IOException("Boundary service unavailable")
-                        val bytes = connection.inputStream.use { readBounded(it, limit) }
-                        return JSONObject(bytes.toString(Charsets.UTF_8))
+                        val body = connection.inputStream.use { readBoundedUtf8(it, limit) }
+                        return JSONObject(body)
                     }
                 } finally { connection.disconnect() }
             }

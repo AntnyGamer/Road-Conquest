@@ -1,10 +1,63 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createHash, generateKeyPairSync, randomBytes, randomUUID } from 'node:crypto';
+import { createCipheriv, createHmac, createHash, generateKeyPairSync, randomBytes, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import pg from 'pg';
 import { createFcmSender, createNotifications } from '../src/notifications.mjs';
 import { createFriends } from '../src/friends.mjs';
+
+test('notification decryption authenticates old ciphertext without copying its 100-byte plaintext', async () => {
+  const pepper = 'local-notification-buffer-test-pepper';
+  const key = createHmac('sha256', pepper).update('roadconquest-fcm-token-encryption-v1').digest();
+  const rows = ['first-test-fid', 'second-test-fid', 'corrupt-test-fid'].map(token => {
+    const iv = randomBytes(12);
+    const cipher = createCipheriv('aes-256-gcm', key, iv);
+    cipher.setAAD(Buffer.from('roadconquest-fcm-token-v1'));
+    return { encrypted_token: Buffer.concat([iv, cipher.update(token.padEnd(100, '\0'), 'utf8'), cipher.final(), cipher.getAuthTag()]), binding: token };
+  });
+  rows[2].encrypted_token[rows[2].encrypted_token.length - 1] ^= 1;
+  const sent = [];
+  const notifications = createNotifications({ async query() { return { rows }; } }, {
+    pepper, sender: async (token, binding) => { sent.push({ token, binding }); return 'sent'; }
+  });
+  const concatenate = Buffer.concat;
+  let plaintextCopies = 0;
+  Buffer.concat = function (parts, ...args) {
+    if (parts.length === 2 && parts[0].length === 100 && parts[1].length === 0) plaintextCopies++;
+    return concatenate.call(this, parts, ...args);
+  };
+  try { await notifications.friendRequest('fixture-user'); }
+  finally { Buffer.concat = concatenate; }
+  assert.deepEqual(sent, ['first-test-fid', 'second-test-fid'].map(token => ({ token, binding: token })));
+  assert.equal(plaintextCopies, 0);
+});
+
+test('rejected notification OAuth releases its unread body without delaying failure or caching it', async () => {
+  const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const account = { project_id: 'roadconquest-9f0eb', client_email: 'cleanup@roadconquest-9f0eb.iam.gserviceaccount.com',
+    private_key: privateKey.export({ type: 'pkcs8', format: 'pem' }) };
+  let auth = 0, cancelled = 0, sent = 0;
+  const sender = createFcmSender(JSON.stringify(account), async url => {
+    if (url === 'https://oauth2.googleapis.com/token') {
+      auth++;
+      if (auth <= 2) return { ok: false, body: { cancel() {
+        cancelled++;
+        return auth === 1 ? Promise.reject(new Error('cleanup failed')) : new Promise(() => {});
+      } } };
+      return Response.json({ access_token: 'recovered-token', expires_in: 3600 });
+    }
+    sent++;
+    return Response.json({ name: 'test-message' });
+  });
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    await assert.rejects(sender('test', randomUUID()), /Notification authorization unavailable/);
+    assert.equal(cancelled, attempt);
+    assert.equal(sent, 0);
+  }
+  assert.equal(await sender('test', randomUUID()), 'sent');
+  assert.equal(auth, 3);
+  assert.equal(sent, 1);
+});
 
 test('a delayed old-token 401 preserves a newer OAuth refresh while a current-token 401 still expires it', async () => {
   const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
