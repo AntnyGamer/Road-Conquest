@@ -30,9 +30,21 @@ object AccountStore {
     // Process-local in-flight network requests cannot survive process death. Invalidate
     // their results on a newer authentication, sign-out, deletion or session update.
     private var sessionGeneration = 0L
+    private var pendingAuthentication: Long? = null
 
     @Synchronized
-    fun beginAuthentication(): Long = ++sessionGeneration
+    fun beginAuthentication(): Long = (++sessionGeneration).also { pendingAuthentication = it }
+
+    @Synchronized
+    fun isAuthenticating(): Boolean = pendingAuthentication == sessionGeneration
+
+    /** Release a failed request only if a newer account action has not replaced it. */
+    @Synchronized
+    fun finishAuthentication(generation: Long): Boolean {
+        if (pendingAuthentication != generation || sessionGeneration != generation) return false
+        pendingAuthentication = null
+        return true
+    }
 
     @Synchronized
     fun saveIfLatest(context: Context, generation: Long, session: Session): Boolean {
@@ -77,12 +89,14 @@ object AccountStore {
         if (durable) check(editor.commit()) { "Could not persist account session" }
         else editor.apply()
         sessionGeneration++
+        pendingAuthentication = null
     }
 
     @Synchronized
     fun clear(context: Context) {
         // Revoke pending sign-in responses before logout or account removal.
         sessionGeneration++
+        pendingAuthentication = null
         com.roadconquest.app.notifications.OptionalNotifications.disableLocal(context)
         // Disable precise-GPS sharing first, then durably remove the local bearer session.
         // Both changes must survive an abrupt process death immediately after logout/deletion.
