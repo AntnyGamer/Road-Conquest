@@ -150,7 +150,7 @@ class RestoreActivity : Activity() {
                     android.widget.Toast.makeText(this, "Progress restored. Tracking is off.", android.widget.Toast.LENGTH_LONG).show()
                     // Rebuild map/repository owners after invalidating their history generation.
                     startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
-                }, { status.text = "Restore failed: ${it.message}. Existing progress was kept; tracking is off." })
+                }, { status.text = "Restore failed: ${it.message}. Existing progress was kept. Check tracking settings before driving." })
             }
         }
     }
