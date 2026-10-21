@@ -243,6 +243,19 @@ class AccountActivityTest {
         }
     }
 
+    @Test fun backArrowIsCenteredDrawableInsteadOfTextGlyph() {
+        val controller = Robolectric.buildActivity(AccountActivity::class.java).create()
+        try {
+            val back = controller.get().findViewById<Button>(R.id.backNavButton)
+            assertEquals("Back", back.text.toString())
+            assertNotNull(back.compoundDrawablesRelative[0])
+            assertEquals(android.view.Gravity.CENTER_VERTICAL,
+                back.gravity and android.view.Gravity.VERTICAL_GRAVITY_MASK)
+        } finally {
+            controller.destroy()
+        }
+    }
+
     @Test fun accountFormHasSeparateFieldsAndActions() {
         val controller = Robolectric.buildActivity(AccountActivity::class.java).create()
         try {
