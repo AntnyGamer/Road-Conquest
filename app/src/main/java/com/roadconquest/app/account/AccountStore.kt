@@ -37,7 +37,7 @@ object AccountStore {
     @Synchronized
     fun saveIfLatest(context: Context, generation: Long, session: Session): Boolean {
         if (generation != sessionGeneration) return false
-        save(context, session)
+        saveInternal(context, session, durable = true)
         return true
     }
 
@@ -63,16 +63,19 @@ object AccountStore {
     }
 
     @Synchronized
-    fun save(context: Context, session: Session) {
+    fun save(context: Context, session: Session) = saveInternal(context, session, durable = false)
+
+    private fun saveInternal(context: Context, session: Session, durable: Boolean) {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, key())
         val ciphertext = cipher.doFinal(session.token.toByteArray(Charsets.UTF_8))
         val encoded = Base64.encodeToString(cipher.iv + ciphertext, Base64.NO_WRAP)
-        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+        val editor = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putString(KEY_USERNAME, session.username)
             .putString(KEY_TOKEN, encoded)
             .putBoolean(KEY_LEADERBOARD_VISIBLE, session.leaderboardVisible)
-            .also { check(it.commit()) { "Could not persist account session" } }
+        if (durable) check(editor.commit()) { "Could not persist account session" }
+        else editor.apply()
         sessionGeneration++
     }
 
