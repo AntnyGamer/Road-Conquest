@@ -1,3 +1,19 @@
+# Road Conquest 1.0 Beta 57
+
+## What's new since Beta 56
+
+- **More reliable fog exploration:** Walking and slow driving can accumulate several short, GPS-corroborated movements without requiring a single long leap. Existing anti-spoofing, accuracy, speed and road-mileage acceptance gates remain intact.
+- **Safer restores:** Restore detailed saved-road geometry from valid exports even above 50,000 vertices. A confirmed restore finishes its data transaction when its screen closes or rotates, and a visible map refreshes after the replacement commits. Rejected stale backups leave tracking settings unchanged.
+- **Account reliability:** Keep encrypted login/signup results across rotation without permitting a duplicate pending request to displace a successful signup. Failed requests allow retry, while stale responses cannot revive a signed-out session.
+- **UI polish:** Consistent Back button arrows and more reliable native-car rendering. Map style device tests wait for satellite reloads and recognize the documented fallback behavior.
+- **Service-check resilience:** Retry transient invalid replies from the live Census municipality endpoint without hiding an ongoing service failure.
+- **Compatibility:** Android 12+, versionCode **83**, versionName **1.0-beta.57**, unchanged app ID and signing identity. Existing roads, GPS, visits, cosmetics, accounts, points, purchases and compatible backups are retained.
+- **Release verification:** Signed artifacts publish only after Android unit tests, lint, native map tests on Android 12/15/17, startup tests on Android 12/17, server tests, Play bundle validation and signing checks all pass.
+
+The signed GitHub APK and AAB are released separately from Google Play Console and the account/map backend deployments. Verified-scoring deployments must explicitly allow versionCode 83; adding it to the documented server allowlist does not change production server configuration. Public competitive scoring remains disabled in ordinary builds.
+
+---
+
 # Road Conquest 1.0 Beta 56
 
 ## What's new since Beta 55
