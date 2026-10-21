@@ -4,7 +4,7 @@ import java.io.PushbackReader
 import java.io.Reader
 
 /** Strict, bounded RFC-4180 rows, including quoted commas, quotes and newlines. */
-internal class CsvReader(reader: Reader) {
+internal class CsvReader(reader: Reader, private val maxRowChars: Int = 1_048_576) {
     private val input = PushbackReader(reader, 1)
 
     fun next(): List<String>? {
@@ -23,7 +23,7 @@ internal class CsvReader(reader: Reader) {
                 return fields
             }
             started = true
-            require(++chars <= 1_048_576 && fields.size < 20) { "Backup CSV row is too large" }
+            require(++chars <= maxRowChars && fields.size < 20) { "Backup CSV row is too large" }
             if (quoted) {
                 if (c == '"'.code) {
                     val after = input.read()
