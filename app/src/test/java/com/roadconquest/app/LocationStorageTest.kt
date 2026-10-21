@@ -103,7 +103,7 @@ class LocationStorageTest {
             // This verifies exploration only; never invoke the production remote matcher.
             field("matcher").set(service, object : com.roadconquest.app.matching.RoadMatcher {
                 override val unavailable = true
-                override fun rateLimitRemainingMs() = Long.MAX_VALUE
+                override fun rateLimitRemainingMs() = 300_000L
                 override fun match(points: List<com.roadconquest.app.data.TrackPoint>) = null
             })
             field("ready").setBoolean(service, true)
