@@ -35,6 +35,7 @@ import com.roadconquest.app.data.LocalDataReset
 import com.roadconquest.app.account.AccountOnboarding
 import com.roadconquest.app.achievements.Achievements
 import com.roadconquest.app.export.DataExporter
+import com.roadconquest.app.export.DataImporter
 import com.roadconquest.app.map.MapRenderer
 import com.roadconquest.app.map.FogBitmapRenderer
 import com.roadconquest.app.map.PlaceOverlayInfo
@@ -179,6 +180,15 @@ class MainActivity : Activity() {
                     )
                 }
                 TrackingService.ACTION_STATS_UPDATED -> scheduleStatsRefresh()
+                DataImporter.ACTION_LOCAL_PROGRESS_RESTORED -> {
+                    // A confirmed restore can finish while the map stays foregrounded.
+                    // Recreate only an obsolete repository; resumed screens already
+                    // handle any missed notification through the generation check.
+                    if (!repository.isHistoryCurrent()) {
+                        recreatingForAppearance = true
+                        recreate()
+                    }
+                }
                 LocationManager.PROVIDERS_CHANGED_ACTION, LocationManager.MODE_CHANGED_ACTION -> {
                     refreshControls()
                     if (!TrackingService.isRunning && !Prefs.isManualOnly(this@MainActivity) &&
@@ -352,6 +362,7 @@ class MainActivity : Activity() {
         enteredForeground = ForegroundSession.app.onStart()
         val filter = IntentFilter(TrackingService.ACTION_LOCATION_UPDATE).apply {
             addAction(TrackingService.ACTION_STATS_UPDATED)
+            addAction(DataImporter.ACTION_LOCAL_PROGRESS_RESTORED)
             addAction(TrackingService.ACTION_ROADS_UPDATED)
             addAction(TrackingService.ACTION_EXPLORATION_UPDATED)
             addAction(TrackingService.ACTION_PLACE_CANDIDATE_UPDATED)
