@@ -1,3 +1,20 @@
+# Road Conquest 1.0 Beta 58
+
+## What's new since Beta 57
+
+- **Current Android dependencies:** Upgrade MapLibre OpenGL from 13.6.1 to 13.7.1 and OkHttp/MockWebServer from 4.12.0 to 5.5.0. Retain the stable OpenGL rendering backend, existing road-matching acceptance rules and all supported backup formats.
+- **Current build tools:** Update the verified Gradle wrapper from 9.8.1 to 9.8.2, including the official ZIP SHA-256 checksum, and the SHA-pinned setup-java GitHub Action from 6.0.1 to 6.1.0.
+- **Release symbols:** Update the pinned MapLibre 13.7.1 native debug-symbol archive and authoritative SHA-256. The release pipeline continues verifying each embedded ABI symbol Build ID against its shipped native library.
+- **Emulator tooling:** Update release-drive replay dependencies to grpcio 1.84.0 and protobuf 7.36.2 without changing production GPS recording or how replay data is interpreted.
+- **Unchanged dependencies:** Android Gradle Plugin, Firebase, Google Play Billing/Integrity/Ads, AndroidX, Robolectric, PostgreSQL and esbuild are already at the verified current stable versions.
+- **Compatibility:** Android 12+, versionCode **84**, versionName **1.0-beta.58**. Same package ID, upload key, account and backup schemas; existing device progress and Play purchases must remain intact.
+
+This release requires the usual Android unit, lint, native map/emulator, release-startup, account-server, bundle validation, 16 KB library, MapLibre debug-symbol and signing checks before publishing. Upgrading major versions can change implementation behavior, so all verification gates must complete before merging/publishing.
+
+The signed release APK and Play AAB are published to GitHub separately from the Google Play Console upload. The separately deployed verified-driving server must allow versionCode 84; updating documentation alone does not change production allowlists. Public verified competition remains hidden in ordinary builds.
+
+---
+
 # Road Conquest 1.0 Beta 57
 
 ## What's new since Beta 56
