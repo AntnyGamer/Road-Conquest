@@ -160,7 +160,7 @@ class TripHistoryActivity : Activity() {
             insets
         }
         root.addView(Button(this, null, 0, R.style.RoadConquest_BackAction).apply {
-            text = "← Back"
+            text = "Back"
             setOnClickListener { finish() }
         }, LinearLayout.LayoutParams(dp(110), dp(48)).apply { bottomMargin = dp(8) })
         root.addView(TextView(this).apply {
