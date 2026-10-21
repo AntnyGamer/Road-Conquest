@@ -99,6 +99,34 @@ class AccountStoreDeviceTest {
         }
     }
 
+    @Test fun onboardingScreenClosesAfterLoginCompletesAcrossRotation() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        AccountStore.clear(context)
+        val session = AccountStore.Session("OnboardedDriver", "device-onboarding-token", false)
+        val generation = AccountStore.beginAuthentication()
+        try {
+            ActivityScenario.launch<AccountActivity>(
+                Intent(context, AccountActivity::class.java)
+                    .putExtra(AccountActivity.EXTRA_ONBOARDING, true)
+            ).use { scenario ->
+                scenario.recreate()
+                assertTrue(AccountStore.saveIfLatest(context, generation, session))
+                context.sendBroadcast(Intent("com.roadconquest.app.ACCOUNT_SESSION_CHANGED")
+                    .setPackage(context.packageName))
+                val deadline = SystemClock.elapsedRealtime() + 5_000L
+                while (scenario.state != androidx.lifecycle.Lifecycle.State.DESTROYED &&
+                    SystemClock.elapsedRealtime() < deadline
+                ) {
+                    SystemClock.sleep(50)
+                }
+                assertEquals("Onboarding must return to the app after login",
+                    androidx.lifecycle.Lifecycle.State.DESTROYED, scenario.state)
+            }
+        } finally {
+            AccountStore.clear(context)
+        }
+    }
+
     @Test fun sessionTokenIsEncryptedByAndroidKeystoreAndRoundTrips() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         AccountStore.clear(context)
