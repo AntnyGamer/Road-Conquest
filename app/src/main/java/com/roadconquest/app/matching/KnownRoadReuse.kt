@@ -34,8 +34,10 @@ internal object KnownRoadReuse {
         // identify retains every existing five-fix/edge/quality/ambiguity gate.
         // Negative source IDs are context only; only real pending IDs map back.
         val ordered = evidence.mapIndexed { index, fix -> fix.copy(id = index + 1L) }
-        val pending = evidence.indices.filter { evidence[it].id in remaining }
-            .mapTo(HashSet()) { it + 1L }
+        val pending = HashSet<Long>()
+        evidence.forEachIndexed { index, fix ->
+            if (fix.id in remaining) pending += index + 1L
+        }
         val corroborated = ArrayList<KnownRoadVisit>()
         for (visit in identify(ordered, pending, nearby)) {
             val mapped = visit.copy(pointIds = visit.pointIds.map { evidence[(it - 1L).toInt()].id })
