@@ -103,11 +103,7 @@ internal object RoadGrouping {
 
         val overlapSouth = max(first.minLatitude, second.minLatitude)
         val overlapNorth = min(first.maxLatitude, second.maxLatitude)
-        val latitude = if (overlapSouth <= overlapNorth) {
-            (overlapSouth + overlapNorth) / 2.0
-        } else {
-            (max(first.minLatitude, second.minLatitude) + min(first.maxLatitude, second.maxLatitude)) / 2.0
-        }
+        val latitude = (overlapSouth + overlapNorth) / 2.0
         val longitudePad = tolerance /
             (METERS_PER_DEGREE * cos(Math.toRadians(latitude.coerceIn(-89.0, 89.0))).coerceAtLeast(0.01))
 
