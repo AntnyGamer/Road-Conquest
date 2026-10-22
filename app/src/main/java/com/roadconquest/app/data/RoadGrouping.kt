@@ -78,8 +78,7 @@ internal object RoadGrouping {
     fun connected(first: Road, second: Road): Boolean {
         val sharedRef = sharedReference(first, second)
         if (!sharedRef && first.nameKey != second.nameKey) return false
-        // Two unrelated unnamed fragments still need the tight access-road seam rule.
-        if (!sharedRef && isUnnamed(first.nameKey) != isUnnamed(second.nameKey)) return false
+        // Unnamed fragments still need the tight access-road seam rule.
         val tolerance = when {
             sharedRef -> REF_JOIN_TOLERANCE_M
             isUnnamed(first.nameKey) -> UNNAMED_JOIN_TOLERANCE_M
@@ -103,11 +102,7 @@ internal object RoadGrouping {
 
         val overlapSouth = max(first.minLatitude, second.minLatitude)
         val overlapNorth = min(first.maxLatitude, second.maxLatitude)
-        val latitude = if (overlapSouth <= overlapNorth) {
-            (overlapSouth + overlapNorth) / 2.0
-        } else {
-            (max(first.minLatitude, second.minLatitude) + min(first.maxLatitude, second.maxLatitude)) / 2.0
-        }
+        val latitude = (overlapSouth + overlapNorth) / 2.0
         val longitudePad = tolerance /
             (METERS_PER_DEGREE * cos(Math.toRadians(latitude.coerceIn(-89.0, 89.0))).coerceAtLeast(0.01))
 

@@ -1,3 +1,18 @@
+# Road Conquest 1.0 Beta 59
+
+## What's new since Beta 58
+
+- **Reliable map fallback:** A legitimate OpenFreeMap cached HTTP 304 no longer marks the primary map offline. Isolated tile errors and failures of optional zoomed-out Natural Earth overview images, glyphs or sprites no longer cause an unnecessary complete basemap switch. Repeated primary vector failures and real authorization/rate limits still trigger the backup map.
+- **Clear satellite status:** If Esri satellite imagery fails while streets remain available, the app correctly says that satellite imagery is unavailable instead of incorrectly blaming primary map tiles.
+- **Trip GPX export:** Restore the selectable privacy options in the save dialog so the Android document picker launches correctly. Prevent a privacy-redacted export from proceeding for a drive too short to leave any endpoint-safe time range, and improve error feedback when a picker result is invalid.
+- **Dark-mode buttons:** Render the Cancel text in the map-overlay selector and GPX dialog using the active theme's foreground color.
+- **Conservative optimizations:** Build known-road matching's pending-ID set without an intermediate list, reuse existing road-visit window objects, remove mathematically redundant or unreachable road-grouping conditions, and remove an unreferenced legacy matching constant. Remove unused Natural Earth raster declarations from Minimal, Night and Satellite styles while retaining the actual Streets overview layer; all rendered style layers and their active sources remain unchanged. Matching strictness, mileage, achievement rewards, GPS history and map geometry remain unchanged.
+- **Compatibility:** Android 12+, versionCode **85**, versionName **1.0-beta.59**. Same Android package, release upload key, purchases, storage and backup formats.
+
+The updated signed APK and Play-ready AAB are published to GitHub only after Android unit tests, lint, native map integration on Android 12/15/17, release cold-start checks and signing/bundle verification pass. Uploading the release AAB to Google Play and enabling verified-scoring services are separate operations. The separately deployed verified-scoring backend must explicitly allow versionCode 85 if competitive verification is enabled; publishing the release or editing documentation does not deploy its allowlist.
+
+---
+
 # Road Conquest 1.0 Beta 58
 
 ## What's new since Beta 57

@@ -879,11 +879,9 @@ class MainActivity : Activity() {
             .setNegativeButton("Cancel", null)
             .create()
         dialog.setOnShowListener {
-            if (Appearance.isDark(this)) {
-                val lightText = Appearance.color(this, R.attr.rcTextPrimary)
-                dialog.getButton(AlertDialog.BUTTON_NEUTRAL)?.setTextColor(lightText)
-                dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(lightText)
-            }
+            val textColor = Appearance.color(this, R.attr.rcTextPrimary)
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL)?.setTextColor(textColor)
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(textColor)
         }
         dialog.show()
     }

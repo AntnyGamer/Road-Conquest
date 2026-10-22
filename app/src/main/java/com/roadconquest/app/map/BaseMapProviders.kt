@@ -12,9 +12,31 @@ import java.io.IOException
 import java.util.concurrent.CopyOnWriteArraySet
 import java.util.concurrent.TimeUnit
 
+/** Ignore isolated tile errors; repeated core failures still trigger provider failover. */
+internal class MapFailureGate(private val now: () -> Long = System::currentTimeMillis) {
+    private data class Burst(val started: Long, val count: Int)
+    private val failures = mutableMapOf<String, Burst>()
+
+    @Synchronized fun failed(provider: String, status: Int? = null): Boolean {
+        // Authentication and rate limits apply to the provider, not an isolated tile.
+        if (status == 401 || status == 403 || status == 429) {
+            failures.remove(provider)
+            return true
+        }
+        val time = now()
+        val prior = failures[provider]?.takeIf { time - it.started in 0L..15_000L }
+        val count = (prior?.count ?: 0) + 1
+        failures[provider] = Burst(prior?.started ?: time, count.coerceAtMost(3))
+        return count >= 3
+    }
+
+    @Synchronized fun succeeded(provider: String) { failures.remove(provider) }
+}
+
 /** OpenFreeMap -> Geoapify raster -> saved progress on a local background. */
 object BaseMapProviders {
     private val health = ProviderHealth.shared
+    private val failureGate = MapFailureGate()
     private val listeners = CopyOnWriteArraySet<() -> Unit>()
     private var installed = false
     // BuildConfig endpoint is immutable for an installed build. Avoid reparsing
@@ -41,6 +63,11 @@ object BaseMapProviders {
                     "services.arcgisonline.com" -> "esri-imagery"
                     else -> if (gatewayHost != null && request.url.host == gatewayHost) "geoapify-tiles" else null
                 }
+                // The Natural Earth overview, glyphs and sprites are optional layers.
+                // Their individual failures must not replace an otherwise working vector map.
+                val coreProvider = provider?.takeIf {
+                    isMapCriticalRequest(it, request.url.encodedPath)
+                }
                 // An intentionally disabled service did not fail a network
                 // request: do not mark it unhealthy or prolong recovery.
                 if (provider != null && !ServiceConfig.enabled(provider)) {
@@ -49,21 +76,39 @@ object BaseMapProviders {
                 try {
                     val response = chain.proceed(request)
                     val status = response.code
-                    if (provider != null && (status == 401 || status == 403 || status == 429 ||
-                            status >= 500 || status in 300..399)) {
-                        health.failed(provider, status, response.header("Retry-After"))
-                        listeners.forEach { it() }
+                    if (coreProvider != null) {
+                        if (status in 200..299 || status == 304) {
+                            // A revalidated cached resource proves this provider is reachable.
+                            failureGate.succeeded(coreProvider)
+                        } else if (isMapFailureStatus(status) &&
+                                failureGate.failed(coreProvider, status)) {
+                            health.failed(coreProvider, status, response.header("Retry-After"))
+                            listeners.forEach { it() }
+                        }
                     }
                     response
                 } catch (error: IOException) {
-                    if (provider != null && !chain.call().isCanceled()) {
-                        health.failed(provider)
+                    if (coreProvider != null && !chain.call().isCanceled() &&
+                        failureGate.failed(coreProvider)) {
+                        health.failed(coreProvider)
                         listeners.forEach { it() }
                     }
                     throw error
                 }
             }.build())
     }
+    // HTTP 304 means a cached map resource is still current, not an outage.
+    internal fun isMapFailureStatus(status: Int): Boolean =
+        status == 401 || status == 403 || status == 429 || status >= 500 ||
+            status in 300..399 && status != 304
+
+    internal fun isMapCriticalRequest(provider: String, path: String): Boolean = when (provider) {
+        "openfreemap" -> path == "/planet" || path.startsWith("/planet/")
+        "geoapify-tiles" -> path.startsWith("/v1/tile/")
+        "esri-imagery" -> true
+        else -> false
+    }
+
     fun addListener(listener: () -> Unit) { listeners.add(listener) }
     fun removeListener(listener: () -> Unit) { listeners.remove(listener) }
     private fun available(provider: String) = ServiceConfig.enabled(provider) && health.remaining(provider) == 0L
