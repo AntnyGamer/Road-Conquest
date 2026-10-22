@@ -553,7 +553,6 @@ class RoadGeometryValidator {
         // on both sides constrain the route. Keep this identical to TrackingService's road
         // acceptance threshold; otherwise a 0.45-0.79 contextual match can retry forever.
         internal const val MIN_ACCEPTABLE_CONFIDENCE = 0.45
-        private const val MAX_MATCH_RADIUS_M = 75f
         // Treat provider's radius as candidate discovery, not proof. Tighten permanent
         // geometry only while the vehicle is moving slowly enough for a nearby-road snap to be
         // especially plausible; normal driving keeps the previous distance allowance. Keep a
