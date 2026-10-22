@@ -41,6 +41,35 @@ class MapProviderTest {
         assertEquals(60_000L, health.remaining("invalid"))
     }
 
+    @Test fun optionalOverviewTilesAndLabelsCannotDisableTheEntireVectorMap() {
+        assertTrue(BaseMapProviders.isMapCriticalRequest("openfreemap", "/planet"))
+        assertTrue(BaseMapProviders.isMapCriticalRequest("openfreemap", "/planet/release/2/1/1.pbf"))
+        assertFalse(BaseMapProviders.isMapCriticalRequest("openfreemap", "/natural_earth/ne2sr/2/1/1.png"))
+        assertFalse(BaseMapProviders.isMapCriticalRequest("openfreemap", "/fonts/Roboto/0-255.pbf"))
+        assertFalse(BaseMapProviders.isMapCriticalRequest("openfreemap", "/sprites/ofm/sprite.json"))
+        assertTrue(BaseMapProviders.isMapCriticalRequest("geoapify-tiles", "/v1/tile/osm-liberty/2/1/1.png"))
+        assertFalse(BaseMapProviders.isMapCriticalRequest("geoapify-tiles", "/v1/config"))
+        assertTrue(BaseMapProviders.isMapCriticalRequest("esri-imagery", "/ArcGIS/rest/services/World_Imagery/MapServer/tile/2/1/1"))
+    }
+
+    @Test fun isolatedCoreTileErrorsKeepPrimaryUntilRepeatedFailures() {
+        var now = 1_000_000L
+        val gate = MapFailureGate { now }
+        assertFalse(gate.failed("openfreemap", 503))
+        assertFalse(gate.failed("openfreemap"))
+        gate.succeeded("openfreemap")
+        assertFalse(gate.failed("openfreemap", 502))
+        now += 16_000L // A separate burst cannot complete an older outage.
+        assertFalse(gate.failed("openfreemap", 503))
+        assertFalse(gate.failed("openfreemap"))
+        assertTrue(gate.failed("openfreemap", 503))
+        gate.succeeded("openfreemap")
+        assertFalse(gate.failed("openfreemap"))
+        assertTrue("Rate limits require immediate failover", gate.failed("openfreemap", 429))
+        assertTrue("Authorization failures require immediate failover", gate.failed("geoapify-tiles", 403))
+        assertFalse("One backup timeout should not blank the base map", gate.failed("geoapify-tiles"))
+    }
+
     @Test fun configuredGatewayHostHandlesInvalidUrlsWithoutBreakingLocalMaps() {
         assertEquals("maps.example", BaseMapProviders.configuredGatewayHost("https://maps.example:443/"))
         assertEquals("maps.example", BaseMapProviders.configuredGatewayHost("HTTPS://maps.example/"))
