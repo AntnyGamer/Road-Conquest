@@ -411,9 +411,17 @@ class TripHistoryActivity : Activity() {
         val trip = selectedTrip ?: return
         if (!requireVip() || !isTripSafeToShare(trip)) return
         AlertDialog.Builder(this)
-            .setTitle("Save private GPX route")
-            .setMessage("GPX files contain precise GPS locations. Omitting the first and last two minutes can reduce exposure of your start and destination, but does not guarantee privacy. Review the route before sharing; Full route includes exact endpoints.")
-            .setItems(arrayOf("Hide first and last 2 minutes (recommended)", "Export full route, including exact endpoints")) { _, choice ->
+            // AlertDialog cannot show both a message and an item list: the message
+            // hides the privacy choices, preventing the document picker from opening.
+            .setTitle("Save GPX · Precise GPS locations")
+            .setItems(arrayOf(
+                "Hide first/last 2 minutes (recommended; privacy not guaranteed)",
+                "Full route with exact endpoints (review before sharing)"
+            )) { _, choice ->
+                if (choice == 0 && trip.endedAt - trip.startedAt <= 240_000L) {
+                    Toast.makeText(this, "This trip is too short to hide both endpoints. Choose Full route to save it.", Toast.LENGTH_LONG).show()
+                    return@setItems
+                }
                 pendingGpxTrip = trip
                 redactGpxEnds = choice == 0
                 val name = "roadconquest-trip-${trip.startedAt}.gpx"
@@ -429,6 +437,8 @@ class TripHistoryActivity : Activity() {
                 }
             }
             .setNegativeButton("Cancel", null).show()
+            .getButton(AlertDialog.BUTTON_NEGATIVE)
+            ?.setTextColor(Appearance.color(this, R.attr.rcTextPrimary))
     }
 
     @Deprecated("Uses Android document picker for direct user-controlled GPX files")
@@ -437,8 +447,16 @@ class TripHistoryActivity : Activity() {
         if (requestCode != GPX_DOCUMENT_REQUEST) return
         val trip = pendingGpxTrip
         pendingGpxTrip = null
-        val uri = data?.data ?: return
-        if (resultCode != Activity.RESULT_OK || trip == null || !VipEntitlement.isActive(this)) return
+        if (resultCode != Activity.RESULT_OK) return
+        if (trip == null || !VipEntitlement.isActive(this)) {
+            Toast.makeText(this, "GPX export is unavailable. Reopen the trip and try again.", Toast.LENGTH_LONG).show()
+            return
+        }
+        val uri = data?.data
+        if (uri == null) {
+            Toast.makeText(this, "No file was selected for GPX export.", Toast.LENGTH_LONG).show()
+            return
+        }
         val hideEnds = redactGpxEnds
         // A user-requested document save must finish if the Trips Activity is
         // recreated or closed. The screen's read/replay executor is cancelled
