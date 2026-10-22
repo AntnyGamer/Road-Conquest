@@ -88,7 +88,7 @@ jobs:
       - name: Verify live national Census municipality boundary service
         run: python3 tools/check_us_municipality_source.py
       - name: Set up JDK 21
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
           java-version: '21'
@@ -128,14 +128,14 @@ jobs:
         run: |
           set -euo pipefail
           maplibre_version=$(sed -n 's/.*org\.maplibre\.gl:android-sdk-opengl:\([^"]*\).*/\1/p' app/build.gradle.kts)
-          if [ "$maplibre_version" != "13.6.1" ]; then
+          if [ "$maplibre_version" != "13.7.1" ]; then
             echo "::error::Update the pinned MapLibre symbol archive/checksum for version $maplibre_version."
             exit 1
           fi
           symbols_archive="$RUNNER_TEMP/maplibre-opengl-release-symbols.tar.gz"
-          symbols_url="https://github.com/maplibre/maplibre-native/releases/download/android-v13.6.1/debug-symbols-maplibre-android-opengl-release-android-v13.6.1.tar.gz"
+          symbols_url="https://github.com/maplibre/maplibre-native/releases/download/android-v13.7.1/debug-symbols-maplibre-android-opengl-release-android-v13.7.1.tar.gz"
           curl --fail --location --retry 3 --retry-delay 2 "$symbols_url" --output "$symbols_archive"
-          echo "dafa34c93eb73e14a34f16ccd15412ed3164eb1bc87a6d0811083d40a8e1a173  $symbols_archive" | sha256sum -c -
+          echo "204500f02610f496e5a668489c945f4c8e0a999978d5338a3f8123ac699870f0  $symbols_archive" | sha256sum -c -
 
           symbols_dir="$RUNNER_TEMP/maplibre-symbols"
           rm -rf "$symbols_dir"
@@ -294,7 +294,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Set up JDK 21
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
           java-version: '21'
@@ -464,7 +464,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Set up JDK 21 for bundle signing
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
           java-version: '21'
