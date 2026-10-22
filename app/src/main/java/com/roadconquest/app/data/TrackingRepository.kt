@@ -1174,8 +1174,9 @@ class TrackingRepository(context: Context) {
         var changed: Boolean
         do {
             changed = false
-            for ((start, end) in candidates) {
-                if ((start to end) in merged) continue
+            for (window in candidates) {
+                if (window in merged) continue
+                val (start, end) = window
                 val overlaps = start <= mergedEnd && end >= mergedStart
                 val gapStart = if (end < mergedStart) end else mergedEnd
                 val gapEnd = if (end < mergedStart) mergedStart else start
@@ -1183,7 +1184,7 @@ class TrackingRepository(context: Context) {
                 if (!overlaps && !(close && !hasConfirmedDeparture(
                         db, segmentId, gapStart, gapEnd
                     ))) continue
-                merged += start to end
+                merged += window
                 mergedStart = min(mergedStart, start)
                 mergedEnd = max(mergedEnd, end)
                 changed = true
