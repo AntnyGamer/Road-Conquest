@@ -78,8 +78,7 @@ internal object RoadGrouping {
     fun connected(first: Road, second: Road): Boolean {
         val sharedRef = sharedReference(first, second)
         if (!sharedRef && first.nameKey != second.nameKey) return false
-        // Two unrelated unnamed fragments still need the tight access-road seam rule.
-        if (!sharedRef && isUnnamed(first.nameKey) != isUnnamed(second.nameKey)) return false
+        // Unnamed fragments still need the tight access-road seam rule.
         val tolerance = when {
             sharedRef -> REF_JOIN_TOLERANCE_M
             isUnnamed(first.nameKey) -> UNNAMED_JOIN_TOLERANCE_M
