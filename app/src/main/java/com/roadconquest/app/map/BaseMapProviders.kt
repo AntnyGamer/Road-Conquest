@@ -80,8 +80,7 @@ object BaseMapProviders {
                     if (coreProvider != null) {
                         if (status in 200..299) {
                             failureGate.succeeded(coreProvider)
-                        } else if ((status == 401 || status == 403 || status == 429 ||
-                                    status >= 500 || status in 300..399) &&
+                        } else if (isMapFailureStatus(status) &&
                                 failureGate.failed(coreProvider, status)) {
                             health.failed(coreProvider, status, response.header("Retry-After"))
                             listeners.forEach { it() }
@@ -98,6 +97,11 @@ object BaseMapProviders {
                 }
             }.build())
     }
+    // HTTP 304 means a cached map resource is still current, not an outage.
+    internal fun isMapFailureStatus(status: Int): Boolean =
+        status == 401 || status == 403 || status == 429 || status >= 500 ||
+            status in 300..399 && status != 304
+
     internal fun isMapCriticalRequest(provider: String, path: String): Boolean = when (provider) {
         "openfreemap" -> path == "/planet" || path.startsWith("/planet/")
         "geoapify-tiles" -> path.startsWith("/v1/tile/")
