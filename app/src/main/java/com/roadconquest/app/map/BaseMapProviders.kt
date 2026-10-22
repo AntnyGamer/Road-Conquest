@@ -25,7 +25,7 @@ internal class MapFailureGate(private val now: () -> Long = System::currentTimeM
         }
         val time = now()
         val prior = failures[provider]
-        val withinWindow = prior != null && time - prior.started in 0..15_000L
+        val withinWindow = prior != null && time - prior.started in 0L..15_000L
         val count = if (withinWindow) prior!!.count + 1 else 1
         failures[provider] = Burst(if (withinWindow) prior!!.started else time, count.coerceAtMost(3))
         return count >= 3
