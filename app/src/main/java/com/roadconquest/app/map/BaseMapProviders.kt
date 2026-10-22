@@ -78,7 +78,8 @@ object BaseMapProviders {
                     val response = chain.proceed(request)
                     val status = response.code
                     if (coreProvider != null) {
-                        if (status in 200..299) {
+                        if (status in 200..299 || status == 304) {
+                            // A revalidated cached resource proves this provider is reachable.
                             failureGate.succeeded(coreProvider)
                         } else if (isMapFailureStatus(status) &&
                                 failureGate.failed(coreProvider, status)) {
