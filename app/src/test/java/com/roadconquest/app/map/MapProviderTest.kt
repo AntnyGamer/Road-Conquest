@@ -52,6 +52,18 @@ class MapProviderTest {
         assertTrue(BaseMapProviders.isMapCriticalRequest("esri-imagery", "/ArcGIS/rest/services/World_Imagery/MapServer/tile/2/1/1"))
     }
 
+    @Test fun cachedNotModifiedTileDoesNotCountAsProviderOutage() {
+        assertFalse("HTTP 304 validates a cached map tile", BaseMapProviders.isMapFailureStatus(304))
+        assertFalse(BaseMapProviders.isMapFailureStatus(200))
+        assertFalse(BaseMapProviders.isMapFailureStatus(204))
+        assertFalse(BaseMapProviders.isMapFailureStatus(404))
+        assertTrue(BaseMapProviders.isMapFailureStatus(301))
+        assertTrue(BaseMapProviders.isMapFailureStatus(401))
+        assertTrue(BaseMapProviders.isMapFailureStatus(403))
+        assertTrue(BaseMapProviders.isMapFailureStatus(429))
+        assertTrue(BaseMapProviders.isMapFailureStatus(500))
+    }
+
     @Test fun isolatedCoreTileErrorsKeepPrimaryUntilRepeatedFailures() {
         var now = 1_000_000L
         val gate = MapFailureGate { now }
