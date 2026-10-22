@@ -625,7 +625,8 @@ class MapRenderer(
         if (previousProvider.isNotBlank() && previousProvider != baseProvider) {
             val message = when (baseProvider) {
                 "local" -> "Map tiles temporarily unavailable. Your saved progress is still visible."
-                "geoapify-tiles", "openfreemap-streets" -> "Primary map tiles unavailable. Using the backup map."
+                "geoapify-tiles" -> "Primary map tiles unavailable. Using the backup map."
+                "openfreemap-streets" -> "Satellite imagery unavailable. Showing the street map."
                 else -> null
             }
             message?.let { android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_SHORT).show() }
