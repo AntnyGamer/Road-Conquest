@@ -7,7 +7,9 @@ cloud-textured fog map.
 [Source and issues](https://github.com/AntnyGamer/RoadConquest-Beta) ·
 [GNU AGPL v3 license](LICENSE)
 
-Beta 59 fixes spurious low-zoom map fallback caused by HTTP 304 and isolated auxiliary tile errors, repairs the trip GPX privacy-choice save flow, improves dark-mode Cancel contrast and simplifies strictly equivalent road-matching and visit logic. It also clarifies Satellite-only failures. See [release notes](RELEASE_NOTES.md).\n\nBeta 58 refreshes MapLibre OpenGL, OkHttp, Gradle, the setup-java CI action and emulator replay dependencies, while retaining the existing app package, signed update path and stored progress. Release verification exercises map rendering, driving, backups, account-server checks and startup on supported Android versions. See [release notes](RELEASE_NOTES.md).
+Beta 59 fixes spurious low-zoom map fallback caused by HTTP 304 and isolated auxiliary tile errors, repairs the trip GPX privacy-choice save flow, improves dark-mode Cancel contrast and simplifies strictly equivalent road-matching and visit logic. It also clarifies Satellite-only failures. See [release notes](RELEASE_NOTES.md).
+
+Beta 58 refreshes MapLibre OpenGL, OkHttp, Gradle, the setup-java CI action and emulator replay dependencies, while retaining the existing app package, signed update path and stored progress. Release verification exercises map rendering, driving, backups, account-server checks and startup on supported Android versions. See [release notes](RELEASE_NOTES.md).
 
 Beta 57 improves slow walking/driving exploration, preserves large detailed roads in backups, prevents confirmed restores from being interrupted by screen rotation, refreshes maps after restores, and keeps pending signup/login consistent across rotation. It also polishes Back buttons and map-device test reliability. See [release notes](RELEASE_NOTES.md) for verification and compatibility details.
 
