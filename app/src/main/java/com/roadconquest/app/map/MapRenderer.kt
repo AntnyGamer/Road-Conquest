@@ -124,9 +124,9 @@ class MapRenderer(
     private var nearbyExplorationRequested = false
     private var nearbyCenter: Pair<Double, Double>? = null
     private var nearbyExplorationRevision = 0
-    private var nearbyVisitedFeatures = EMPTY_FEATURES.toJson()
-    private var nearbyUnvisitedFeatures = EMPTY_FEATURES.toJson()
-    private var nearbyNumberFeatures = EMPTY_FEATURES.toJson()
+    private var nearbyVisitedFeatures = EMPTY_FEATURES_JSON
+    private var nearbyUnvisitedFeatures = EMPTY_FEATURES_JSON
+    private var nearbyNumberFeatures = EMPTY_FEATURES_JSON
     private val nearbyVisitedPublisher = DistinctGeoJson(nearbyVisitedFeatures)
     private val nearbyUnvisitedPublisher = DistinctGeoJson(nearbyUnvisitedFeatures)
     private val nearbyNumbersPublisher = DistinctGeoJson(nearbyNumberFeatures)
@@ -258,9 +258,9 @@ class MapRenderer(
         nearbyExplorationRequested = false
         nearbyCenter = null
         nearbyExplorationRevision++
-        nearbyVisitedFeatures = EMPTY_FEATURES.toJson()
-        nearbyUnvisitedFeatures = EMPTY_FEATURES.toJson()
-        nearbyNumberFeatures = EMPTY_FEATURES.toJson()
+        nearbyVisitedFeatures = EMPTY_FEATURES_JSON
+        nearbyUnvisitedFeatures = EMPTY_FEATURES_JSON
+        nearbyNumberFeatures = EMPTY_FEATURES_JSON
         applyNearbyExploration()
     }
 
@@ -1836,6 +1836,7 @@ class MapRenderer(
         private const val CAR_LAYER_ID = "roadconquest-car-symbol"
         private const val CAR_IMAGE_ID = "roadconquest-car-image"
         private val EMPTY_FEATURES = FeatureCollection.fromFeatures(emptyList<Feature>())
+        private val EMPTY_FEATURES_JSON = EMPTY_FEATURES.toJson()
         private const val BOUNDS_EPSILON = 1e-9
         private const val RESUME_VISIBILITY_RETRY_MS = 16L
         // Native MapLibre transforms the georeferenced bitmap between refreshes, so ~8 fps
