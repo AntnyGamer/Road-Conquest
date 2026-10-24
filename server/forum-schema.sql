@@ -60,9 +60,15 @@ CREATE TABLE IF NOT EXISTS forum_billing_events (
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS forum_billing_events_age_idx ON forum_billing_events(created_at);
+-- Durable per-recipient limit: even multiple app instances cannot queue more
+-- than one optional friend-post push in any rolling seven-day window.
+CREATE TABLE IF NOT EXISTS forum_post_push (
+  user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  last_sent_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 DO $$ BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname='roadconquest_runtime') THEN
     GRANT SELECT,INSERT,UPDATE,DELETE ON forum_profiles,forum_posts,forum_reactions,forum_blocks,
-      forum_reports,forum_purchases,forum_billing_events TO roadconquest_runtime;
+      forum_reports,forum_purchases,forum_billing_events,forum_post_push TO roadconquest_runtime;
   END IF;
 END $$;
