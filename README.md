@@ -1,4 +1,4 @@
-# Road Conquest 1.0 Beta 59
+# Road Conquest 1.0 Beta 60
 
 Road Conquest remembers the roads you drive and the places you visit, revealing them through a
 cloud-textured fog map.
@@ -6,6 +6,8 @@ cloud-textured fog map.
 [Download the Android app](https://github.com/AntnyGamer/RoadConquest-Beta/releases) ·
 [Source and issues](https://github.com/AntnyGamer/RoadConquest-Beta) ·
 [GNU AGPL v3 license](LICENSE)
+
+Beta 60 adds a replayable Quick tour, accuracy-guarded junction matching improvements, and groundwork for a moderated opt-in community. The forum and its optional paid features remain disabled until their separate server, moderation and Play services are configured. See [release notes](RELEASE_NOTES.md).
 
 Beta 59 fixes spurious low-zoom map fallback caused by HTTP 304 and isolated auxiliary tile errors, repairs the trip GPX privacy-choice save flow, improves dark-mode Cancel contrast and simplifies strictly equivalent road-matching and visit logic. It also clarifies Satellite-only failures. See [release notes](RELEASE_NOTES.md).
 
@@ -46,11 +48,11 @@ Grant Precise location. For automatic background tracking, choose Allow all the 
 location settings and allow background battery use. Settings includes shortcuts to the relevant
 Android screens. Allow notifications to see the tracking notification and its Stop tracking control.
 
-The new release builds **Beta 59** with Android application ID
-`com.roadconquest.app` and internal version code **85**. Beta 58 used code 84, Beta 57 used code 83, Beta 56 used code 82, Beta 55 used code 81, Beta 54 used code 80, Beta 53 used code 79, Beta 52 used code 78, Beta 51 used code 77, Beta 50 used code 76, Beta 49 used code 75,
+The new release builds **Beta 60** with Android application ID
+`com.roadconquest.app` and internal version code **86**. Beta 59 used code 85, Beta 58 used code 84, Beta 57 used code 83, Beta 56 used code 82, Beta 55 used code 81, Beta 54 used code 80, Beta 53 used code 79, Beta 52 used code 78, Beta 51 used code 77, Beta 50 used code 76, Beta 49 used code 75,
 and Beta 48 used code 74. Google Play permanently reserves uploaded version codes,
-including drafts and testing tracks. Before uploading a **signed Beta 59 release bundle**,
-confirm that code 85 is still available in Play Console. The unsigned CI bundle cannot be uploaded.
+including drafts and testing tracks. Before uploading a **signed Beta 60 release bundle**,
+confirm that code 86 is still available in Play Console. The unsigned CI bundle cannot be uploaded.
 Do not confuse a locally tested development build with an already-published signed release.
 The app shows its exact version in Settings → About. Treat the application ID as permanent once
 the Google Play listing is created; changing it later would create a different app.
