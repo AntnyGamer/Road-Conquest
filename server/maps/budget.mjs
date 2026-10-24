@@ -5,6 +5,9 @@ const json = (body, status = 200, extra = {}) => Response.json(body, {
 });
 const denied = (code, message, status, seconds) => json({ error: message, code }, status,
   { 'Retry-After': String(seconds), 'X-RoadConquest-Error': code });
+// SQL storage cursors are iterable; consume at most one row for existence/PK lookups.
+// Also accepts array-backed cursors in the database test harness.
+function firstRow(rows) { for (const row of rows) return row; }
 const validId = id => typeof id === 'string' && /^[a-f0-9-]{36}$/.test(id);
 const validKey = key => typeof key === 'string' && /^[a-f0-9]{64}$/.test(key);
 function remember(cache, key, value, limit) {
@@ -57,7 +60,7 @@ export class MapBudget {
     if (this.lastPrunedDay !== day) {
       // A memory-only marker repeats full-table scans on each object restart.
       // Persist one zero-cost marker per UTC day in the existing counter table.
-      const pruned = [...this.sql.exec("SELECT used FROM usage WHERE day = ? AND bucket = 'maintenance:pruned'", day)].length;
+      const pruned = firstRow(this.sql.exec("SELECT used FROM usage WHERE day = ? AND bucket = 'maintenance:pruned'", day));
       if (!pruned) {
         this.sql.exec('DELETE FROM usage WHERE day < ?', day);
         this.sql.exec('DELETE FROM map_permits WHERE day < ?', day);
@@ -66,8 +69,8 @@ export class MapBudget {
         // it empty. Current-day/legacy credits are never copied, reset or lost.
         // This runs in the reservation transaction, so a failed commit restores
         // both the old table and every expired row removed above.
-        if (![...this.sql.exec('SELECT 1 FROM usage LIMIT 1')].length &&
-            ![...this.sql.exec('PRAGMA index_info(usage)')].length) {
+        if (!firstRow(this.sql.exec('SELECT 1 FROM usage LIMIT 1')) &&
+            !firstRow(this.sql.exec('PRAGMA index_info(usage)'))) {
           this.sql.exec('DROP TABLE usage');
           this.sql.exec(USAGE_TABLE);
         }
@@ -156,12 +159,12 @@ export class MapBudget {
   health(key) {
     if (!this.healthCache.has(key)) {
       if (this.healthCache.size >= 8) this.healthCache.delete(this.healthCache.keys().next().value);
-      this.healthCache.set(key, [...this.sql.exec('SELECT until_ms,probe_id,probe_until FROM map_health WHERE key = ?', key)][0]);
+      this.healthCache.set(key, firstRow(this.sql.exec('SELECT until_ms,probe_id,probe_until FROM map_health WHERE key = ?', key)));
     }
     return this.healthCache.get(key);
   }
   permit(id) {
-    const value = this.permitCache.get(id) || [...this.sql.exec('SELECT day,bucket,cost,slot,state FROM map_permits WHERE id = ?', id)][0];
+    const value = this.permitCache.get(id) || firstRow(this.sql.exec('SELECT day,bucket,cost,slot,state FROM map_permits WHERE id = ?', id));
     // Do not retain negative lookups or arbitrary caller-supplied unknown IDs.
     return value ? remember(this.permitCache, id, value, 64) : undefined;
   }
