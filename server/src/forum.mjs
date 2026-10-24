@@ -39,7 +39,7 @@ function cursorFrom(value) {
   } catch { throw new EvidenceError('Invalid community page.', 400); }
 }
 
-export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebhook, prepare = async () => {}, adminIds = [] }) {
+export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebhook, prepare = async () => {}, adminIds = [], friendPosted = async () => {} }) {
   const codec = purchaseCodec(pepper);
   const admins = new Set(adminIds.map(String));
   const pendingPosts = new Map();
@@ -161,7 +161,8 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
       const task = (async () => {
         const verdict = await moderate(input);
         if (typeof verdict?.flagged !== 'boolean') throw new EvidenceError('Moderation is temporarily unavailable.', 503);
-        return transact(async db => {
+        let published = false;
+        const result = await transact(async db => {
           const current = await profile(db, user.id, true);
           const raced = await existing(db, user.id, input);
           if (raced) return postResult(raced, current);
@@ -175,10 +176,16 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
             verdict.flagged ? '' : input.text, verdict.flagged ? null : input.gifUrl,
             verdict.flagged ? null : verdict.gifHash, state,
             JSON.stringify({ model: verdict.model, categories: verdict.categories || [], rules_version: FORUM_RULES_VERSION })]);
+          published = state === 'visible';
           const updated = await db.query(`UPDATE forum_profiles SET rules_version=$2,last_post_at=CURRENT_TIMESTAMP
             WHERE user_id=$1 RETURNING last_post_at + INTERVAL '10 minutes' AS next_post_at`, [user.id,FORUM_RULES_VERSION]);
           return postResult({ id, state }, { ...penalty, ...updated.rows[0] });
         });
+        // Only a newly committed, visible post can trigger the occasional alert.
+        // Push failures never roll back a successfully published post or allow
+        // a duplicate client retry to send the notification again.
+        if (published) await Promise.resolve().then(() => friendPosted(user.id)).catch(() => {});
+        return result;
       })();
       pendingPosts.set(key, task);
       try { return await task; } finally { pendingPosts.delete(key); }
