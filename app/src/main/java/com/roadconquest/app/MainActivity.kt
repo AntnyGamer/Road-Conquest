@@ -827,6 +827,11 @@ class MainActivity : Activity() {
         SystemSettingsNavigator.open(this, SystemSettingsNavigator.Destination.LOCATION_PERMISSION)
     }
 
+    /** Unchanged labels need no new layout or accessibility invalidation. */
+    private fun TextView.setTextIfDifferent(next: String) {
+        if (text.toString() != next) text = next
+    }
+
     private fun refreshControls() {
         exitPrompt?.takeIf { it.isShowing }?.let { ExitConfirmation.updateTracking(it, TrackingService.isRunning) }
         statsHandler.removeCallbacks(statsRefresh)
@@ -854,7 +859,7 @@ class MainActivity : Activity() {
             else -> "Not tracking"
         }
         // Avoid repeating the same live-region announcement on each data refresh.
-        if (statusText.text.toString() != statusLabel) statusText.text = statusLabel
+        statusText.setTextIfDifferent(statusLabel)
 
         val generation = ++summaryGeneration
         summaryExecutor.execute {
@@ -882,10 +887,12 @@ class MainActivity : Activity() {
                 if (isDestroyed || generation != summaryGeneration) return@runOnUiThread
                 result.fold(
                     onSuccess = { (value, progression, unlocked) ->
-                        statsText.text = StatsText.mapOverview(this, value, progression.tilesUnlocked)
+                        statsText.setTextIfDifferent(StatsText.mapOverview(this, value, progression.tilesUnlocked))
                         val points = String.format(Locale.getDefault(), "%,d", progression.balance)
-                        pointsText.text = "Garage · ⚔ $points"
-                        pointsText.contentDescription = "Garage and shop. $points points. Double tap to open."
+                        pointsText.setTextIfDifferent("Garage · ⚔ $points")
+                        val pointsDescription = "Garage and shop. $points points. Double tap to open."
+                        if (pointsText.contentDescription?.toString() != pointsDescription)
+                            pointsText.contentDescription = pointsDescription
                         if (unlocked.isNotEmpty()) {
                             val reward = unlocked.sumOf { it.rewardPoints }
                             val message = if (unlocked.size == 1) {
@@ -904,26 +911,28 @@ class MainActivity : Activity() {
                     },
                     onFailure = { error ->
                         Log.e("RoadConquest", "Could not load data summary", error)
-                        statsText.text = getString(R.string.saved_data_unavailable)
-                        pointsText.text = "Garage · Points unavailable"
-                        pointsText.contentDescription = "Open Garage and shop. Points are temporarily unavailable."
+                        statsText.setTextIfDifferent(getString(R.string.saved_data_unavailable))
+                        pointsText.setTextIfDifferent("Garage · Points unavailable")
+                        val pointsDescription = "Open Garage and shop. Points are temporarily unavailable."
+                        if (pointsText.contentDescription?.toString() != pointsDescription)
+                            pointsText.contentDescription = pointsDescription
                     }
                 )
             }
         }
 
         if (deletionPending) {
-            enableButton.text = "Deleting device data…"
+            enableButton.setTextIfDifferent("Deleting device data…")
             enableButton.isEnabled = false
         } else if (trackingPaused) {
-            enableButton.text = getString(R.string.resume_tracking)
+            enableButton.setTextIfDifferent(getString(R.string.resume_tracking))
             enableButton.isEnabled = true
         } else if (!manualOnly) {
-            enableButton.text = "Enabled automatically"
+            enableButton.setTextIfDifferent("Enabled automatically")
             enableButton.isEnabled = false
         } else {
             enableButton.isEnabled = true
-            enableButton.text = if (active) getString(R.string.disable) else getString(R.string.enable)
+            enableButton.setTextIfDifferent(if (active) getString(R.string.disable) else getString(R.string.enable))
         }
     }
 
