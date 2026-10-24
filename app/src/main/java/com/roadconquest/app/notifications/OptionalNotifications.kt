@@ -48,7 +48,7 @@ object OptionalNotifications {
     private var lastRegistrationAt = 0L
     private fun prefs(context: Context) = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     fun friendsEnabled(context: Context) = prefs(context).getBoolean("friends", true)
-    fun friendPostsEnabled(context: Context) = prefs(context).getBoolean("friend_posts", false)
+    fun friendPostsEnabled(context: Context) = prefs(context).getBoolean("friend_posts", true)
     private fun pushEnabled(context: Context) = friendsEnabled(context) || friendPostsEnabled(context)
     fun weeklyEnabled(context: Context) = prefs(context).getBoolean("weekly", true)
     fun permission(context: Context) = Build.VERSION.SDK_INT < 33 ||

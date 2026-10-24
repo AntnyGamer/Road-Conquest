@@ -12,6 +12,9 @@ import android.content.pm.PackageManager
 import android.location.LocationManager
 import android.os.Build
 import android.os.Bundle
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.TextAppearanceSpan
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
@@ -42,6 +45,24 @@ import java.util.concurrent.Executors
 import android.util.Log
 
 class SettingsActivity : Activity() {
+    private fun setupPrivacyDescriptions() {
+        val descriptions = listOf(
+            R.id.friendNotificationsSwitch to R.string.friend_notifications_detail,
+            R.id.friendForumPostsSwitch to R.string.friend_posts_detail,
+            R.id.weeklyRemindersSwitch to R.string.weekly_reminders_detail,
+            R.id.crashReportingSwitch to R.string.crash_reporting_detail
+        )
+        for ((id, detail) in descriptions) {
+            findViewById<Switch>(id).apply {
+                val title = text.toString()
+                text = SpannableString("$title\n${getString(detail)}").apply {
+                    setSpan(TextAppearanceSpan(this@SettingsActivity, R.style.RoadConquest_ToggleDescription),
+                        title.length + 1, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                }
+            }
+        }
+    }
+
     private fun setupOptionalNotifications() {
         val options = com.roadconquest.app.notifications.OptionalNotifications
         fun bind(id: Int, friends: Boolean) {
@@ -125,6 +146,7 @@ class SettingsActivity : Activity() {
             isAppearanceLightNavigationBars = lightSystemBars
         }
         setContentView(R.layout.activity_settings)
+        setupPrivacyDescriptions()
         findViewById<Button>(R.id.backNavButton).setOnClickListener { finish() }
         ads = ScreenAds(this, findViewById(R.id.settingsRoot))
         applySafeAreaInsets()

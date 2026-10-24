@@ -1,0 +1,22 @@
+<resources>
+    <style name="RoadConquest.PrivacyToggle" parent="@android:style/Widget.Material.CompoundButton.Switch">
+        <item name="android:minHeight">64dp</item>
+        <item name="android:paddingTop">12dp</item>
+        <item name="android:paddingBottom">12dp</item>
+        <item name="android:switchPadding">12dp</item>
+        <item name="android:textColor">?attr/rcTextPrimary</item>
+        <item name="android:textSize">15sp</item>
+    </style>
+    <style name="RoadConquest.ToggleDescription" parent="@android:style/TextAppearance.Material.Small">
+        <item name="android:textColor">?attr/rcTextSecondary</item>
+        <item name="android:textSize">13sp</item>
+    </style>
+    <string name="friend_notifications_title">Friend request notifications</string>
+    <string name="friend_notifications_detail">Alerts when someone sends you a friend request. Requires sign-in and notification permission.</string>
+    <string name="friend_posts_title">Occasional posts from friends</string>
+    <string name="friend_posts_detail">Occasional alerts when friends post. At most one per week.</string>
+    <string name="weekly_reminders_title">Weekly challenge reminders</string>
+    <string name="weekly_reminders_detail">Reminds you on Mondays around 6 PM. Requires notification permission.</string>
+    <string name="crash_reporting_title">Share crash reports with Firebase</string>
+    <string name="crash_reporting_detail">Optional crash and device diagnostics. Does not include saved routes or account details.</string>
+</resources>

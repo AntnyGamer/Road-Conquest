@@ -63,12 +63,12 @@ the pending restore-feedback state.
 
 ## Optional notifications when a friend posts
 
-Settings offers an independent **Occasional posts from friends** switch, off by default.
+Settings offers an independent **Occasional posts from friends** switch, on by default unless previously disabled.
 Only a newly committed, moderation-approved post by an accepted friend is eligible.
 Roughly one in four eligible posts is sampled, and a database-enforced, rolling
 **seven-day limit per recipient** applies across every friend and app instance.
 Posts rejected by moderation, client retries, nonfriends, blocked relationships,
-and devices without opt-in never receive this event. There is no feed polling or
+and devices with alerts disabled never receive this event. There is no feed polling or
 post-text, author name or location in Firebase messages. Each alert opens the
 community feed; signed-out users and users without Android notification
 permission cannot display it.

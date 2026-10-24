@@ -3,6 +3,7 @@ package com.roadconquest.app.onboarding
 import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.BitmapShader
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -10,16 +11,21 @@ import android.graphics.Path
 import android.graphics.PathMeasure
 import android.graphics.Rect
 import android.graphics.RectF
+import android.graphics.Shader
 import android.util.AttributeSet
 import android.view.FocusFinder
 import android.view.LayoutInflater
 import android.view.View
+import android.view.animation.LinearInterpolator
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.roadconquest.app.R
+import com.roadconquest.app.map.FogBitmapRenderer
+import com.roadconquest.app.map.FogTexture
+import com.roadconquest.app.util.Appearance
 import com.roadconquest.app.util.Prefs
 
 /** A modal guide over the real controls. Its demo never touches location or saved progress. */
@@ -215,8 +221,20 @@ class MapTour(
 /** Lightweight, offline illustration; one short animation only when the user taps Try. */
 class DiscoveryPreview(context: Context, attrs: AttributeSet? = null) : View(context, attrs) {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val route = Path()
-    private val routeMeasure = PathMeasure()
+    private val route = Path().apply {
+        moveTo(40f, 98f)
+        lineTo(160f, 98f)
+        lineTo(160f, 50f)
+        lineTo(184f, 50f)
+    }
+    private val routeMeasure = PathMeasure(route, false)
+    private val driven = Path()
+    private val clip = Path()
+    private val fog = Path()
+    private val fogPaint = Paint(Paint.FILTER_BITMAP_FLAG).apply {
+        shader = BitmapShader(texture, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
+    }
+    private val dark = Appearance.isDark(context)
     private val carPosition = FloatArray(2)
     private var reveal = 0f
     private var animator: ValueAnimator? = null
@@ -224,9 +242,10 @@ class DiscoveryPreview(context: Context, attrs: AttributeSet? = null) : View(con
     fun setRevealed(revealed: Boolean, animate: Boolean = false) {
         stopAnimation()
         val target = if (revealed) 1f else 0f
-        if (animate && ValueAnimator.areAnimatorsEnabled()) {
+        if (animate && revealed && reveal < target && ValueAnimator.areAnimatorsEnabled()) {
             animator = ValueAnimator.ofFloat(reveal, target).apply {
-                duration = 450
+                duration = 1800
+                interpolator = LinearInterpolator()
                 addUpdateListener { reveal = it.animatedValue as Float; invalidate() }
                 start()
             }
@@ -241,39 +260,55 @@ class DiscoveryPreview(context: Context, attrs: AttributeSet? = null) : View(con
         super.onDraw(canvas)
         canvas.save()
         canvas.scale(width / 320f, height / 148f)
-        route.reset()
-        route.addRoundRect(0f, 0f, 320f, 148f, 20f, 20f, Path.Direction.CW)
-        canvas.clipPath(route)
+        clip.reset()
+        clip.addRoundRect(0f, 0f, 320f, 148f, 20f, 20f, Path.Direction.CW)
+        canvas.clipPath(clip)
         paint.style = Paint.Style.FILL
-        paint.color = Color.rgb(15, 28, 49)
-        canvas.drawRoundRect(0f, 0f, 320f, 148f, 20f, 20f, paint)
-        paint.strokeWidth = 2f
-        paint.color = Color.rgb(47, 66, 90)
-        for (x in 22..310 step 48) canvas.drawLine(x.toFloat(), 0f, x + 40f, 148f, paint)
-        for (y in 18..148 step 32) canvas.drawLine(0f, y.toFloat(), 320f, y - 28f, paint)
-        paint.style = Paint.Style.FILL
-        paint.color = Color.argb((reveal * 50).toInt(), 130, 178, 255)
-        canvas.drawRoundRect(112f, 26f, 260f, 124f, 16f, 16f, paint)
-        route.reset()
-        route.moveTo(38f, 108f)
-        route.cubicTo(90f, 108f, 84f, 65f, 136f, 65f)
-        route.lineTo(224f, 65f)
-        routeMeasure.setPath(route, false)
+        paint.color = if (dark) Color.rgb(27, 35, 44) else Color.rgb(232, 236, 230)
+        canvas.drawRect(0f, 0f, 320f, 148f, paint)
+        paint.color = if (dark) Color.rgb(36, 47, 54) else Color.rgb(214, 224, 207)
+        for (x in 0..320 step 48) for (y in 8..148 step 48) {
+            canvas.drawRoundRect(x + 4f, y.toFloat(), x + 30f, y + 30f, 3f, 3f, paint)
+        }
+        // The dot and its blue trail use the same straight streets and right-angle turn.
+        paint.strokeCap = Paint.Cap.BUTT
+        paint.strokeWidth = 8f
+        paint.color = if (dark) Color.rgb(66, 78, 91) else Color.WHITE
+        for (x in floatArrayOf(40f, 88f, 160f, 232f, 280f)) canvas.drawLine(x, 0f, x, 148f, paint)
+        for (y in floatArrayOf(2f, 50f, 98f, 146f)) canvas.drawLine(0f, y, 320f, y, paint)
         routeMeasure.getPosTan(routeMeasure.length * reveal, carPosition, null)
+        driven.reset()
+        routeMeasure.getSegment(0f, routeMeasure.length * reveal, driven, true)
         paint.style = Paint.Style.STROKE
         paint.strokeCap = Paint.Cap.ROUND
+        paint.strokeJoin = Paint.Join.ROUND
         paint.strokeWidth = 5f
         paint.color = Color.rgb(130, 178, 255)
-        canvas.drawPath(route, paint)
+        canvas.drawPath(driven, paint)
+
+        // Start in one clear, square map tile. Only crossing its edge reveals the next tile.
+        val crossing = (112f - 40f) / routeMeasure.length
+        val nextTile = ((reveal - crossing) / .16f).coerceIn(0f, 1f)
+        val fogAlpha = (FogBitmapRenderer.MAX_FOG_ALPHA * 255).toInt()
+        fog.reset()
+        fog.fillType = Path.FillType.EVEN_ODD
+        fog.addRect(0f, 0f, 320f, 148f, Path.Direction.CW)
+        fog.addRect(16f, 26f, 112f, 122f, Path.Direction.CW)
+        fog.addRect(112f, 26f, 208f, 122f, Path.Direction.CW)
+        fogPaint.alpha = fogAlpha
+        canvas.drawPath(fog, fogPaint)
+        fogPaint.alpha = ((1f - nextTile) * fogAlpha).toInt()
+        canvas.drawRect(112f, 26f, 208f, 122f, fogPaint)
         paint.style = Paint.Style.FILL
-        paint.color = Color.argb(((1f - reveal) * 240).toInt(), 22, 34, 53)
-        canvas.drawRoundRect(112f, 26f, 260f, 124f, 16f, 16f, paint)
+        paint.color = Color.argb(65, 130, 178, 255)
+        canvas.drawCircle(carPosition[0], carPosition[1], 11f, paint)
         paint.color = Color.WHITE
-        canvas.drawCircle(carPosition[0], carPosition[1], 7f, paint)
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = 1.5f
-        paint.color = Color.argb((reveal * 180).toInt(), 130, 178, 255)
-        canvas.drawRoundRect(112f, 26f, 260f, 124f, 16f, 16f, paint)
+        canvas.drawCircle(carPosition[0], carPosition[1], 6f, paint)
         canvas.restore()
+    }
+
+    companion object {
+        // The same cloud generator as the live map; a small shared texture keeps this offline demo cheap.
+        private val texture by lazy { FogTexture.create(128) }
     }
 }

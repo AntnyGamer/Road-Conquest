@@ -11,11 +11,11 @@
     <string name="tour_next">Next</string>
     <string name="tour_finish">Explore map</string>
     <string name="tour_intro_title">A map that grows with you.</string>
-    <string name="tour_intro_body">Reveal new areas as you explore. Your location uncovers roughly one-mile map tiles; driving also adds roads and mileage.</string>
+    <string name="tour_intro_body">Fog covers places you haven’t explored. Enter a new one-mile square to uncover it. Driving also marks your roads in blue and adds mileage.</string>
     <string name="tour_demo_action">Try a discovery</string>
     <string name="tour_demo_reset">Reset preview</string>
     <string name="tour_demo_hint">A little preview. No location needed.</string>
-    <string name="tour_demo_revealed">Tile revealed! This preview adds no real progress.</string>
+    <string name="tour_demo_revealed">Entering a new square clears its fog. This preview saves no progress.</string>
     <string name="tour_tracking_title">Ready when you are.</string>
     <string name="tour_tracking_body">This is your tracking control. Allow Precise location to record roads. Automatic tracking is the default; choose manual tracking in Settings if you prefer.\n\nSet up while parked. Stop tracking from its notification.</string>
     <string name="tour_layers_title">Find your next discovery.</string>
@@ -28,7 +28,8 @@
     <string name="tour_settings_body">Settings has light and dark appearance, tracking options, backup and restore, and the privacy policy. Review location sharing under Data and privacy.\n\nReplay this guide anytime from Settings → Quick tour. An account is optional. If needed, setup follows the tour.</string>
     <string name="tour_replay">Quick tour</string>
     <string name="tour_replay_detail">A quick guide to your map and tracking controls.</string>
-    <string name="exit_confirmation_setting">Ask before leaving the map</string>
+    <string name="exit_confirmation_setting">Confirm before exiting with Back</string>
+    <string name="exit_confirmation_detail">Ask for confirmation when you press Back to exit from the map.</string>
     <string name="exit_title">Leave the map?</string>
     <string name="exit_tracking_active">Tracking is still on</string>
     <string name="exit_tracking_off">Tracking is currently off</string>

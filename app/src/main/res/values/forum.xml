@@ -11,6 +11,9 @@
     <string name="forum_post_actions">Post actions</string>
     <string name="forum_shared_gif">Shared GIF</string>
     <string name="forum_new_post">Share a discovery</string>
+    <string name="forum_posting_unavailable">Posting unavailable</string>
+    <string name="forum_unavailable_title">Community unavailable</string>
+    <string name="forum_unavailable_body">The community service is unavailable right now. Try Refresh later.</string>
     <string name="forum_plus">Forum Plus</string>
     <string name="forum_empty_title">Start a conversation.</string>
     <string name="forum_empty_body">Share a favorite drive, a new discovery, or a useful tip.</string>
