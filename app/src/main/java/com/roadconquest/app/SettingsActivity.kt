@@ -61,6 +61,20 @@ class SettingsActivity : Activity() {
             }
         }
         bind(R.id.friendNotificationsSwitch, true)
+        findViewById<Switch>(R.id.friendForumPostsSwitch).apply {
+            setOnCheckedChangeListener(null)
+            isChecked = options.friendPostsEnabled(this@SettingsActivity)
+            setOnCheckedChangeListener { _, checked ->
+                options.setFriendPostsEnabled(this@SettingsActivity, checked)
+                if (checked && AccountStore.load(this@SettingsActivity) == null) {
+                    Toast.makeText(this@SettingsActivity, "Forum post notifications require sign-in.", Toast.LENGTH_LONG).show()
+                }
+                if (checked && !options.permission(this@SettingsActivity)) {
+                    requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 9103)
+                }
+                setupOptionalNotifications()
+            }
+        }
         bind(R.id.weeklyRemindersSwitch, false)
     }
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
