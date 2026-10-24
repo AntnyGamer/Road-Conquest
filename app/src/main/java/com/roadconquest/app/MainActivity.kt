@@ -324,6 +324,9 @@ class MainActivity : Activity() {
         findViewById<Button>(R.id.weeklyGoalsNavButton).setOnClickListener {
             startActivity(Intent(this, ChallengesActivity::class.java))
         }
+        findViewById<Button>(R.id.forumNavButton).setOnClickListener {
+            startActivity(Intent(this, ForumActivity::class.java))
+        }
         applySafeAreaInsets(settingsButton, centerButton, overlayButton, controlPanel, statsText, pointsText)
         enableButton.setOnClickListener { handleEnableButton() }
 

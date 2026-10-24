@@ -7,7 +7,7 @@ wording, not evidence that the described recruitment, surveys, engagement, or ch
 ## Implemented in this change
 
 - A six-step tour over the real map controls: an offline discovery preview, tracking, Layers and
-  Explore nearby, Trips/Badges/Goals, Garage, and Settings/privacy/backups. Skip and Back are available;
+  Explore nearby, Trips/Badges/Goals/Forum, Garage, and Settings/privacy/backups. Skip and Back are available;
   completion or Skip suppresses the automatic tour. Settings can replay it without resetting progress.
 - Tour progress and the preview survive activity recreation. The tour appears before the existing
   account invitation and location disclosure; demo interaction never requests location or writes
@@ -22,6 +22,10 @@ wording, not evidence that the described recruitment, surveys, engagement, or ch
   Don't ask again is saved only when Leave map is chosen. Settings can re-enable it.
 - Ready-to-review English Play Store descriptions in `play-store/en-US/`. They describe existing
   features and distinguish free features from optional VIP. These files do not publish a listing.
+- Optional Buy Me a Coffee support link in Settings → About; it grants no app benefits.
+- Public community feed with reactions, reports, account blocking, a persistent 10-minute posting
+  cooldown and automatic moderation. Forum Plus adds GIF links and subtle highlights through a
+  separate one-time Play purchase. See `COMMUNITY_FORUM.md` for setup and launch requirements.
 
 ## Already present
 

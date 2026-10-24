@@ -164,6 +164,13 @@ export class MapBudget {
     // Do not retain negative lookups or arbitrary caller-supplied unknown IDs.
     return value ? remember(this.permitCache, id, value, 64) : undefined;
   }
+  clearProbe(sql, healthKey, attemptId) {
+    // This object is the sole writer. A cached absent/different probe proves
+    // the conditional write is a no-op. Cache misses retain the original SQL.
+    if (this.healthCache.has(healthKey) && this.healthCache.get(healthKey)?.probe_id !== attemptId) return;
+    this.sql.exec(sql, healthKey, attemptId);
+    this.healthCache.delete(healthKey);
+  }
   finish(action, { attemptId, healthKey, status, retryAfterMs = 0 }) {
     if (!validId(attemptId)) return json({ error: 'Invalid attempt' }, 400);
     const permit = this.permit(attemptId);
@@ -181,8 +188,7 @@ export class MapBudget {
         this.counterCache.delete('units:' + permit.bucket);
       }
       if (validKey(healthKey)) {
-        this.sql.exec('UPDATE map_health SET probe_id = NULL, probe_until = 0 WHERE key = ? AND probe_id = ?', healthKey, attemptId);
-        this.healthCache.delete(healthKey);
+        this.clearProbe('UPDATE map_health SET probe_id = NULL, probe_until = 0 WHERE key = ? AND probe_id = ?', healthKey, attemptId);
       }
       return json({ ok: true }); // Dispatched/ambiguous attempts are never refunded.
     }
@@ -203,8 +209,7 @@ export class MapBudget {
     }
     if (!validKey(healthKey) || permit.state !== 'dispatched') return json({ error: 'Invalid provider report' }, 400);
     if (action === '/success') {
-      this.sql.exec('DELETE FROM map_health WHERE key = ? AND probe_id = ?', healthKey, attemptId);
-      this.healthCache.delete(healthKey);
+      this.clearProbe('DELETE FROM map_health WHERE key = ? AND probe_id = ?', healthKey, attemptId);
       return json({ ok: true });
     }
     if (action !== '/failure' || ![401,403,429,500,502,503,504].includes(status)) return json({ error: 'Invalid provider report' }, 400);

@@ -214,6 +214,16 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
                 android:text="Manage account" />
+            <Button
+                android:id="@+id/communityButton"
+                style="@style/RoadConquest.SettingsAction"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:drawableStart="@drawable/ic_forum"
+                android:drawableTint="?attr/rcAccent"
+                android:drawablePadding="12dp"
+                android:text="Community forum" />
 
             <Switch
                 android:id="@+id/leaderboardPrivacySwitch"
@@ -466,6 +476,25 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:text="@string/github_button" />
+
+            <Button
+                android:id="@+id/supportDeveloperButton"
+                style="@style/RoadConquest.SettingsAction"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:drawableStart="@drawable/ic_coffee"
+                android:drawableTint="?attr/rcAccent"
+                android:drawablePadding="12dp"
+                android:text="@string/support_developer" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="7dp"
+                android:text="@string/support_developer_description"
+                android:textColor="?attr/rcTextSecondary"
+                android:textSize="12sp" />
         </LinearLayout>
     </LinearLayout>
     </ScrollView>

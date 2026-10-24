@@ -17,6 +17,7 @@ import { createFriends } from "./friends.mjs";
 import { createNotifications, createFcmSender } from "./notifications.mjs";
 import { createRequestMaintenance } from "./maintenance.mjs";
 import { RATE_LIMIT_SQL, RATE_LIMIT_SESSION_SQL, LOGIN_WITH_USER_SQL } from "./rate-limits.mjs";
+import { EvidenceError } from './scoring.mjs';
 
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -32,8 +33,8 @@ const PRIVACY_HTML = `<!doctype html>
 <title>Road Conquest Privacy Policy</title>
 <style>body{font:16px system-ui,sans-serif;max-width:760px;margin:40px auto;padding:0 20px;line-height:1.55}h1,h2{line-height:1.2}code{overflow-wrap:anywhere}</style></head>
 <body><h1>Road Conquest Privacy Policy</h1>
-<p><strong>Effective:</strong> October 16, 2026. <strong>Developer/publisher:</strong> AntnyGamer.</p>
-<p>Road Conquest collects precise location data to record driven roads and reveal visited places, including in the background when automatic tracking is enabled and the app is closed or not in use. It also uses location to display your live map position. Precise driving history, explored places, points, purchases, and cosmetics are stored on your device unless you export them.</p>
+<p><strong>Effective:</strong> October 24, 2026. <strong>Developer/publisher:</strong> AntnyGamer.</p>
+<p>Road Conquest collects precise location data to record driven roads and reveal visited places, including in the background when automatic tracking is enabled and the app is closed or not in use. It also uses location to display your live map position. Local driving history, explored places, points and cosmetics are stored on your device unless you export them. Optional cloud account and forum data are handled separately as described below.</p>
 <h2>Data sent to services</h2>
 <p>Road matching for new roads sends bounded GPS coordinate batches, timestamps and accuracy through Road Conquest's Cloudflare map proxy to Geoapify, or to LocationIQ when Geoapify is unavailable or its allowance is exhausted. See <a href="https://locationiq.com/privacy">LocationIQ's privacy policy</a>. Repeat drives on previously saved roads may be recognized on-device without a network request. The map proxy processes matching coordinates transiently and does not retain GPS traces. It stores daily request totals, daily keyed client-address fingerprints and random matching-attempt identifiers to enforce separate free allowances and avoid counting unsent work. Those daily records are deleted when a later day's requests are processed. Short provider-availability records contain no coordinates or raw client addresses; expired records are pruned during later activity. OpenFreeMap and Esri provide map display data; Geoapify supplies backup street-map tiles. Map providers receive requests for areas you view. While the app is in the foreground, Android's system geocoder may process saved coordinates for place names, and U.S. Census TIGERweb receives individual saved GPS coordinates to verify the exact municipality visited. Outside the U.S., place names may be sent to the configured OpenStreetMap boundary service. Country and region overlays can fall back to public geoBoundaries datasets, selected by country code without sending GPS coordinates to geoBoundaries. Enabling place overlays downloads and locally caches public boundaries for discovered places.</p>
 <p>Optional Firebase Crashlytics reporting is off by default and enabled only after you enable Share crash reports in Settings. When enabled, Google receives crash stack traces, app/device and operating-system information, diagnostic events and installation identifiers. Road Conquest does not attach saved routes, GPS history, usernames, passwords or session tokens, and does not include Google Analytics. Turning reporting off stops automatic reports and requests deletion of unsent reports on the device. See <a href="https://firebase.google.com/support/privacy">Firebase privacy information</a> for Google's handling of reports already sent.</p>
@@ -43,10 +44,14 @@ const PRIVACY_HTML = `<!doctype html>
 <h2>Advertising and rewards</h2>
 <p>Road Conquest uses Google AdMob for banner ads on the Garage, Achievements, Leaderboards, and Settings screens, and optional rewarded ads in the Garage. The Google Mobile Ads SDK can collect and share IP addresses (which may estimate general location), device or account identifiers such as the advertising ID and app-set ID, app and ad interactions, and diagnostics for advertising, analytics, and fraud prevention. Google encrypts these transmissions in transit. Road Conquest does not pass recorded routes, GPS coordinates, or Road Conquest account credentials to its ad requests.</p>
 <p>Where required, Google's User Messaging Platform presents privacy choices before ads can load. You can reopen applicable choices using Ad privacy choices on these screens. The driving map has no ads. Rewarded ads are voluntary: the Garage shows the point reward before playback, and a completed ad earns local points only after the ad SDK confirms the reward. See <a href="https://policies.google.com/privacy">Google's Privacy Policy</a> for Google's data practices.</p>
+<h2>Public community and optional support</h2>
+<p>Community posts, GIF links, reactions and usernames are public, including when your leaderboard profile is hidden. Posting requires an account and agreement to the community rules. Private driving history is not automatically shared. Text and a preview containing all GIF frames are sent to OpenAI for automated moderation. GIFs load directly from Giphy or Tenor; those services receive media requests. Automation can make mistakes; reports and appeals can be reviewed by project moderators.</p>
+<p>The forum stores posts, reactions, reports, blocked-account choices, rules acceptance, a posting cooldown and moderation penalties until account deletion. Removed or deleted posts have their text and GIF link erased immediately; a submission fingerprint and moderation categories remain to prevent duplicate penalties. Moderator actions and penalties affect forum participation only.</p>
+<p>Forum Plus is an optional, one-time Google Play purchase tied to your Road Conquest account. The server verifies and acknowledges the purchase with Google, storing a keyed account identifier, a purchase-token fingerprint, an encrypted token and entitlement state. Authenticated Google notifications update refunded purchases. Notification IDs expire after 30 days during subsequent notification activity. Deleting the account deletes these records and its Forum Plus access. The optional Buy Me a Coffee support link opens an external site and grants no app benefits.</p>
 <h2>Retention and deletion</h2>
 <p>Competitive accounts count only server-verified exploration cells. Private visited-cell identifiers and weekly cell counts are stored until account deletion; these identifiers describe coarse geographic areas. Older totals and imported or local progress cannot enter hardened rankings. For anti-cheating continuity, the account service keeps one latest accepted GPS fix encrypted with an account-bound server key, plus its timestamp and keyed fingerprint. It is replaced by the next accepted batch and removed with account deletion. Full GPS traces are processed transiently for verification rather than stored in the ranking database.</p>
 <p>Importing a backup validates and replaces local progress without uploading that history for verified scores. Before replacement, the app keeps one private recovery ZIP on this phone. Delete all data and uninstalling remove this recovery copy. Google Play VIP ownership and account credentials are not imported. Weekly local challenges award local points; accepted friends can compare newly verified exploration cells each week. Friendships require consent, may be removed by either person, and are deleted with the account. Hiding a profile hides it from friend rankings as well as public leaderboards. Weekly verified totals remain with the account until account deletion.</p>
-<p>Local app data remains on your device until you use Delete all data, uninstall the app, or otherwise clear app storage. Delete all data requires typing the exact in-app confirmation phrase and removes local Road Conquest data while keeping the cloud account and leaderboard scores; it does not require account sign-in or network access. Exported files are controlled by you and must be deleted separately. Delete account requires the current account password and removes the cloud account, sessions, leaderboard scores, visited-cell and legacy verified-road records, live runs, and verification receipts while leaving saved device history in place. Some short-lived anti-abuse and verification records expire automatically.</p>
+<p>Local app data remains on your device until you use Delete all data, uninstall the app, or otherwise clear app storage. Delete all data requires typing the exact in-app confirmation phrase and removes local Road Conquest data while keeping the cloud account and leaderboard scores; it does not require account sign-in or network access. Exported files are controlled by you and must be deleted separately. Delete account requires the current account password and removes the cloud account, forum data and Forum Plus access, sessions, leaderboard scores, visited-cell and legacy verified-road records, live runs, and verification receipts while leaving saved device history in place. Some short-lived anti-abuse and verification records expire automatically.</p>
 <h2>Security and choices</h2>
 <p>Network account traffic uses HTTPS. You can use Road Conquest without an account, hide yourself from leaderboards, leave verified-drive sharing off, use manual tracking, export your data, delete only your cloud account, or delete all local Road Conquest data while keeping your account.</p>
 <h2>Privacy inquiries</h2>
@@ -58,7 +63,7 @@ const DELETE_ACCOUNT_HTML = `<!doctype html>
 <title>Delete Road Conquest Account</title>
 <style>body{font:16px system-ui,sans-serif;max-width:640px;margin:40px auto;padding:0 20px;line-height:1.5}label,input,button{display:block;width:100%;box-sizing:border-box}input,button{font:inherit;padding:10px;margin:6px 0 16px}button{cursor:pointer}#status{min-height:1.5em}</style></head>
 <body><h1>Delete Road Conquest Account</h1>
-<p>This permanently deletes your Road Conquest cloud account, active sessions, leaderboard scores, visited-cell and legacy verified-road records, live runs, and verification receipts. Data stored only on a phone or in exported files must be deleted separately.</p>
+<p>This permanently deletes your Road Conquest cloud account, forum posts, reactions, reports, blocks and Forum Plus access, active sessions, leaderboard scores, visited-cell and legacy verified-road records, live runs, and verification receipts. Data stored only on a phone or in exported files must be deleted separately.</p>
 <form id="deleteForm"><label>Username<input id="username" autocomplete="username" required minlength="3" maxlength="24"></label>
 <label>Password<input id="password" type="password" autocomplete="current-password" required minlength="8" maxlength="128"></label>
 <button type="submit">Delete account permanently</button></form>
@@ -90,6 +95,9 @@ const prepareDatabase = createRequestMaintenance(pool, { initialize: async () =>
   if (process.env.APPLY_SCHEMA_ON_STARTUP !== "0") {
     const schemaPath = fileURLToPath(new URL("../schema.sql", import.meta.url));
     await pool.query(await readFile(schemaPath, "utf8"));
+    if (process.env.FORUM_ENABLED === "1") {
+      await pool.query(await readFile(fileURLToPath(new URL("../forum-schema.sql", import.meta.url)), "utf8"));
+    }
   }
 } });
 const competition = await createCompetition(pool, competitionConfig(process.env));
@@ -101,6 +109,19 @@ const friends = createFriends(pool, async target => {
     await notifications.friendRequest(target);
   }
 });
+// Keep public posting explicitly disabled until moderation and purchase setup is ready.
+// Heavy GIF decoding modules are initialized only for enabled community deployments.
+const forum = process.env.FORUM_ENABLED === "1" ? await (async () => {
+  const [{ createForum }, { createForumModerator }, billing] = await Promise.all([
+    import('./forum.mjs'), import('./forum-moderation.mjs'), import('./forum-billing.mjs')
+  ]);
+  return createForum(pool, { pepper: PEPPER, prepare: prepareDatabase,
+    moderate: createForumModerator(process.env.FORUM_MODERATION_API_KEY),
+    verifyPurchase: billing.createForumPurchaseVerifier(process.env.FORUM_PLAY_SERVICE_ACCOUNT_JSON),
+    verifyWebhook: billing.createForumWebhookVerifier(process.env.FORUM_RTDN_AUDIENCE, process.env.FORUM_RTDN_SERVICE_ACCOUNT_EMAIL),
+    adminIds: (process.env.FORUM_MODERATOR_USER_IDS || '').split(',').filter(x => /^[1-9][0-9]*$/.test(x))
+  });
+})() : null;
 
 // Invalid usernames still take one full scrypt verification, just like bad passwords
 // for real users. Random dummy hashes cannot accidentally authenticate and do not
@@ -281,6 +302,39 @@ async function handle(req, res) {
   }
 
   const ip = clientIp(req);
+  if (url.pathname.startsWith('/v1/forum/')) {
+    if (!forum) return send(res, req.method === 'GET' ? 200 : 503,
+      { available: false, posts: [], viewer: null, posting_available: false, purchases_available: false });
+    if (req.method === 'POST' && url.pathname === '/v1/forum/play-notifications') {
+      return send(res, 200, await forum.webhook(req.headers.authorization, await readJson(req)));
+    }
+    const publicRead = req.method === 'GET' && url.pathname === '/v1/forum/posts';
+    if (!publicRead && !bearerToken(req)) return send(res, 401, { error: 'Authentication required.' });
+    let user;
+    if (bearerToken(req)) {
+      const access = await rateLimitedUser(req, 'forum-ip', 120, 60_000);
+      if (!access.allowed) return send(res, 429, { error: 'Try again later.' });
+      user = access.user;
+      if (!user) return send(res, 401, { error: 'Authentication required.' });
+    } else if (!await rateLimit('forum-ip', ip, 120, 60_000)) return send(res, 429, { error: 'Try again later.' });
+    if (publicRead) return send(res, 200, await forum.list(user, url.searchParams.get('before')));
+    if (req.method === 'GET' && url.pathname === '/v1/forum/blocks') return send(res, 200, await forum.blocks(user));
+    if (req.method === 'GET' && url.pathname === '/v1/forum/reports') return send(res, 200, await forum.reports(user));
+    const postId = url.pathname.match(/^\/v1\/forum\/posts\/([a-f0-9-]{36})(?:\/(reaction|report))?$/i);
+    const posting = req.method === 'POST' && url.pathname === '/v1/forum/posts';
+    const bucket = posting ? 'forum-post' : 'forum-write';
+    if (!await rateLimit(bucket, String(user.id), posting ? 5 : 60, 60_000)) return send(res, 429, { error: 'Please slow down and try again shortly.' });
+    if (posting) return send(res, 200, await forum.post(user, await readJson(req)));
+    if (postId && req.method === 'DELETE' && !postId[2]) return send(res, 200, await forum.remove(user,postId[1]));
+    const body = await readJson(req);
+    if (postId && req.method === 'PUT' && postId[2] === 'reaction') return send(res, 200, await forum.react(user,postId[1],body.reaction));
+    if (postId && req.method === 'POST' && postId[2] === 'report') return send(res, 200, await forum.report(user,postId[1],body.reason));
+    if (req.method === 'PUT' && url.pathname === '/v1/forum/blocks') return send(res, 200, await forum.block(user,body.username,body.blocked));
+    if (req.method === 'POST' && url.pathname === '/v1/forum/purchase') return send(res, 200, await forum.purchase(user,body.purchase_token));
+    if (req.method === 'POST' && url.pathname === '/v1/forum/review') return send(res, 200, await forum.review(user,body.post_id,body.remove));
+    if (req.method === 'POST' && url.pathname === '/v1/forum/appeal-review') return send(res, 200, await forum.appealReview(user,body.username));
+    return send(res, 404, { error: 'Community action not found.' });
+  }
   if (url.pathname === "/v1/notifications/device") {
     // No database-backed rate-limit reservation or session lookup is needed
     // for an absent/malformed bearer token. Validly shaped but invalid tokens
@@ -579,7 +633,8 @@ export function serve(req, res) {
     if (!error?.status || error.status >= 500) {
       console.error("request failed", error instanceof Error ? error.message : "unknown error");
     }
-    if (!res.headersSent) send(res, error?.status || 500, { error: "Request failed." });
+    const forumMessage = req.url?.startsWith('/v1/forum/') && error instanceof EvidenceError;
+    if (!res.headersSent) send(res, error?.status || 500, { error: forumMessage ? error.message : "Request failed." });
     else res.destroy();
   });
 }

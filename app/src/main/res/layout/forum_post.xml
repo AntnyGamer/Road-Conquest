@@ -1,0 +1,28 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="wrap_content" android:padding="16dp"
+    android:background="@drawable/settings_card_background" android:orientation="vertical">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical">
+        <TextView android:id="@+id/postAuthor" android:layout_width="0dp" android:layout_weight="1"
+            android:layout_height="wrap_content" android:textSize="15sp" android:fontFamily="sans-serif-medium"
+            android:textColor="?attr/rcTextPrimary" />
+        <ImageButton android:id="@+id/postMore" android:layout_width="48dp" android:layout_height="48dp"
+            android:src="@drawable/ic_more" android:tint="?attr/rcTextSecondary" android:padding="12dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless" android:contentDescription="@string/forum_post_actions" />
+    </LinearLayout>
+    <TextView android:id="@+id/postDate" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:textSize="12sp" android:textColor="?attr/rcTextSecondary" />
+    <TextView android:id="@+id/postBody" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:layout_marginTop="12dp" android:textSize="16sp" android:lineSpacingExtra="4dp"
+        android:textColor="?attr/rcTextPrimary" android:textIsSelectable="true" />
+    <ImageView android:id="@+id/postGif" android:layout_width="match_parent" android:layout_height="200dp"
+        android:layout_marginTop="12dp" android:scaleType="fitCenter" android:background="?attr/rcMutedBg"
+        android:contentDescription="@string/forum_shared_gif" android:visibility="gone" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp">
+        <Button android:id="@+id/postLike" style="@style/RoadConquest.TourQuietAction"
+            android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" />
+        <Button android:id="@+id/postLove" style="@style/RoadConquest.TourQuietAction"
+            android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" />
+        <Button android:id="@+id/postCelebrate" style="@style/RoadConquest.TourQuietAction"
+            android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" />
+    </LinearLayout>
+</LinearLayout>

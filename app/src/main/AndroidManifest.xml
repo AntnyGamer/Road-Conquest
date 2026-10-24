@@ -54,6 +54,7 @@
 
         <activity android:name=".LeaderboardActivity" android:exported="false" />
         <activity android:name=".ShopActivity" android:exported="false" />
+        <activity android:name=".ForumActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
 
         <activity
             android:name=".MainActivity"

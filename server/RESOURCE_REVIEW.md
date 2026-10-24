@@ -1,5 +1,22 @@
 # Server, storage and phone resource review
 
+## Additional community/tour PR review
+
+The map budget now skips conditional health UPDATE/DELETE statements when its existing sole-writer
+cache proves the probe ID cannot match. Cold-cache paths and matching recovery probes retain the
+original writes. Successful no-op checks keep the valid cache entry, avoiding a subsequent read.
+This changes no provider allowances, retry timing, health expiry, matching quality or tracking.
+`maps-probe-noop.test.mjs` exercises 50 healthy cancelled reservations and their retries: zero health
+UPDATEs, one initial health read, refunded credits and all 50 non-refundable attempts retained.
+The existing cache, recovery and cancellation tests also cover cold and real recovery paths.
+No fleet-wide billing or battery reduction was measured.
+
+The new forum adds usage by design. Its specific bounds, caching, account cooldown and launch
+requirements are documented in [COMMUNITY_FORUM.md](../COMMUNITY_FORUM.md). It does not introduce
+background polling, store media bytes in PostgreSQL or weaken moderation to save work.
+
+## Earlier review
+
 This follow-up compares with `503a286296a638e69b70db545a244431ce1d9e5c`.
 It removes repeated work in eight areas without changing GPS subscriptions,
 recording quality, matching confidence, geometry, distance, provider cadence or

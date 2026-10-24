@@ -22,7 +22,7 @@ import org.robolectric.annotation.SQLiteMode
 @GraphicsMode(GraphicsMode.Mode.LEGACY)
 @SQLiteMode(SQLiteMode.Mode.LEGACY)
 class MapLayoutTest {
-    @Test fun bottomNavigationKeepsThreePrimaryDestinationsAndAccessibleGarageChip() {
+    @Test fun bottomNavigationKeepsFourPrimaryDestinationsAndAccessibleGarageChip() {
         // Parse actual compiled layout without starting MapLibre's native GPU view.
         val context = Robolectric.buildActivity(MainActivity::class.java).get()
         val parser = context.resources.getLayout(R.layout.activity_main)
@@ -33,7 +33,7 @@ class MapLayoutTest {
             while (parser.eventType != org.xmlpull.v1.XmlPullParser.END_DOCUMENT) {
                 if (parser.eventType == org.xmlpull.v1.XmlPullParser.START_TAG) {
                     val id = parser.getAttributeResourceValue(androidNs, "id", 0)
-                    if (id in setOf(R.id.tripsNavButton, R.id.badgesNavButton, R.id.weeklyGoalsNavButton)) {
+                    if (id in setOf(R.id.tripsNavButton, R.id.badgesNavButton, R.id.weeklyGoalsNavButton, R.id.forumNavButton)) {
                         assertEquals("Navigation targets must be actual buttons", "Button", parser.name)
                         nav += id
                     }
@@ -46,7 +46,7 @@ class MapLayoutTest {
         } finally {
             parser.close()
         }
-        assertEquals(listOf(R.id.tripsNavButton, R.id.badgesNavButton, R.id.weeklyGoalsNavButton), nav)
+        assertEquals(listOf(R.id.tripsNavButton, R.id.badgesNavButton, R.id.weeklyGoalsNavButton, R.id.forumNavButton), nav)
         assertTrue("The existing points chip must remain tappable for Garage", garageChipFound)
     }
 

@@ -1,5 +1,9 @@
 # Road Conquest account service
 
+Optional public community routes, moderation, the ten-minute account posting cooldown and Forum Plus
+setup are documented in [COMMUNITY_FORUM.md](../COMMUNITY_FORUM.md). The feature defaults off; this
+change does not provision payment products or deploy credentials.
+
 Optional free monitoring, provider controls and friend notifications are described
 in [FREE_SERVICES.md](../FREE_SERVICES.md), including deployment and migration steps.
 

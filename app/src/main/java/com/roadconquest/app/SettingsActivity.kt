@@ -166,6 +166,7 @@ class SettingsActivity : Activity() {
 
         val destinations = listOf(
             R.id.accountButton to AccountActivity::class.java,
+            R.id.communityButton to ForumActivity::class.java,
             R.id.achievementsButton to AchievementsActivity::class.java,
             R.id.shopButton to ShopActivity::class.java,
             R.id.tripHistoryButton to TripHistoryActivity::class.java,
@@ -194,6 +195,14 @@ class SettingsActivity : Activity() {
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).addCategory(Intent.CATEGORY_BROWSABLE)
             if (SystemSettingsNavigator.launchFirst(listOf(intent), ::startActivity) == null) {
                 Toast.makeText(this, getString(R.string.github_unavailable, url), Toast.LENGTH_LONG).show()
+            }
+        }
+
+        findViewById<Button>(R.id.supportDeveloperButton).setOnClickListener {
+            val url = getString(R.string.support_developer_url)
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).addCategory(Intent.CATEGORY_BROWSABLE)
+            if (SystemSettingsNavigator.launchFirst(listOf(intent), ::startActivity) == null) {
+                Toast.makeText(this, getString(R.string.web_page_unavailable, url), Toast.LENGTH_LONG).show()
             }
         }
 

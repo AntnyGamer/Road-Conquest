@@ -1,0 +1,16 @@
+<resources>
+    <item name="forumDraftText" type="id" />
+    <item name="forumDraftGif" type="id" />
+    <string name="community">Community</string>
+    <string name="forum_loading">Loading community…</string>
+    <string name="forum_refresh">Refresh community</string>
+    <string name="forum_more">Community options</string>
+    <string name="forum_post_actions">Post actions</string>
+    <string name="forum_shared_gif">Shared GIF</string>
+    <string name="forum_new_post">Share a discovery</string>
+    <string name="forum_plus">Forum Plus</string>
+    <string name="forum_empty_title">Start a conversation.</string>
+    <string name="forum_empty_body">Share a favorite drive, a new discovery, or a useful tip.</string>
+    <string name="forum_rules">Be kind and keep posts relevant to Road Conquest and exploring. No harassment, hate, threats, sexual content, graphic violence, or instructions for harm. No spam or personal information about other people. One post per account every 10 minutes, including Forum Plus.\n\nPosts are public and checked automatically before publication. First violation: post removed. Second: post removed and a 7-day forum mute. Third: forum ban. Mutes and bans restrict posting and reactions, not your driving progress.\n\nYou can report posts and block authors. Moderation can make mistakes; use the project’s GitHub help page to appeal with your username and post ID.\n\nText and GIF previews are processed by OpenAI for moderation. GIFs load from Giphy or Tenor. Do not post private location history.</string>
+    <string name="forum_plus_description">Post GIFs using direct Giphy or Tenor links, and give your posts a subtle highlight.\n\nOne-time purchase for this Road Conquest account. Sign in to the same account to restore it. Does not change moderation rules, bypass the 10-minute cooldown, or remove ads. Deleting your Road Conquest account removes its Forum Plus access.</string>
+</resources>

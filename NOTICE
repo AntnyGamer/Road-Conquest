@@ -13,3 +13,6 @@ Bundled map-style and imagery notices are in:
 
 The Gradle wrapper and Gradle-generated launcher scripts retain their upstream
 Apache-2.0 notices. Dependency declarations remain in app/build.gradle.kts.
+
+Server forum GIF dependencies and their MIT notices are listed in:
+  server/FORUM_THIRD_PARTY_NOTICES.txt

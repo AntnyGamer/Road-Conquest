@@ -298,5 +298,8 @@ styles, map data, imagery and dependencies retain their own licenses and service
 
 ## License
 
+The proposed community feed, automated moderation and optional Forum Plus setup are documented in
+[COMMUNITY_FORUM.md](COMMUNITY_FORUM.md). The forum defaults off until its server configuration is ready.
+
 Road Conquest's original source is licensed under GNU Affero General Public License v3 only
 (`AGPL-3.0-only`). The complete license is in [LICENSE](LICENSE) and bundled with the app.

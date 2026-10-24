@@ -122,6 +122,11 @@ class AppearanceTest {
             assertEquals(android.content.Intent.ACTION_VIEW, github.action)
             assertEquals("https://github.com/AntnyGamer/RoadConquest-Beta", github.data.toString())
             assertTrue(github.hasCategory(android.content.Intent.CATEGORY_BROWSABLE))
+            activity.findViewById<Button>(R.id.supportDeveloperButton).performClick()
+            val support = shadowOf(activity).nextStartedActivity
+            assertEquals(android.content.Intent.ACTION_VIEW, support.action)
+            assertEquals("https://buymeacoffee.com/antnygamer", support.data.toString())
+            assertTrue(support.hasCategory(android.content.Intent.CATEGORY_BROWSABLE))
             assertTrue(activity.assets.open("licenses/RoadConquest-AGPL-3.0.txt").bufferedReader().use { it.readText() }
                 .contains("GNU AFFERO GENERAL PUBLIC LICENSE"))
         } finally { controller.pause().stop().destroy() }
