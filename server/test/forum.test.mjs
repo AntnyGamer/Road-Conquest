@@ -172,6 +172,33 @@ test('purchase verification outages preserve existing paid access and receipt st
   assert.deepEqual((await pool.query('SELECT active,checked_at FROM forum_purchases')).rows[0],refreshed);
 }));
 
+test('existing profiles skip redundant insert and billing notifications still prune old IDs', { skip: !database }, async () => fixture(async (pool,[a],forum) => {
+  const input=body('A first post');
+  const first=await forum.post(a,input);
+  const query=pool.query.bind(pool);
+  let profileInserts=0, billingWrites=0;
+  pool.query=(sql,...args)=>{
+    if (typeof sql==='string' && sql.includes('INSERT INTO forum_profiles')) profileInserts++;
+    if (typeof sql==='string' && sql.includes('forum_billing_events') && sql.includes('DELETE')) billingWrites++;
+    return query(sql,...args);
+  };
+  try {
+    assert.equal((await forum.post(a,input)).id,first.id);
+    assert.equal(profileInserts,0,'Already-created profiles do not issue an INSERT on retry');
+    await query("INSERT INTO forum_billing_events(id,created_at) VALUES('expired-id',CURRENT_TIMESTAMP-INTERVAL '31 days')");
+    const notification={ message:{ messageId:'fresh-id', data:Buffer.from(JSON.stringify({
+      packageName:'com.roadconquest.app',oneTimeProductNotification:{
+        sku:'forum_plus_lifetime',purchaseToken:'unrecognized-receipt'
+      }
+    })).toString('base64') } };
+    assert.deepEqual(await forum.webhook('verified',notification),{ok:true});
+    assert.equal(billingWrites,1,'Event insert and cleanup happen in one query');
+    assert.deepEqual((await query('SELECT id FROM forum_billing_events ORDER BY id')).rows.map(x=>x.id),['fresh-id']);
+    await forum.webhook('verified',notification);
+    assert.equal(billingWrites,1,'Duplicate events skip maintenance and Play verification');
+  } finally { pool.query=query; }
+}));
+
 test('moderation report batches fit the Android response bound and advance after review', { skip: !database }, async () => fixture(async(pool,[a,b,c,admin])=>{
   const forum=createForum(pool,{...options,adminIds:[admin.id],moderate:async()=>({flagged:false,gifHash:'a'.repeat(64)})});
   await forum.purchase(a,'receipt');
