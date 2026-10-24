@@ -197,7 +197,7 @@ class ForumActivity : Activity() {
         val wait = cooldownSeconds()
         compose.isEnabled = !busy && current?.available == true && current.posting && !restricted(viewer) && wait == 0L
         compose.text = if (viewer == null) "Sign in to post" else getString(R.string.forum_new_post)
-        plus.isEnabled = !busy && current?.available == true
+        plus.isEnabled = !busy && current?.available == true && viewer?.banned != true
         plus.text = if (viewer?.plus == true) "Plus active" else getString(R.string.forum_plus)
         morePosts.visibility = if (current?.next != null) View.VISIBLE else View.GONE
         morePosts.isEnabled = !busy
@@ -393,6 +393,7 @@ class ForumActivity : Activity() {
 
     private fun showPlus() {
         if (sessionToken() == null) { signIn(); return }
+        if (page?.viewer?.banned == true) { message("Forum Plus does not remove a forum ban."); return }
         if (page?.viewer?.plus == true) { message("Forum Plus is already active for this account."); return }
         val (dialog,content) = panel("A little extra personality.")
         purchaseDialog = dialog

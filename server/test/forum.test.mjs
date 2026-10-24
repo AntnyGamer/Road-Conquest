@@ -108,6 +108,7 @@ test('moderation is idempotent, outages do not punish, and mute/ban affect only 
   await assert.rejects(forum.react(a,randomUUID(),'like'),error=>error.status===403);
   await pool.query("UPDATE forum_profiles SET muted_until=CURRENT_TIMESTAMP-INTERVAL '1 day',last_post_at=NULL WHERE user_id=$1",[a.id]);
   assert.equal((await forum.post(a,body('Third violation'))).banned,true);
+  assert.equal((await forum.list(a)).purchases_available,false);
   assert.ok((await pool.query('SELECT * FROM users WHERE id=$1',[a.id])).rowCount);
   await assert.rejects(forum.post(a,body()),/banned/);
   await forum.appealReview(admin,a.username_display);

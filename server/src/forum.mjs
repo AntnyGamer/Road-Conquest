@@ -124,7 +124,8 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
       const hasMore = posts.length > 20;
       if (hasMore) posts.pop();
       const last = posts.at(-1);
-      return { available: true, posting_available: Boolean(moderate), purchases_available: Boolean(verifyPurchase && verifyWebhook),
+      return { available: true, posting_available: Boolean(moderate),
+        purchases_available: Boolean(verifyPurchase && verifyWebhook) && !rows[0].viewer?.banned,
         product_id: FORUM_PRODUCT, rules_version: FORUM_RULES_VERSION, posts,
         next: hasMore ? Buffer.from(JSON.stringify([last.created_at,last.id])).toString('base64url') : null,
         viewer: rows[0].viewer ? { ...rows[0].viewer, billing_account_id: binding(user.id), moderator: admins.has(String(user.id)) } : null };

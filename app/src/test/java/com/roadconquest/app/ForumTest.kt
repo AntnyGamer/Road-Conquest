@@ -44,6 +44,7 @@ class ForumTest {
                 assertFalse(compose.isEnabled); assertTrue(status.text.toString().contains("mute"))
                 activity.renderForPreview(page(viewer(banned=true)))
                 assertFalse(compose.isEnabled); assertTrue(status.text.toString().contains("banned"))
+                assertFalse(activity.findViewById<Button>(R.id.forumPlus).isEnabled)
                 activity.renderForPreview(page(viewer(),posting=false))
                 assertFalse(compose.isEnabled); assertTrue(status.text.toString().contains("temporarily unavailable"))
                 activity.renderForPreview(page(viewer(next=Instant.now().minusSeconds(1).toString())))
