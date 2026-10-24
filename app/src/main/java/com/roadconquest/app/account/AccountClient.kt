@@ -48,8 +48,11 @@ object AccountClient {
     fun logout(token: String) {
         request("/v1/logout", "POST", JSONObject(), token)
     }
-    fun registerNotificationDevice(token: String, deviceToken: String, binding: String) {
-        request("/v1/notifications/device", "POST", JSONObject().put("fid", deviceToken).put("binding", binding), token)
+    fun registerNotificationDevice(token: String, deviceToken: String, binding: String,
+                                   friendRequests: Boolean, friendPosts: Boolean) {
+        request("/v1/notifications/device", "POST", JSONObject()
+            .put("fid", deviceToken).put("binding", binding)
+            .put("friend_requests", friendRequests).put("friend_posts", friendPosts), token)
     }
     fun removeNotificationDevice(token: String) {
         request("/v1/notifications/device", "DELETE", null, token)
