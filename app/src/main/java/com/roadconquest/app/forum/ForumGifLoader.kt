@@ -17,9 +17,12 @@ import javax.net.ssl.HttpsURLConnection
 /** Bounded CDN media, verified against the exact bytes the server moderated. No account token is sent. */
 class ForumGifLoader {
     private val workers = Executors.newFixedThreadPool(2) as ThreadPoolExecutor
-    private class Ticket {
+    private class Ticket(val url: String, val hash: String) {
         val cancelled = AtomicBoolean(false)
         var work: Runnable? = null
+        // Updated only on the UI thread, along with view binding.
+        var finished = false
+        var successful = false
     }
     private val main = Handler(Looper.getMainLooper())
     private var closed = false
@@ -65,11 +68,16 @@ class ForumGifLoader {
         view.setImageDrawable(null)
     }
     fun load(view: ImageView, url: String, expectedHash: String) {
+        val previous = view.tag as? Ticket
+        // Adapter rebinds should not restart a live download or replay a
+        // successful decode. Failed loads still retry when rebound.
+        if (previous != null && !previous.cancelled.get() && previous.url == url &&
+            previous.hash == expectedHash && (!previous.finished || previous.successful)) return
         clear(view)
         if (!allowed(url)) return
         val expectedDigest = parseHash(expectedHash) ?: return
         if (closed) return
-        val ticket = Ticket()
+        val ticket = Ticket(url,expectedHash)
         view.tag = ticket
         views.add(view)
         val work = Runnable {
@@ -86,6 +94,8 @@ class ForumGifLoader {
             }.getOrNull()
             main.post {
                 if (!closed && !ticket.cancelled.get() && view.tag === ticket) {
+                    ticket.finished = true
+                    ticket.successful = image != null
                     view.setImageDrawable(image)
                     view.contentDescription = if (image == null) "GIF unavailable. Refresh to retry." else "Shared GIF"
                     if (foreground && view.isAttachedToWindow) (image as? AnimatedImageDrawable)?.start()
