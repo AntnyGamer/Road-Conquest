@@ -93,9 +93,9 @@ class FallbackRoadMatcher(private val providers: List<RoadMatcher>) : RoadMatche
     }
 
     private fun providerOffset(points: List<TrackPoint>, pendingIds: Set<Long>, limit: Int): Int {
-        if (points.take(limit).any { it.id in pendingIds }) return 0
+        require(limit >= 0)
         val firstPending = points.indexOfFirst { it.id in pendingIds }
-        if (firstPending < 0) return 0
+        if (firstPending < limit) return 0
         val approach = minOf(3, (limit - 1).coerceAtLeast(0))
         return (firstPending - approach).coerceIn(0, (points.size - limit).coerceAtLeast(0))
     }
