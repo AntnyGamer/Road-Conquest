@@ -54,7 +54,7 @@ export function createFcmSender(raw, fetcher = fetch, now = Date.now) {
   };
 }
 
-export function createNotifications(pool, { pepper, sender, deliveryLimit }) {
+export function createNotifications(pool, { pepper, sender, deliveryLimit, sampleForumPost = () => randomInt(4) === 0 }) {
   const key = createHmac('sha256', pepper).update('roadconquest-fcm-token-encryption-v1').digest();
   const aad = Buffer.from('roadconquest-fcm-token-v1');
   const digest = token => createHash('sha256').update(token).digest();
@@ -139,7 +139,7 @@ export function createNotifications(pool, { pepper, sender, deliveryLimit }) {
       // Most approved posts cost zero database/FCM requests. Only a sampled
       // quarter can alert friends, and each recipient is capped once per seven
       // days across all friends and all API instances.
-      if (!sender || randomInt(4) !== 0) return;
+      if (!sender || !sampleForumPost()) return;
       const { rows } = await pool.query(`WITH eligible AS (
         SELECT CASE WHEN f.user_low=$1 THEN f.user_high ELSE f.user_low END AS user_id
         FROM friendships f
