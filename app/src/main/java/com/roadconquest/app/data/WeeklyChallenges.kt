@@ -71,11 +71,11 @@ object WeeklyChallenges {
                         WeeklyChallenge("towns_1", "Explore 1 new town", towns, 1, 75, false),
                         WeeklyChallenge("towns", "Explore 3 new towns", towns, 3, 300, false)
                     )
-                    val keys = challenges.map { "weekly:$week:${it.id}" }
+                    val keys = Array(challenges.size) { "weekly:$week:${challenges[it].id}" }
                     val rewarded = HashSet<String>(challenges.size)
                     db.rawQuery(
                         "SELECT reward_key FROM progression_rewards WHERE reward_key IN (?,?,?,?)",
-                        keys.toTypedArray()
+                        keys
                     ).use { cursor ->
                         while (cursor.moveToNext()) rewarded.add(cursor.getString(0))
                     }

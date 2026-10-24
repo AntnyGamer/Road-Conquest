@@ -35,6 +35,25 @@ class AppearanceTest {
         app.getSharedPreferences("roadconquest_preferences", 0).edit().clear().commit()
     }
 
+    @Test fun settingsCanReplayTheTourAndChangeExitConfirmationWithoutResettingProgress() {
+        val controller = Robolectric.buildActivity(SettingsActivity::class.java).create().start().resume()
+        try {
+            val activity = controller.get()
+            Prefs.setTourHandled(activity, true)
+            Prefs.setManualOnly(activity, true)
+            val confirmation = activity.findViewById<Switch>(R.id.exitConfirmationSwitch)
+            assertTrue(confirmation.isChecked)
+            confirmation.performClick()
+            assertFalse(Prefs.isExitConfirmationEnabled(activity))
+            activity.findViewById<Button>(R.id.quickTourButton).performClick()
+            val intent = shadowOf(activity).nextStartedActivity
+            assertEquals(MainActivity::class.java.name, intent.component?.className)
+            assertTrue(intent.getBooleanExtra(MainActivity.EXTRA_SHOW_TOUR, false))
+            assertTrue(Prefs.isTourHandled(activity))
+            assertTrue(Prefs.isManualOnly(activity))
+        } finally { controller.pause().stop().destroy() }
+    }
+
     @Test fun mapAndSettingsStatsHaveClearDistinctCategoriesWithoutChangingTotals() {
         val context = ContextThemeWrapper(
             Appearance.wrap(RuntimeEnvironment.getApplication()), R.style.Theme_RoadConquest
@@ -103,6 +122,11 @@ class AppearanceTest {
             assertEquals(android.content.Intent.ACTION_VIEW, github.action)
             assertEquals("https://github.com/AntnyGamer/RoadConquest-Beta", github.data.toString())
             assertTrue(github.hasCategory(android.content.Intent.CATEGORY_BROWSABLE))
+            activity.findViewById<Button>(R.id.supportDeveloperButton).performClick()
+            val support = shadowOf(activity).nextStartedActivity
+            assertEquals(android.content.Intent.ACTION_VIEW, support.action)
+            assertEquals("https://buymeacoffee.com/antnygamer", support.data.toString())
+            assertTrue(support.hasCategory(android.content.Intent.CATEGORY_BROWSABLE))
             assertTrue(activity.assets.open("licenses/RoadConquest-AGPL-3.0.txt").bufferedReader().use { it.readText() }
                 .contains("GNU AFFERO GENERAL PUBLIC LICENSE"))
         } finally { controller.pause().stop().destroy() }

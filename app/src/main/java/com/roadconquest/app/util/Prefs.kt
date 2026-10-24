@@ -132,6 +132,18 @@ object Prefs {
         prefs(context).edit().putBoolean(KEY_ACCOUNT_PROMPT_SHOWN, shown).apply()
     }
 
+    fun isTourHandled(context: Context): Boolean = prefs(context).getBoolean("map_tour_handled", false)
+
+    fun setTourHandled(context: Context, handled: Boolean) {
+        prefs(context).edit().putBoolean("map_tour_handled", handled).apply()
+    }
+
+    fun isExitConfirmationEnabled(context: Context): Boolean = prefs(context).getBoolean("confirm_map_exit", true)
+
+    fun setExitConfirmationEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean("confirm_map_exit", enabled).apply()
+    }
+
     fun carStyle(context: Context): String = prefs(context).getString("car_style", "classic") ?: "classic"
     fun setCarStyle(context: Context, value: String) {
         prefs(context).edit().putString("car_style", value).apply()

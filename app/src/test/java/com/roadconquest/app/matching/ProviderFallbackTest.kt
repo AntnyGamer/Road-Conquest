@@ -161,6 +161,32 @@ class ProviderFallbackTest {
         assertEquals(0, router.lastUsedProviderPointOffset)
     }
 
+    @Test fun fallbackOffsetKeepsExactPrefixAndOutOfRangeBehavior() {
+        val input = List(30) { points.first().copy(id = it + 1L, matched = true) }
+        var submitted = emptyList<TrackPoint>()
+        val provider = object : RoadMatcher {
+            override val maxPoints = 10
+            override val unavailable = false
+            override fun rateLimitRemainingMs() = 0L
+            override fun match(points: List<TrackPoint>): MatchResult {
+                submitted = points
+                return MatchResult(emptyList(), emptyMap())
+            }
+        }
+        val matcher = FallbackRoadMatcher(listOf(provider))
+        for ((pendingIds, expectedOffset) in listOf(
+            setOf(10L) to 0,
+            setOf(11L) to 7,
+            setOf(11L, 27L) to 7,
+            setOf(27L) to 20,
+            emptySet<Long>() to 0
+        )) {
+            assertNotNull(matcher.match(input, pendingIds))
+            assertEquals(expectedOffset, matcher.lastUsedProviderPointOffset)
+            assertEquals(input.drop(expectedOffset).take(provider.maxPoints), submitted)
+        }
+    }
+
     @Test fun realGeoapifyPublicExamplePassesExistingGeometryAndSnapValidation() {
         val result = requireNotNull(GeoapifyMatcher("https://maps.example").parse(example, points))
         assertTrue(result.roads.isNotEmpty())
@@ -226,6 +252,60 @@ class ProviderFallbackTest {
         })
     }
 
+    @Test fun equivalentDateLineOriginalLongitudesKeepSingleAndIndependentFeatureMatches() {
+        for (latitude in listOf(0.0, 40.0, -40.0, 70.0)) for (longitude in listOf(-180.0, 180.0)) {
+            fun feature(north: Double): Pair<JSONObject, List<TrackPoint>> {
+                fun at(lat: Double) = JSONArray().put(longitude).put(lat)
+                val first = at(north)
+                val last = at(north + 0.0001)
+                val (json, fixes) = fixtureLine(JSONArray().put(first).put(last),
+                    JSONArray().put(JSONObject().put("from_index", 0).put("to_index", 1)
+                        .put("name", "Date Line Road").put("road_class", "residential")),
+                    listOf(first, last), listOf(0, 0), listOf(1_000_000L, 1_003_000L))
+                return JSONObject(json).getJSONArray("features").getJSONObject(0) to fixes
+            }
+            val (left, firstFixes) = feature(latitude)
+            val (right, laterFixes) = feature(latitude + 0.0002)
+            val rightWaypoints = right.getJSONObject("properties").getJSONArray("waypoints")
+            rightWaypoints.getJSONObject(0).put("original_index", 2)
+            rightWaypoints.getJSONObject(1).put("original_index", 3)
+            val allFixes = firstFixes + laterFixes.mapIndexed { i, point ->
+                point.copy(id = i + 3L, timestampMillis = 1_006_000L + i * 3_000L)
+            }
+            fun response(multiple: Boolean) = JSONObject().put("type", "FeatureCollection")
+                .put("features", JSONArray().put(left).apply { if (multiple) put(right) }).toString()
+            val matcher = GeoapifyMatcher("https://maps.example")
+            val single = requireNotNull(matcher.parse(response(false), firstFixes))
+            val independent = requireNotNull(matcher.parse(response(true), allFixes))
+            assertEquals(setOf(1L, 2L), single.matchedPointConfidences.keys)
+            assertEquals(setOf(1L, 2L, 4L), independent.matchedPointConfidences.keys)
+            for (part in listOf(left, right)) {
+                val waypoints = part.getJSONObject("properties").getJSONArray("waypoints")
+                for (i in 0 until waypoints.length()) {
+                    waypoints.getJSONObject(i).getJSONArray("original_location").put(0, -longitude)
+                }
+            }
+            assertEquals(single, matcher.parse(response(false), firstFixes))
+            assertEquals(independent, matcher.parse(response(true), allFixes))
+
+            // Longitude normalization cannot excuse an actual longitude or latitude change.
+            val original = left.getJSONObject("properties").getJSONArray("waypoints")
+                .getJSONObject(0).getJSONArray("original_location")
+            original.put(0, -longitude + if (longitude < 0) -0.000002 else 0.000002)
+            val outsideTolerance = matcher.parse(response(false), firstFixes)
+            assertTrue(outsideTolerance == null || outsideTolerance.roads.isEmpty())
+            assertNull(matcher.parse(response(true), allFixes))
+            original.put(0, if (longitude < 0) 179.99 else -179.99)
+            val shifted = matcher.parse(response(false), firstFixes)
+            assertTrue(shifted == null || shifted.roads.isEmpty())
+            assertNull(matcher.parse(response(true), allFixes))
+            original.put(0, -longitude).put(1, latitude + 0.0001)
+            val wrongLatitude = matcher.parse(response(false), firstFixes)
+            assertTrue(wrongLatitude == null || wrongLatitude.roads.isEmpty())
+            assertNull(matcher.parse(response(true), allFixes))
+        }
+    }
+
     @Test fun zeroLengthJunctionStepDoesNotDiscardValidApproachAndExit() {
         val coords = JSONArray().put(JSONArray().put(0.0).put(0.0))
             .put(JSONArray().put(0.001).put(0.0))
@@ -256,6 +336,88 @@ class ProviderFallbackTest {
             .put("location", JSONArray().put(0.0011).put(0.0))
         val rejected = runCatching { matcher.parse(invalid.toString(), samples) }.getOrNull()
         assertTrue(rejected == null || rejected.matchedPointConfidences.isEmpty())
+    }
+
+    @Test fun repeatedJunctionVertexDoesNotDiscardValidApproachAndExit() {
+        for (latitude in listOf(0.0, 40.0, -40.0, 70.0)) {
+            fun at(longitude: Double, north: Double = latitude) = JSONArray().put(longitude).put(north)
+            val junction = at(0.001)
+            val coords = JSONArray().put(at(0.0)).put(junction).put(at(0.001)).put(at(0.001, latitude + 0.001))
+            val steps = JSONArray()
+                .put(JSONObject().put("from_index", 0).put("to_index", 1)
+                    .put("name", "Approach").put("road_class", "residential"))
+                .put(JSONObject().put("from_index", 1).put("to_index", 2)
+                    .put("name", "Junction").put("road_class", "residential"))
+                .put(JSONObject().put("from_index", 2).put("to_index", 3)
+                    .put("name", "Exit").put("road_class", "residential"))
+            val (json, samples) = fixtureLine(coords, steps,
+                listOf(at(0.0002), junction, at(0.001, latitude + 0.0008)),
+                listOf(0, 1, 2), listOf(1_000_000L, 1_010_000L, 1_020_000L))
+            val matcher = GeoapifyMatcher("https://maps.example")
+            // A sub-metre provider offset must not give the zero-length Junction road credit.
+            for (offset in listOf(0.0, 0.0000045)) {
+                val response = JSONObject(json)
+                response.getJSONArray("features").getJSONObject(0).getJSONObject("properties")
+                    .getJSONArray("waypoints").getJSONObject(1).put("location", at(0.001, latitude + offset))
+                val result = requireNotNull(matcher.parse(response.toString(), samples))
+                assertEquals(setOf(1L, 2L, 3L), result.matchedPointConfidences.keys)
+                assertEquals(listOf("Approach", "Exit"), result.roads.map { it.name })
+                val approach = JSONArray(result.roads.first { it.name == "Approach" }.coordinatesJson)
+                val exit = JSONArray(result.roads.first { it.name == "Exit" }.coordinatesJson)
+                assertEquals(approach.getJSONArray(approach.length() - 1).toString(), exit.getJSONArray(0).toString())
+            }
+
+            val invalid = JSONObject(json)
+            invalid.getJSONArray("features").getJSONObject(0).getJSONObject("properties")
+                .getJSONArray("waypoints").getJSONObject(1).put("location", at(0.001, latitude + 0.0001))
+            val rejected = matcher.parse(invalid.toString(), samples)
+            assertTrue("The existing 3 m junction-position limit still applies", rejected == null || rejected.roads.isEmpty())
+        }
+    }
+
+    @Test fun repeatedJunctionVertexPreservesAlreadyVerifiedRoadSections() {
+        for (latitude in listOf(0.0, 40.0, -40.0, 70.0)) {
+            fun at(longitude: Double, north: Double = latitude) = JSONArray().put(longitude).put(north)
+            val junction = at(0.001)
+            val line = JSONArray().put(at(0.0)).put(junction).put(at(0.001)).put(at(0.001, latitude + 0.001))
+            val steps = JSONArray()
+                .put(JSONObject().put("from_index", 0).put("to_index", 1)
+                    .put("name", "Approach").put("road_class", "residential"))
+                .put(JSONObject().put("from_index", 1).put("to_index", 2)
+                    .put("name", "Junction").put("road_class", "residential"))
+                .put(JSONObject().put("from_index", 2).put("to_index", 3)
+                    .put("name", "Exit").put("road_class", "residential"))
+            val (json, samples) = fixtureLine(line, steps, listOf(
+                at(0.0001), at(0.0003), junction,
+                at(0.001, latitude + 0.0006), at(0.001, latitude + 0.0009)
+            ), listOf(0, 0, 1, 2, 2), (0..4).map { 1_000_000L + it * 10_000L })
+            val matcher = GeoapifyMatcher("https://maps.example")
+            val missingJunction = JSONObject(json)
+            val waypoint = missingJunction.getJSONArray("features").getJSONObject(0)
+                .getJSONObject("properties").getJSONArray("waypoints").getJSONObject(2)
+            waypoint.put("match_type", "unmatched")
+            val before = requireNotNull(matcher.parse(missingJunction.toString(), samples))
+            val after = requireNotNull(matcher.parse(json, samples))
+            assertEquals(listOf("Approach", "Exit"), before.roads.map { it.name })
+            assertEquals(listOf("Approach", "Exit"), after.roads.map { it.name })
+            assertEquals(samples.map { it.id }.toSet(), after.matchedPointConfidences.keys)
+            for (oldRoad in before.roads) {
+                val oldCoordinates = JSONArray(oldRoad.coordinatesJson)
+                val newCoordinates = JSONArray(after.roads.first { it.name == oldRoad.name }.coordinatesJson)
+                for (i in 0 until oldCoordinates.length()) {
+                    val old = oldCoordinates.getJSONArray(i)
+                    assertTrue("The existing ${oldRoad.name} section remains in the extended geometry",
+                        (0 until newCoordinates.length()).any { j ->
+                            val new = newCoordinates.getJSONArray(j)
+                            kotlin.math.abs(old.getDouble(0) - new.getDouble(0)) < 1e-10 &&
+                                kotlin.math.abs(old.getDouble(1) - new.getDouble(1)) < 1e-10
+                        })
+                }
+            }
+            // Rejected junction evidence must also leave both independently valid sides intact.
+            waypoint.put("match_type", "matched").put("location", at(0.001, latitude + 0.0001))
+            assertEquals(before, matcher.parse(missingJunction.toString(), samples))
+        }
     }
 
     @Test fun malformedGeoapifyStepKeepsBothIndependentVerifiedSides() {

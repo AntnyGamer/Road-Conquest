@@ -7,6 +7,7 @@ import android.location.Location
 import android.database.Cursor
 import android.os.Build
 import com.roadconquest.app.util.LocationProviders
+import com.roadconquest.app.util.allAdjacent
 import org.json.JSONArray
 import java.security.MessageDigest
 import java.util.Locale
@@ -113,7 +114,7 @@ class TrackingRepository(context: Context) {
         if (cells.isEmpty()) return@synchronized emptyList()
         // IN handles longitude wrapping at ±180°, including a neighborhood that
         // straddles the date line. Only 25 possible keys are ever inspected.
-        val columns = cells.map { it.column }.distinct()
+        val columns = cells.mapTo(LinkedHashSet()) { it.column }
         val placeholders = List(columns.size) { "?" }.joinToString(",")
         val args = (listOf(cells.first().row, cells.last().row) + columns)
             .map(Int::toString).toTypedArray()
@@ -385,8 +386,8 @@ class TrackingRepository(context: Context) {
     @Synchronized
     internal fun knownRoadEvidence(points: List<TrackPoint>): List<TrackPoint> = synchronized(dbHelper.historyLock) {
         if (historyGeneration != dbHelper.historyGeneration || points.size !in 2..100 ||
-            points.any { it.id <= 0L } || points.zipWithNext().any { (a, b) ->
-                b.id != a.id + 1L || b.timestampMillis - a.timestampMillis !in 1..12_000L
+            points.any { it.id <= 0L } || !points.allAdjacent { a, b ->
+                b.id == a.id + 1L && b.timestampMillis - a.timestampMillis in 1..12_000L
             }) return@synchronized points
         // Compression retains at most four original fixes between queue points.
         // Do not broaden across missing IDs, pauses, clock changes or noisy data.
@@ -405,7 +406,7 @@ class TrackingRepository(context: Context) {
         val retainedTimes = points.mapTo(HashSet()) { it.timestampMillis }
         if (skipped.isEmpty() || skipped.size > maximum ||
             skipped.any { it.timestampMillis in retainedTimes } ||
-            skipped.zipWithNext().any { (a, b) -> a.timestampMillis == b.timestampMillis }
+            !skipped.allAdjacent { a, b -> a.timestampMillis != b.timestampMillis }
         ) return@synchronized points
         val evidence = ArrayList<TrackPoint>(points.size + skipped.size)
         var next = 0
@@ -507,8 +508,8 @@ class TrackingRepository(context: Context) {
                 addAll(between)
                 add(older)
             }
-            if (chain.zipWithNext().any { (newerFix, olderFix) ->
-                    !isMatchingContinuation(olderFix, newerFix, MATCH_CLUSTER_GAP_MS)
+            if (!chain.allAdjacent { newerFix, olderFix ->
+                    isMatchingContinuation(olderFix, newerFix, MATCH_CLUSTER_GAP_MS)
                 }) break
             newestFirst.addAll(between)
             newestFirst += older
@@ -517,7 +518,10 @@ class TrackingRepository(context: Context) {
 
         // Bridged, previously matched fixes provide true route context only. They
         // must never be marked a second time or awarded as newly discovered roads.
-        val markableIds = newestFirst.filter { !it.matched }.mapTo(LinkedHashSet(newestFirst.size)) { it.id }
+        val markableIds = LinkedHashSet<Long>(newestFirst.size)
+        for (point in newestFirst) {
+            if (!point.matched) markableIds.add(point.id)
+        }
         val earliest = newestFirst.first()
         val latest = newestFirst.last()
 
@@ -678,7 +682,7 @@ class TrackingRepository(context: Context) {
                     run.all { it.accuracyMeters.isFinite() &&
                         it.accuracyMeters in 0.01f..PRIORITY_GAP_MAX_ACCURACY_M
                     } &&
-                    run.zipWithNext().all { (a, b) ->
+                    run.allAdjacent { a, b ->
                         isMatchingContinuation(a, b, MATCH_CLUSTER_GAP_MS)
                     }
                 if (continuous && first.id > 0 && last.id < Long.MAX_VALUE) {
@@ -700,7 +704,7 @@ class TrackingRepository(context: Context) {
             db.query(
                 "track_points", TRACK_COLUMNS,
                 "id IN (${anchorIds.joinToString(",") { "?" }})",
-                anchorIds.map(Long::toString).toTypedArray(),
+                Array(anchorIds.size) { anchorIds[it].toString() },
                 null, null, null
             ).use { cursor ->
                 while (cursor.moveToNext()) {
@@ -764,7 +768,7 @@ class TrackingRepository(context: Context) {
                         "track_points",
                         ContentValues().apply { put("matched", 1); put("next_match_attempt_ms", 0) },
                         "matched = 0 AND id IN ($placeholders)",
-                        ids.map(Long::toString).toTypedArray()
+                        Array(ids.size) { ids[it].toString() }
                     )
                     check(count == ids.size) { "Local match changed during validation" }
                     recordRoadVisit(db, visit.segmentId, visit.firstTimestamp, visit.lastTimestamp)
@@ -842,7 +846,7 @@ class TrackingRepository(context: Context) {
         ids.chunked(400).forEach { chunk ->
             val placeholders = chunk.joinToString(",") { "?" }
             val selection = if (unmatchedOnly) "matched = 0 AND id IN ($placeholders)" else "id IN ($placeholders)"
-            db.update("track_points", values, selection, chunk.map(Long::toString).toTypedArray())
+            db.update("track_points", values, selection, Array(chunk.size) { chunk[it].toString() })
         }
     }
 
@@ -935,7 +939,9 @@ class TrackingRepository(context: Context) {
             // This row was read under the write transaction. Zero means every
             // persisted value already matches, including the exact geometry.
             // Compare inside SQLite rather than loading another full geometry.
-            val args = arrayOf(segmentId, *ROAD_UPDATE_COLUMNS.map { values.getAsString(it) }.toTypedArray())
+            val args = Array(ROAD_UPDATE_COLUMNS.size + 1) { index ->
+                if (index == 0) segmentId else values.getAsString(ROAD_UPDATE_COLUMNS[index - 1])
+            }
             check(db.update("roads", values, ROAD_UPDATE_IF_CHANGED, args) in 0..1)
         }
         recordRoadVisit(db, segmentId, firstTimestamp, lastTimestamp)

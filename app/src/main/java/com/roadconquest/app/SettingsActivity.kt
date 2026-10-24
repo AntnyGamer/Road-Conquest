@@ -61,6 +61,20 @@ class SettingsActivity : Activity() {
             }
         }
         bind(R.id.friendNotificationsSwitch, true)
+        findViewById<Switch>(R.id.friendForumPostsSwitch).apply {
+            setOnCheckedChangeListener(null)
+            isChecked = options.friendPostsEnabled(this@SettingsActivity)
+            setOnCheckedChangeListener { _, checked ->
+                options.setFriendPostsEnabled(this@SettingsActivity, checked)
+                if (checked && AccountStore.load(this@SettingsActivity) == null) {
+                    Toast.makeText(this@SettingsActivity, "Forum post notifications require sign-in.", Toast.LENGTH_LONG).show()
+                }
+                if (checked && !options.permission(this@SettingsActivity)) {
+                    requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 9103)
+                }
+                setupOptionalNotifications()
+            }
+        }
         bind(R.id.weeklyRemindersSwitch, false)
     }
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
@@ -116,6 +130,18 @@ class SettingsActivity : Activity() {
         applySafeAreaInsets()
         setupAppearance()
 
+        findViewById<Button>(R.id.quickTourButton).setOnClickListener {
+            startActivity(Intent(this, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                .putExtra(MainActivity.EXTRA_SHOW_TOUR, true))
+        }
+        findViewById<Switch>(R.id.exitConfirmationSwitch).apply {
+            isChecked = Prefs.isExitConfirmationEnabled(this@SettingsActivity)
+            setOnCheckedChangeListener { _, checked ->
+                Prefs.setExitConfirmationEnabled(this@SettingsActivity, checked)
+            }
+        }
+
         repository = TrackingRepository(this)
         manualOnlySwitch = findViewById(R.id.manualOnlySwitch)
         summaryText = findViewById(R.id.dataSummaryText)
@@ -154,6 +180,7 @@ class SettingsActivity : Activity() {
 
         val destinations = listOf(
             R.id.accountButton to AccountActivity::class.java,
+            R.id.communityButton to ForumActivity::class.java,
             R.id.achievementsButton to AchievementsActivity::class.java,
             R.id.shopButton to ShopActivity::class.java,
             R.id.tripHistoryButton to TripHistoryActivity::class.java,
@@ -182,6 +209,14 @@ class SettingsActivity : Activity() {
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).addCategory(Intent.CATEGORY_BROWSABLE)
             if (SystemSettingsNavigator.launchFirst(listOf(intent), ::startActivity) == null) {
                 Toast.makeText(this, getString(R.string.github_unavailable, url), Toast.LENGTH_LONG).show()
+            }
+        }
+
+        findViewById<Button>(R.id.supportDeveloperButton).setOnClickListener {
+            val url = getString(R.string.support_developer_url)
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).addCategory(Intent.CATEGORY_BROWSABLE)
+            if (SystemSettingsNavigator.launchFirst(listOf(intent), ::startActivity) == null) {
+                Toast.makeText(this, getString(R.string.web_page_unavailable, url), Toast.LENGTH_LONG).show()
             }
         }
 
@@ -415,7 +450,7 @@ class SettingsActivity : Activity() {
         mapButton.setOnClickListener {
             val modes = MapMode.entries
             AlertDialog.Builder(this).setTitle("Map style")
-                .setSingleChoiceItems(modes.map { it.label }.toTypedArray(), modes.indexOf(Prefs.mapMode(this))) { dialog, index ->
+                .setSingleChoiceItems(Array(modes.size) { modes[it].label }, modes.indexOf(Prefs.mapMode(this))) { dialog, index ->
                     Prefs.setMapMode(this, modes[index])
                     mapButton.text = getString(R.string.map_style_label, modes[index].label)
                     dialog.dismiss()
@@ -426,7 +461,7 @@ class SettingsActivity : Activity() {
         themeButton.setOnClickListener {
             val themes = UiTheme.entries
             AlertDialog.Builder(this).setTitle("Appearance")
-                .setSingleChoiceItems(themes.map { it.label }.toTypedArray(), themes.indexOf(Prefs.uiTheme(this))) { dialog, index ->
+                .setSingleChoiceItems(Array(themes.size) { themes[it].label }, themes.indexOf(Prefs.uiTheme(this))) { dialog, index ->
                     val changed = Prefs.uiTheme(this) != themes[index]
                     Prefs.setUiTheme(this, themes[index])
                     dialog.dismiss()

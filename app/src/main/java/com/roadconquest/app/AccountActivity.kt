@@ -349,7 +349,7 @@ class AccountActivity : Activity() {
         val error = TextView(this)
         fields.addView(password); fields.addView(error)
         val dialog = AlertDialog.Builder(this).setTitle("Delete account?").setView(fields)
-            .setMessage("This permanently deletes your cloud account, sessions, friendships and cloud driving records. Driving history saved on this phone stays. To remove both, also use Settings → Data and privacy → Delete local data. That option does not delete your cloud account.")
+            .setMessage("This permanently deletes your cloud account, sessions, friendships, cloud driving records and forum data, including posts and Forum Plus access tied to this account. Driving history saved on this phone stays. To remove both, also use Settings → Data and privacy → Delete local data. That option does not delete your cloud account.")
             .setNegativeButton("Cancel", null).setPositiveButton("Delete account", null).create()
         dialog.setOnDismissListener { password.text.clear() }
         dialog.setOnShowListener {

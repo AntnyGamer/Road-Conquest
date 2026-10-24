@@ -1,0 +1,27 @@
+Turn everyday drives into a growing exploration map. Road Conquest tracks the roads you drive, reveals places you visit, and helps you see how far you have explored.
+
+YOUR OWN ROAD TRACKING MAP
+Build a personal driving map with saved road lines, driving mileage, and cloud-like fog that clears as you explore. Good location fixes can reveal roughly one-mile map tiles while walking or stopped too; road and mileage credit comes from driving.
+
+REVISIT YOUR JOURNEYS
+Browse your trip history and watch an animated replay of a saved drive. Basic summaries, replay, and your 100 most recent trips are free.
+
+DISCOVER WHAT IS NEARBY
+Use Explore nearby to see visited and unexplored map tiles around the map center. Highlight towns, states or regions, and countries, with visit details where available. Map and boundary coverage varies by location and data provider.
+
+MAKE EXPLORATION REWARDING
+Earn achievements, work toward weekly exploration goals, and collect points from new roads, milestones, and first visits to new places. Spend points in the Garage on car styles, car colors, road colors, and other cosmetics. An optional account lets you add friends.
+
+A MAP THAT FITS YOU
+Choose Streets, Minimal, Night, or Satellite maps. Use light, dark, or phone-controlled appearance. A short, skippable tour introduces the real map controls and can be replayed from Settings.
+
+CONTROL YOUR RECORDING
+Use automatic tracking or choose manual control. Precise location is needed for road tracking. Background recording depends on Android location permissions and battery settings; the tracking notification includes a Stop tracking action. Set up the app while parked and keep your attention on the road.
+
+KEEP YOUR PROGRESS
+Export a full progress ZIP backup and restore it later. Review location sharing, data controls, and the privacy policy in Settings. Your saved map does not require an account. Online road matching and place discovery send location data to the services described in the in-app disclosure and privacy policy.
+
+OPTIONAL VIP
+A one-time Google Play purchase removes ads and unlocks Gold cosmetics and trip extras: up to 500 recent drives, text-summary sharing, and GPX route exports with optional start/end redaction. Core road tracking, exploration, achievements, replay, and full progress backup and restore remain free.
+
+Android 12 or newer required. GPS conditions, Android background restrictions, and map-provider availability can affect recording and map detail. Road Conquest records exploration; it does not provide turn-by-turn navigation.

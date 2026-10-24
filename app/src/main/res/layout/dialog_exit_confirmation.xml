@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="wrap_content"
+    android:background="@drawable/tour_card_background">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="vertical" android:padding="24dp">
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="@string/exit_title" android:textSize="26sp" android:fontFamily="sans-serif-medium"
+            android:textColor="?attr/rcTextPrimary" android:accessibilityHeading="true" />
+        <TextView android:id="@+id/exitTrackingStatus" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:layout_marginTop="16dp" android:textSize="14sp"
+            android:fontFamily="sans-serif-medium" android:textColor="?attr/rcAccent" />
+        <TextView android:id="@+id/exitBody" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="8dp" android:textSize="15sp" android:lineSpacingExtra="3dp"
+            android:textColor="?attr/rcTextSecondary" />
+        <CheckBox android:id="@+id/exitDontAsk" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:minHeight="48dp" android:layout_marginTop="12dp"
+            android:text="@string/exit_dont_ask" android:textColor="?attr/rcTextSecondary" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:layout_marginTop="12dp">
+            <Button android:id="@+id/exitStayButton" style="@style/RoadConquest.TourQuietAction"
+                android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"
+                android:layout_marginEnd="12dp" android:text="@string/exit_stay" />
+            <Button android:id="@+id/exitLeaveButton" android:layout_width="0dp" android:layout_weight="1"
+                android:layout_height="wrap_content" android:text="@string/exit_leave" />
+        </LinearLayout>
+    </LinearLayout>
+</ScrollView>

@@ -167,8 +167,14 @@ CREATE TABLE IF NOT EXISTS notification_devices (
     session_hash BYTEA NOT NULL UNIQUE REFERENCES sessions(token_hash) ON DELETE CASCADE,
     encrypted_token BYTEA NOT NULL CHECK (octet_length(encrypted_token) BETWEEN 128 AND 8192),
     binding UUID NOT NULL,
+    friend_requests_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    friend_posts_enabled BOOLEAN NOT NULL DEFAULT FALSE,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+-- Additive for existing deployments and older clients; legacy devices receive
+-- request alerts only until they explicitly register the new forum preference.
+ALTER TABLE notification_devices ADD COLUMN IF NOT EXISTS friend_requests_enabled BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE notification_devices ADD COLUMN IF NOT EXISTS friend_posts_enabled BOOLEAN NOT NULL DEFAULT FALSE;
 CREATE INDEX IF NOT EXISTS notification_devices_updated_idx ON notification_devices(updated_at);
 DO $$ BEGIN
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'roadconquest_runtime') THEN

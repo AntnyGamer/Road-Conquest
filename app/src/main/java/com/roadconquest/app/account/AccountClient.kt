@@ -48,8 +48,11 @@ object AccountClient {
     fun logout(token: String) {
         request("/v1/logout", "POST", JSONObject(), token)
     }
-    fun registerNotificationDevice(token: String, deviceToken: String, binding: String) {
-        request("/v1/notifications/device", "POST", JSONObject().put("fid", deviceToken).put("binding", binding), token)
+    fun registerNotificationDevice(token: String, deviceToken: String, binding: String,
+                                   friendRequests: Boolean, friendPosts: Boolean) {
+        request("/v1/notifications/device", "POST", JSONObject()
+            .put("fid", deviceToken).put("binding", binding)
+            .put("friend_requests", friendRequests).put("friend_posts", friendPosts), token)
     }
     fun removeNotificationDevice(token: String) {
         request("/v1/notifications/device", "DELETE", null, token)
@@ -125,13 +128,16 @@ object AccountClient {
         }
     }
 
-    private fun request(path: String, method: String, body: JSONObject?, token: String?): JSONObject {
+    internal fun forumRequest(path: String, method: String, body: JSONObject?, token: String?): JSONObject =
+        request("/v1/forum/$path", method, body, token, 192 * 1024, if (method == "GET") 10_000 else 30_000)
+
+    private fun request(path: String, method: String, body: JSONObject?, token: String?, maxResponseBytes: Int = 64 * 1024, readTimeoutMs: Int = 10_000): JSONObject {
         val url = endpoint(path) ?: throw ApiException("Account service is not configured in this build.")
         val connection = url.toURL().openConnection() as HttpsURLConnection
         connection.requestMethod = method
         connection.instanceFollowRedirects = false
         connection.connectTimeout = 10_000
-        connection.readTimeout = 10_000
+        connection.readTimeout = readTimeoutMs
         connection.setRequestProperty("Accept", "application/json")
         token?.let { connection.setRequestProperty("Authorization", "Bearer $it") }
 
@@ -151,7 +157,7 @@ object AccountClient {
                 while (true) {
                     val count = input.read(buffer)
                     if (count < 0) break
-                    if (output.size() + count > 64 * 1024) throw ApiException("Account server response was too large.")
+                    if (output.size() + count > maxResponseBytes) throw ApiException("Account server response was too large.")
                     output.write(buffer, 0, count)
                 }
                 output.toString(Charsets.UTF_8.name())

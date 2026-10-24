@@ -36,6 +36,23 @@
             android:textStyle="bold" />
 
         <LinearLayout
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="18dp" android:orientation="vertical" android:padding="16dp"
+            android:background="@drawable/settings_card_background" android:elevation="3dp">
+            <Button android:id="@+id/quickTourButton" style="@style/RoadConquest.SettingsAction"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:drawableStart="@drawable/ic_tour" android:drawableTint="?attr/rcAccent"
+                android:drawablePadding="12dp" android:text="@string/tour_replay" />
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="6dp" android:text="@string/tour_replay_detail"
+                android:textColor="?attr/rcTextSecondary" android:textSize="13sp" />
+            <Switch android:id="@+id/exitConfirmationSwitch" android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:minHeight="52dp" android:layout_marginTop="12dp"
+                android:text="@string/exit_confirmation_setting" android:textColor="?attr/rcTextPrimary"
+                android:textSize="15sp" />
+        </LinearLayout>
+
+        <LinearLayout
             android:id="@+id/mapSettingsCard"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -197,6 +214,16 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
                 android:text="Manage account" />
+            <Button
+                android:id="@+id/communityButton"
+                style="@style/RoadConquest.SettingsAction"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:drawableStart="@drawable/ic_forum"
+                android:drawableTint="?attr/rcAccent"
+                android:drawablePadding="12dp"
+                android:text="Community forum" />
 
             <Switch
                 android:id="@+id/leaderboardPrivacySwitch"
@@ -333,6 +360,14 @@
                 android:text="On by default. Requires sign-in and notification permission. Firebase receives an installation ID, but not your routes or account credentials."
                 android:textColor="?attr/rcTextSecondary" android:textSize="13sp" />
             <Switch
+                android:id="@+id/friendForumPostsSwitch"
+                android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp"
+                android:text="Occasional posts from friends" android:textColor="?attr/rcTextPrimary" />
+            <TextView
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="Off by default. Roughly 1 in 4 approved posts can trigger an alert, at most once every 7 days per account. Requires sign-in and notification permission."
+                android:textColor="?attr/rcTextSecondary" android:textSize="13sp" />
+            <Switch
                 android:id="@+id/weeklyRemindersSwitch"
                 android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp"
                 android:text="Weekly challenge reminders" android:textColor="?attr/rcTextPrimary" />
@@ -449,6 +484,25 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:text="@string/github_button" />
+
+            <Button
+                android:id="@+id/supportDeveloperButton"
+                style="@style/RoadConquest.SettingsAction"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:drawableStart="@drawable/ic_coffee"
+                android:drawableTint="?attr/rcAccent"
+                android:drawablePadding="12dp"
+                android:text="@string/support_developer" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="7dp"
+                android:text="@string/support_developer_description"
+                android:textColor="?attr/rcTextSecondary"
+                android:textSize="12sp" />
         </LinearLayout>
     </LinearLayout>
     </ScrollView>

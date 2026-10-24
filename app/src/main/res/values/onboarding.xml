@@ -1,0 +1,40 @@
+<resources>
+    <style name="RoadConquest.TourQuietAction" parent="@style/RoadConquest.Button">
+        <item name="android:background">?android:attr/selectableItemBackground</item>
+        <item name="android:textColor">?attr/rcTextSecondary</item>
+        <item name="android:minHeight">48dp</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+    <string name="tour_step">QUICK TOUR · %1$d OF %2$d</string>
+    <string name="tour_skip">Skip</string>
+    <string name="tour_back">Back</string>
+    <string name="tour_next">Next</string>
+    <string name="tour_finish">Explore map</string>
+    <string name="tour_intro_title">A map that grows with you.</string>
+    <string name="tour_intro_body">Reveal new areas as you explore. Your location uncovers roughly one-mile map tiles; driving also adds roads and mileage.</string>
+    <string name="tour_demo_action">Try a discovery</string>
+    <string name="tour_demo_reset">Reset preview</string>
+    <string name="tour_demo_hint">A little preview. No location needed.</string>
+    <string name="tour_demo_revealed">Tile revealed! This preview adds no real progress.</string>
+    <string name="tour_tracking_title">Ready when you are.</string>
+    <string name="tour_tracking_body">This is your tracking control. Allow Precise location to record roads. Automatic tracking is the default; choose manual tracking in Settings if you prefer.\n\nSet up while parked. Stop tracking from its notification.</string>
+    <string name="tour_layers_title">Find your next discovery.</string>
+    <string name="tour_layers_body">Open Layers for Explore nearby: a grid showing which nearby tiles you have visited. You can also highlight towns, states or regions, and countries.\n\nThe location button above brings the map back to you.</string>
+    <string name="tour_progress_title">Every trip has a story.</string>
+    <string name="tour_progress_body">Trips keeps your drives and animated replays. Badges shows achievements. Goals gives you weekly challenges. Forum opens the public community for discoveries and tips.\n\nWalking can uncover tiles too; driving earns road and mileage credit.</string>
+    <string name="tour_garage_title">Make it yours.</string>
+    <string name="tour_garage_body">Earn points from new roads, achievements, and first visits to new places. Tap Garage to spend them on car styles, colors, and other cosmetics.</string>
+    <string name="tour_settings_title">Your map. Your choices.</string>
+    <string name="tour_settings_body">Settings has light and dark appearance, tracking options, backup and restore, and the privacy policy. Review location sharing under Data and privacy.\n\nReplay this guide anytime from Settings → Quick tour. An account is optional. If needed, setup follows the tour.</string>
+    <string name="tour_replay">Quick tour</string>
+    <string name="tour_replay_detail">A quick guide to your map and tracking controls.</string>
+    <string name="exit_confirmation_setting">Ask before leaving the map</string>
+    <string name="exit_title">Leave the map?</string>
+    <string name="exit_tracking_active">Tracking is still on</string>
+    <string name="exit_tracking_off">Tracking is currently off</string>
+    <string name="exit_body_active">Leaving keeps your saved progress. Tracking can continue in the background, subject to Android’s location and battery settings. To stop recording, use Stop tracking in the notification.</string>
+    <string name="exit_body_off">Leaving keeps your saved progress. No tracking service is running right now.</string>
+    <string name="exit_leave">Leave map</string>
+    <string name="exit_stay">Stay</string>
+    <string name="exit_dont_ask">Don’t ask again</string>
+</resources>

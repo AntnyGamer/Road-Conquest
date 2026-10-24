@@ -5,6 +5,9 @@ const json = (body, status = 200, extra = {}) => Response.json(body, {
 });
 const denied = (code, message, status, seconds) => json({ error: message, code }, status,
   { 'Retry-After': String(seconds), 'X-RoadConquest-Error': code });
+// SQL storage cursors are iterable; consume at most one row for existence/PK lookups.
+// Also accepts array-backed cursors in the database test harness.
+function firstRow(rows) { for (const row of rows) return row; }
 const validId = id => typeof id === 'string' && /^[a-f0-9-]{36}$/.test(id);
 const validKey = key => typeof key === 'string' && /^[a-f0-9]{64}$/.test(key);
 function remember(cache, key, value, limit) {
@@ -57,7 +60,7 @@ export class MapBudget {
     if (this.lastPrunedDay !== day) {
       // A memory-only marker repeats full-table scans on each object restart.
       // Persist one zero-cost marker per UTC day in the existing counter table.
-      const pruned = [...this.sql.exec("SELECT used FROM usage WHERE day = ? AND bucket = 'maintenance:pruned'", day)].length;
+      const pruned = firstRow(this.sql.exec("SELECT used FROM usage WHERE day = ? AND bucket = 'maintenance:pruned'", day));
       if (!pruned) {
         this.sql.exec('DELETE FROM usage WHERE day < ?', day);
         this.sql.exec('DELETE FROM map_permits WHERE day < ?', day);
@@ -66,8 +69,8 @@ export class MapBudget {
         // it empty. Current-day/legacy credits are never copied, reset or lost.
         // This runs in the reservation transaction, so a failed commit restores
         // both the old table and every expired row removed above.
-        if (![...this.sql.exec('SELECT 1 FROM usage LIMIT 1')].length &&
-            ![...this.sql.exec('PRAGMA index_info(usage)')].length) {
+        if (!firstRow(this.sql.exec('SELECT 1 FROM usage LIMIT 1')) &&
+            !firstRow(this.sql.exec('PRAGMA index_info(usage)'))) {
           this.sql.exec('DROP TABLE usage');
           this.sql.exec(USAGE_TABLE);
         }
@@ -110,10 +113,11 @@ export class MapBudget {
     const globalExhausted = counters.has('all') && counters.has('units:all') &&
       used('all') * 4 + used('units:all') + costUnits > limit;
     if (missing.length && !globalExhausted) {
-      const stored = new Map([...this.sql.exec(
+      const stored = new Map();
+      for (const row of this.sql.exec(
         'SELECT bucket,used FROM usage WHERE day = ? AND bucket IN (' + missing.map(() => '?').join(',') + ')',
         day, ...missing
-      )].map(row => [row.bucket, row.used]));
+      )) stored.set(row.bucket, row.used);
       for (const key of missing) counters.set(key, remember(this.counterCache, key, stored.get(key) || 0, 512));
     }
     if (used('all') * 4 + used('units:all') + costUnits > limit)
@@ -144,7 +148,7 @@ export class MapBudget {
     if (attemptId) {
       this.sql.exec("INSERT INTO map_permits(id,day,bucket,cost,slot,state) VALUES(?,?,?,?,?,'reserved')",
         attemptId, day, bucket, costUnits, slot);
-      remember(this.permitCache, attemptId, { id: attemptId, day, bucket, cost: costUnits, slot, state: 'reserved' }, 64);
+      remember(this.permitCache, attemptId, { day, bucket, cost: costUnits, slot, state: 'reserved' }, 64);
       if (health) {
         this.sql.exec('UPDATE map_health SET probe_id = ?, probe_until = ? WHERE key = ?', attemptId, now + 35_000, healthKey);
         this.healthCache.delete(healthKey);
@@ -155,14 +159,21 @@ export class MapBudget {
   health(key) {
     if (!this.healthCache.has(key)) {
       if (this.healthCache.size >= 8) this.healthCache.delete(this.healthCache.keys().next().value);
-      this.healthCache.set(key, [...this.sql.exec('SELECT * FROM map_health WHERE key = ?', key)][0]);
+      this.healthCache.set(key, firstRow(this.sql.exec('SELECT until_ms,probe_id,probe_until FROM map_health WHERE key = ?', key)));
     }
     return this.healthCache.get(key);
   }
   permit(id) {
-    const value = this.permitCache.get(id) || [...this.sql.exec('SELECT * FROM map_permits WHERE id = ?', id)][0];
+    const value = this.permitCache.get(id) || firstRow(this.sql.exec('SELECT day,bucket,cost,slot,state FROM map_permits WHERE id = ?', id));
     // Do not retain negative lookups or arbitrary caller-supplied unknown IDs.
     return value ? remember(this.permitCache, id, value, 64) : undefined;
+  }
+  clearProbe(sql, healthKey, attemptId) {
+    // This object is the sole writer. A cached absent/different probe proves
+    // the conditional write is a no-op. Cache misses retain the original SQL.
+    if (this.healthCache.has(healthKey) && this.healthCache.get(healthKey)?.probe_id !== attemptId) return;
+    this.sql.exec(sql, healthKey, attemptId);
+    this.healthCache.delete(healthKey);
   }
   finish(action, { attemptId, healthKey, status, retryAfterMs = 0 }) {
     if (!validId(attemptId)) return json({ error: 'Invalid attempt' }, 400);
@@ -181,8 +192,7 @@ export class MapBudget {
         this.counterCache.delete('units:' + permit.bucket);
       }
       if (validKey(healthKey)) {
-        this.sql.exec('UPDATE map_health SET probe_id = NULL, probe_until = 0 WHERE key = ? AND probe_id = ?', healthKey, attemptId);
-        this.healthCache.delete(healthKey);
+        this.clearProbe('UPDATE map_health SET probe_id = NULL, probe_until = 0 WHERE key = ? AND probe_id = ?', healthKey, attemptId);
       }
       return json({ ok: true }); // Dispatched/ambiguous attempts are never refunded.
     }
@@ -203,8 +213,7 @@ export class MapBudget {
     }
     if (!validKey(healthKey) || permit.state !== 'dispatched') return json({ error: 'Invalid provider report' }, 400);
     if (action === '/success') {
-      this.sql.exec('DELETE FROM map_health WHERE key = ? AND probe_id = ?', healthKey, attemptId);
-      this.healthCache.delete(healthKey);
+      this.clearProbe('DELETE FROM map_health WHERE key = ? AND probe_id = ?', healthKey, attemptId);
       return json({ ok: true });
     }
     if (action !== '/failure' || ![401,403,429,500,502,503,504].includes(status)) return json({ error: 'Invalid provider report' }, 400);

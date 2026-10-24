@@ -1,0 +1,46 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/forumRoot" android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:background="?attr/rcScreenBg">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="horizontal" android:gravity="center_vertical" android:padding="16dp">
+        <Button android:id="@+id/forumBack" style="@style/RoadConquest.BackAction"
+            android:layout_width="wrap_content" android:layout_height="48dp" android:text="@string/tour_back" />
+        <TextView android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"
+            android:layout_marginStart="12dp" android:text="@string/community" android:textSize="24sp" android:maxLines="1" android:ellipsize="end"
+            android:fontFamily="sans-serif-medium" android:textColor="?attr/rcTextPrimary" android:accessibilityHeading="true" />
+        <ImageButton android:id="@+id/forumRefresh" android:layout_width="48dp" android:layout_height="48dp"
+            android:src="@drawable/ic_refresh" android:tint="?attr/rcAccent" android:padding="12dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless" android:contentDescription="@string/forum_refresh" />
+        <ImageButton android:id="@+id/forumMore" android:layout_width="48dp" android:layout_height="48dp"
+            android:src="@drawable/ic_more" android:tint="?attr/rcTextPrimary" android:padding="12dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless" android:contentDescription="@string/forum_more" />
+    </LinearLayout>
+    <TextView android:id="@+id/forumStatus" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:paddingStart="20dp" android:paddingEnd="20dp" android:paddingBottom="12dp"
+        android:text="@string/forum_loading" android:textColor="?attr/rcTextSecondary" android:textSize="14sp"
+        android:accessibilityLiveRegion="polite" />
+    <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
+        <ListView android:id="@+id/forumList" android:layout_width="match_parent" android:layout_height="match_parent"
+            android:clipToPadding="false" android:paddingStart="16dp" android:paddingEnd="16dp"
+            android:paddingBottom="12dp" android:divider="@android:color/transparent" android:dividerHeight="12dp" />
+        <LinearLayout android:id="@+id/forumEmpty" android:layout_width="match_parent" android:layout_height="match_parent"
+            android:padding="28dp" android:gravity="center" android:orientation="vertical">
+            <ImageView android:layout_width="56dp" android:layout_height="56dp" android:src="@drawable/ic_forum"
+                android:tint="?attr/rcAccent" android:importantForAccessibility="no" />
+            <TextView android:id="@+id/forumEmptyTitle" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="16dp" android:text="@string/forum_empty_title" android:gravity="center"
+                android:textSize="22sp" android:fontFamily="sans-serif-medium" android:textColor="?attr/rcTextPrimary" />
+            <TextView android:id="@+id/forumEmptyBody" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="8dp" android:text="@string/forum_empty_body" android:gravity="center"
+                android:textSize="15sp" android:lineSpacingExtra="3dp" android:textColor="?attr/rcTextSecondary" />
+        </LinearLayout>
+    </FrameLayout>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="horizontal" android:padding="16dp" android:gravity="center_vertical">
+        <Button android:id="@+id/forumCompose" android:layout_width="0dp" android:layout_weight="1"
+            android:layout_height="wrap_content" android:minHeight="52dp" android:text="@string/forum_new_post" />
+        <Button android:id="@+id/forumPlus" style="@style/RoadConquest.FilterAction"
+            android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="10dp"
+            android:text="@string/forum_plus" />
+    </LinearLayout>
+</LinearLayout>

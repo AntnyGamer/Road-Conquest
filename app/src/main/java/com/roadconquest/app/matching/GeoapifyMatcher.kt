@@ -132,8 +132,10 @@ class GeoapifyMatcher(
                 if (waypoint.optString("match_type") != "matched") continue
                 val index = waypoint.optInt("original_index", -1)
                 val original = waypoint.optJSONArray("original_location")
+                // Only a failed direct longitude check needs equivalent date-line wrapping.
                 if (index !in points.indices || original == null || !valid(original) ||
-                    abs(original.getDouble(0) - points[index].longitude) >= 0.000001 ||
+                    (abs(original.getDouble(0) - points[index].longitude) >= 0.000001 &&
+                        abs(shortLongitudeDelta(original.getDouble(0) - points[index].longitude)) >= 0.000001) ||
                     abs(original.getDouble(1) - points[index].latitude) >= 0.000001 ||
                     !local.add(index) || !claimed.add(index)
                 ) return null
@@ -224,9 +226,11 @@ class GeoapifyMatcher(
             val waypoint = waypoints.optJSONObject(index) ?: continue
             val original = waypoint.optJSONArray("original_location")
             // A malformed waypoint is a HOLE, never evidence for either neighboring leg.
+            // Longitude wrapping can preserve the original fix across +/-180 degrees.
             if (waypoint.optInt("original_index", -1) != index || original == null ||
                 !valid(original) ||
-                abs(original.getDouble(0) - points[index].longitude) >= 0.000001 ||
+                (abs(original.getDouble(0) - points[index].longitude) >= 0.000001 &&
+                    abs(shortLongitudeDelta(original.getDouble(0) - points[index].longitude)) >= 0.000001) ||
                 abs(original.getDouble(1) - points[index].latitude) >= 0.000001 ||
                 waypoint.optString("match_type") != "matched" ||
                 waypoint.optInt("leg_index", -1) != 0
@@ -294,6 +298,9 @@ class GeoapifyMatcher(
                         distance += meters(previousCoordinate, nextCoordinate)
                         previousCoordinate = nextCoordinate
                     }
+                    // A repeated junction vertex covers an index interval, but
+                    // cannot acquire road length from a nearby snapped waypoint.
+                    if (distance == 0.0) continue
                     pieces.put(JSONObject().put("name", stepNames[s]).put("distance", distance)
                         .put("geometry", JSONObject().put("type", "LineString").put("coordinates", coordinates))
                         .put("maneuver", JSONObject().put("type", if (stepCountable[s]) "turn" else "ramp")))
@@ -334,7 +341,12 @@ class GeoapifyMatcher(
             val dx = shortLongitudeDelta(b.getDouble(0) - a.getDouble(0)) * scale
             val dy = b.getDouble(1) - a.getDouble(1)
             val length = dx * dx + dy * dy
-            if (length <= 0) continue
+            if (length <= 0) {
+                // A single repeated-vertex edge is the same zero-length junction
+                // as start == end above. Locate it without inventing geometry.
+                if (end == start + 1) return start.toDouble().takeIf { meters(point, a) < 3.0 }
+                continue
+            }
             val fromA = shortLongitudeDelta(longitude - a.getDouble(0)) * scale
             val t = ((fromA * dx + (latitude - a.getDouble(1)) * dy) / length).coerceIn(0.0, 1.0)
             val error = meters(point, at(line, i + t))

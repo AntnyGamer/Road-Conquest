@@ -1,5 +1,9 @@
 # Road Conquest account service
 
+Optional public community routes, moderation, the ten-minute account posting cooldown and Forum Plus
+setup are documented in [COMMUNITY_FORUM.md](../COMMUNITY_FORUM.md). The feature defaults off; this
+change does not provision payment products or deploy credentials.
+
 Optional free monitoring, provider controls and friend notifications are described
 in [FREE_SERVICES.md](../FREE_SERVICES.md), including deployment and migration steps.
 
@@ -325,7 +329,7 @@ PLAY_SERVICE_ACCOUNT_JSON=<service-account JSON stored as a secret env var>
 # or PLAY_SERVICE_ACCOUNT_FILE=/run/secrets/play-integrity.json
 PLAY_CLOUD_PROJECT_NUMBER=<numeric linked Google Cloud project>
 PLAY_CERTIFICATES=<base64url SHA256 Play app-signing certificate without padding>
-PLAY_VERSION_CODES=71,72,73,74,75,76,77,78,79,80,81,82,83,84,85
+PLAY_VERSION_CODES=71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86
 ```
 
 Apply `schema.sql` as the database owner. Restricted API roles need

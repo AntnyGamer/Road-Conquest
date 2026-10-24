@@ -14,6 +14,7 @@ import androidx.core.content.ContextCompat
 import com.google.firebase.FirebaseApp
 import com.google.firebase.messaging.FirebaseMessaging
 import com.roadconquest.app.AccountActivity
+import com.roadconquest.app.ForumActivity
 import com.roadconquest.app.ChallengesActivity
 import com.roadconquest.app.R
 import com.roadconquest.app.account.AccountClient
@@ -47,13 +48,15 @@ object OptionalNotifications {
     private var lastRegistrationAt = 0L
     private fun prefs(context: Context) = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     fun friendsEnabled(context: Context) = prefs(context).getBoolean("friends", true)
+    fun friendPostsEnabled(context: Context) = prefs(context).getBoolean("friend_posts", false)
+    private fun pushEnabled(context: Context) = friendsEnabled(context) || friendPostsEnabled(context)
     fun weeklyEnabled(context: Context) = prefs(context).getBoolean("weekly", true)
     fun permission(context: Context) = Build.VERSION.SDK_INT < 33 ||
         ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
     fun initialize(context: Context) {
         WeeklyReminderReceiver.schedule(context)
-        if (!friendsEnabled(context) || !permission(context)) return
+        if (!pushEnabled(context) || !permission(context)) return
         val session = AccountStore.load(context) ?: return
         deletion?.takeUnless { it.isComplete }?.let { pending ->
             pending.addOnCompleteListener { initialize(context.applicationContext) }
@@ -64,7 +67,7 @@ object OptionalNotifications {
         if (FirebaseApp.getApps(context).isEmpty() && FirebaseApp.initializeApp(context) == null) return
         CrashReporting.initialize(context) // Separate crash consent remains authoritative.
         synchronized(displayLock) {
-            if (!friendsEnabled(context) || !permission(context) || prefs(context).getString("binding", null) != binding) return
+            if (!pushEnabled(context) || !permission(context) || prefs(context).getString("binding", null) != binding) return
             val now = SystemClock.elapsedRealtime()
             if (lastRegistrationBinding == binding && now - lastRegistrationAt < 5 * 60_000L) return
             lastRegistrationBinding = binding
@@ -82,7 +85,7 @@ object OptionalNotifications {
     }
     /** A new login gets a new binding without changing the user's saved notification choice. */
     internal fun prepareBinding(context: Context, sessionToken: String): String? = synchronized(displayLock) {
-        if (!friendsEnabled(context) || !permission(context)) return@synchronized null
+        if (!pushEnabled(context) || !permission(context)) return@synchronized null
         val settings = prefs(context)
         val digest = sessionDigest(sessionToken)
         val current = settings.getString("binding", null)
@@ -92,15 +95,27 @@ object OptionalNotifications {
             context.getSystemService(NotificationManager::class.java).cancel(9101)
         }
     }
-    fun setFriendsEnabled(context: Context, enabled: Boolean) {
-        prefs(context).edit().putBoolean("friends", enabled).commit()
-        if (enabled) {
-            initialize(context)
-        } else {
+    private fun updatePushPreference(context: Context) {
+        synchronized(displayLock) {
+            // A changed choice must bypass the unchanged-FID registration cache.
+            prefs(context).edit().remove("registered_at").commit()
+            lastRegistrationBinding = null
+        }
+        if (pushEnabled(context)) initialize(context)
+        else {
             disableLocal(context)
             val session = AccountStore.load(context)
             if (session != null) executor.execute { runCatching { AccountClient.removeNotificationDevice(session.token) } }
         }
+    }
+    fun setFriendsEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean("friends", enabled).commit()
+        updatePushPreference(context)
+    }
+    fun setFriendPostsEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean("friend_posts", enabled).commit()
+        if (!enabled) context.getSystemService(NotificationManager::class.java).cancel(9104)
+        updatePushPreference(context)
     }
     /** Called before discarding an account session, including corrupt/expired credentials. */
     fun disableLocal(context: Context) {
@@ -110,6 +125,7 @@ object OptionalNotifications {
                 .remove("registered_at").commit()
             lastRegistrationBinding = null
             context.getSystemService(NotificationManager::class.java).cancel(9101)
+            context.getSystemService(NotificationManager::class.java).cancel(9104)
         }
         if (FirebaseApp.getApps(context).isNotEmpty()) {
             FirebaseMessaging.getInstance().apply { isAutoInitEnabled = false; deletion = unregister() }
@@ -132,7 +148,7 @@ object OptionalNotifications {
         val session = AccountStore.load(app) ?: return
         val binding = prefs(app).getString("binding", null) ?: return
         executor.execute {
-            if (deletion?.isComplete == false || !friendsEnabled(app) || !permission(app) || AccountStore.load(app)?.token != session.token ||
+            if (deletion?.isComplete == false || !pushEnabled(app) || !permission(app) || AccountStore.load(app)?.token != session.token ||
                 prefs(app).getString("session_binding", null) != sessionDigest(session.token) ||
                 prefs(app).getString("binding", null) != binding) return@execute
             // The same FID can be emitted again on every app start. Re-registering
@@ -149,9 +165,12 @@ object OptionalNotifications {
                     settings.getLong("registered_at", 0L),
                     idHash, binding, now
                 )) return@execute
-            runCatching { AccountClient.registerNotificationDevice(session.token, token, binding) }
+            val requests = friendsEnabled(app)
+            val posts = friendPostsEnabled(app)
+            runCatching { AccountClient.registerNotificationDevice(session.token, token, binding, requests, posts) }
                 .onSuccess {
-                    if (AccountStore.load(app)?.token == session.token && friendsEnabled(app) && permission(app) &&
+                    if (AccountStore.load(app)?.token == session.token &&
+                        friendsEnabled(app) == requests && friendPostsEnabled(app) == posts && permission(app) &&
                         settings.getString("binding", null) == binding) {
                         settings.edit().putString("registered_id_hash", idHash)
                             .putString("registered_binding", binding)
@@ -160,19 +179,47 @@ object OptionalNotifications {
                 }
         }
     }
-    internal fun acceptsFriend(context: Context, kind: String?, binding: String?): Boolean {
+    private fun acceptsPush(context: Context, kind: String?, binding: String?): Boolean {
         val session = AccountStore.load(context) ?: return false
-        return kind == "friend_request" && binding != null && friendsEnabled(context) && permission(context) &&
+        val enabled = when (kind) {
+            "friend_request" -> friendsEnabled(context)
+            "friend_post" -> friendPostsEnabled(context)
+            else -> false
+        }
+        return enabled && binding != null && permission(context) &&
             binding == prefs(context).getString("binding", null) &&
             prefs(context).getString("session_binding", null) == sessionDigest(session.token)
     }
+    internal fun acceptsFriend(context: Context, kind: String?, binding: String?) =
+        kind == "friend_request" && acceptsPush(context, kind, binding)
+    internal fun acceptsForumPost(context: Context, kind: String?, binding: String?) =
+        kind == "friend_post" && acceptsPush(context, kind, binding)
 
     fun friend(context: Context, kind: String?, binding: String?) {
-        if (!acceptsFriend(context, kind, binding)) return
+        if (!acceptsPush(context, kind, binding)) return
         // Never hold displayLock while acquiring AccountStore's lock: logout uses the reverse order.
         synchronized(displayLock) {
-            if (friendsEnabled(context) && binding == prefs(context).getString("binding", null)) post(context, false)
+            if (binding != prefs(context).getString("binding", null)) return@synchronized
+            when (kind) {
+                "friend_request" -> if (friendsEnabled(context)) post(context, false)
+                "friend_post" -> if (friendPostsEnabled(context)) postForum(context)
+            }
         }
+    }
+    private fun postForum(context: Context) {
+        if (!permission(context)) return
+        val manager = context.getSystemService(NotificationManager::class.java)
+        manager.createNotificationChannel(NotificationChannel("friend-forum-posts",
+            "Friends' community posts", NotificationManager.IMPORTANCE_DEFAULT))
+        val content = PendingIntent.getActivity(context, 9104,
+            Intent(context, ForumActivity::class.java),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        manager.notify(9104, NotificationCompat.Builder(context, "friend-forum-posts")
+            .setSmallIcon(R.drawable.ic_car)
+            .setContentTitle("A friend posted in Road Conquest")
+            .setContentText("Open the community to see what's new.")
+            .setContentIntent(content).setAutoCancel(true)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE).build())
     }
     internal fun post(context: Context, weekly: Boolean) = synchronized(displayLock) {
         if (!permission(context) || weekly && !weeklyEnabled(context)) return@synchronized

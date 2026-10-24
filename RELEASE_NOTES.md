@@ -1,3 +1,20 @@
+# Road Conquest 1.0 Beta 60
+
+## What's new since Beta 59
+
+- **Modern first-use guide:** A replayable six-step Quick tour highlights tracking, map layers, trip history, goals, customization and Settings. The offline discovery preview works without disclosing a location. Tour position and preview survive rotation, and Back can navigate within the guide.
+- **Community forum groundwork:** Add opt-in public posts, reactions, reports, blocking, moderator review and appeals. A persistent ten-minute posting cooldown and moderation-before-publication enforce the published rules. The forum is **disabled by default** until its separate server schema, moderation and service credentials are deployed; installing Beta 60 alone does not enable it.
+- **Occasional friend-post alerts:** A separate, off-by-default Settings toggle permits a sampled notification for an accepted friend's newly approved forum post. At most one alert is attempted per recipient in any seven-day period, with server-side atomic throttling, block filtering and no background polling. The forum, backend schema and Firebase push configuration must be enabled separately before delivery is possible.
+- **Optional Forum Plus groundwork:** A separate lifetime in-app product adds GIF linking and subtle post highlights, with Play verification, restores, and refund notifications. It requires a separately configured Play Console product, backend credentials and live end-to-end verification before being offered; no payment service is activated by the GitHub release itself.
+- **Road-matching continuity:** Keep the strict GPS/geometry checks while allowing correctly validated repeated junction vertices and equivalent +180/-180 longitude representations that could otherwise leave short turn segments unmatched. Tests cover both valid turns and rejection of unverified geometry; real driving improvement has not been measured.
+- **Other fixes:** Restore a practical GPX export flow, maintain theme-appropriate controls, preserve existing verified-driving and rate-limit defenses, and add an optional Buy Me a Coffee link in Settings.
+- **Conservative resource improvements:** Reuse the main map's unchanged overlay mode collection and nearby empty GeoJSON, reuse empty replay features, avoid unnecessary Android label invalidation, reduce duplicate GPS-window processing, and stream Cloudflare budget query rows without intermediate arrays. These preserve existing quotas and provider order. No measured battery or invoice savings are claimed.
+- **Compatibility:** Android 12+, versionCode **86**, versionName **1.0-beta.60**. Same Android package, upload certificate, saved driving history, account data and backup format.
+
+The GitHub release workflow publishes a signed APK and Play-ready AAB only when account-server tests, Android unit tests, lint, release-build checks, all map-integration emulator checks, startup tests and signing verification pass. Upload to Google Play, deployment of the server/map gateway and enabling Forum/Forum Plus remain **separate steps**. The separately deployed verified-driving server must also allow versionCode 86 if that feature is enabled; updating its documented allowlist does not change live configuration.
+
+---
+
 # Road Conquest 1.0 Beta 59
 
 ## What's new since Beta 58
