@@ -217,7 +217,7 @@ class ForumActivity : Activity() {
         if (plus.text.toString() != plusLabel) plus.text = plusLabel
         val moreVisibility = if (current?.next != null) View.VISIBLE else View.GONE
         if (morePosts.visibility != moreVisibility) morePosts.visibility = moreVisibility
-        if (morePosts.isEnabled == busy) morePosts.isEnabled = !busy
+        if (morePosts.isEnabled != !busy) morePosts.isEnabled = !busy
         val statusText = when {
             writing -> "Sending…"
             loading -> getString(R.string.forum_loading)
