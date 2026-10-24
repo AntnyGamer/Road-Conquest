@@ -158,7 +158,7 @@ export function createNotifications(pool, { pepper, sender, deliveryLimit, sampl
         LIMIT 50
       ), claimed AS (
         INSERT INTO forum_post_push(user_id,last_sent_at)
-        SELECT user_id,CURRENT_TIMESTAMP FROM eligible
+        SELECT user_id,CURRENT_TIMESTAMP FROM eligible WHERE TRUE
         ON CONFLICT(user_id) DO UPDATE SET last_sent_at=EXCLUDED.last_sent_at
           WHERE forum_post_push.last_sent_at<=CURRENT_TIMESTAMP-INTERVAL '7 days'
         RETURNING user_id
