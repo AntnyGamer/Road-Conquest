@@ -15,7 +15,7 @@ export function forumGifUrl(value) {
   let url;
   try { url = new URL(value); } catch { throw new EvidenceError('Use a direct Giphy or Tenor GIF link.', 400); }
   if (url.href.length > 1000 || url.protocol !== 'https:' || !GIF_HOSTS.has(url.hostname) || url.username || url.password ||
-      (url.port && url.port !== '443') || !/\.gif$/i.test(url.pathname) || url.hash) {
+      (url.port && url.port !== '443') || !/\.gif$/i.test(url.pathname) || url.hash || url.href.endsWith('#')) {
     throw new EvidenceError('Use a direct HTTPS GIF link from Giphy or Tenor.', 400);
   }
   return url.href;

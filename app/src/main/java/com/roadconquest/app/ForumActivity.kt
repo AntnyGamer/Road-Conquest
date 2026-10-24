@@ -185,6 +185,7 @@ class ForumActivity : Activity() {
             if (known.add(post.id)) posts.add(post)
         }
         adapter.notifyDataSetChanged()
+        updateComposerExtras()
         updateControls()
     }
     internal fun showLoadError(message: String) {
@@ -315,16 +316,17 @@ class ForumActivity : Activity() {
             id = R.id.forumDraftGif; hint = "Direct Giphy or Tenor .gif link"; maxLines = 2
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
             filters = arrayOf(InputFilter.LengthFilter(1000)); setText(draftGif)
-            visibility = if (page?.viewer?.plus == true) View.VISIBLE else View.GONE
             setTextColor(Appearance.color(this@ForumActivity,R.attr.rcTextPrimary))
         }
         content.addView(gif)
-        if (page?.viewer?.plus == true) content.addView(label("GIFs: up to 2 MB, 512 × 512 pixels and 60 frames."))
-        else content.addView(Button(this,null,0,R.style.RoadConquest_TourQuietAction).apply {
+        content.addView(label("GIFs: up to 2 MB, 512 × 512 pixels and 60 frames.").apply { id = R.id.forumGifHelp })
+        content.addView(Button(this,null,0,R.style.RoadConquest_TourQuietAction).apply {
+            id = R.id.forumGifUpsell
             this.text = "GIFs and highlights · Forum Plus"; setOnClickListener { showPlus() }
         })
         content.addView(Button(this,null,0,R.style.RoadConquest_TourQuietAction).apply { this.text = "Read community rules"; setOnClickListener { rules() } })
         val agreed = CheckBox(this).apply {
+            id = R.id.forumDraftRules
             this.text = "I agree to the community rules. My post will be public."; minHeight = dp(48)
             setTextColor(Appearance.color(this@ForumActivity,R.attr.rcTextSecondary))
         }
@@ -377,21 +379,29 @@ class ForumActivity : Activity() {
         }
         content.addView(send)
         dialog.setOnDismissListener { saveDraft() }
+        updateComposerExtras()
         showPanel(dialog)
+    }
+
+    private fun updateComposerExtras() {
+        val dialog = composer ?: return
+        val hasPlus = page?.viewer?.plus == true
+        dialog.findViewById<View>(R.id.forumDraftGif)?.visibility = if (hasPlus) View.VISIBLE else View.GONE
+        dialog.findViewById<View>(R.id.forumGifHelp)?.visibility = if (hasPlus) View.VISIBLE else View.GONE
+        dialog.findViewById<View>(R.id.forumGifUpsell)?.visibility = if (hasPlus) View.GONE else View.VISIBLE
     }
 
     private fun billing(): ForumBilling = billing ?: ForumBilling(this,{ price,feedback ->
         checkout?.apply { isEnabled = price != null && page?.purchases == true; text = if (price == null) "Purchase unavailable" else "Continue · $price" }
-        if (feedback != null) {
-            purchaseMessage?.text = feedback
-            if (restoreRequested) { message(feedback); restoreRequested = false }
-        }
+        purchaseMessage?.text = feedback.orEmpty()
+        if (feedback != null && restoreRequested) { message(feedback); restoreRequested = false }
     },{ token ->
         val session = sessionToken()
         if (session != null) worker.execute {
             val result = runCatching { ForumClient.purchase(session,token) }
             runOnUiThread {
                 if (!active() || sessionToken() != session) return@runOnUiThread
+                restoreRequested = false
                 result.fold(onSuccess = {
                     if (it.optBoolean("plus")) { purchaseDialog?.dismiss(); message("Forum Plus is active."); refresh() }
                     else message("Google Play has not confirmed an active purchase.")

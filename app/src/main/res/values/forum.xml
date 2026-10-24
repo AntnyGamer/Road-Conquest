@@ -1,6 +1,9 @@
 <resources>
     <item name="forumDraftText" type="id" />
     <item name="forumDraftGif" type="id" />
+    <item name="forumDraftRules" type="id" />
+    <item name="forumGifHelp" type="id" />
+    <item name="forumGifUpsell" type="id" />
     <string name="community">Community</string>
     <string name="forum_loading">Loading community…</string>
     <string name="forum_refresh">Refresh community</string>

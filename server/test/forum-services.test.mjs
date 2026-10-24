@@ -18,7 +18,8 @@ function animation() {
 
 test('GIF links reject redirects, untrusted hosts, credentials and oversized/invalid media', async () => {
   for(const url of ['http://media.giphy.com/a.gif','https://media.giphy.com.evil.test/a.gif','https://user@media.giphy.com/a.gif',
-    'https://media.giphy.com:444/a.gif','https://media.giphy.com/a.html','https://127.0.0.1/a.gif']) assert.throws(()=>forumGifUrl(url));
+    'https://media.giphy.com:444/a.gif','https://media.giphy.com/a.html','https://127.0.0.1/a.gif',
+    'https://media.giphy.com/a.gif#','https://media.giphy.com/a.gif#fragment']) assert.throws(()=>forumGifUrl(url));
   assert.equal(forumGifUrl('https://media.tenor.com/a.gif'),'https://media.tenor.com/a.gif');
   assert.throws(()=>forumGifUrl('https://media.giphy.com/'+ '\u2615'.repeat(200)+'.gif'),/GIF link/,
     'Canonical URL length must fit the stored/media response bound after percent encoding');

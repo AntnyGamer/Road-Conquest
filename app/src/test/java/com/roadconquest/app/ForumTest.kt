@@ -2,6 +2,8 @@ package com.roadconquest.app
 
 import android.view.View
 import android.widget.Button
+import android.widget.CheckBox
+import android.widget.EditText
 import android.widget.ListView
 import android.widget.TextView
 import com.roadconquest.app.forum.ForumClient
@@ -17,6 +19,7 @@ import org.robolectric.Robolectric
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowDialog
 import java.time.Instant
 import java.security.MessageDigest
 
@@ -70,6 +73,40 @@ class ForumTest {
         ForumClient.Viewer("Driver",0,until,banned,false,"bound",false,next)
     private fun page(viewer: ForumClient.Viewer? = null, posting: Boolean = true) =
         ForumClient.Page(true,posting,false,emptyList(),null,viewer)
+
+    @Test fun plusChangesUpdateTheOpenComposerWithoutLosingItsDraftOrRulesAgreement() {
+        for (theme in listOf(UiTheme.LIGHT,UiTheme.DARK)) {
+            Prefs.setUiTheme(RuntimeEnvironment.getApplication(),theme)
+            val controller = Robolectric.buildActivity(ForumActivity::class.java).create()
+            try {
+                val activity = controller.get()
+                activity.renderPage(page(viewer()))
+                ForumActivity::class.java.getDeclaredMethod("showComposer").apply { isAccessible = true }.invoke(activity)
+                val dialog = requireNotNull(ShadowDialog.getLatestDialog())
+                val text = dialog.findViewById<EditText>(R.id.forumDraftText)
+                val gif = dialog.findViewById<EditText>(R.id.forumDraftGif)
+                val rules = dialog.findViewById<CheckBox>(R.id.forumDraftRules)
+                text.setText("Keep this discovery while restoring Plus")
+                gif.setText("https://media.giphy.com/example.gif")
+                rules.isChecked = true
+                assertEquals(View.GONE,gif.visibility)
+                assertEquals(View.VISIBLE,dialog.findViewById<View>(R.id.forumGifUpsell).visibility)
+
+                activity.renderPage(page(viewer().copy(plus=true)))
+                assertTrue(dialog.isShowing)
+                assertEquals(View.VISIBLE,gif.visibility)
+                assertEquals(View.VISIBLE,dialog.findViewById<View>(R.id.forumGifHelp).visibility)
+                assertEquals(View.GONE,dialog.findViewById<View>(R.id.forumGifUpsell).visibility)
+                activity.renderPage(page(viewer()))
+                assertEquals(View.GONE,gif.visibility)
+                assertEquals(View.GONE,dialog.findViewById<View>(R.id.forumGifHelp).visibility)
+                assertEquals(View.VISIBLE,dialog.findViewById<View>(R.id.forumGifUpsell).visibility)
+                assertEquals("Keep this discovery while restoring Plus",text.text.toString())
+                assertEquals("https://media.giphy.com/example.gif",gif.text.toString())
+                assertTrue(rules.isChecked)
+            } finally { controller.destroy() }
+        }
+    }
 
     @Test fun forumShowsHonestUnavailableSignInCooldownMuteAndBanStatesInBothThemes() {
         for (theme in listOf(UiTheme.LIGHT,UiTheme.DARK)) {
@@ -126,7 +163,8 @@ class ForumTest {
         assertTrue(ForumGifLoader.allowed("https://media.giphy.com/media/example/giphy.gif"))
         assertTrue(ForumGifLoader.allowed("https://media.tenor.com/example.gif"))
         for(url in listOf("http://media.giphy.com/a.gif","https://user@media.giphy.com/a.gif",
-            "https://media.giphy.com.evil.test/a.gif","https://media.giphy.com:444/a.gif","https://media.giphy.com/page")) {
+            "https://media.giphy.com.evil.test/a.gif","https://media.giphy.com:444/a.gif","https://media.giphy.com/page",
+            "https://media.giphy.com/a.gif#","https://media.giphy.com/a.gif#fragment")) {
             assertFalse(url,ForumGifLoader.allowed(url))
         }
     }

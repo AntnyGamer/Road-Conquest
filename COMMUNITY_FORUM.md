@@ -7,7 +7,7 @@ It never publishes GPS history automatically and does not poll in the background
 ## Posting and moderation
 
 Users accept the rules before submitting. Text and a contact sheet containing every GIF frame
-are checked with OpenAI's moderation endpoint before publication. High-confidence harmful
+are checked with OpenAI's moderation endpoint before publication. Flagged harmful
 categories trigger removal: first violation deletes the post, second also mutes forum participation
 for seven days, third bans forum participation. Driving, account access and public reading remain
 available. Ordinary road/crash discussion and distress alone do not trigger the ladder.
@@ -36,7 +36,8 @@ with localized prices and an eligible buy offer. The app displays the actual Goo
 before checkout; no hard-coded price can disagree with the store. Benefits: a subtle accent border
 and direct Giphy/Tenor GIF links (no search or upload feature). Rules, cooldown and ads are unchanged.
 GIFs are limited to 2 MB, 512 × 512, 60 frames, and eight million decoded frame pixels.
-Only exact HTTPS CDN hosts on port 443 are accepted; redirects are rejected. Clients verify the
+Only exact HTTPS CDN hosts on port 443 are accepted; redirects and fragments (including an empty
+trailing `#`) are rejected consistently by the server and app. Clients verify the
 SHA-256 of the exact moderated bytes before displaying media; no account token goes to the CDN.
 
 The server verifies purchase state, product, unconsumed status and the account binding with Google,
@@ -52,6 +53,13 @@ cancellation. A rejected cached credential is discarded for the next retry; an o
 cannot invalidate a newer credential. Successful acknowledgement does not wait for response-body
 cleanup. New purchases require moderation to be configured and are rejected for banned accounts;
 existing receipt verification and refunds remain available.
+
+Buying/restoring Plus updates GIF controls in an already open composer without rebuilding it
+or losing its draft/rules agreement. Losing Plus hides the controls and the existing server
+entitlement check still applies. Restore/payment feedback preserves a successfully queried Play
+price; only a price-query failure clears it. Checkout still queries a fresh offer before launching.
+Successful price loading clears the checking message, and completed receipt verification clears
+the pending restore-feedback state.
 
 ## Server setup before enabling
 

@@ -20,6 +20,7 @@ class ForumBilling(context: Context, private val status: (String?, String?) -> U
     private val main = Handler(Looper.getMainLooper())
     private var closed = false
     private var connecting = false
+    private var currentPrice: String? = null
     private val waiting = mutableListOf<() -> Unit>()
     private val client: BillingClient = BillingClient.newBuilder(context.applicationContext)
         .enablePendingPurchases(PendingPurchasesParams.newBuilder().enableOneTimeProducts().build())
@@ -29,12 +30,13 @@ class ForumBilling(context: Context, private val status: (String?, String?) -> U
                 BillingClient.BillingResponseCode.OK -> accept(purchases.orEmpty())
                 BillingClient.BillingResponseCode.USER_CANCELED -> Unit
                 BillingClient.BillingResponseCode.ITEM_ALREADY_OWNED -> restore()
-                else -> update(null,"Google Play could not complete the purchase.")
+                else -> update("Google Play could not complete the purchase.")
             } }
         }.build()
 
-    private fun update(price: String?, message: String?) {
-        main.post { if (!closed) status(price,message) }
+    private fun update(message: String) {
+        // Restore/payment feedback does not invalidate a successful price query.
+        main.post { if (!closed) status(currentPrice,message) }
     }
     private fun accept(purchases: List<Purchase>): Boolean {
         var found = false
@@ -45,7 +47,7 @@ class ForumBilling(context: Context, private val status: (String?, String?) -> U
                 val token = purchase.purchaseToken
                 main.post { if (!closed) purchased(token) }
             } else if (purchase.purchaseState == Purchase.PurchaseState.PENDING) {
-                update(null,"Payment is pending. Extras unlock after Google Play confirms it.")
+                update("Payment is pending. Extras unlock after Google Play confirms it.")
             }
         }
         return found
@@ -61,7 +63,7 @@ class ForumBilling(context: Context, private val status: (String?, String?) -> U
                 main.post {
                 connecting = false
                 waiting.clear()
-                update(null,"Google Play connection interrupted. Try again.")
+                update("Google Play connection interrupted. Try again.")
                 }
             }
             override fun onBillingSetupFinished(result: BillingResult) {
@@ -71,7 +73,7 @@ class ForumBilling(context: Context, private val status: (String?, String?) -> U
                 val actions = waiting.toList()
                 waiting.clear()
                 if (result.responseCode == BillingClient.BillingResponseCode.OK) actions.forEach { it() }
-                else update(null,"Google Play purchases are unavailable right now.")
+                else update("Google Play purchases are unavailable right now.")
                 }
             }
         })
@@ -91,15 +93,20 @@ class ForumBilling(context: Context, private val status: (String?, String?) -> U
             if (!closed) {
                 val price = if (result.responseCode == BillingClient.BillingResponseCode.OK)
                     response.productDetailsList.firstOrNull { it.productId == ForumClient.PRODUCT_ID }?.let(::offer)?.formattedPrice else null
-                update(price,if (price == null) "Forum Plus is currently unavailable." else null)
+                main.post {
+                    if (!closed) {
+                        currentPrice = price
+                        status(price,if (price == null) "Forum Plus is currently unavailable." else null)
+                    }
+                }
             }
         }
     }
     fun restore(silent: Boolean = false): Unit = connect {
         client.queryPurchasesAsync(QueryPurchasesParams.newBuilder().setProductType(BillingClient.ProductType.INAPP).build()) { result, purchases ->
             if (!closed && result.responseCode == BillingClient.BillingResponseCode.OK) {
-                if (!accept(purchases) && !silent) update(null,"No Forum Plus purchase was found for this Google Play account.")
-            } else if (!closed) update(null,"Google Play could not restore purchases right now.")
+                if (!accept(purchases) && !silent) update("No Forum Plus purchase was found for this Google Play account.")
+            } else if (!closed) update("Google Play could not restore purchases right now.")
         }
     }
     fun buy(activity: Activity, accountBinding: String) = connect {
@@ -108,7 +115,7 @@ class ForumBilling(context: Context, private val status: (String?, String?) -> U
             val details = if (result.responseCode == BillingClient.BillingResponseCode.OK)
                 response.productDetailsList.firstOrNull { it.productId == ForumClient.PRODUCT_ID } else null
             val option = details?.let(::offer)
-            if (details == null || option == null) { update(null,"Forum Plus is currently unavailable."); return@queryProductDetailsAsync }
+            if (details == null || option == null) { update("Forum Plus is currently unavailable."); return@queryProductDetailsAsync }
             main.post {
                 if (!closed && !activity.isDestroyed && !activity.isFinishing) {
                     val product = BillingFlowParams.ProductDetailsParams.newBuilder().setProductDetails(details)
@@ -116,7 +123,7 @@ class ForumBilling(context: Context, private val status: (String?, String?) -> U
                     val launched = client.launchBillingFlow(activity,BillingFlowParams.newBuilder()
                         .setObfuscatedAccountId(accountBinding).setProductDetailsParamsList(listOf(product)).build())
                     if (launched.responseCode == BillingClient.BillingResponseCode.ITEM_ALREADY_OWNED) restore()
-                    else if (launched.responseCode != BillingClient.BillingResponseCode.OK) update(null,"Google Play could not open checkout.")
+                    else if (launched.responseCode != BillingClient.BillingResponseCode.OK) update("Google Play could not open checkout.")
                 }
             }
         }

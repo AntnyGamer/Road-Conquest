@@ -52,3 +52,13 @@ matching thresholds, and neither is counted as an optimization group.
 The last two optimization checks compare all 65,537 valid/default URI port values and 42
 complete contact-sheet/error results, including all disposal modes, transparency, aspect ratios
 and the decoded-pixel bound. They preserve all results; the server sheets compare byte for byte.
+
+The subsequent full-PR review also fixes live Plus controls in an open composer while keeping
+its draft and rules agreement, preserves a valid Play price through restore/payment feedback,
+clears stale checking/restore state, and rejects an empty GIF fragment consistently with Android.
+No new dependency, server request or matching change is needed for these corrections.
+
+The map-budget comparison was repeated against the PR's actual starting commit
+`146b80cb56907ad2012f91b6fc9e8d8fc100dc9f`: all 2,209 complete responses and all three stored
+tables remain identical through restart, eviction, day rollover, dispatch, cancellation,
+success, outage and recovery. The 17 targeted SQL/provider checks also pass again.
