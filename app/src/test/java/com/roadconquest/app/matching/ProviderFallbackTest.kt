@@ -161,6 +161,32 @@ class ProviderFallbackTest {
         assertEquals(0, router.lastUsedProviderPointOffset)
     }
 
+    @Test fun fallbackOffsetKeepsExactPrefixAndOutOfRangeBehavior() {
+        val input = List(30) { points.first().copy(id = it + 1L, matched = true) }
+        var submitted = emptyList<TrackPoint>()
+        val provider = object : RoadMatcher {
+            override val maxPoints = 10
+            override val unavailable = false
+            override fun rateLimitRemainingMs() = 0L
+            override fun match(points: List<TrackPoint>): MatchResult {
+                submitted = points
+                return MatchResult(emptyList(), emptyMap())
+            }
+        }
+        val matcher = FallbackRoadMatcher(listOf(provider))
+        for ((pendingIds, expectedOffset) in listOf(
+            setOf(10L) to 0,
+            setOf(11L) to 7,
+            setOf(11L, 27L) to 7,
+            setOf(27L) to 20,
+            emptySet<Long>() to 0
+        )) {
+            assertNotNull(matcher.match(input, pendingIds))
+            assertEquals(expectedOffset, matcher.lastUsedProviderPointOffset)
+            assertEquals(input.drop(expectedOffset).take(provider.maxPoints), submitted)
+        }
+    }
+
     @Test fun realGeoapifyPublicExamplePassesExistingGeometryAndSnapValidation() {
         val result = requireNotNull(GeoapifyMatcher("https://maps.example").parse(example, points))
         assertTrue(result.roads.isNotEmpty())
