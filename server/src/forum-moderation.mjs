@@ -59,8 +59,9 @@ export function gifContactSheet(bytes) {
         const source = (Math.floor(y / scale) * width + Math.floor(x / scale)) * 4;
         const target = ((top + y) * sheet.width + left + x) * 4;
         const alpha = pixels[source + 3] / 255;
+        const white = 255 * (1 - alpha);
         for (let channel = 0; channel < 3; channel++) {
-          sheet.data[target + channel] = Math.round(pixels[source + channel] * alpha + 255 * (1 - alpha));
+          sheet.data[target + channel] = Math.round(pixels[source + channel] * alpha + white);
         }
       }
       previous = frame;
