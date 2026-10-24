@@ -220,3 +220,29 @@ test('moderation report batches fit the Android response bound and advance after
   }
   assert.equal((await forum.reports(admin)).posts.length,0);
 }));
+
+test('friend post alerts follow only newly committed visible posts and never duplicate retries', { skip: !database }, async () =>
+  fixture(async (_pool, [author]) => {
+    let sent = 0;
+    const forum = createForum(_pool, { ...options, friendPosted: async () => { sent++; } });
+    const input = body('Welcome to the community');
+    const published = await forum.post(author, input);
+    assert.equal(published.removed, false);
+    assert.equal(sent, 1);
+    assert.equal((await forum.post(author, input)).id, published.id);
+    assert.equal(sent, 1, 'Client retries never resend the notification');
+
+    await advance(_pool, author);
+    const rejected = createForum(_pool, { ...options,
+      moderate: async () => ({ flagged: true, categories: ['spam'] }),
+      friendPosted: async () => { sent++; } });
+    assert.equal((await rejected.post(author, body('Spam content'))).removed, true);
+    assert.equal(sent, 1, 'Moderated-away posts never notify friends');
+
+    await advance(_pool, author);
+    const unavailable = createForum(_pool, { ...options,
+      moderate: async () => { throw new Error('moderation outage'); },
+      friendPosted: async () => { sent++; } });
+    await assert.rejects(unavailable.post(author, body('Temporary failure')), /outage/);
+    assert.equal(sent, 1);
+  }));
