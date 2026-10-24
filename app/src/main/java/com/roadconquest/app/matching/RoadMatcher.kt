@@ -34,7 +34,7 @@ class FallbackRoadMatcher(private val providers: List<RoadMatcher>) : RoadMatche
     override var lastNetworkProviderPointLimit = GeoapifyMatcher.MAX_MATCH_POINTS
         private set
     @Synchronized override fun cachedMatch(points: List<TrackPoint>): MatchResult? =
-        cachedMatch(points, points.filterNot { it.matched }.mapTo(HashSet()) { it.id })
+        cachedMatch(points, unmatchedPointIds(points))
 
     @Synchronized override fun cachedMatch(points: List<TrackPoint>, pendingIds: Set<Long>): MatchResult? {
         lastCallUsedNetwork = false
@@ -51,7 +51,7 @@ class FallbackRoadMatcher(private val providers: List<RoadMatcher>) : RoadMatche
         return null
     }
     @Synchronized override fun match(points: List<TrackPoint>): MatchResult? =
-        match(points, points.filterNot { it.matched }.mapTo(HashSet()) { it.id })
+        match(points, unmatchedPointIds(points))
 
     @Synchronized override fun match(points: List<TrackPoint>, pendingIds: Set<Long>): MatchResult? {
         if (providers.any { it.rateLimitRemainingMs() > 0L }) {
@@ -83,6 +83,14 @@ class FallbackRoadMatcher(private val providers: List<RoadMatcher>) : RoadMatche
     override fun rateLimitRemainingMs(): Long = providers.minOfOrNull { it.rateLimitRemainingMs() } ?: 300_000L
     override val maxPoints: Int get() = providers.firstOrNull { it.rateLimitRemainingMs() == 0L }?.maxPoints
         ?: GeoapifyMatcher.MAX_MATCH_POINTS
+
+    private fun unmatchedPointIds(points: List<TrackPoint>): Set<Long> {
+        val ids = HashSet<Long>()
+        for (point in points) {
+            if (!point.matched) ids.add(point.id)
+        }
+        return ids
+    }
 
     private fun providerOffset(points: List<TrackPoint>, pendingIds: Set<Long>, limit: Int): Int {
         if (points.take(limit).any { it.id in pendingIds }) return 0

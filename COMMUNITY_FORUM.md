@@ -13,6 +13,8 @@ for seven days, third bans forum participation. Driving, account access and publ
 available. Ordinary road/crash discussion and distress alone do not trigger the ladder.
 Automation cannot catch every violation; reports go to the configured human moderators.
 Moderators can keep/remove reported posts and clear penalties after reviewing an appeal.
+Reported posts are fetched in batches of 20, including worst-case text/GIF-link sizes within the
+Android response limit. Reviewing a batch exposes the next waiting reports.
 
 One submission per account every **10 minutes**, including Plus and removed submissions.
 Successful submissions record the cooldown in PostgreSQL; deletion, reinstall and process restart
@@ -45,6 +47,11 @@ Deleting the Road Conquest account removes its Forum Plus access, as disclosed i
 Google signed Pub/Sub notifications cause authoritative Play checks for cancellations and voided
 purchases; duplicate notification IDs are retained for 30 days. Verification and refund updates are
 serialized per account so an older verification response cannot undo a refund.
+Malformed or unavailable Play responses preserve existing access rather than being treated as a
+cancellation. A rejected cached credential is discarded for the next retry; an older delayed failure
+cannot invalidate a newer credential. Successful acknowledgement does not wait for response-body
+cleanup. New purchases require moderation to be configured and are rejected for banned accounts;
+existing receipt verification and refunds remain available.
 
 ## Server setup before enabling
 

@@ -14,7 +14,7 @@ export function forumGifUrl(value) {
   if (typeof value !== 'string' || value.length > 1000) throw new EvidenceError('Use a direct Giphy or Tenor GIF link.', 400);
   let url;
   try { url = new URL(value); } catch { throw new EvidenceError('Use a direct Giphy or Tenor GIF link.', 400); }
-  if (url.protocol !== 'https:' || !GIF_HOSTS.has(url.hostname) || url.username || url.password ||
+  if (url.href.length > 1000 || url.protocol !== 'https:' || !GIF_HOSTS.has(url.hostname) || url.username || url.password ||
       (url.port && url.port !== '443') || !/\.gif$/i.test(url.pathname) || url.hash) {
     throw new EvidenceError('Use a direct HTTPS GIF link from Giphy or Tenor.', 400);
   }
@@ -75,16 +75,27 @@ export function createForumModerator(key, request = fetch) {
     const input = [{ type: 'text', text: text || 'An image shared in the Road Conquest community.' }];
     let gifHash = null;
     if (gifUrl) {
-      const response = await request(forumGifUrl(gifUrl), { redirect: 'manual', signal: AbortSignal.timeout(8000) });
+      const url = forumGifUrl(gifUrl);
+      let response;
+      try {
+        response = await request(url, { redirect: 'manual', signal: AbortSignal.timeout(8000) });
+      } catch {
+        throw new EvidenceError('The GIF provider is temporarily unavailable. Please try again.', 503);
+      }
       if (!response.ok || !response.body || !(response.headers.get('Content-Type') || '').toLowerCase().includes('image/gif')) {
         void response.body?.cancel().catch(() => {});
         throw new EvidenceError('The GIF link is unavailable. Choose another GIF.', 400);
       }
       const chunks = []; let size = 0;
-      for await (const chunk of response.body) {
-        size += chunk.length;
-        if (size > GIF_MAX_BYTES) throw new EvidenceError('GIFs must be 2 MB or smaller.', 400);
-        chunks.push(chunk);
+      try {
+        for await (const chunk of response.body) {
+          size += chunk.length;
+          if (size > GIF_MAX_BYTES) throw new EvidenceError('GIFs must be 2 MB or smaller.', 400);
+          chunks.push(chunk);
+        }
+      } catch (error) {
+        if (error instanceof EvidenceError) throw error;
+        throw new EvidenceError('The GIF download was interrupted. Please try again.', 503);
       }
       const bytes = Buffer.concat(chunks);
       const preview = gifContactSheet(bytes);
@@ -99,12 +110,15 @@ export function createForumModerator(key, request = fetch) {
         body: JSON.stringify({ model: 'omni-moderation-latest', input })
       }), 65536);
     } catch { throw new EvidenceError('Moderation is temporarily unavailable. Please try again.', 503); }
-    const verdict = result.results?.[0];
+    const verdict = result?.results?.[0];
     if (typeof verdict?.flagged !== 'boolean' || !verdict.categories || typeof result.model !== 'string' ||
         REMOVAL_CATEGORIES.some(k => typeof verdict.categories[k] !== 'boolean')) {
       throw new EvidenceError('Moderation is temporarily unavailable. Please try again.', 503);
     }
     const categories = REMOVAL_CATEGORIES.filter(k => verdict.categories[k] === true);
+    if (categories.length && !verdict.flagged) {
+      throw new EvidenceError('Moderation is temporarily unavailable. Please try again.', 503);
+    }
     // Crash/travel discussions and expressions of distress alone are not rule violations.
     return { flagged: categories.length > 0, categories,
       model: result.model, gifHash };

@@ -23,7 +23,7 @@ test('healthy cancellations preserve refunds and limits without no-op health wri
     now += 1500;
   }
   assert.equal(queries.filter(q => q.startsWith('UPDATE map_health')).length, 0);
-  assert.equal(queries.filter(q => q.startsWith('SELECT * FROM map_health')).length, 1);
+  assert.equal(queries.filter(q => q.startsWith('SELECT until_ms,probe_id,probe_until FROM map_health')).length, 1);
   assert.equal(db.prepare("SELECT used FROM usage WHERE bucket='units:all'").get().used, 0);
   assert.equal(db.prepare("SELECT used FROM usage WHERE bucket='attempts:all'").get().used, 50);
 });

@@ -55,14 +55,23 @@ export function createForumPurchaseVerifier(raw, request = fetch, now = Date.now
     if (typeof token !== 'string' || !token.length || token.length > 4096 || /[\r\n]/.test(token)) {
       throw new EvidenceError('Invalid purchase token.', 400);
     }
-    const headers = { Authorization: 'Bearer ' + await access() };
+    const accessToken = await access();
+    const headers = { Authorization: 'Bearer ' + accessToken };
+    const invalidateRejectedAccess = response => {
+      // A delayed old-token failure must not discard a newer shared refresh.
+      if (response.status === 401 && cached?.token === accessToken) cached = null;
+    };
     const endpoint = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${PACKAGE}/purchases/products/${FORUM_PRODUCT}/tokens/${encodeURIComponent(token)}`;
     const response = await request(endpoint, { headers, redirect: 'error', signal: AbortSignal.timeout(8000) });
+    invalidateRejectedAccess(response);
     if (response.status === 400 || response.status === 404 || response.status === 410) {
       void response.body?.cancel().catch(() => {});
       return false;
     }
     const purchase = await boundedJson(response, 32768);
+    if (![0, 1, 2].includes(purchase?.purchaseState)) {
+      throw new EvidenceError('Purchase verification is temporarily unavailable.', 503);
+    }
     if (purchase.purchaseState !== 0) return false;
     if (purchase.obfuscatedExternalAccountId !== binding ||
         (purchase.productId != null && purchase.productId !== FORUM_PRODUCT) || purchase.consumptionState !== 0) {
@@ -73,8 +82,9 @@ export function createForumPurchaseVerifier(raw, request = fetch, now = Date.now
         method: 'POST', redirect: 'error', headers: { ...headers, 'Content-Type': 'application/json' },
         body: '{}', signal: AbortSignal.timeout(8000)
       });
+      invalidateRejectedAccess(ack);
       if (!ack.ok) { void ack.body?.cancel().catch(() => {}); throw new EvidenceError('Purchase acknowledgement is temporarily unavailable.', 503); }
-      await ack.body?.cancel();
+      void ack.body?.cancel().catch(() => {});
     } else if (purchase.acknowledgementState !== 1) {
       throw new EvidenceError('Purchase verification is temporarily unavailable.', 503);
     }

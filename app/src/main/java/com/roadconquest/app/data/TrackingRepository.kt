@@ -113,7 +113,7 @@ class TrackingRepository(context: Context) {
         if (cells.isEmpty()) return@synchronized emptyList()
         // IN handles longitude wrapping at ±180°, including a neighborhood that
         // straddles the date line. Only 25 possible keys are ever inspected.
-        val columns = cells.map { it.column }.distinct()
+        val columns = cells.mapTo(LinkedHashSet()) { it.column }
         val placeholders = List(columns.size) { "?" }.joinToString(",")
         val args = (listOf(cells.first().row, cells.last().row) + columns)
             .map(Int::toString).toTypedArray()
@@ -517,7 +517,10 @@ class TrackingRepository(context: Context) {
 
         // Bridged, previously matched fixes provide true route context only. They
         // must never be marked a second time or awarded as newly discovered roads.
-        val markableIds = newestFirst.filter { !it.matched }.mapTo(LinkedHashSet(newestFirst.size)) { it.id }
+        val markableIds = LinkedHashSet<Long>(newestFirst.size)
+        for (point in newestFirst) {
+            if (!point.matched) markableIds.add(point.id)
+        }
         val earliest = newestFirst.first()
         val latest = newestFirst.last()
 
@@ -700,7 +703,7 @@ class TrackingRepository(context: Context) {
             db.query(
                 "track_points", TRACK_COLUMNS,
                 "id IN (${anchorIds.joinToString(",") { "?" }})",
-                anchorIds.map(Long::toString).toTypedArray(),
+                Array(anchorIds.size) { anchorIds[it].toString() },
                 null, null, null
             ).use { cursor ->
                 while (cursor.moveToNext()) {
@@ -764,7 +767,7 @@ class TrackingRepository(context: Context) {
                         "track_points",
                         ContentValues().apply { put("matched", 1); put("next_match_attempt_ms", 0) },
                         "matched = 0 AND id IN ($placeholders)",
-                        ids.map(Long::toString).toTypedArray()
+                        Array(ids.size) { ids[it].toString() }
                     )
                     check(count == ids.size) { "Local match changed during validation" }
                     recordRoadVisit(db, visit.segmentId, visit.firstTimestamp, visit.lastTimestamp)
@@ -842,7 +845,7 @@ class TrackingRepository(context: Context) {
         ids.chunked(400).forEach { chunk ->
             val placeholders = chunk.joinToString(",") { "?" }
             val selection = if (unmatchedOnly) "matched = 0 AND id IN ($placeholders)" else "id IN ($placeholders)"
-            db.update("track_points", values, selection, chunk.map(Long::toString).toTypedArray())
+            db.update("track_points", values, selection, Array(chunk.size) { chunk[it].toString() })
         }
     }
 
@@ -935,7 +938,9 @@ class TrackingRepository(context: Context) {
             // This row was read under the write transaction. Zero means every
             // persisted value already matches, including the exact geometry.
             // Compare inside SQLite rather than loading another full geometry.
-            val args = arrayOf(segmentId, *ROAD_UPDATE_COLUMNS.map { values.getAsString(it) }.toTypedArray())
+            val args = Array(ROAD_UPDATE_COLUMNS.size + 1) { index ->
+                if (index == 0) segmentId else values.getAsString(ROAD_UPDATE_COLUMNS[index - 1])
+            }
             check(db.update("roads", values, ROAD_UPDATE_IF_CHANGED, args) in 0..1)
         }
         recordRoadVisit(db, segmentId, firstTimestamp, lastTimestamp)

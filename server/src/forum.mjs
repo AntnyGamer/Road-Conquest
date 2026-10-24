@@ -47,7 +47,7 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
 
   async function profile(db, userId, lock = false) {
     await db.query('INSERT INTO forum_profiles(user_id) VALUES($1) ON CONFLICT DO NOTHING', [userId]);
-    const { rows } = await db.query(`SELECT violations,muted_until,banned,plus_active,rules_version,
+    const { rows } = await db.query(`SELECT violations,muted_until,banned,plus_active,
       last_post_at + INTERVAL '10 minutes' AS next_post_at FROM forum_profiles
       WHERE user_id=$1${lock ? ' FOR UPDATE' : ''}`, [userId]);
     if (!rows[0]) throw new EvidenceError('Authentication required.', 401);
@@ -125,14 +125,15 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
       if (hasMore) posts.pop();
       const last = posts.at(-1);
       return { available: true, posting_available: Boolean(moderate),
-        purchases_available: Boolean(verifyPurchase && verifyWebhook) && !rows[0].viewer?.banned,
+        purchases_available: Boolean(moderate && verifyPurchase && verifyWebhook) && !rows[0].viewer?.banned,
         product_id: FORUM_PRODUCT, rules_version: FORUM_RULES_VERSION, posts,
         next: hasMore ? Buffer.from(JSON.stringify([last.created_at,last.id])).toString('base64url') : null,
         viewer: rows[0].viewer ? { ...rows[0].viewer, billing_account_id: binding(user.id), moderator: admins.has(String(user.id)) } : null };
     },
     async post(user, body) {
       const input = postInput(body);
-      const key = user.id + ':' + input.requestId + ':' + input.contentHash;
+      const accountPrefix = user.id + ':';
+      const key = accountPrefix + input.requestId + ':' + input.contentHash;
       if (pendingPosts.has(key)) return pendingPosts.get(key);
       const prior = await existing(pool, user.id, input);
       if (prior) return postResult(prior, await profile(pool, user.id));
@@ -148,7 +149,9 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
       enforceCooldown(state);
       if (input.gifUrl && !state.plus_active) throw new EvidenceError('Forum Plus is required to attach GIFs.', 403);
       if (pendingPosts.has(key)) return pendingPosts.get(key);
-      if ([...pendingPosts.keys()].some(k => k.startsWith(user.id + ':'))) throw new EvidenceError('Your previous post is still being checked.', 429);
+      for (const pendingKey of pendingPosts.keys()) {
+        if (pendingKey.startsWith(accountPrefix)) throw new EvidenceError('Your previous post is still being checked.', 429);
+      }
       if (pendingPosts.size >= 32) throw new EvidenceError('Community is busy. Please try again shortly.', 503);
       const task = (async () => {
         const verdict = await moderate(input);
@@ -221,7 +224,7 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
         COUNT(*) AS reports,MAX(r.created_at) AS reported_at FROM forum_reports r
         JOIN forum_posts p ON p.id=r.post_id JOIN users u ON u.id=p.user_id
         WHERE NOT r.reviewed AND p.state='visible' GROUP BY p.id,u.username_display
-        ORDER BY MAX(r.created_at) LIMIT 50`);
+        ORDER BY MAX(r.created_at) LIMIT 20`);
       return { posts: rows };
     },
     async review(user, postId, remove) {
@@ -253,9 +256,11 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
       if (typeof token !== 'string' || !token.length || token.length > 4096) throw new EvidenceError('Invalid purchase token.', 400);
       const digest = purchaseHash(token);
       return transact(async db => {
-        await profile(db,user.id,true);
+        const current = await profile(db,user.id,true);
         const prior = await db.query('SELECT user_id FROM forum_purchases WHERE token_hash=$1 FOR UPDATE', [digest]);
         if (prior.rowCount && String(prior.rows[0].user_id) !== String(user.id)) throw new EvidenceError('Purchase belongs to another account.', 403);
+        if (current.banned && !prior.rowCount) throw new EvidenceError('New Forum Plus purchases are unavailable for banned accounts.', 403);
+        if (!moderate && !prior.rowCount) throw new EvidenceError('New Forum Plus purchases are temporarily unavailable.', 503);
         // Serialize verification with refunds/restores so an older response cannot overwrite a refund.
         const active = await verifyPurchase(token, binding(user.id));
         if (active) await db.query(`INSERT INTO forum_purchases(token_hash,user_id,encrypted_token,active)
@@ -278,7 +283,7 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
       if (!item || (notification.oneTimeProductNotification ? item.sku !== FORUM_PRODUCT : item.productType !== 2)) return { ok: true };
       if (typeof item.purchaseToken !== 'string' || !item.purchaseToken.length || item.purchaseToken.length > 4096) throw new EvidenceError('Invalid purchase notification.', 400);
       if ((await pool.query('SELECT 1 FROM forum_billing_events WHERE id=$1', [id])).rowCount) return { ok: true };
-      const digest = typeof item.purchaseToken === 'string' ? purchaseHash(item.purchaseToken) : '';
+      const digest = purchaseHash(item.purchaseToken);
       const found = await pool.query('SELECT user_id FROM forum_purchases WHERE token_hash=$1', [digest]);
       if (found.rowCount) await this.purchase({ id: found.rows[0].user_id }, item.purchaseToken);
       await pool.query('INSERT INTO forum_billing_events(id) VALUES($1) ON CONFLICT DO NOTHING', [id]);

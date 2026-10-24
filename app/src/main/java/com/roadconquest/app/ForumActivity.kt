@@ -54,6 +54,7 @@ class ForumActivity : Activity() {
     private var page: ForumClient.Page? = null
     private var loading = false
     private var writing = false
+    private var loadError: String? = null
     private var billing: ForumBilling? = null
     private var purchaseDialog: Dialog? = null
     private var checkout: Button? = null
@@ -144,6 +145,7 @@ class ForumActivity : Activity() {
         val next = if (loadMore) page?.next ?: return else null
         val token = sessionToken()
         loading = true
+        loadError = null
         updateControls()
         worker.execute {
             val result = runCatching { ForumClient.posts(token,next) }
@@ -152,13 +154,7 @@ class ForumActivity : Activity() {
                 loading = false
                 if (sessionToken() != token) { refresh(); return@runOnUiThread }
                 result.fold(onSuccess = { received ->
-                    page = received
-                    if (!loadMore) posts.clear()
-                    val known = posts.mapTo(HashSet()) { it.id }
-                    posts.addAll(received.posts.filter { known.add(it.id) })
-                    adapter.notifyDataSetChanged()
-                    updateControls()
-                    if (!received.available) status.text = "Community is currently unavailable. Please try again later."
+                    renderPage(received,loadMore)
                     if (restoreComposer && received.viewer != null && received.posting && !restricted(received.viewer)) {
                         restoreComposer = false
                         showComposer()
@@ -173,16 +169,27 @@ class ForumActivity : Activity() {
                         ownershipRequested = false
                         refresh()
                     } else {
-                        status.text = error.message ?: "Could not load the community. Tap Refresh to retry."
-                        updateControls(keepStatus = true)
+                        showLoadError(error.message ?: "Could not load the community. Tap Refresh to retry.")
                     }
                 })
             }
         }
     }
 
-    internal fun renderForPreview(received: ForumClient.Page) {
-        page = received; posts.clear(); posts.addAll(received.posts); adapter.notifyDataSetChanged(); updateControls()
+    internal fun renderPage(received: ForumClient.Page, append: Boolean = false) {
+        loadError = null
+        page = received
+        if (!append) posts.clear()
+        val known = posts.mapTo(HashSet()) { it.id }
+        for (post in received.posts) {
+            if (known.add(post.id)) posts.add(post)
+        }
+        adapter.notifyDataSetChanged()
+        updateControls()
+    }
+    internal fun showLoadError(message: String) {
+        loadError = message
+        updateControls()
     }
     private fun restricted(viewer: ForumClient.Viewer?): Boolean = viewer?.banned == true ||
         viewer?.mutedUntil?.let { runCatching { Instant.parse(it).isAfter(Instant.now()) }.getOrDefault(false) } == true
@@ -190,7 +197,7 @@ class ForumActivity : Activity() {
         runCatching { ((Instant.parse(it).toEpochMilli() - System.currentTimeMillis() + 999) / 1000).coerceAtLeast(0) }.getOrDefault(0)
     } ?: 0
 
-    private fun updateControls(keepStatus: Boolean = false) {
+    internal fun updateControls() {
         val current = page
         val viewer = current?.viewer
         val busy = loading || writing
@@ -201,9 +208,10 @@ class ForumActivity : Activity() {
         plus.text = if (viewer?.plus == true) "Plus active" else getString(R.string.forum_plus)
         morePosts.visibility = if (current?.next != null) View.VISIBLE else View.GONE
         morePosts.isEnabled = !busy
-        if (!keepStatus) status.text = when {
+        val statusText = when {
             writing -> "Sending…"
             loading -> getString(R.string.forum_loading)
+            loadError != null -> loadError
             current == null || !current.available -> "Community is currently unavailable. Please try again later."
             viewer?.banned == true -> "Your account is banned from forum participation. Your driving progress is unaffected."
             restricted(viewer) -> "Forum mute ends " + date(viewer!!.mutedUntil!!) + ". You can still read posts."
@@ -213,6 +221,7 @@ class ForumActivity : Activity() {
             viewer.strikes > 0 -> "Signed in as ${viewer.username} · ${viewer.strikes} moderation violation(s)."
             else -> "Share discoveries. Find inspiration. Be kind."
         }
+        if (status.text != statusText) status.text = statusText
         findViewById<TextView>(R.id.forumEmptyTitle).text = if (loading) "One moment…" else getString(R.string.forum_empty_title)
         list.visibility = if (posts.isEmpty()) View.GONE else View.VISIBLE
         findViewById<View>(R.id.forumEmpty).visibility = if (posts.isEmpty()) View.VISIBLE else View.GONE
@@ -392,6 +401,7 @@ class ForumActivity : Activity() {
     }).also { billing = it }
 
     private fun showPlus() {
+        if (purchaseDialog?.isShowing == true) return
         if (sessionToken() == null) { signIn(); return }
         if (page?.viewer?.banned == true) { message("Forum Plus does not remove a forum ban."); return }
         if (page?.viewer?.plus == true) { message("Forum Plus is already active for this account."); return }
@@ -487,19 +497,12 @@ class ForumActivity : Activity() {
             view.findViewById<TextView>(R.id.postDate).text = date(post.createdAt)
             view.findViewById<TextView>(R.id.postBody).apply { text = post.text; visibility = if (post.text.isEmpty()) View.GONE else View.VISIBLE }
             val image = view.findViewById<ImageView>(R.id.postGif)
-            gifs.clear(image)
             image.visibility = if (post.gifUrl != null) View.VISIBLE else View.GONE
             if (post.gifUrl != null && post.gifHash != null) gifs.load(image,post.gifUrl,post.gifHash)
-            listOf(Triple(R.id.postLike,"like","👍"),Triple(R.id.postLove,"love","♡"),Triple(R.id.postCelebrate,"celebrate","✦")).forEach { (id,key,icon) ->
-                view.findViewById<Button>(id).apply {
-                    text = "$icon ${post.reactions[key] ?: 0}"
-                    contentDescription = "$key: ${post.reactions[key] ?: 0}" + if (post.mine == key) ", selected" else ""
-                    isSelected = post.mine == key
-                    setTextColor(Appearance.color(this@ForumActivity,if (post.mine == key) R.attr.rcAccent else R.attr.rcTextSecondary))
-                    isEnabled = !restricted(page?.viewer) && !writing
-                    setOnClickListener { action({ ForumClient.react(it,post.id,if (post.mine == key) null else key) },"Reaction updated.") }
-                }
-            }
+            else gifs.clear(image)
+            bindReaction(view,post,R.id.postLike,"like","👍")
+            bindReaction(view,post,R.id.postLove,"love","♡")
+            bindReaction(view,post,R.id.postCelebrate,"celebrate","✦")
             view.findViewById<View>(R.id.postMore).setOnClickListener { anchor ->
                 PopupMenu(this@ForumActivity,anchor).apply {
                     if (post.own) menu.add("Delete my post").setOnMenuItemClickListener { action({ ForumClient.remove(it,post.id) },"Post deleted."); true }
@@ -517,6 +520,18 @@ class ForumActivity : Activity() {
                 }
             }
             return view
+        }
+        private fun bindReaction(view: View, post: ForumClient.Post, id: Int, key: String, icon: String) {
+            val count = post.reactions[key] ?: 0
+            val selected = post.mine == key
+            view.findViewById<Button>(id).apply {
+                text = "$icon $count"
+                contentDescription = "$key: $count" + if (selected) ", selected" else ""
+                isSelected = selected
+                setTextColor(Appearance.color(this@ForumActivity,if (selected) R.attr.rcAccent else R.attr.rcTextSecondary))
+                isEnabled = !restricted(page?.viewer) && !writing
+                setOnClickListener { action({ ForumClient.react(it,post.id,if (post.mine == key) null else key) },"Reaction updated.") }
+            }
         }
     }
 }

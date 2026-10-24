@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { createForum, moderationPenalty } from '../src/forum.mjs';
+import { EvidenceError } from '../src/scoring.mjs';
 import { forumDatabase } from './helpers/forum-database.mjs';
 
 const database = Boolean(process.env.DATABASE_URL || process.env.FORUM_PGLITE_MODULE);
@@ -116,6 +117,9 @@ test('moderation is idempotent, outages do not punish, and mute/ban affect only 
   const disabled=createForum(pool,{ ...options,moderate:null,verifyWebhook:null });
   assert.equal((await disabled.list(a)).posting_available,false);
   assert.equal((await disabled.list(a)).purchases_available,false);
+  assert.equal((await createForum(pool,{...options,moderate:null}).list(b)).purchases_available,false,
+    'Do not offer paid posting extras before moderation is configured');
+  await assert.rejects(createForum(pool,{...options,moderate:null}).purchase(b,'receipt'),e=>e.status===503);
   await assert.rejects(disabled.post(b,body()),error=>error.status===503);
 }));
 
@@ -132,9 +136,13 @@ test('manual removal strikes once, reports alone never strike, Plus grants requi
   assert.equal((await shop.list(a)).viewer.plus,true);
   await assert.rejects(shop.purchase(b,'receipt'),/another account/);
   assert.equal(checks,1);
+  await pool.query('UPDATE forum_profiles SET banned=TRUE WHERE user_id=$1',[b.id]);
+  await assert.rejects(shop.purchase(b,'new-receipt'),e=>e.status===403);
+  assert.equal(checks,1,'New banned-account purchases must be rejected before contacting Play');
   await advance(pool,a);
   const highlighted=await shop.post(a,body());
   assert.equal((await shop.list(null)).posts.find(p=>p.id===highlighted.id).highlighted,true);
+  await pool.query('UPDATE forum_profiles SET banned=TRUE WHERE user_id=$1',[a.id]);
   active=false;
   const notification = {message:{messageId:'refund-1',data:Buffer.from(JSON.stringify({packageName:'com.roadconquest.app',
     voidedPurchaseNotification:{productType:2,purchaseToken:'receipt'}})).toString('base64')}};
@@ -146,4 +154,42 @@ test('manual removal strikes once, reports alone never strike, Plus grants requi
   await assert.rejects(unauth.webhook('fake',notification),error=>error.status===401);
   await pool.query('DELETE FROM users WHERE id=$1',[a.id]);
   assert.equal((await pool.query('SELECT * FROM forum_purchases')).rowCount,0);
+}));
+
+test('purchase verification outages preserve existing paid access and receipt state', { skip: !database }, async () => fixture(async(pool,[a])=>{
+  let outage=false;
+  const forum=createForum(pool,{...options,verifyPurchase:async()=>{
+    if(outage)throw new EvidenceError('Purchase verification is temporarily unavailable.',503);
+    return true;
+  }});
+  await forum.purchase(a,'receipt');
+  assert.deepEqual(await createForum(pool,{...options,moderate:null}).purchase(a,'receipt'),{plus:true},
+    'Temporarily disabled posting must still allow verification of an existing purchase');
+  const refreshed=(await pool.query('SELECT active,checked_at FROM forum_purchases')).rows[0];
+  outage=true;
+  await assert.rejects(forum.purchase(a,'receipt'),e=>e.status===503);
+  assert.equal((await forum.list(a)).viewer.plus,true);
+  assert.deepEqual((await pool.query('SELECT active,checked_at FROM forum_purchases')).rows[0],refreshed);
+}));
+
+test('moderation report batches fit the Android response bound and advance after review', { skip: !database }, async () => fixture(async(pool,[a,b,c,admin])=>{
+  const forum=createForum(pool,{...options,adminIds:[admin.id],moderate:async()=>({flagged:false,gifHash:'a'.repeat(64)})});
+  await forum.purchase(a,'receipt');
+  const text='\u2615'.repeat(1200),url='https://media.giphy.com/'+'a'.repeat(970)+'.gif';
+  for(let i=0;i<50;i++) {
+    await advance(pool,a);
+    const post=await forum.post(a,body(text,url));
+    await forum.report(b,post.id,'other');
+  }
+  const reviewed=new Set();
+  for(const expected of [20,20,10]) {
+    const batch=await forum.reports(admin);
+    assert.equal(batch.posts.length,expected);
+    assert.ok(Buffer.byteLength(JSON.stringify(batch))<192*1024,'Every batch must fit AccountClient.forumRequest');
+    for(const post of batch.posts) {
+      assert.ok(!reviewed.has(post.id)); reviewed.add(post.id);
+      await forum.review(admin,post.id,false);
+    }
+  }
+  assert.equal((await forum.reports(admin)).posts.length,0);
 }));

@@ -20,6 +20,8 @@ test('GIF links reject redirects, untrusted hosts, credentials and oversized/inv
   for(const url of ['http://media.giphy.com/a.gif','https://media.giphy.com.evil.test/a.gif','https://user@media.giphy.com/a.gif',
     'https://media.giphy.com:444/a.gif','https://media.giphy.com/a.html','https://127.0.0.1/a.gif']) assert.throws(()=>forumGifUrl(url));
   assert.equal(forumGifUrl('https://media.tenor.com/a.gif'),'https://media.tenor.com/a.gif');
+  assert.throws(()=>forumGifUrl('https://media.giphy.com/'+ '\u2615'.repeat(200)+'.gif'),/GIF link/,
+    'Canonical URL length must fit the stored/media response bound after percent encoding');
   assert.throws(()=>gifContactSheet(Buffer.alloc(2*1024*1024+1)),/2 MB/);
   assert.throws(()=>gifContactSheet(Buffer.from('not a GIF')),/read/);
   const moderate=createForumModerator('test',async()=>new Response(null,{status:302,headers:{Location:'https://evil.test'}}));
@@ -52,6 +54,7 @@ test('moderation outages and incomplete responses fail closed; distress and ordi
   for(const response of [new Response('outage',{status:503}),reply({}),reply({model:'test',results:[{flagged:false,categories:{}}]})]) {
     await assert.rejects(createForumModerator('test',async()=>response)({text:'Hello'}),e=>e.status===503);
   }
+  await assert.rejects(createForumModerator('test',async()=>reply(null))({text:'Hello'}),e=>e.status===503);
   const moderate=createForumModerator('test',async()=>reply({model:'test',results:[{flagged:true,
     categories:{...categories,violence:true,'self-harm/intent':true}}]}));
   assert.equal((await moderate({text:'A hard day on the road'})).flagged,false);
@@ -72,11 +75,80 @@ test('Play verifies product/account/state, acknowledges on the server, and cache
   assert.equal(await verify('receipt','bound'),true); assert.equal(acks,1);
   state={...state,acknowledgementState:1};
   await verify('receipt','bound'); assert.equal(acks,1); assert.equal(oauth,1);
-  for(const purchaseState of [1,2,undefined]) { state={...state,purchaseState}; assert.equal(await verify('receipt','bound'),false); }
+  for(const purchaseState of [1,2]) { state={...state,purchaseState}; assert.equal(await verify('receipt','bound'),false); }
+  for(const purchaseState of [undefined,null,-1,3,'0']) {
+    state={...state,purchaseState}; await assert.rejects(verify('receipt','bound'),e=>e.status===503);
+  }
   state={...state,purchaseState:0};
   await assert.rejects(verify('receipt','wrong-account'),e=>e.status===403);
   state={...state,consumptionState:1}; await assert.rejects(verify('receipt','bound'),e=>e.status===403);
   await assert.rejects(verify('','bound'),e=>e.status===400);
+});
+
+test('a rejected cached Play credential is refreshed on retry, including acknowledgement failures', async () => {
+  for (const rejectedStep of ['get','ack']) {
+    let oauth=0,rejected=false;
+    const verify=createForumPurchaseVerifier(credentials,async(url,init)=>{
+      if(url==='https://oauth2.googleapis.com/token') return reply({access_token:'access-'+(++oauth),expires_in:3600});
+      const step=url.endsWith(':acknowledge')?'ack':'get';
+      if(step===rejectedStep && !rejected) { rejected=true; return new Response('{}',{status:401}); }
+      assert.equal(init.headers.Authorization,'Bearer access-'+oauth);
+      return step==='ack' ? new Response('{}') : reply({purchaseState:0,consumptionState:0,
+        acknowledgementState:0,obfuscatedExternalAccountId:'bound'});
+    });
+    await assert.rejects(verify('receipt','bound'),e=>e.status===503);
+    assert.equal(await verify('receipt','bound'),true);
+    assert.equal(oauth,2,rejectedStep+' must invalidate its rejected credential');
+  }
+});
+
+test('a delayed old Play credential failure preserves a newer shared credential', async () => {
+  let oauth=0,release,started;
+  const pending=new Promise(resolve=>{release=resolve;});
+  const requested=new Promise(resolve=>{started=resolve;});
+  const verify=createForumPurchaseVerifier(credentials,async url=>{
+    if(url==='https://oauth2.googleapis.com/token') return reply({access_token:'access-'+(++oauth),expires_in:3600});
+    if(url.endsWith('/slow')) { started(); return pending; }
+    if(url.endsWith('/expired')) return new Response('{}',{status:401});
+    return reply({purchaseState:0,consumptionState:0,acknowledgementState:1,obfuscatedExternalAccountId:'bound'});
+  });
+  const slow=verify('slow','bound');
+  const rejected=assert.rejects(slow,e=>e.status===503);
+  await requested;
+  await assert.rejects(verify('expired','bound'),e=>e.status===503);
+  assert.equal(await verify('fresh','bound'),true);
+  release(new Response('{}',{status:401})); await rejected;
+  assert.equal(await verify('fresh-again','bound'),true);
+  assert.equal(oauth,2);
+});
+
+test('successful acknowledgement is not undone or delayed by response-body cleanup', { timeout: 2000 }, async () => {
+  for(const failCleanup of [true,false]) {
+    let cleaned=false;
+    const verify=createForumPurchaseVerifier(credentials,async url=>{
+      if(url==='https://oauth2.googleapis.com/token') return reply({access_token:'access',expires_in:3600});
+      if(url.endsWith(':acknowledge')) return {ok:true,status:200,body:{cancel:()=>{
+        cleaned=true;
+        return failCleanup?Promise.reject(new Error('cleanup failed')):new Promise(()=>{});
+      }}};
+      return reply({purchaseState:0,consumptionState:0,acknowledgementState:0,obfuscatedExternalAccountId:'bound'});
+    });
+    assert.equal(await verify('receipt','bound'),true);
+    assert.equal(cleaned,true);
+  }
+});
+
+test('interrupted GIF downloads and contradictory moderation results are retryable outages', async () => {
+  const unavailable=createForumModerator('test',async()=>{throw new TypeError('network unavailable');});
+  await assert.rejects(unavailable({text:'A GIF',gifUrl:'https://media.giphy.com/a.gif'}),e=>e.status===503);
+  const interrupted=createForumModerator('test',async()=>new Response(new ReadableStream({
+    start(controller){controller.error(new Error('connection lost'));}
+  }),{headers:{'Content-Type':'image/gif'}}));
+  await assert.rejects(interrupted({text:'A GIF',gifUrl:'https://media.giphy.com/a.gif'}),e=>e.status===503);
+  const inconsistent=createForumModerator('test',async()=>reply({model:'test',results:[{
+    flagged:false,categories:{...categories,hate:true}
+  }]}));
+  await assert.rejects(inconsistent({text:'Hello'}),e=>e.status===503);
 });
 
 test('account binding is stable and separated; encrypted purchase tokens detect tampering', () => {

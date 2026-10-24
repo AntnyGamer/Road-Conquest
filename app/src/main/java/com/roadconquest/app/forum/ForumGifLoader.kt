@@ -36,6 +36,18 @@ class ForumGifLoader {
     }
     companion object {
         private val hosts = setOf("media.giphy.com","i.giphy.com","media.tenor.com")
+        private const val HEX_DIGITS = "0123456789abcdef"
+        internal fun parseHash(value: String): ByteArray? {
+            if (value.length != 64) return null
+            val bytes = ByteArray(32)
+            for (index in bytes.indices) {
+                val high = HEX_DIGITS.indexOf(value[index * 2])
+                val low = HEX_DIGITS.indexOf(value[index * 2 + 1])
+                if (high < 0 || low < 0) return null
+                bytes[index] = ((high shl 4) or low).toByte()
+            }
+            return bytes
+        }
         internal fun allowed(url: String): Boolean = runCatching {
             val uri = URI(url)
             uri.scheme == "https" && uri.host in hosts && uri.rawUserInfo == null &&
@@ -54,7 +66,8 @@ class ForumGifLoader {
     }
     fun load(view: ImageView, url: String, expectedHash: String) {
         clear(view)
-        if (!allowed(url) || !Regex("[a-f0-9]{64}").matches(expectedHash)) return
+        if (!allowed(url)) return
+        val expectedDigest = parseHash(expectedHash) ?: return
         if (closed) return
         val ticket = Ticket()
         view.tag = ticket
@@ -63,7 +76,7 @@ class ForumGifLoader {
             val image = runCatching {
                 check(!ticket.cancelled.get())
                 val cached = synchronized(cache) { cache[expectedHash] }
-                val bytes = cached ?: download(url,expectedHash,ticket).also { synchronized(cache) { cache[expectedHash] = it } }
+                val bytes = cached ?: download(url,expectedDigest,ticket).also { synchronized(cache) { cache[expectedHash] = it } }
                 check(!ticket.cancelled.get())
                 ImageDecoder.decodeDrawable(ImageDecoder.createSource(ByteBuffer.wrap(bytes))) { decoder, info, _ ->
                     require(info.size.width in 1..512 && info.size.height in 1..512)
@@ -82,7 +95,7 @@ class ForumGifLoader {
         ticket.work = work
         workers.execute(work)
     }
-    private fun download(url: String, expectedHash: String, ticket: Ticket): ByteArray {
+    private fun download(url: String, expectedDigest: ByteArray, ticket: Ticket): ByteArray {
         val connection = URI(url).toURL().openConnection() as HttpsURLConnection
         connection.instanceFollowRedirects = false
         connection.connectTimeout = 8000
@@ -102,8 +115,7 @@ class ForumGifLoader {
                 }
             }
             val bytes = output.toByteArray()
-            val actual = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
-            require(actual == expectedHash)
+            require(MessageDigest.isEqual(MessageDigest.getInstance("SHA-256").digest(bytes),expectedDigest))
             return bytes
         } finally { connection.disconnect() }
     }

@@ -144,7 +144,7 @@ export class MapBudget {
     if (attemptId) {
       this.sql.exec("INSERT INTO map_permits(id,day,bucket,cost,slot,state) VALUES(?,?,?,?,?,'reserved')",
         attemptId, day, bucket, costUnits, slot);
-      remember(this.permitCache, attemptId, { id: attemptId, day, bucket, cost: costUnits, slot, state: 'reserved' }, 64);
+      remember(this.permitCache, attemptId, { day, bucket, cost: costUnits, slot, state: 'reserved' }, 64);
       if (health) {
         this.sql.exec('UPDATE map_health SET probe_id = ?, probe_until = ? WHERE key = ?', attemptId, now + 35_000, healthKey);
         this.healthCache.delete(healthKey);
@@ -155,12 +155,12 @@ export class MapBudget {
   health(key) {
     if (!this.healthCache.has(key)) {
       if (this.healthCache.size >= 8) this.healthCache.delete(this.healthCache.keys().next().value);
-      this.healthCache.set(key, [...this.sql.exec('SELECT * FROM map_health WHERE key = ?', key)][0]);
+      this.healthCache.set(key, [...this.sql.exec('SELECT until_ms,probe_id,probe_until FROM map_health WHERE key = ?', key)][0]);
     }
     return this.healthCache.get(key);
   }
   permit(id) {
-    const value = this.permitCache.get(id) || [...this.sql.exec('SELECT * FROM map_permits WHERE id = ?', id)][0];
+    const value = this.permitCache.get(id) || [...this.sql.exec('SELECT day,bucket,cost,slot,state FROM map_permits WHERE id = ?', id)][0];
     // Do not retain negative lookups or arbitrary caller-supplied unknown IDs.
     return value ? remember(this.permitCache, id, value, 64) : undefined;
   }

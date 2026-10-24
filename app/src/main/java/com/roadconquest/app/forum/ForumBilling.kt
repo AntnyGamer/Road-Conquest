@@ -36,15 +36,19 @@ class ForumBilling(context: Context, private val status: (String?, String?) -> U
     private fun update(price: String?, message: String?) {
         main.post { if (!closed) status(price,message) }
     }
-    private fun accept(purchases: List<Purchase>) {
-        purchases.filter { ForumClient.PRODUCT_ID in it.products }.forEach {
-            if (it.purchaseState == Purchase.PurchaseState.PURCHASED) {
-                val token = it.purchaseToken
+    private fun accept(purchases: List<Purchase>): Boolean {
+        var found = false
+        for (purchase in purchases) {
+            if (ForumClient.PRODUCT_ID !in purchase.products) continue
+            found = true
+            if (purchase.purchaseState == Purchase.PurchaseState.PURCHASED) {
+                val token = purchase.purchaseToken
                 main.post { if (!closed) purchased(token) }
-            } else if (it.purchaseState == Purchase.PurchaseState.PENDING) {
+            } else if (purchase.purchaseState == Purchase.PurchaseState.PENDING) {
                 update(null,"Payment is pending. Extras unlock after Google Play confirms it.")
             }
         }
+        return found
     }
     private fun connect(action: () -> Unit) {
         if (closed) return
@@ -94,10 +98,7 @@ class ForumBilling(context: Context, private val status: (String?, String?) -> U
     fun restore(silent: Boolean = false): Unit = connect {
         client.queryPurchasesAsync(QueryPurchasesParams.newBuilder().setProductType(BillingClient.ProductType.INAPP).build()) { result, purchases ->
             if (!closed && result.responseCode == BillingClient.BillingResponseCode.OK) {
-                if (purchases.none { ForumClient.PRODUCT_ID in it.products }) {
-                    if (!silent) update(null,"No Forum Plus purchase was found for this Google Play account.")
-                }
-                else accept(purchases)
+                if (!accept(purchases) && !silent) update(null,"No Forum Plus purchase was found for this Google Play account.")
             } else if (!closed) update(null,"Google Play could not restore purchases right now.")
         }
     }
