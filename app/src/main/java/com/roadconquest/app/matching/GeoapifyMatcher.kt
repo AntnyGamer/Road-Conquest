@@ -132,8 +132,10 @@ class GeoapifyMatcher(
                 if (waypoint.optString("match_type") != "matched") continue
                 val index = waypoint.optInt("original_index", -1)
                 val original = waypoint.optJSONArray("original_location")
+                // Only a failed direct longitude check needs equivalent date-line wrapping.
                 if (index !in points.indices || original == null || !valid(original) ||
-                    abs(original.getDouble(0) - points[index].longitude) >= 0.000001 ||
+                    (abs(original.getDouble(0) - points[index].longitude) >= 0.000001 &&
+                        abs(shortLongitudeDelta(original.getDouble(0) - points[index].longitude)) >= 0.000001) ||
                     abs(original.getDouble(1) - points[index].latitude) >= 0.000001 ||
                     !local.add(index) || !claimed.add(index)
                 ) return null
@@ -224,9 +226,11 @@ class GeoapifyMatcher(
             val waypoint = waypoints.optJSONObject(index) ?: continue
             val original = waypoint.optJSONArray("original_location")
             // A malformed waypoint is a HOLE, never evidence for either neighboring leg.
+            // Longitude wrapping can preserve the original fix across +/-180 degrees.
             if (waypoint.optInt("original_index", -1) != index || original == null ||
                 !valid(original) ||
-                abs(original.getDouble(0) - points[index].longitude) >= 0.000001 ||
+                (abs(original.getDouble(0) - points[index].longitude) >= 0.000001 &&
+                    abs(shortLongitudeDelta(original.getDouble(0) - points[index].longitude)) >= 0.000001) ||
                 abs(original.getDouble(1) - points[index].latitude) >= 0.000001 ||
                 waypoint.optString("match_type") != "matched" ||
                 waypoint.optInt("leg_index", -1) != 0

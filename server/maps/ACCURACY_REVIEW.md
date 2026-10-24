@@ -129,3 +129,25 @@ date-line, malformed-step, malformed-waypoint and multi-leg cases. Network servi
 are stubbed to prohibit provider calls. These synthetic checks are not physical-drive
 measurements or a full Android test run; Android CI validates the committed tests
 with the rest of the app.
+
+## Equivalent original longitudes at the date line
+
+The subsequent review compares against `df5b2bc81958991935271eb77a5459231b4e4e8e`.
+A Geoapify response can represent an original longitude of 180 degrees as -180
+degrees, or vice versa. Those are the same position, but the original-input
+identity checks treated them as different and discarded the valid road. This
+was reproduced before changing production code.
+
+Both the single-feature and independent-feature checks retain the existing direct
+comparison first. Only a failed direct check tries the existing short wrapped
+longitude calculation. The tolerance remains strictly below 0.000001 degrees;
+latitude identity, original indices, duplicate/overlap rejection, snap, confidence,
+speed, geometry and detour checks are unchanged. Normal accepted inputs keep the
+same direct check without calculating a wrapped difference.
+
+The added regression exercises both longitude representations at four latitudes
+and compares complete results with their already accepted canonical responses,
+including two independent feature matches. Wrapped errors of 0.000002 degrees,
+larger longitude errors and changed latitudes remain rejected. The eight local
+parser regression methods and the existing 3,200-case turn corpus pass. These
+remain synthetic parser checks; no physical-drive accuracy rate is claimed.

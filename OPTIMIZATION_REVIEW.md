@@ -1,7 +1,7 @@
 # Follow-up optimization review
 
 Reviewed the new forum, billing, GIF loading, tutorial and map tests, plus matching, local SQL,
-map-budget bookkeeping, account APIs, maintenance and common collection pipelines. Kept the 17
+map-budget bookkeeping, account APIs, maintenance and common collection pipelines. Kept the 19
 groups below; did not reach 50 without speculative caching, behavioral changes or less clear code.
 These remove redundant work. They do not change quotas, cooldowns, expiry, matching thresholds,
 GPS samples, provider order, road geometry, moderation rules or public response shapes.
@@ -25,6 +25,8 @@ GPS samples, provider order, road geometry, moderation rules or public response 
 | 15 | GPS adjacency checks | Four temporary lists of neighboring pairs | Same empty/single-point behavior, order, duplicate-time, ID, gap and continuity checks |
 | 16 | Settings choices | Intermediate label lists before creating the two dialog arrays | Same enum order, labels, selected item and click actions |
 | 17 | Weekly reward lookup | Intermediate key list before creating SQL arguments | Same four reward IDs, bindings, ownership lookup and payouts |
+| 18 | GIF URL ports | A temporary two-element list and boxed port values on each check | Exactly the same default/443 allowlist and all other URL restrictions |
+| 19 | GIF moderation sheets | Recomputing identical scale and thumbnail dimensions for every frame | Byte-identical PNG contact sheets, including disposal, transparency, all frames and media bounds |
 
 The requested camera-movement assertion and its longitude polling were removed. The actual pan,
 render synchronization, fog-pixel checks and other map/tour tests remain.
@@ -43,4 +45,10 @@ No phone battery percentage, fleet capacity or billing reduction is claimed from
 The separate [accuracy follow-up](server/maps/ACCURACY_REVIEW.md#repeated-junction-vertices)
 fixes dropped turn waypoints on repeated provider vertices. It preserves valid approach/exit
 sections, rejects out-of-range junction evidence and avoids crediting empty junction geometry.
-It does not relax matching thresholds and is not counted as an optimization group.
+The [date-line follow-up](server/maps/ACCURACY_REVIEW.md#equivalent-original-longitudes-at-the-date-line)
+also accepts equivalent +/-180-degree representations of an original fix. Neither relaxes
+matching thresholds, and neither is counted as an optimization group.
+
+The last two optimization checks compare all 65,537 valid/default URI port values and 42
+complete contact-sheet/error results, including all disposal modes, transparency, aspect ratios
+and the decoded-pixel bound. They preserve all results; the server sheets compare byte for byte.

@@ -51,7 +51,7 @@ class ForumGifLoader {
         internal fun allowed(url: String): Boolean = runCatching {
             val uri = URI(url)
             uri.scheme == "https" && uri.host in hosts && uri.rawUserInfo == null &&
-                uri.port in listOf(-1,443) && uri.fragment == null && uri.path.endsWith(".gif",ignoreCase = true)
+                (uri.port == -1 || uri.port == 443) && uri.fragment == null && uri.path.endsWith(".gif",ignoreCase = true)
         }.getOrDefault(false)
     }
     fun clear(view: ImageView) {

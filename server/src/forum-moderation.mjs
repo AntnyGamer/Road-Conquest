@@ -34,6 +34,8 @@ export function gifContactSheet(bytes) {
   }
   const columns = Math.ceil(Math.sqrt(frames));
   const thumb = 128;
+  const scale = Math.min(thumb / width, thumb / height);
+  const w = Math.max(1, Math.floor(width * scale)), h = Math.max(1, Math.floor(height * scale));
   const sheet = new PNG({ width: columns * thumb, height: Math.ceil(frames / columns) * thumb });
   sheet.data.fill(255);
   const pixels = Buffer.alloc(width * height * 4);
@@ -51,8 +53,6 @@ export function gifContactSheet(bytes) {
       }
       restore = frame.disposal === 3 ? Buffer.from(pixels) : null;
       gif.decodeAndBlitFrameRGBA(index, pixels);
-      const scale = Math.min(thumb / width, thumb / height);
-      const w = Math.max(1, Math.floor(width * scale)), h = Math.max(1, Math.floor(height * scale));
       const left = index % columns * thumb + Math.floor((thumb - w) / 2);
       const top = Math.floor(index / columns) * thumb + Math.floor((thumb - h) / 2);
       for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
