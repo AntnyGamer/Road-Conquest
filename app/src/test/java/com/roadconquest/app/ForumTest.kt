@@ -53,8 +53,23 @@ class ForumTest {
                 override fun onTextChanged(s:CharSequence?,start:Int,before:Int,count:Int) { changes++ }
                 override fun afterTextChanged(s:android.text.Editable?) {}
             })
+            val unchangedControls = listOf(
+                activity.findViewById<TextView>(R.id.forumCompose),
+                activity.findViewById<TextView>(R.id.forumPlus),
+                activity.findViewById<TextView>(R.id.forumEmptyTitle)
+            )
+            val changesByControl = IntArray(unchangedControls.size)
+            unchangedControls.forEachIndexed { index,control ->
+                control.addTextChangedListener(object:android.text.TextWatcher {
+                    override fun beforeTextChanged(s:CharSequence?,start:Int,count:Int,after:Int) {}
+                    override fun onTextChanged(s:CharSequence?,start:Int,before:Int,count:Int) { changesByControl[index]++ }
+                    override fun afterTextChanged(s:android.text.Editable?) {}
+                })
+            }
             repeat(3) { activity.updateControls() }
             assertEquals(0,changes)
+            assertTrue("Unchanged controls should not trigger repeated text layouts",
+                changesByControl.all { it == 0 })
         } finally { controller.destroy() }
     }
     @Test fun aFailedRefreshStaysVisibleWhenTheLocalCooldownUpdatesAndClearsOnSuccess() {
