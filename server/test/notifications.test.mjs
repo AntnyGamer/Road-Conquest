@@ -109,6 +109,9 @@ test('FCM uses scoped OAuth, private data-only payloads, shared refresh, validat
   const binding = randomUUID();
   assert.deepEqual(await Promise.all([sender('test', binding, true), sender('gone', binding)]), ['sent', 'unregistered']);
   assert.equal(auth, 1); assert.equal(sent[0].validate_only, true);
+  assert.equal(await sender('test', binding, false, 'friend_post'), 'sent');
+  assert.deepEqual(sent[2].message.data, { kind: 'friend_post', binding });
+  assert.equal(sent[2].message.android.collapse_key, 'friend_post');
   assert.equal(createFcmSender(undefined), null);
   assert.throws(() => createFcmSender(JSON.stringify({ ...account, project_id: 'other' })), /Invalid/);
 });
@@ -246,4 +249,52 @@ test('an invalid-token reply cannot delete a registration refreshed while delive
     await service.friendRequest(user.id);
     assert.equal((await pool.query('SELECT COUNT(*) FROM notification_devices')).rows[0].count,'0');
   }finally{await pool.end();}
+});
+
+test('forum post alerts are sampled, consent aware, blocked and capped at one per recipient per seven days', { skip: !process.env.DATABASE_URL }, async () => {
+  const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    await pool.query(await readFile(new URL('../schema.sql', import.meta.url), 'utf8'));
+    await pool.query(await readFile(new URL('../forum-schema.sql', import.meta.url), 'utf8'));
+    await pool.query('TRUNCATE users CASCADE');
+    const users = (await pool.query(`INSERT INTO users(username_display,username_key,password_salt,password_hash)
+      SELECT 'Weekly_'||g,'weekly_'||g,$1,$2 FROM generate_series(0,3) g ORDER BY g RETURNING id`,
+      [Buffer.alloc(16), Buffer.alloc(64)])).rows;
+    const [author, optedIn, optedOut, blocked] = users;
+    for (const target of [optedIn, optedOut, blocked]) {
+      const pair = [author.id, target.id].sort((a, b) => Number(a)-Number(b));
+      await pool.query('INSERT INTO friendships(user_low,user_high,requested_by,accepted) VALUES($1,$2,$1,TRUE)', pair);
+      const sessionHash = randomBytes(32), fid = randomBytes(16).toString('base64url');
+      await pool.query("INSERT INTO sessions(token_hash,user_id,expires_at) VALUES($1,$2,CURRENT_TIMESTAMP+INTERVAL '1 day')",
+        [sessionHash, target.id]);
+      const service = createNotifications(pool, { pepper: 'weekly-friend-notification-pepper',
+        sender: async () => 'sent', sampleForumPost: () => true });
+      await service.register({ id: target.id, session_hash: sessionHash }, {
+        fid, binding: randomUUID(), friend_requests: true, friend_posts: target !== optedOut
+      });
+    }
+    await pool.query('INSERT INTO forum_blocks(user_id,blocked_id) VALUES($1,$2)', [blocked.id, author.id]);
+    let selected = false; const sent = [];
+    const service = createNotifications(pool, { pepper: 'weekly-friend-notification-pepper',
+      sampleForumPost: () => selected, sender: async (fid,binding,validate,kind) => {
+        sent.push({fid,binding,validate,kind}); return 'sent';
+      } });
+    await service.forumPost(author.id);
+    assert.equal(sent.length, 0, 'Unselected posts do not cause delivery');
+    selected = true;
+    await service.forumPost(author.id);
+    assert.equal(sent.length, 1, 'Only one opted-in, unblocked friend is eligible');
+    assert.equal(sent[0].kind, 'friend_post');
+    await Promise.all(Array.from({ length: 5 }, () => service.forumPost(author.id)));
+    assert.equal(sent.length, 1, 'Concurrent and repeated posts retain the weekly limit');
+    await pool.query("UPDATE forum_post_push SET last_sent_at=CURRENT_TIMESTAMP-INTERVAL '8 days'");
+    await service.forumPost(author.id);
+    assert.equal(sent.length, 2, 'Recipient can receive another alert after seven days');
+    await pool.query('UPDATE notification_devices SET friend_posts_enabled=FALSE');
+    await service.forumPost(author.id);
+    assert.equal(sent.length, 2, 'Disabling consent stops further deliveries');
+    await pool.query('DELETE FROM users WHERE id=$1',[optedIn.id]);
+    assert.equal((await pool.query('SELECT COUNT(*) FROM forum_post_push')).rows[0].count, '0',
+      'Account deletion erases the push throttle record');
+  } finally { await pool.end(); }
 });
