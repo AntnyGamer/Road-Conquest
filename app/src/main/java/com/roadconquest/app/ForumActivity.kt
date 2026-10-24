@@ -47,6 +47,8 @@ class ForumActivity : Activity() {
     private val posts = mutableListOf<ForumClient.Post>()
     private lateinit var list: ListView
     private lateinit var status: TextView
+    private lateinit var emptyTitle: TextView
+    private lateinit var emptyView: View
     private lateinit var compose: Button
     private lateinit var plus: Button
     private lateinit var morePosts: Button
@@ -105,6 +107,8 @@ class ForumActivity : Activity() {
         restoreComposer = savedInstanceState?.getBoolean("composer_open") ?: false
         list = findViewById(R.id.forumList)
         status = findViewById(R.id.forumStatus)
+        emptyTitle = findViewById(R.id.forumEmptyTitle)
+        emptyView = findViewById(R.id.forumEmpty)
         compose = findViewById(R.id.forumCompose)
         plus = findViewById(R.id.forumPlus)
         morePosts = Button(this,null,0,R.style.RoadConquest_FilterAction).apply {
@@ -203,12 +207,17 @@ class ForumActivity : Activity() {
         val viewer = current?.viewer
         val busy = loading || writing
         val wait = cooldownSeconds()
-        compose.isEnabled = !busy && current?.available == true && current.posting && !restricted(viewer) && wait == 0L
-        compose.text = if (viewer == null) "Sign in to post" else getString(R.string.forum_new_post)
-        plus.isEnabled = !busy && current?.available == true && viewer?.banned != true
-        plus.text = if (viewer?.plus == true) "Plus active" else getString(R.string.forum_plus)
-        morePosts.visibility = if (current?.next != null) View.VISIBLE else View.GONE
-        morePosts.isEnabled = !busy
+        val canCompose = !busy && current?.available == true && current.posting && !restricted(viewer) && wait == 0L
+        if (compose.isEnabled != canCompose) compose.isEnabled = canCompose
+        val composeLabel = if (viewer == null) "Sign in to post" else getString(R.string.forum_new_post)
+        if (compose.text.toString() != composeLabel) compose.text = composeLabel
+        val canPurchase = !busy && current?.available == true && viewer?.banned != true
+        if (plus.isEnabled != canPurchase) plus.isEnabled = canPurchase
+        val plusLabel = if (viewer?.plus == true) "Plus active" else getString(R.string.forum_plus)
+        if (plus.text.toString() != plusLabel) plus.text = plusLabel
+        val moreVisibility = if (current?.next != null) View.VISIBLE else View.GONE
+        if (morePosts.visibility != moreVisibility) morePosts.visibility = moreVisibility
+        if (morePosts.isEnabled == busy) morePosts.isEnabled = !busy
         val statusText = when {
             writing -> "Sending…"
             loading -> getString(R.string.forum_loading)
@@ -223,9 +232,12 @@ class ForumActivity : Activity() {
             else -> "Share discoveries. Find inspiration. Be kind."
         }
         if (status.text != statusText) status.text = statusText
-        findViewById<TextView>(R.id.forumEmptyTitle).text = if (loading) "One moment…" else getString(R.string.forum_empty_title)
-        list.visibility = if (posts.isEmpty()) View.GONE else View.VISIBLE
-        findViewById<View>(R.id.forumEmpty).visibility = if (posts.isEmpty()) View.VISIBLE else View.GONE
+        val emptyLabel = if (loading) "One moment…" else getString(R.string.forum_empty_title)
+        if (emptyTitle.text.toString() != emptyLabel) emptyTitle.text = emptyLabel
+        val listVisibility = if (posts.isEmpty()) View.GONE else View.VISIBLE
+        if (list.visibility != listVisibility) list.visibility = listVisibility
+        val emptyVisibility = if (posts.isEmpty()) View.VISIBLE else View.GONE
+        if (emptyView.visibility != emptyVisibility) emptyView.visibility = emptyVisibility
     }
     private fun date(value: String) = runCatching {
         DateFormat.getDateTimeInstance(DateFormat.MEDIUM,DateFormat.SHORT).format(Date.from(Instant.parse(value)))
