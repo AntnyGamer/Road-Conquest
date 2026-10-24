@@ -5,6 +5,14 @@ const json = (body, status = 200, extra = {}) => Response.json(body, {
 });
 const denied = (code, message, status, seconds) => json({ error: message, code }, status,
   { 'Retry-After': String(seconds), 'X-RoadConquest-Error': code });
+// Reservation writes always contain three tile rows or five managed-matching rows.
+// Build identical parameterized SQL once instead of recreating strings every request.
+const reservationSql = rows =>
+  'INSERT INTO usage(day,bucket,used) VALUES' + Array(rows).fill('(?,?,?)').join(',') + ' ' +
+    "ON CONFLICT(day,bucket) DO UPDATE SET used = CASE WHEN excluded.bucket = 'next-slot' " +
+    'THEN excluded.used ELSE used + excluded.used END';
+const TILE_RESERVATION_SQL = reservationSql(3);
+const MATCH_RESERVATION_SQL = reservationSql(5);
 const validId = id => typeof id === 'string' && /^[a-f0-9-]{36}$/.test(id);
 const validKey = key => typeof key === 'string' && /^[a-f0-9]{64}$/.test(key);
 function remember(cache, key, value, limit) {
@@ -110,10 +118,11 @@ export class MapBudget {
     const globalExhausted = counters.has('all') && counters.has('units:all') &&
       used('all') * 4 + used('units:all') + costUnits > limit;
     if (missing.length && !globalExhausted) {
-      const stored = new Map([...this.sql.exec(
+      const stored = new Map();
+      for (const row of this.sql.exec(
         'SELECT bucket,used FROM usage WHERE day = ? AND bucket IN (' + missing.map(() => '?').join(',') + ')',
         day, ...missing
-      )].map(row => [row.bucket, row.used]));
+      )) stored.set(row.bucket, row.used);
       for (const key of missing) counters.set(key, remember(this.counterCache, key, stored.get(key) || 0, 512));
     }
     if (used('all') * 4 + used('units:all') + costUnits > limit)
@@ -132,11 +141,7 @@ export class MapBudget {
     const values = [day, 'units:all', costUnits, day, 'units:' + bucket, costUnits,
       day, 'next-slot', slot + spacingMs];
     if (attemptId) values.push(day, 'attempts:all', 1, day, 'attempts:' + bucket, 1);
-    this.sql.exec(
-      'INSERT INTO usage(day,bucket,used) VALUES' + Array(values.length / 3).fill('(?,?,?)').join(',') + ' ' +
-        "ON CONFLICT(day,bucket) DO UPDATE SET used = CASE WHEN excluded.bucket = 'next-slot' " +
-        'THEN excluded.used ELSE used + excluded.used END',
-      ...values);
+    this.sql.exec(attemptId ? MATCH_RESERVATION_SQL : TILE_RESERVATION_SQL, ...values);
     for (let i = 0; i < values.length; i += 3) {
       const key = values[i + 1], added = values[i + 2];
       remember(this.counterCache, key, key === 'next-slot' ? added : used(key) + added, 512);
