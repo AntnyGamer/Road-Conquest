@@ -31,6 +31,7 @@ class OptionalServicesTest {
     @Test fun defaultsScheduleWeeklyReminderWithoutStartingFirebaseWhileSignedOut() {
         val app = RuntimeEnvironment.getApplication()
         assertTrue(OptionalNotifications.friendsEnabled(app))
+        assertFalse(OptionalNotifications.friendPostsEnabled(app))
         assertTrue(OptionalNotifications.weeklyEnabled(app))
         assertFalse(CrashReporting.enabled(app))
         assertFalse(OptionalNotifications.acceptsFriend(app, "friend_request", "stale"))
@@ -71,6 +72,23 @@ class OptionalServicesTest {
         assertNotNull(OptionalNotifications.prepareBinding(app, "a-login"))
         assertFalse(CrashReporting.enabled(app))
     }
+    @Test fun friendForumPostsHaveIndependentOptInAndRejectUnboundPushes() {
+        val app = RuntimeEnvironment.getApplication()
+        assertFalse(OptionalNotifications.friendPostsEnabled(app))
+        assertFalse(OptionalNotifications.acceptsForumPost(app, "friend_post", "stale"))
+        OptionalNotifications.setFriendsEnabled(app, false)
+        assertNull(OptionalNotifications.prepareBinding(app, "not-logged-in"))
+        OptionalNotifications.setFriendPostsEnabled(app, true)
+        assertTrue(OptionalNotifications.friendPostsEnabled(app))
+        assertFalse(OptionalNotifications.friendsEnabled(app))
+        assertNotNull(OptionalNotifications.prepareBinding(app, "account-session"))
+        assertFalse(OptionalNotifications.acceptsForumPost(app, "friend_post", "unbound"))
+        assertFalse(OptionalNotifications.acceptsForumPost(app, "friend_request", "unbound"))
+        OptionalNotifications.setFriendPostsEnabled(app, false)
+        assertFalse(OptionalNotifications.friendPostsEnabled(app))
+        assertNull(OptionalNotifications.prepareBinding(app, "account-session"))
+    }
+
     @Test fun notificationSessionDigestPreservesExactExistingHexValues() {
         assertEquals("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
             OptionalNotifications.sessionDigest("abc"))
