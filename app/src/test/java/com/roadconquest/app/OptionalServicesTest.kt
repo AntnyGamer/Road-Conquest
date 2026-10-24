@@ -74,10 +74,11 @@ class OptionalServicesTest {
         assertNotNull(OptionalNotifications.prepareBinding(app, "a-login"))
         assertFalse(CrashReporting.enabled(app))
     }
-    @Test fun friendForumPostsHaveIndependentOptInAndRejectUnboundPushes() {
+    @Test fun friendForumPostsHaveIndependentControlAndRejectUnboundPushes() {
         val app = RuntimeEnvironment.getApplication()
-        assertFalse(OptionalNotifications.friendPostsEnabled(app))
+        assertTrue(OptionalNotifications.friendPostsEnabled(app))
         assertFalse(OptionalNotifications.acceptsForumPost(app, "friend_post", "stale"))
+        OptionalNotifications.setFriendPostsEnabled(app, false)
         OptionalNotifications.setFriendsEnabled(app, false)
         assertNull(OptionalNotifications.prepareBinding(app, "not-logged-in"))
         OptionalNotifications.setFriendPostsEnabled(app, true)

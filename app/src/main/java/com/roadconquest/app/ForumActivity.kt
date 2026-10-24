@@ -243,7 +243,7 @@ class ForumActivity : Activity() {
         }
         if (emptyTitle.text.toString() != emptyLabel) emptyTitle.text = emptyLabel
         val emptyBody = findViewById<TextView>(R.id.forumEmptyBody)
-        val emptyMessage = getString(if (current?.available != true) R.string.forum_unavailable_body else R.string.forum_empty_body)
+        val emptyMessage = getString(if (!loading && current?.available != true) R.string.forum_unavailable_body else R.string.forum_empty_body)
         if (emptyBody.text.toString() != emptyMessage) emptyBody.text = emptyMessage
         val listVisibility = if (posts.isEmpty()) View.GONE else View.VISIBLE
         if (list.visibility != listVisibility) list.visibility = listVisibility
