@@ -46,10 +46,15 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
   const binding = id => forumAccountBinding(pepper, id);
 
   async function profile(db, userId, lock = false) {
-    await db.query('INSERT INTO forum_profiles(user_id) VALUES($1) ON CONFLICT DO NOTHING', [userId]);
-    const { rows } = await db.query(`SELECT violations,muted_until,banned,plus_active,
+    const query = `SELECT violations,muted_until,banned,plus_active,
       last_post_at + INTERVAL '10 minutes' AS next_post_at FROM forum_profiles
-      WHERE user_id=$1${lock ? ' FOR UPDATE' : ''}`, [userId]);
+      WHERE user_id=$1${lock ? ' FOR UPDATE' : ''}`;
+    let { rows } = await db.query(query, [userId]);
+    if (rows[0]) return rows[0];
+    // Missing profiles are uncommon. Insert only on first participation, then
+    // re-read so competing instances still acquire the requested row lock.
+    await db.query('INSERT INTO forum_profiles(user_id) VALUES($1) ON CONFLICT DO NOTHING', [userId]);
+    ({ rows } = await db.query(query, [userId]));
     if (!rows[0]) throw new EvidenceError('Authentication required.', 401);
     return rows[0];
   }
@@ -286,8 +291,11 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
       const digest = purchaseHash(item.purchaseToken);
       const found = await pool.query('SELECT user_id FROM forum_purchases WHERE token_hash=$1', [digest]);
       if (found.rowCount) await this.purchase({ id: found.rows[0].user_id }, item.purchaseToken);
-      await pool.query('INSERT INTO forum_billing_events(id) VALUES($1) ON CONFLICT DO NOTHING', [id]);
-      await pool.query("DELETE FROM forum_billing_events WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '30 days'");
+      // The insert and age cleanup share one database round trip. They touch
+      // disjoint rows because an incoming notification is never 30 days old.
+      await pool.query(`WITH recorded AS (
+        INSERT INTO forum_billing_events(id) VALUES($1) ON CONFLICT DO NOTHING RETURNING id
+      ) DELETE FROM forum_billing_events WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '30 days'`, [id]);
       return { ok: true };
     }
   };
