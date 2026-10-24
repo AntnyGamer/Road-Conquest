@@ -131,14 +131,21 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
     },
     async post(user, body) {
       const input = postInput(body);
+      const key = user.id + ':' + input.requestId + ':' + input.contentHash;
+      if (pendingPosts.has(key)) return pendingPosts.get(key);
       const prior = await existing(pool, user.id, input);
       if (prior) return postResult(prior, await profile(pool, user.id));
       if (!moderate) throw new EvidenceError('Community posting is temporarily unavailable.', 503);
       const state = await profile(pool, user.id);
+      // The first lookup can precede another instance's commit while this profile
+      // read follows it. Return that receipt before enforcing its new penalty/cooldown.
+      if (blocked(state) || (state.next_post_at && new Date(state.next_post_at).getTime() > Date.now())) {
+        const completed = await existing(pool, user.id, input);
+        if (completed) return postResult(completed,state);
+      }
       enforce(state);
       enforceCooldown(state);
       if (input.gifUrl && !state.plus_active) throw new EvidenceError('Forum Plus is required to attach GIFs.', 403);
-      const key = user.id + ':' + input.requestId + ':' + input.contentHash;
       if (pendingPosts.has(key)) return pendingPosts.get(key);
       if ([...pendingPosts.keys()].some(k => k.startsWith(user.id + ':'))) throw new EvidenceError('Your previous post is still being checked.', 429);
       if (pendingPosts.size >= 32) throw new EvidenceError('Community is busy. Please try again shortly.', 503);
