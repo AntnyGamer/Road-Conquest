@@ -58,6 +58,8 @@ import java.util.concurrent.Executors
 
 /** Replays recorded driving history; never changes tracking, matching or stored locations. */
 class TripHistoryActivity : Activity() {
+    // Reuse empty route/marker data while this screen is open, then release it.
+    private val emptyFeatures = FeatureCollection.fromFeatures(emptyList())
     private val worker = Executors.newSingleThreadExecutor()
     private val handler = Handler(Looper.getMainLooper())
     private var mapView: MapView? = null
@@ -201,8 +203,8 @@ class TripHistoryActivity : Activity() {
                     .bufferedReader().use { it.readText() }
                 ready.setStyle(Style.Builder().fromJson(json)) { style ->
                     if (!isDestroyed) {
-                        style.addSource(GeoJsonSource(ROUTE, EMPTY_FEATURES))
-                        style.addSource(GeoJsonSource(MARKER, EMPTY_FEATURES))
+                        style.addSource(GeoJsonSource(ROUTE, emptyFeatures))
+                        style.addSource(GeoJsonSource(MARKER, emptyFeatures))
                         style.addLayer(LineLayer(ROUTE_LINE, ROUTE)
                             .withProperties(lineColor("#337BF2"), lineWidth(4f)))
                         style.addLayer(CircleLayer(ROUTE_MARKER, MARKER)
@@ -575,10 +577,10 @@ class TripHistoryActivity : Activity() {
             lastRenderedIndex = -1
             if (points.isEmpty()) replayProgress?.text = ""
             map?.style?.getSourceAs<GeoJsonSource>(ROUTE)?.setGeoJson(
-                EMPTY_FEATURES
+                emptyFeatures
             )
             map?.style?.getSourceAs<GeoJsonSource>(MARKER)?.setGeoJson(
-                EMPTY_FEATURES
+                emptyFeatures
             )
             return
         }
@@ -617,7 +619,7 @@ class TripHistoryActivity : Activity() {
         }
         val source = style.getSourceAs<GeoJsonSource>(ROUTE) ?: return
         if (visible.isEmpty()) {
-            source.setGeoJson(EMPTY_FEATURES)
+            source.setGeoJson(emptyFeatures)
         } else {
             source.setGeoJson(Feature.fromGeometry(MultiLineString.fromLngLats(visible)))
         }
@@ -679,8 +681,6 @@ class TripHistoryActivity : Activity() {
     }
 
     private companion object {
-        // A replay's empty route/marker data is identical across resets and style loads.
-        val EMPTY_FEATURES = FeatureCollection.fromFeatures(emptyList())
         const val GPX_DOCUMENT_REQUEST = 7124
         const val ROUTE = "trip-replay-source"
         const val MARKER = "trip-replay-position"
