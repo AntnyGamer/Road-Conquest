@@ -1,7 +1,7 @@
 # Follow-up optimization review
 
 Reviewed the new forum, billing, GIF loading, tutorial and map tests, plus matching, local SQL,
-map-budget bookkeeping, account APIs, maintenance and common collection pipelines. Kept the 14
+map-budget bookkeeping, account APIs, maintenance and common collection pipelines. Kept the 17
 groups below; did not reach 50 without speculative caching, behavioral changes or less clear code.
 These remove redundant work. They do not change quotas, cooldowns, expiry, matching thresholds,
 GPS samples, provider order, road geometry, moderation rules or public response shapes.
@@ -22,6 +22,9 @@ GPS samples, provider order, road geometry, moderation rules or public response 
 | 12 | Map-budget metadata | Returning redundant health keys and permit IDs; storing the ID again in its keyed cache | Same indexed lookups, limits, reservations, dispatches, refunds, health and recovery state |
 | 13 | Outstanding-post lookup | Copying all pending keys into an array and rebuilding the account prefix | Same per-account in-flight rejection and global bound |
 | 14 | Refund notification parsing | Rechecking a token type already validated in the same parsed payload | Same token hashing, ownership verification and refund handling |
+| 15 | GPS adjacency checks | Four temporary lists of neighboring pairs | Same empty/single-point behavior, order, duplicate-time, ID, gap and continuity checks |
+| 16 | Settings choices | Intermediate label lists before creating the two dialog arrays | Same enum order, labels, selected item and click actions |
+| 17 | Weekly reward lookup | Intermediate key list before creating SQL arguments | Same four reward IDs, bindings, ownership lookup and payouts |
 
 The requested camera-movement assertion and its longitude polling were removed. The actual pan,
 render synchronization, fog-pixel checks and other map/tour tests remain.

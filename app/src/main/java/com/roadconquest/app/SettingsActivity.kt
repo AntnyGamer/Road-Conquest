@@ -436,7 +436,7 @@ class SettingsActivity : Activity() {
         mapButton.setOnClickListener {
             val modes = MapMode.entries
             AlertDialog.Builder(this).setTitle("Map style")
-                .setSingleChoiceItems(modes.map { it.label }.toTypedArray(), modes.indexOf(Prefs.mapMode(this))) { dialog, index ->
+                .setSingleChoiceItems(Array(modes.size) { modes[it].label }, modes.indexOf(Prefs.mapMode(this))) { dialog, index ->
                     Prefs.setMapMode(this, modes[index])
                     mapButton.text = getString(R.string.map_style_label, modes[index].label)
                     dialog.dismiss()
@@ -447,7 +447,7 @@ class SettingsActivity : Activity() {
         themeButton.setOnClickListener {
             val themes = UiTheme.entries
             AlertDialog.Builder(this).setTitle("Appearance")
-                .setSingleChoiceItems(themes.map { it.label }.toTypedArray(), themes.indexOf(Prefs.uiTheme(this))) { dialog, index ->
+                .setSingleChoiceItems(Array(themes.size) { themes[it].label }, themes.indexOf(Prefs.uiTheme(this))) { dialog, index ->
                     val changed = Prefs.uiTheme(this) != themes[index]
                     Prefs.setUiTheme(this, themes[index])
                     dialog.dismiss()

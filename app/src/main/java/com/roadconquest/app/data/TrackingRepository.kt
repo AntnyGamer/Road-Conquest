@@ -7,6 +7,7 @@ import android.location.Location
 import android.database.Cursor
 import android.os.Build
 import com.roadconquest.app.util.LocationProviders
+import com.roadconquest.app.util.allAdjacent
 import org.json.JSONArray
 import java.security.MessageDigest
 import java.util.Locale
@@ -385,8 +386,8 @@ class TrackingRepository(context: Context) {
     @Synchronized
     internal fun knownRoadEvidence(points: List<TrackPoint>): List<TrackPoint> = synchronized(dbHelper.historyLock) {
         if (historyGeneration != dbHelper.historyGeneration || points.size !in 2..100 ||
-            points.any { it.id <= 0L } || points.zipWithNext().any { (a, b) ->
-                b.id != a.id + 1L || b.timestampMillis - a.timestampMillis !in 1..12_000L
+            points.any { it.id <= 0L } || !points.allAdjacent { a, b ->
+                b.id == a.id + 1L && b.timestampMillis - a.timestampMillis in 1..12_000L
             }) return@synchronized points
         // Compression retains at most four original fixes between queue points.
         // Do not broaden across missing IDs, pauses, clock changes or noisy data.
@@ -405,7 +406,7 @@ class TrackingRepository(context: Context) {
         val retainedTimes = points.mapTo(HashSet()) { it.timestampMillis }
         if (skipped.isEmpty() || skipped.size > maximum ||
             skipped.any { it.timestampMillis in retainedTimes } ||
-            skipped.zipWithNext().any { (a, b) -> a.timestampMillis == b.timestampMillis }
+            !skipped.allAdjacent { a, b -> a.timestampMillis != b.timestampMillis }
         ) return@synchronized points
         val evidence = ArrayList<TrackPoint>(points.size + skipped.size)
         var next = 0
@@ -507,8 +508,8 @@ class TrackingRepository(context: Context) {
                 addAll(between)
                 add(older)
             }
-            if (chain.zipWithNext().any { (newerFix, olderFix) ->
-                    !isMatchingContinuation(olderFix, newerFix, MATCH_CLUSTER_GAP_MS)
+            if (!chain.allAdjacent { newerFix, olderFix ->
+                    isMatchingContinuation(olderFix, newerFix, MATCH_CLUSTER_GAP_MS)
                 }) break
             newestFirst.addAll(between)
             newestFirst += older
@@ -681,7 +682,7 @@ class TrackingRepository(context: Context) {
                     run.all { it.accuracyMeters.isFinite() &&
                         it.accuracyMeters in 0.01f..PRIORITY_GAP_MAX_ACCURACY_M
                     } &&
-                    run.zipWithNext().all { (a, b) ->
+                    run.allAdjacent { a, b ->
                         isMatchingContinuation(a, b, MATCH_CLUSTER_GAP_MS)
                     }
                 if (continuous && first.id > 0 && last.id < Long.MAX_VALUE) {
