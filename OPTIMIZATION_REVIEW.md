@@ -39,3 +39,8 @@ response limit; and periodic redraws could hide a failed forum refresh.
 Validation uses the existing matching/database/map tests, new forum status and binary-hash
 regressions, provider fault-injection tests, quota/recovery/cancellation tests and PostgreSQL CI.
 No phone battery percentage, fleet capacity or billing reduction is claimed from these edits.
+
+The separate [accuracy follow-up](server/maps/ACCURACY_REVIEW.md#repeated-junction-vertices)
+fixes dropped turn waypoints on repeated provider vertices. It preserves valid approach/exit
+sections, rejects out-of-range junction evidence and avoids crediting empty junction geometry.
+It does not relax matching thresholds and is not counted as an optimization group.

@@ -6,8 +6,9 @@ depend on lower GPS quality, weaker matching evidence or reduced recording.
 
 ## Source checks
 
-The complete Geoapify parser/client, LocationIQ parser/client, shared
-`RoadGeometryValidator` and phone provider-cooldown implementation are unchanged.
+During the original resource review, the complete Geoapify parser/client, LocationIQ
+parser/client, shared `RoadGeometryValidator` and phone provider-cooldown implementation
+were unchanged. The subsequent repeated-junction parser correction is documented below.
 The entire local `KnownRoadReuse.identify` acceptance algorithm and its edge
 checks are also unchanged. This includes five actual fixes, minimum span,
 accuracy, speed, heading and continuity requirements. Saved-road lookup still
@@ -93,3 +94,38 @@ comparison preserves all 400 complete responses and final durable-state hashes,
 including matching-attempt enforcement after the tile workload. Device Keystore,
 native map rendering and optimized startup still require emulator CI; local
 unit tests and APK compilation are not substitutes for those checks.
+
+## Repeated junction vertices
+
+The follow-up compares the Geoapify parser with commit
+`02f2b0a41027a72d141f073da944b0cb97ac2a5d`. A provider step can represent a junction
+with two consecutive, identical coordinates. Previously, the waypoint projector
+skipped that zero-length edge, discarded its matched waypoint and split an otherwise
+valid approach/turn/exit into unmatched singletons. A three-fix synthetic drive
+reproduces the loss of both roads at latitudes 0, 40, -40 and 70 degrees.
+
+A single collapsed edge can now locate its junction using the existing strict
+3-metre position limit, just like the existing single-index junction case. Ordinary
+nonzero edges and multi-edge projection are unchanged. Zero-length geometry still
+covers its provider index interval but supplies no road step: this prevents a
+sub-metre waypoint offset from turning an empty junction into an extra named road.
+The approach and exit retain their original provider coordinates and pass through
+the unchanged shared geometry validator, including its 1-metre join tolerance,
+snap, confidence, detour and speed checks. No threshold, GPS sample, retry, provider
+call, subscription or server setting changes.
+
+Two regression methods cover all four latitudes. They verify contiguous approach
+and exit geometry, preservation of independently accepted sections, all eligible
+point IDs, no zero-length junction road credit, and rejection of an out-of-range
+junction while retaining independently valid sides. The three-fix response changes
+from zero accepted roads to exactly the two genuine roads; normal single-index
+junction responses compare identically with the original parser. A sub-metre
+offset regression also reproduced spurious junction credit before the zero-length
+step guard and passes after it.
+
+Local verification compiles the actual production parser, validator, grouping and
+models with Kotlin and executes seven parser regression methods, including the
+date-line, malformed-step, malformed-waypoint and multi-leg cases. Network services
+are stubbed to prohibit provider calls. These synthetic checks are not physical-drive
+measurements or a full Android test run; Android CI validates the committed tests
+with the rest of the app.
