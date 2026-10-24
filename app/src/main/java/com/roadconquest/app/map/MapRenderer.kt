@@ -982,7 +982,7 @@ class MapRenderer(
     private fun installPlaceOverlayLayers(style: Style) {
         // A new MapLibre style has new empty GeoJSON sources even if the names match.
         overlayPublication.reset()
-        for (mode in listOf(PlaceOverlayMode.COUNTRY, PlaceOverlayMode.STATE, PlaceOverlayMode.TOWN)) {
+        for (mode in OVERLAY_MODES) {
             style.addSource(GeoJsonSource(overlaySourceId(mode), EMPTY_FEATURES))
             style.addSource(GeoJsonSource(overlayBoundarySourceId(mode), EMPTY_FEATURES))
             val color = when (mode) {
@@ -1037,7 +1037,7 @@ class MapRenderer(
 
     private fun clearPlaceOverlaySources() {
         overlayPublication.reset()
-        for (mode in listOf(PlaceOverlayMode.COUNTRY, PlaceOverlayMode.STATE, PlaceOverlayMode.TOWN)) {
+        for (mode in OVERLAY_MODES) {
             (map.style?.getSource(overlaySourceId(mode)) as? GeoJsonSource)?.setGeoJson(EMPTY_FEATURES)
             (map.style?.getSource(overlayBoundarySourceId(mode)) as? GeoJsonSource)?.setGeoJson(EMPTY_FEATURES)
         }
@@ -1772,6 +1772,8 @@ class MapRenderer(
     }
 
     companion object {
+        // Both layer setup and source clearing use the same stable order.
+        private val OVERLAY_MODES = listOf(PlaceOverlayMode.COUNTRY, PlaceOverlayMode.STATE, PlaceOverlayMode.TOWN)
         private const val COUNTRY_OVERLAY_SOURCE_ID = "roadconquest-country-overlays"
         private const val STATE_OVERLAY_SOURCE_ID = "roadconquest-state-overlays"
         private const val TOWN_OVERLAY_SOURCE_ID = "roadconquest-town-overlays"
