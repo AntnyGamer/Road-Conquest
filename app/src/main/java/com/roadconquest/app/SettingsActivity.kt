@@ -116,6 +116,18 @@ class SettingsActivity : Activity() {
         applySafeAreaInsets()
         setupAppearance()
 
+        findViewById<Button>(R.id.quickTourButton).setOnClickListener {
+            startActivity(Intent(this, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                .putExtra(MainActivity.EXTRA_SHOW_TOUR, true))
+        }
+        findViewById<Switch>(R.id.exitConfirmationSwitch).apply {
+            isChecked = Prefs.isExitConfirmationEnabled(this@SettingsActivity)
+            setOnCheckedChangeListener { _, checked ->
+                Prefs.setExitConfirmationEnabled(this@SettingsActivity, checked)
+            }
+        }
+
         repository = TrackingRepository(this)
         manualOnlySwitch = findViewById(R.id.manualOnlySwitch)
         summaryText = findViewById(R.id.dataSummaryText)

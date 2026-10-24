@@ -36,6 +36,23 @@
             android:textStyle="bold" />
 
         <LinearLayout
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="18dp" android:orientation="vertical" android:padding="16dp"
+            android:background="@drawable/settings_card_background" android:elevation="3dp">
+            <Button android:id="@+id/quickTourButton" style="@style/RoadConquest.SettingsAction"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:drawableStart="@drawable/ic_tour" android:drawableTint="?attr/rcAccent"
+                android:drawablePadding="12dp" android:text="@string/tour_replay" />
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="6dp" android:text="@string/tour_replay_detail"
+                android:textColor="?attr/rcTextSecondary" android:textSize="13sp" />
+            <Switch android:id="@+id/exitConfirmationSwitch" android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:minHeight="52dp" android:layout_marginTop="12dp"
+                android:text="@string/exit_confirmation_setting" android:textColor="?attr/rcTextPrimary"
+                android:textSize="15sp" />
+        </LinearLayout>
+
+        <LinearLayout
             android:id="@+id/mapSettingsCard"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="wrap_content"
+    android:orientation="vertical" android:background="@drawable/tour_card_background"
+    android:padding="20dp" android:elevation="12dp">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="horizontal" android:gravity="center_vertical">
+        <TextView android:id="@+id/tourStep" android:layout_width="0dp" android:layout_weight="1"
+            android:layout_height="wrap_content" android:textColor="?attr/rcAccent"
+            android:fontFamily="sans-serif-medium" android:textSize="12sp" />
+        <Button android:id="@+id/tourSkipButton" style="@style/RoadConquest.TourQuietAction"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="@string/tour_skip" />
+    </LinearLayout>
+    <ScrollView android:id="@+id/tourScroll" android:layout_width="match_parent"
+        android:layout_height="wrap_content" android:layout_weight="1" android:fillViewport="false">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="vertical" android:paddingBottom="12dp">
+            <TextView android:id="@+id/tourTitle" android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:textSize="28sp"
+                android:fontFamily="sans-serif-medium" android:textColor="?attr/rcTextPrimary"
+                android:accessibilityHeading="true" />
+            <TextView android:id="@+id/tourBody" android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:layout_marginTop="10dp"
+                android:textSize="15sp" android:lineSpacingExtra="3dp" android:textColor="?attr/rcTextSecondary" />
+            <LinearLayout android:id="@+id/tourDemo" android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:layout_marginTop="18dp" android:orientation="vertical">
+                <com.roadconquest.app.onboarding.DiscoveryPreview android:id="@+id/tourPreview"
+                    android:layout_width="match_parent" android:layout_height="148dp"
+                    android:importantForAccessibility="no" />
+                <TextView android:id="@+id/tourDemoCaption" android:layout_width="match_parent"
+                    android:layout_height="wrap_content" android:layout_marginTop="8dp"
+                    android:accessibilityLiveRegion="polite"
+                    android:textSize="12sp" android:textColor="?attr/rcTextSecondary" android:gravity="center" />
+                <Button android:id="@+id/tourDemoButton" style="@style/RoadConquest.FilterAction"
+                    android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" />
+            </LinearLayout>
+        </LinearLayout>
+    </ScrollView>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="horizontal" android:gravity="center_vertical">
+        <Button android:id="@+id/tourBackButton" style="@style/RoadConquest.TourQuietAction"
+            android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"
+            android:layout_marginEnd="10dp" android:text="@string/tour_back" />
+        <Button android:id="@+id/tourNextButton" android:layout_width="0dp" android:layout_weight="1"
+            android:layout_height="wrap_content" android:minHeight="52dp" />
+    </LinearLayout>
+</LinearLayout>

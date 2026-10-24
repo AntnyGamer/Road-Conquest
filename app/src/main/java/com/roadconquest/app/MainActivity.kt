@@ -1,8 +1,10 @@
 package com.roadconquest.app
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.AlertDialog
+import android.app.Dialog
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -33,6 +35,8 @@ import com.roadconquest.app.data.RoadRecord
 import com.roadconquest.app.data.ProgressionRepository
 import com.roadconquest.app.data.LocalDataReset
 import com.roadconquest.app.account.AccountOnboarding
+import com.roadconquest.app.onboarding.MapTour
+import com.roadconquest.app.onboarding.ExitConfirmation
 import com.roadconquest.app.achievements.Achievements
 import com.roadconquest.app.export.DataExporter
 import com.roadconquest.app.export.DataImporter
@@ -92,6 +96,12 @@ class MainActivity : Activity() {
     private var recreatingForAppearance = false
     private var accountPrompt: AlertDialog? = null
     private var locationDisclosure: AlertDialog? = null
+    private var mapTour: MapTour? = null
+    private var pendingTourStep: Int? = null
+    private var pendingTourPreview = false
+    private var pendingResumeStoppedTracking = false
+    private var exitPrompt: Dialog? = null
+    private var backCallback: android.window.OnBackInvokedCallback? = null
     private val summaryExecutor = Executors.newSingleThreadExecutor()
     private val populationExecutor = Executors.newSingleThreadExecutor()
     private val discoveryExecutor = Executors.newSingleThreadExecutor()
@@ -236,6 +246,17 @@ class MainActivity : Activity() {
         }
         MapLibre.getInstance(this)
         setContentView(R.layout.activity_main)
+        pendingTourStep = savedInstanceState?.getInt(STATE_TOUR_STEP, -1)?.takeIf { it >= 0 }
+            ?: if (intent.getBooleanExtra(EXTRA_SHOW_TOUR, false)) 0 else null
+        pendingTourPreview = savedInstanceState?.getBoolean(STATE_TOUR_PREVIEW) ?: false
+        pendingResumeStoppedTracking = savedInstanceState?.getBoolean(STATE_PENDING_RESUME) ?: false
+        intent.removeExtra(EXTRA_SHOW_TOUR)
+        if (Build.VERSION.SDK_INT >= 33) {
+            backCallback = android.window.OnBackInvokedCallback { handleMapBack() }.also {
+                onBackInvokedDispatcher.registerOnBackInvokedCallback(
+                    android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, it)
+            }
+        }
 
         repository = TrackingRepository(this)
         // Recover a privacy deletion interrupted by process death before doing ordinary
@@ -418,12 +439,60 @@ class MainActivity : Activity() {
         renderer?.resumeViewport(refreshRoadsAfterStop)
         refreshRoadsAfterStop = false
         refreshControls()
+        pendingResumeStoppedTracking = pendingResumeStoppedTracking || resumeStoppedTracking
+        if (mapTour != null) return
+        if (pendingTourStep != null || !Prefs.isTourHandled(this)) {
+            mapTour = MapTour(findViewById(R.id.root), pendingTourStep ?: 0, pendingTourPreview) {
+                mapTour = null
+                if (resumed && !isDestroyed) continueAfterTour()
+            }
+            pendingTourStep = null
+            pendingTourPreview = false
+            return
+        }
+        continueAfterTour()
+    }
+
+    private fun continueAfterTour() {
         if (accountPrompt?.isShowing == true) return
         accountPrompt = AccountOnboarding.showIfNeeded(this) {
-            if (resumed && !isDestroyed) completeForegroundStart(resumeStoppedTracking)
+            if (resumed && !isDestroyed) completePendingForegroundStart()
         }
         if (accountPrompt != null) return
-        completeForegroundStart(resumeStoppedTracking)
+        completePendingForegroundStart()
+    }
+
+    private fun completePendingForegroundStart() {
+        val resume = pendingResumeStoppedTracking
+        pendingResumeStoppedTracking = false
+        completeForegroundStart(resume)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra(EXTRA_SHOW_TOUR, false)) {
+            pendingTourStep = 0
+            pendingTourPreview = false
+            intent.removeExtra(EXTRA_SHOW_TOUR)
+        }
+    }
+
+    @Deprecated("Legacy Back dispatch for Android 12; newer versions use OnBackInvokedCallback")
+    @SuppressLint("GestureBackNavigation") // Android 12 fallback; API 33+ registers OnBackInvokedCallback in onCreate.
+    override fun onBackPressed() { handleMapBack() }
+
+    private fun handleMapBack() {
+        mapTour?.let {
+            if (!it.back()) moveTaskToBack(true)
+            return
+        }
+        if (exitPrompt?.isShowing == true) return
+        if (!Prefs.isExitConfirmationEnabled(this)) {
+            moveTaskToBack(true)
+            return
+        }
+        exitPrompt = ExitConfirmation.show(this, TrackingService.isRunning) { moveTaskToBack(true) }
     }
 
     private fun completeForegroundStart(resumeStoppedTracking: Boolean) {
@@ -564,6 +633,10 @@ class MainActivity : Activity() {
         // onStop owns receiver registration state. Do not clear the process-wide flag here:
         // during a configuration handoff a replacement MainActivity may already be started.
         accountPrompt?.dismiss()
+        locationDisclosure?.dismiss()
+        exitPrompt?.dismiss()
+        mapTour?.dismiss()
+        if (Build.VERSION.SDK_INT >= 33) backCallback?.let(onBackInvokedDispatcher::unregisterOnBackInvokedCallback)
         summaryGeneration++
         roadDetailsGeneration++
         statsHandler.removeCallbacksAndMessages(null)
@@ -588,6 +661,9 @@ class MainActivity : Activity() {
         super.onSaveInstanceState(outState)
         outState.putBoolean(STATE_START_AFTER_PERMISSION, startAfterPermissionGrant)
         outState.putBoolean(STATE_MAP_CENTERED, renderer?.hasCentered ?: mapWasCentered)
+        outState.putInt(STATE_TOUR_STEP, mapTour?.step ?: pendingTourStep ?: -1)
+        outState.putBoolean(STATE_TOUR_PREVIEW, mapTour?.previewRevealed ?: pendingTourPreview)
+        outState.putBoolean(STATE_PENDING_RESUME, pendingResumeStoppedTracking)
         mapView.onSaveInstanceState(outState)
     }
 
@@ -749,6 +825,7 @@ class MainActivity : Activity() {
     }
 
     private fun refreshControls() {
+        exitPrompt?.takeIf { it.isShowing }?.let { ExitConfirmation.updateTracking(it, TrackingService.isRunning) }
         statsHandler.removeCallbacks(statsRefresh)
         statsRefreshScheduled = false
         // Snapshot state once for this UI refresh. Besides avoiding repeated preference/permission
@@ -1322,6 +1399,10 @@ class MainActivity : Activity() {
         private const val REQUEST_BASIC_PERMISSIONS = 100
         private const val STATE_START_AFTER_PERMISSION = "start_after_permission"
         private const val STATE_MAP_CENTERED = "map_centered"
+        const val EXTRA_SHOW_TOUR = "show_map_tour"
+        private const val STATE_TOUR_STEP = "map_tour_step"
+        private const val STATE_TOUR_PREVIEW = "map_tour_preview"
+        private const val STATE_PENDING_RESUME = "pending_tracking_resume"
         private const val PREVIEW_INTERVAL_MS = 5_000L
         private const val PREVIEW_MIN_UPDATE_INTERVAL_MS = 2_500L
         // Stationary fixes keep the car and nearby clearing fresh without recording a drive.

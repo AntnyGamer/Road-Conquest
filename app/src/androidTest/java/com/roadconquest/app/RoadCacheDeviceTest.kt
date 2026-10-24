@@ -27,6 +27,10 @@ import java.util.concurrent.TimeUnit
 
 @RunWith(AndroidJUnit4::class)
 class RoadCacheDeviceTest {
+    @org.junit.Before fun skipFirstUseTour() {
+        Prefs.setTourHandled(androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext, true)
+    }
+
     @get:Rule val permissions: GrantPermissionRule = GrantPermissionRule.grant(*buildList {
         add(Manifest.permission.ACCESS_FINE_LOCATION)
         add(Manifest.permission.ACCESS_COARSE_LOCATION)

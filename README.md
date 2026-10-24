@@ -57,6 +57,10 @@ the Google Play listing is created; changing it later would create a different a
 
 ## Explore
 
+- The first-use Quick tour previews a discovery without location access, then highlights the real
+  tracking, Layers, Trips/Badges/Goals, Garage and Settings controls. Skip it or replay it from
+  Settings → Quick tour. The optional Back-to-exit prompt explains whether tracking remains on;
+  Settings can turn this prompt off or back on. Leaving the map does not stop the tracking service.
 - Recorded driving appears while matching is pending; confirmed road geometry then refines it.
 - A tightly bounded, GPS-supported connector can close a short split between differently named
   roads; it does not grant extra unlocked roads. Certain short pending turns can be retried once

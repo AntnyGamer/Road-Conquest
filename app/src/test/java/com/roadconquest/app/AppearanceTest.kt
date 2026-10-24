@@ -35,6 +35,25 @@ class AppearanceTest {
         app.getSharedPreferences("roadconquest_preferences", 0).edit().clear().commit()
     }
 
+    @Test fun settingsCanReplayTheTourAndChangeExitConfirmationWithoutResettingProgress() {
+        val controller = Robolectric.buildActivity(SettingsActivity::class.java).create().start().resume()
+        try {
+            val activity = controller.get()
+            Prefs.setTourHandled(activity, true)
+            Prefs.setManualOnly(activity, true)
+            val confirmation = activity.findViewById<Switch>(R.id.exitConfirmationSwitch)
+            assertTrue(confirmation.isChecked)
+            confirmation.performClick()
+            assertFalse(Prefs.isExitConfirmationEnabled(activity))
+            activity.findViewById<Button>(R.id.quickTourButton).performClick()
+            val intent = shadowOf(activity).nextStartedActivity
+            assertEquals(MainActivity::class.java.name, intent.component?.className)
+            assertTrue(intent.getBooleanExtra(MainActivity.EXTRA_SHOW_TOUR, false))
+            assertTrue(Prefs.isTourHandled(activity))
+            assertTrue(Prefs.isManualOnly(activity))
+        } finally { controller.pause().stop().destroy() }
+    }
+
     @Test fun mapAndSettingsStatsHaveClearDistinctCategoriesWithoutChangingTotals() {
         val context = ContextThemeWrapper(
             Appearance.wrap(RuntimeEnvironment.getApplication()), R.style.Theme_RoadConquest
