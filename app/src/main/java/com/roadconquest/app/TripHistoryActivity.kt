@@ -201,8 +201,8 @@ class TripHistoryActivity : Activity() {
                     .bufferedReader().use { it.readText() }
                 ready.setStyle(Style.Builder().fromJson(json)) { style ->
                     if (!isDestroyed) {
-                        style.addSource(GeoJsonSource(ROUTE, FeatureCollection.fromFeatures(emptyList())))
-                        style.addSource(GeoJsonSource(MARKER, FeatureCollection.fromFeatures(emptyList())))
+                        style.addSource(GeoJsonSource(ROUTE, EMPTY_FEATURES))
+                        style.addSource(GeoJsonSource(MARKER, EMPTY_FEATURES))
                         style.addLayer(LineLayer(ROUTE_LINE, ROUTE)
                             .withProperties(lineColor("#337BF2"), lineWidth(4f)))
                         style.addLayer(CircleLayer(ROUTE_MARKER, MARKER)
@@ -575,10 +575,10 @@ class TripHistoryActivity : Activity() {
             lastRenderedIndex = -1
             if (points.isEmpty()) replayProgress?.text = ""
             map?.style?.getSourceAs<GeoJsonSource>(ROUTE)?.setGeoJson(
-                FeatureCollection.fromFeatures(emptyList())
+                EMPTY_FEATURES
             )
             map?.style?.getSourceAs<GeoJsonSource>(MARKER)?.setGeoJson(
-                FeatureCollection.fromFeatures(emptyList())
+                EMPTY_FEATURES
             )
             return
         }
@@ -617,7 +617,7 @@ class TripHistoryActivity : Activity() {
         }
         val source = style.getSourceAs<GeoJsonSource>(ROUTE) ?: return
         if (visible.isEmpty()) {
-            source.setGeoJson(FeatureCollection.fromFeatures(emptyList()))
+            source.setGeoJson(EMPTY_FEATURES)
         } else {
             source.setGeoJson(Feature.fromGeometry(MultiLineString.fromLngLats(visible)))
         }
@@ -679,6 +679,8 @@ class TripHistoryActivity : Activity() {
     }
 
     private companion object {
+        // A replay's empty route/marker data is identical across resets and style loads.
+        val EMPTY_FEATURES = FeatureCollection.fromFeatures(emptyList())
         const val GPX_DOCUMENT_REQUEST = 7124
         const val ROUTE = "trip-replay-source"
         const val MARKER = "trip-replay-position"
