@@ -61,6 +61,27 @@ price; only a price-query failure clears it. Checkout still queries a fresh offe
 Successful price loading clears the checking message, and completed receipt verification clears
 the pending restore-feedback state.
 
+## Optional notifications when a friend posts
+
+Settings offers an independent **Occasional posts from friends** switch, off by default.
+Only a newly committed, moderation-approved post by an accepted friend is eligible.
+Roughly one in four eligible posts is sampled, and a database-enforced, rolling
+**seven-day limit per recipient** applies across every friend and app instance.
+Posts rejected by moderation, client retries, nonfriends, blocked relationships,
+and devices without opt-in never receive this event. There is no feed polling or
+post-text, author name or location in Firebase messages. Each alert opens the
+community feed; signed-out users and users without Android notification
+permission cannot display it.
+
+Use the additive notification-device migration in `server/schema.sql` and
+`server/forum-schema.sql` before enabling the forum. Existing device rows
+default to forum-post notifications off. Account deletion automatically erases
+the weekly-throttle row. At most five active devices per eligible recipient
+are considered; each attempted alert consumes server and FCM resources,
+and the weekly cap is applied before delivery rather than after confirmation.
+Push delivery remains best-effort and requires the already-configured FCM
+service account. The Android app does not activate the forum by itself.
+
 ## Server setup before enabling
 
 No live resources or Play products are created by this PR. The forum defaults off. Configure in an
