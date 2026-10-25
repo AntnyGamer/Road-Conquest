@@ -12,6 +12,8 @@ import com.android.billingclient.api.PendingPurchasesParams
 import com.android.billingclient.api.ProductDetails
 import com.android.billingclient.api.Purchase
 import com.android.billingclient.api.QueryProductDetailsParams
+import com.android.billingclient.api.QueryProductDetailsResult
+import com.android.billingclient.api.UnfetchedProduct
 import com.android.billingclient.api.QueryPurchasesParams
 
 /** Store prices/ownership are discovery only. The account server verifies and acknowledges grants. */
@@ -30,7 +32,7 @@ class ForumBilling(context: Context, private val status: (String?, String?) -> U
                 BillingClient.BillingResponseCode.OK -> accept(purchases.orEmpty())
                 BillingClient.BillingResponseCode.USER_CANCELED -> Unit
                 BillingClient.BillingResponseCode.ITEM_ALREADY_OWNED -> restore()
-                else -> update("Google Play could not complete the purchase.")
+                else -> update("Google Play could not complete the purchase (code ${result.responseCode}).")
             } }
         }.build()
 
@@ -88,15 +90,29 @@ class ForumBilling(context: Context, private val status: (String?, String?) -> U
         return details.oneTimePurchaseOfferDetailsList?.firstOrNull(::eligible)
             ?: if (details.oneTimePurchaseOfferDetailsList == null) details.oneTimePurchaseOfferDetails?.takeIf(::eligible) else null
     }
+    /** Explain whether the store lookup failed, the product is missing, or no Buy option is active. */
+    private fun unavailable(result: BillingResult, response: QueryProductDetailsResult): String {
+        if (result.responseCode != BillingClient.BillingResponseCode.OK)
+            return "Google Play couldn't load Forum Plus (code ${result.responseCode}). Try again from the Play-installed app."
+        val missing = response.unfetchedProductList.firstOrNull { it.productId == ForumClient.PRODUCT_ID }
+        return when (missing?.statusCode) {
+            UnfetchedProduct.StatusCode.PRODUCT_NOT_FOUND ->
+                "Google Play can't find forum_plus_lifetime for this app. Check its product ID and Play testing track."
+            UnfetchedProduct.StatusCode.NO_ELIGIBLE_OFFER ->
+                "Forum Plus exists, but no active Buy purchase option is available for this Play account and region."
+            else -> "No permanent Forum Plus Buy offer is available in Google Play. Check the product's active purchase option."
+        }
+    }
     fun price() = connect {
         client.queryProductDetailsAsync(query()) { result, response ->
             if (!closed) {
                 val price = if (result.responseCode == BillingClient.BillingResponseCode.OK)
                     response.productDetailsList.firstOrNull { it.productId == ForumClient.PRODUCT_ID }?.let(::offer)?.formattedPrice else null
+                val feedback = if (price == null) unavailable(result, response) else null
                 main.post {
                     if (!closed) {
                         currentPrice = price
-                        status(price,if (price == null) "Forum Plus is currently unavailable." else null)
+                        status(price,feedback)
                     }
                 }
             }
@@ -115,7 +131,7 @@ class ForumBilling(context: Context, private val status: (String?, String?) -> U
             val details = if (result.responseCode == BillingClient.BillingResponseCode.OK)
                 response.productDetailsList.firstOrNull { it.productId == ForumClient.PRODUCT_ID } else null
             val option = details?.let(::offer)
-            if (details == null || option == null) { update("Forum Plus is currently unavailable."); return@queryProductDetailsAsync }
+            if (details == null || option == null) { update(unavailable(result, response)); return@queryProductDetailsAsync }
             main.post {
                 if (!closed && !activity.isDestroyed && !activity.isFinishing) {
                     val product = BillingFlowParams.ProductDetailsParams.newBuilder().setProductDetails(details)
@@ -123,7 +139,7 @@ class ForumBilling(context: Context, private val status: (String?, String?) -> U
                     val launched = client.launchBillingFlow(activity,BillingFlowParams.newBuilder()
                         .setObfuscatedAccountId(accountBinding).setProductDetailsParamsList(listOf(product)).build())
                     if (launched.responseCode == BillingClient.BillingResponseCode.ITEM_ALREADY_OWNED) restore()
-                    else if (launched.responseCode != BillingClient.BillingResponseCode.OK) update("Google Play could not open checkout.")
+                    else if (launched.responseCode != BillingClient.BillingResponseCode.OK) update("Google Play couldn't open checkout (code ${launched.responseCode}).")
                 }
             }
         }

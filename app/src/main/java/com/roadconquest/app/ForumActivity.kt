@@ -450,7 +450,12 @@ class ForumActivity : Activity() {
         val (dialog,content) = panel("A little extra personality.")
         purchaseDialog = dialog
         content.addView(label(getString(R.string.forum_plus_description)))
-        purchaseMessage = label(if (page?.purchases == true) "Checking Google Play price…" else "Forum Plus is currently unavailable.")
+        val availability = when {
+            page?.available != true -> "The community service is not available on this server yet."
+            page?.purchases != true -> "Forum Plus isn't enabled on the account server yet. The server also needs Google Play verification, refund notifications, and moderation configured."
+            else -> "Checking Google Play price…"
+        }
+        purchaseMessage = label(availability)
         content.addView(purchaseMessage)
         checkout = button("Checking price…") {
             page?.viewer?.let { billing().buy(this,it.billingAccountId) }

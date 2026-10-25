@@ -61,6 +61,26 @@ price; only a price-query failure clears it. Checkout still queries a fresh offe
 Successful price loading clears the checking message, and completed receipt verification clears
 the pending restore-feedback state.
 
+### If Forum Plus shows unavailable
+
+The Android product ID is exactly `forum_plus_lifetime`, of type **one-time (INAPP)**
+for package `com.roadconquest.app`. Play Console's separate **Purchase option ID** does
+not replace the product ID in app code. In Play Console → Monetize with Play → Products →
+One-time products, activate both the product and a permanent **Buy** purchase option,
+with an available price for the tester's country. A draft/inactive option is not
+returned to the app. Install a current Play-distributed testing build and use an
+eligible Play account. Billing 9 distinguishes “product not found” from “no eligible
+offer”; the purchase screen reports which one Play returned.
+
+If the screen instead says the **account server has not enabled purchases**, this is
+not fixed by adding the Play Console product. The backend must actually be deployed
+with `FORUM_ENABLED=1`, `FORUM_MODERATION_API_KEY`,
+`FORUM_PLAY_SERVICE_ACCOUNT_JSON`, `FORUM_RTDN_AUDIENCE`, and
+`FORUM_RTDN_SERVICE_ACCOUNT_EMAIL`, plus the forum database migration and Play
+Developer API permissions/working Pub/Sub notification delivery. Secrets belong on
+the server, never in the Android app or repository. The Android client deliberately
+does not issue payments that a disabled verifier cannot grant or safely revoke.
+
 ## Optional notifications when a friend posts
 
 Settings offers an independent **Occasional posts from friends** switch, on by default unless previously disabled.
