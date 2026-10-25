@@ -1,3 +1,17 @@
+# Road Conquest 1.0 Beta 62
+
+## What's new since Beta 61
+
+- **Clearer forum cooldown:** Show the remaining time as "You can post again in X minutes" rather than repeating the ten-minute posting policy.
+- **Opaque forum content:** Community post cards and the new-post composer use fully opaque backgrounds in light, dark and gold appearances, while retaining highlight borders.
+- **Improved discovery tour:** The offline map demonstration follows roads farther, enters a third mile square, and uses smoother cloud-fog transitions as newly visited squares clear.
+- **Appearance cues:** The Settings appearance control displays a sun, moon or automatic icon based on the selected setting. The main map Settings gear tint also reflects that choice.
+- **Compatibility:** Android 12+, versionCode **88**, versionName **1.0-beta.62**. No change to the package ID, upload key, saved progress, account data or backup format.
+
+The GitHub release workflow publishes signed APK and Play upload AAB files after its required checks succeed. Google Play upload is separate. Existing Forum Plus purchase setup remains unchanged. Separately deployed verified-driving services must allow version code 88 before accepting verified submissions. Editing the documentation does not change live backend configuration.
+
+---
+
 # Road Conquest 1.0 Beta 61
 
 ## What's new since Beta 60
