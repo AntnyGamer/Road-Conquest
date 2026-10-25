@@ -122,13 +122,15 @@ test('profile reads and logout revocations share bounded single-statement IP bud
     await pool.query("UPDATE sessions SET expires_at=CURRENT_TIMESTAMP+INTERVAL '1 day' WHERE token_hash=$1", [token]);
 
     const logoutParams = ['logout-ip', Buffer.alloc(32, 27), 60_000, 1];
-    const logout = async hash => (await pool.query(RATE_LIMIT_LOGOUT_SQL, [...logoutParams, hash])).rows[0].allowed;
-    assert.equal(await logout(invalidToken), true);
-    assert.equal(await logout(token), false, 'An exhausted budget must never revoke a session');
-    assert.equal((await pool.query('SELECT 1 FROM sessions WHERE token_hash=$1', [token])).rowCount, 1);
-    await pool.query("UPDATE auth_rate_limits SET window_started_at=CURRENT_TIMESTAMP-INTERVAL '2 minutes' WHERE bucket='logout-ip'");
-    assert.equal(await logout(token), true);
+    const logout = async hash => (await pool.query(RATE_LIMIT_LOGOUT_SQL, [...logoutParams, hash])).rows[0];
+    assert.deepEqual(await logout(invalidToken), { allowed: true, revoked: false });
+    assert.deepEqual(await logout(token), { allowed: false, revoked: true },
+      'A real active session must be revocable even after other clients exhaust a shared IP budget');
     assert.equal((await pool.query('SELECT 1 FROM sessions WHERE token_hash=$1', [token])).rowCount, 0);
-    assert.equal(await logout(token), false);
+    assert.deepEqual(await logout(invalidToken), { allowed: false, revoked: false });
+    await pool.query("UPDATE auth_rate_limits SET window_started_at=CURRENT_TIMESTAMP-INTERVAL '2 minutes' WHERE bucket='logout-ip'");
+    await pool.query("INSERT INTO sessions(token_hash,user_id,expires_at) VALUES($1,$2,CURRENT_TIMESTAMP+INTERVAL '1 day')", [token, user.id]);
+    assert.deepEqual(await logout(token), { allowed: true, revoked: true });
+    assert.equal((await pool.query('SELECT 1 FROM sessions WHERE token_hash=$1', [token])).rowCount, 0);
   } finally { await pool.end(); }
 });
