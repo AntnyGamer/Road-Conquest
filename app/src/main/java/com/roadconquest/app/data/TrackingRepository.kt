@@ -440,11 +440,10 @@ class TrackingRepository(context: Context) {
         retryGapStartId: Long? = null
     ): MatchingWindow {
         val maxPoints = limit.coerceAtLeast(2)
-        // A long previously missed turn may contain eight consecutive, accurate raw fixes.
-        // The public OSRM demo accepts only ten points: use eight fixes and one genuine
-        // context fix on either side, but ONLY when revisiting an old unresolved island.
-        // Ordinary live batches retain three context slots and their existing behavior.
-        val wideRetry = retryGapStartId != null && maxPoints in 10..16
+        // A retry must include the whole selected island plus approach/exit context.
+        // Twenty-three pending fixes and two anchors fit the 25-fix backup too.
+        // Ordinary live batches keep their three context slots and packing.
+        val wideRetry = retryGapStartId != null && maxPoints >= 4
         val anchorSlots = minOf(if (wideRetry) 2 else if (maxPoints >= 6) 3 else 2, maxPoints - 1)
         val pending = ArrayList<TrackPoint>(maxPoints - anchorSlots)
         val pendingSelection = buildString {
@@ -468,12 +467,19 @@ class TrackingRepository(context: Context) {
             pendingArgs,
             null,
             null,
-            "id DESC",
+            if (wideRetry) "id ASC" else "id DESC",
             (maxPoints - anchorSlots).toString()
         ).use { cursor ->
-            while (cursor.moveToNext()) pending += cursor.toTrackPoint()
+            while (cursor.moveToNext()) {
+                val point = cursor.toTrackPoint()
+                if (wideRetry && (pending.lastOrNull()?.let {
+                        point.id != it.id + 1 || !isMatchingContinuation(it, point, MATCH_CLUSTER_GAP_MS)
+                    } ?: (point.id != retryGapStartId))) break
+                pending += point
+            }
         }
         if (pending.isEmpty()) return MatchingWindow(emptyList(), emptySet())
+        if (wideRetry) pending.reverse()
 
         // Keep the actual GPS samples between nearby pending islands as matching context.
         // A locally resolved re-drive can otherwise split one continuous trip into many
@@ -586,7 +592,7 @@ class TrackingRepository(context: Context) {
 
         // Preserve at least one matched anchor on EACH side of a 7–8 fix retry
         // instead of spending both final request slots after the turn.
-        val preferredNewerSlots = if (wideRetry && newestFirst.size >= 7) 1
+        val preferredNewerSlots = if (wideRetry && newestFirst.size >= maxPoints - 3) 1
             else if (maxPoints >= 6) maxOf(2, contextSlots / 2) else newerAnchorLimit
         var newerCount = minOf(newerAnchors.size, preferredNewerSlots)
         val olderCount = minOf(olderAnchors.size, contextSlots - newerCount)
@@ -2068,9 +2074,9 @@ class TrackingRepository(context: Context) {
         private const val EARTH_RADIUS_M = 6_371_008.8
         private const val WEB_MERCATOR_RADIUS_M = 6_378_137.0
         private const val PRIORITY_GAP_SCAN_LIMIT = 512
-        private const val PRIORITY_GAP_MIN_FIXES = 4
-        private const val PRIORITY_GAP_MAX_FIXES = 8
-        private const val PRIORITY_GAP_MAX_MS = 30_000L
+        private const val PRIORITY_GAP_MIN_FIXES = 2
+        private const val PRIORITY_GAP_MAX_FIXES = 23
+        private const val PRIORITY_GAP_MAX_MS = 120_000L
         private const val PRIORITY_GAP_MAX_ACCURACY_M = 12f
         private const val VISIT_CONTINUATION_MS = 120_000L
         private const val VISIT_DEPARTURE_DISTANCE_M = 75.0

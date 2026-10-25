@@ -52,8 +52,13 @@ class TripHistoryRepository(context: Context) {
         var lastTime = 0L
         var count = 0
         var distance = 0.0
+        var hasDrivingSpeed = false
         fun addCurrent() {
-            if (count >= 2 && lastTime >= firstTime) {
+            // Small walking/GPS-scatter groups used to fill the list with 0.0 mi
+            // drives. Keep short genuine drives with credible speed evidence.
+            // This only filters the list: all original fixes remain in the backup.
+            if (count >= 2 && lastTime >= firstTime &&
+                (distance >= 80.4672 || hasDrivingSpeed)) {
                 output += SavedTrip(firstId, lastId, firstTime, lastTime, count, distance, generation)
             }
         }
@@ -67,7 +72,7 @@ class TripHistoryRepository(context: Context) {
             var rows = 0
             val where = if (beforeId == null) "" else " WHERE id < ?"
             db.rawQuery(
-                "SELECT id, timestamp_ms, distance_m FROM track_points$where ORDER BY id DESC LIMIT $pageSize",
+                "SELECT id, timestamp_ms, distance_m, speed_mps, accuracy_m FROM track_points$where ORDER BY id DESC LIMIT $pageSize",
                 beforeId?.let { arrayOf(it.toString()) }
             ).use { cursor ->
                 while (cursor.moveToNext() && output.size < limit) {
@@ -80,6 +85,7 @@ class TripHistoryRepository(context: Context) {
                         addCurrent()
                         count = 0
                         distance = 0.0
+                        hasDrivingSpeed = false
                         if (output.size >= limit) break
                     }
                     if (count == 0) {
@@ -89,6 +95,7 @@ class TripHistoryRepository(context: Context) {
                     firstId = id
                     firstTime = time
                     count++
+                    if (cursor.getFloat(3) in 2.2f..100f && cursor.getFloat(4) in 0.01f..25f) hasDrivingSpeed = true
                     if (meters.isFinite() && meters > 0.0) distance += meters
                 }
             }

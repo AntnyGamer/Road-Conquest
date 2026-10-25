@@ -50,6 +50,7 @@ import com.roadconquest.app.progression.ProgressionManager
 import com.roadconquest.app.util.LocationProviders
 import com.roadconquest.app.util.Prefs
 import com.roadconquest.app.util.Appearance
+import com.roadconquest.app.util.MeasurementUnits
 import com.roadconquest.app.util.UiTheme
 import com.roadconquest.app.util.SystemSettingsNavigator
 import com.roadconquest.app.util.StatsText
@@ -164,7 +165,8 @@ class MainActivity : Activity() {
             if (location.hasBearing() && (!location.hasSpeed() || location.speed >= 0.5f)) {
                 previewBearingDegrees = location.bearing.toDouble()
             }
-            renderer?.updateCar(location.latitude, location.longitude, previewBearingDegrees, locationAgeMillis(location))
+            renderer?.updateCar(location.latitude, location.longitude, previewBearingDegrees, locationAgeMillis(location),
+                LocationProviders.measuredSpeedOrNull(location) ?: Float.NaN, location.accuracy)
         }
 
         override fun onProviderEnabled(provider: String) {
@@ -187,7 +189,9 @@ class MainActivity : Activity() {
                         intent.getDoubleExtra(TrackingService.EXTRA_LATITUDE, 0.0),
                         intent.getDoubleExtra(TrackingService.EXTRA_LONGITUDE, 0.0),
                         intent.getDoubleExtra(TrackingService.EXTRA_BEARING, 0.0),
-                        intent.getLongExtra(TrackingService.EXTRA_LOCATION_AGE_MS, 0L)
+                        intent.getLongExtra(TrackingService.EXTRA_LOCATION_AGE_MS, 0L),
+                        intent.getFloatExtra(TrackingService.EXTRA_SPEED_MPS, Float.NaN),
+                        intent.getFloatExtra(TrackingService.EXTRA_ACCURACY_M, Float.POSITIVE_INFINITY)
                     )
                 }
                 TrackingService.ACTION_STATS_UPDATED -> scheduleStatsRefresh()
@@ -1002,12 +1006,7 @@ class MainActivity : Activity() {
         var populationSource: String? = null
         var firstVisited = "Loading…"
         var lastVisited = "Loading…"
-        val squareMiles = info.areaSquareKilometers * 0.386102
-        val area = if (squareMiles >= 1.0) {
-            String.format(Locale.getDefault(), "%,.1f sq mi (%,.1f km²)", squareMiles, info.areaSquareKilometers)
-        } else {
-            String.format(Locale.getDefault(), "%,.2f sq mi (%,.2f km²)", squareMiles, info.areaSquareKilometers)
-        }
+        val area = MeasurementUnits.current().area(info.areaSquareKilometers)
         val dialog = AlertDialog.Builder(this)
             .setTitle(info.name)
             .setMessage("")
@@ -1070,11 +1069,7 @@ class MainActivity : Activity() {
 
     private fun showRoadDetails(road: RoadRecord, lengthMeters: Double) {
         val dateTime = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT)
-        val length = if (lengthMeters < 160.9344) {
-            String.format(Locale.getDefault(), "%.0f ft", lengthMeters * 3.28084)
-        } else {
-            String.format(Locale.getDefault(), "%.2f mi", lengthMeters / 1609.344)
-        }
+        val length = MeasurementUnits.current().distance(lengthMeters, decimals = 2)
         // Count road-wide journeys from all connected matched segments.
         // This is based on recorded GPS evidence, not a promise that every
         // journey was tracked through a complete GPS outage.
@@ -1321,7 +1316,8 @@ class MainActivity : Activity() {
         if (best.hasBearing() && (!best.hasSpeed() || best.speed >= 0.5f)) {
             previewBearingDegrees = best.bearing.toDouble()
         }
-        renderer?.updateCar(best.latitude, best.longitude, previewBearingDegrees, locationAgeMillis(best))
+        renderer?.updateCar(best.latitude, best.longitude, previewBearingDegrees, locationAgeMillis(best),
+            LocationProviders.measuredSpeedOrNull(best) ?: Float.NaN, best.accuracy)
     }
 
     private fun locationAgeMillis(location: Location): Long {

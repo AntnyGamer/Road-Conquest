@@ -70,6 +70,44 @@ test('public paging, reactions, blocks, privacy and account deletion', { skip: !
   assert.equal((await pool.query('SELECT * FROM forum_reports')).rowCount,0);
 }));
 
+test('feed lookahead does not transfer an extra post and preserves tied cursors, blocks and reactions', { skip: !database }, async () => fixture(async (pool,[a,b,c]) => {
+  const id = n => '00000000-0000-4000-8000-' + String(n).padStart(12,'0');
+  await pool.query(`INSERT INTO forum_profiles(user_id,plus_active) VALUES($1,TRUE),($2,FALSE)`, [a.id,c.id]);
+  await pool.query(`INSERT INTO forum_posts(id,user_id,request_id,content_hash,body,state,created_at)
+    SELECT ('00000000-0000-4000-8000-'||lpad(g::text,12,'0'))::uuid,
+      CASE WHEN g IN (26,27) THEN $2::bigint ELSE $1::bigint END,
+      ('00000000-0000-4000-8000-'||lpad(g::text,12,'0'))::uuid,repeat('a',64),repeat('x',1190)||g,
+      CASE WHEN g=28 THEN 'removed' WHEN g=29 THEN 'deleted' ELSE 'visible' END,
+      '2026-01-01T00:00:00Z'::timestamptz
+    FROM generate_series(1,29) g`, [a.id,b.id]);
+  await pool.query('INSERT INTO forum_blocks(user_id,blocked_id) VALUES($1,$2)', [c.id,b.id]);
+  await pool.query(`INSERT INTO forum_reactions(post_id,user_id,reaction)
+    SELECT id,$1,'like' FROM forum_posts WHERE user_id=$2 AND state='visible'`, [c.id,a.id]);
+  await pool.query("INSERT INTO forum_reactions(post_id,user_id,reaction) VALUES($1,$2,'love')", [id(5),b.id]);
+  const transferred = [];
+  const forum = createForum({ query: async (...args) => {
+    const result = await pool.query(...args);
+    // Inspect the database boundary before the service can trim its response.
+    transferred.push(result.rows[0].posts.map(post => post.id));
+    return result;
+  } }, options);
+  const first = await forum.list(c);
+  assert.deepEqual(first.posts.map(p=>p.id), Array.from({length:20},(_,i)=>id(25-i)));
+  assert.deepEqual(transferred[0], first.posts.map(p=>p.id));
+  assert.ok(first.next);
+  assert.ok(first.posts.every(p=>p.highlighted && p.my_reaction==='like' && p.reactions.like===1 && !p.own));
+  assert.equal(first.viewer.username,c.username_display);
+  const last = await forum.list(c,first.next);
+  assert.deepEqual(last.posts.map(p=>p.id), [5,4,3,2,1].map(id));
+  assert.deepEqual(transferred[1], last.posts.map(p=>p.id));
+  assert.equal(last.posts[0].reactions.love,1);
+  assert.equal(last.next,null);
+  await pool.query('DELETE FROM users WHERE id=$1',[a.id]);
+  const empty = await forum.list(c,first.next);
+  assert.deepEqual(empty.posts,[]);
+  assert.equal(empty.next,null);
+}));
+
 test('ten-minute cooldown survives service restart, deletes and concurrent submissions; retries are free', { skip: !database }, async () => fixture(async (pool,[a]) => {
   let calls=0;
   const make = () => createForum(pool,{ ...options, moderate: async () => { calls++; return { flagged:false }; } });

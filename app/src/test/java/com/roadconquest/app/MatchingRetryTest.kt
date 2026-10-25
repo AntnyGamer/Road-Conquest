@@ -20,6 +20,66 @@ import java.util.concurrent.TimeUnit
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31, 37], manifest = Config.NONE)
 class MatchingRetryTest {
+    @Test fun unchangedNewestWorkAndStaleWalkingNoiseYieldRequestsToAnchoredTurns() {
+        for (staleWalkingNoise in listOf(false, true)) {
+            val controller = Robolectric.buildService(TrackingService::class.java)
+            val service = controller.get()
+            val repo = repository()
+            val ids = (0..21).map { i -> repo.insertLocation(Location("gps").apply {
+                latitude = 40.0; longitude = -74.0 + i * .00005
+                accuracy = 3f; speed = 10f; time = 1_000_000L + i * 2_000
+            }) }
+            repo.markMatched(listOf(ids.first(), ids.last()))
+            fun appendFresh(start: Long) = (0..1).map { i -> repo.insertLocation(Location("gps").apply {
+                latitude = 41.0; longitude = -74.0 + i * .0001
+                accuracy = 3f; speed = 10f; time = start + i * 3_000
+            }) }
+            val newest = appendFresh(10_000_000L)
+            if (staleWalkingNoise) repo.readableDatabase().execSQL(
+                "UPDATE track_points SET speed_mps=0 WHERE id IN (?,?)", newest.toTypedArray())
+            val submitted = mutableListOf<List<Long>>()
+            val matcher = object : com.roadconquest.app.matching.RoadMatcher {
+                override val unavailable = false
+                override fun rateLimitRemainingMs() = 0L
+                override fun match(points: List<com.roadconquest.app.data.TrackPoint>): com.roadconquest.app.matching.MatchResult {
+                    submitted += points.map { it.id }
+                    return com.roadconquest.app.matching.MatchResult(emptyList(), emptyMap(), explicitNoMatch = true)
+                }
+            }
+            org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofMinutes(10))
+            field(service, "repository").set(service, repo)
+            field(service, "matcher").set(service, matcher)
+            field(service, "ready").setBoolean(service, true)
+            val executor = field(service, "matchingExecutor").get(service) as ScheduledExecutorService
+            val run = TrackingService::class.java.getDeclaredMethod("maybeRunMatching", Boolean::class.javaPrimitiveType)
+                .apply { isAccessible = true }
+            fun request() { run.invoke(service, true); executor.submit {}.get(10, TimeUnit.SECONDS) }
+            fun nextPermit() {
+                repo.makePendingMatchingEligibleNow()
+                field(service, "lastMatchAttempt").setLong(service, android.os.SystemClock.elapsedRealtime() - 420_001L)
+            }
+            try {
+                request()
+                assertEquals(listOf(if (staleWalkingNoise) ids else newest), submitted)
+                if (!staleWalkingNoise) assertNull("A cooldown must not consume the priority cursor",
+                    field(service, "previousPriorityGapStartId").get(service))
+                nextPermit()
+                request()
+                assertEquals(2, submitted.size)
+                assertEquals(if (staleWalkingNoise) newest else ids, submitted[1])
+                assertEquals(newest.last(), field(service, "lastRemoteNewestPendingId").get(service))
+                val fresh = appendFresh(20_000_000L)
+                nextPermit()
+                request()
+                assertEquals(3, submitted.size)
+                assertEquals(fresh, submitted.last())
+            } finally {
+                field(service, "ready").setBoolean(service, false)
+                controller.destroy()
+            }
+        }
+    }
+
     @Test fun cachedNoMatchCannotBypassTheRemoteGateOrRetirePendingFixesEarly() {
         val controller = Robolectric.buildService(TrackingService::class.java)
         val service = controller.get()

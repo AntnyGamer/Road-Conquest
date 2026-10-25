@@ -146,6 +146,7 @@ class MapRenderer(
     private val overlayBounds = OverlayBoundsCache()
     @Volatile private var destroyed = false
     private val liveLocation = LiveLocation()
+    private val motionMode = MotionModeTracker()
     private var displayedRoads = OverlayRoads.EMPTY
     private var displayedRoadFeatures = EMPTY_FEATURES
     // A newly installed GeoJSON source already contains EMPTY_FEATURES. Avoid sending the
@@ -669,11 +670,15 @@ class MapRenderer(
         }
     }
 
-    fun updateCar(latitude: Double, longitude: Double, bearing: Double, ageMillis: Long = 0L) {
+    fun updateCar(latitude: Double, longitude: Double, bearing: Double, ageMillis: Long = 0L,
+                  speedMps: Float = Float.NaN, accuracyMeters: Float = Float.POSITIVE_INFINITY) {
         if (destroyed || !viewportActive) return
         val now = SystemClock.elapsedRealtime()
         val previousVisual = liveLocation.current(now)
         if (!liveLocation.update(latitude, longitude, bearing, now, ageMillis)) return
+        val wasWalking = motionMode.isWalking
+        val modeChanged = motionMode.observe(now - ageMillis, speedMps, accuracyMeters) != wasWalking
+        if (modeChanged) map.style?.let(::updateCarImage)
         mainHandler.removeCallbacks(expireLocation)
         mainHandler.postDelayed(expireLocation, LiveLocation.MAX_AGE_MS - ageMillis)
 
@@ -686,14 +691,14 @@ class MapRenderer(
             previousVisual.longitude != currentVisual.longitude
         val bearingChanged = previousVisual == null || currentVisual == null ||
             previousVisual.bearing != currentVisual.bearing
-        if (positionChanged) {
+        if (positionChanged || modeChanged) {
             updateCarLayer()
         } else if (bearingChanged) {
             // Heading-only updates still rotate the marker, but do not re-upload identical
             // GeoJSON or rebuild fog because neither depends on bearing.
             currentVisual?.let { fix ->
                 (map.style?.getLayer(CAR_LAYER_ID) as? SymbolLayer)
-                    ?.setProperties(iconRotate(fix.bearing.toFloat()))
+                    ?.setProperties(iconRotate(if (motionMode.isWalking) 0f else fix.bearing.toFloat()))
             }
         }
         if (!centeredOnce) {
@@ -741,6 +746,9 @@ class MapRenderer(
         // Once the fix is already gone, another MapLibre marker upload cannot
         // change anything visible, so skip that work entirely.
         if (!liveLocation.clear()) return
+        val wasWalking = motionMode.isWalking
+        motionMode.reset()
+        if (wasWalking) map.style?.let(::updateCarImage)
         updateCarLayer()
     }
 
@@ -1394,7 +1402,7 @@ class MapRenderer(
     }
 
     private fun updateCarImage(style: Style) {
-        val next = Cosmetics.renderCarIcon(context)
+        val next = if (motionMode.isWalking) Cosmetics.renderPedestrianIcon(context) else Cosmetics.renderCarIcon(context)
         runCatching { style.addImage(CAR_IMAGE_ID, next) }
             .onSuccess {
                 carIconBitmap?.recycle()
@@ -1429,7 +1437,10 @@ class MapRenderer(
             return
         }
         source.setGeoJson(Point.fromLngLat(fix.longitude, fix.latitude))
-        (style.getLayer(CAR_LAYER_ID) as? SymbolLayer)?.setProperties(iconRotate(fix.bearing.toFloat()))
+        (style.getLayer(CAR_LAYER_ID) as? SymbolLayer)?.setProperties(
+            iconRotate(if (motionMode.isWalking) 0f else fix.bearing.toFloat()),
+            iconRotationAlignment(if (motionMode.isWalking) Property.ICON_ROTATION_ALIGNMENT_VIEWPORT
+                else Property.ICON_ROTATION_ALIGNMENT_MAP))
     }
 
     private fun scheduleFogRender() {

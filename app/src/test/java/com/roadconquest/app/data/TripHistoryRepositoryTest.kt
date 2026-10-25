@@ -10,6 +10,32 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31, 37], manifest = Config.NONE)
 class TripHistoryRepositoryTest {
+    @Test fun tinyWalkingNoiseGroupsAreHiddenWithoutDeletingDataOrHidingCredibleShortDrives() {
+        val context = RuntimeEnvironment.getApplication()
+        TrackingRepository(context).clearHistory()
+        val db = AppDatabase.get(context).writableDatabase
+        fun insert(start: Long, speed: Double, accuracy: Double, meters: Double) {
+            for (index in 0..1) db.execSQL("""INSERT INTO track_points
+                (latitude,longitude,accuracy_m,speed_mps,bearing_deg,timestamp_ms,distance_m)
+                VALUES (40,-74,?,?,0,?,?)""", arrayOf<Any>(accuracy,speed,start + index * 3_000,
+                    if (index == 0) 0.0 else meters))
+        }
+        insert(1_000_000, 0.0, 6.0, 25.0)
+        insert(3_000_000, 1.4, 5.0, 45.0)
+        insert(5_000_000, 8.0, 40.0, 30.0)
+        insert(7_000_000, 8.0, 3.0, 12.0)
+        insert(9_000_000, 8.0, 3.0, 0.0)
+        insert(11_000_000, 0.0, 3.0, 0.0)
+        val trips = TripHistoryRepository(context).recentTrips(2)
+        // Legacy driving history can have no computed distance. Preserve its
+        // replay/export when speed evidence exists, even with a zero total.
+        assertEquals(listOf(9_000_000L, 7_000_000L), trips.map { it.startedAt })
+        assertEquals(listOf(0.0, 12.0), trips.map { it.distanceMeters })
+        db.rawQuery("SELECT COUNT(*) FROM track_points", null).use {
+            assertTrue(it.moveToFirst()); assertEquals(12, it.getInt(0))
+        }
+    }
+
     @Test fun limitedRecentTripsKeepExactIdsCountsTimesAndDistanceWithALargeOlderArchive() {
         val context = RuntimeEnvironment.getApplication()
         TrackingRepository(context).clearHistory()
@@ -88,7 +114,7 @@ class TripHistoryRepositoryTest {
         val context = RuntimeEnvironment.getApplication()
         TrackingRepository(context).clearHistory()
         TrackingRepository(context).insertLocations((0 until 55).map { index ->
-            android.location.Location("gps").apply {
+            android.location.Location("gps").apply { speed = 8f;
                 latitude = 40.0
                 longitude = -74.0 + index * 0.00001
                 accuracy = 5f
@@ -111,7 +137,7 @@ class TripHistoryRepositoryTest {
         TrackingRepository(context).clearHistory()
         val repository = TrackingRepository(context)
         val fixes = (0..3).map { index ->
-            android.location.Location("gps").apply {
+            android.location.Location("gps").apply { speed = 8f;
                 latitude = 40.0
                 longitude = -74.0 + index * 0.0001
                 accuracy = 5f
@@ -136,7 +162,7 @@ class TripHistoryRepositoryTest {
         // Clear-history increments the repository generation; a stale repository
         // correctly refuses further writes. Use a newly attached repository.
         TrackingRepository(context).insertLocations((0..36).map { index ->
-            android.location.Location("gps").apply {
+            android.location.Location("gps").apply { speed = 8f;
                 latitude = 40.0
                 longitude = -74.0 + index * 0.0001
                 accuracy = 5f
@@ -181,7 +207,7 @@ class TripHistoryRepositoryTest {
         TrackingRepository(context).clearHistory()
         val tracker = TrackingRepository(context)
         tracker.insertLocations((0..2).map { i ->
-            android.location.Location("gps").apply {
+            android.location.Location("gps").apply { speed = 8f;
                 latitude = 40.0
                 longitude = -74.0 + i * 0.0001
                 accuracy = 5f
@@ -214,7 +240,7 @@ class TripHistoryRepositoryTest {
         tracker.clearHistory()
         fun insert(times: List<Long>) {
             TrackingRepository(context).insertLocations(times.mapIndexed { i, time ->
-                android.location.Location("gps").apply { latitude = 40.0; longitude = -74.0 + i * 0.0001; accuracy = 5f; this.time = time }
+                android.location.Location("gps").apply { speed = 8f; latitude = 40.0; longitude = -74.0 + i * 0.0001; accuracy = 5f; this.time = time }
             })
         }
         insert((0..4).map { 1_000_000L + it * 20_000 })

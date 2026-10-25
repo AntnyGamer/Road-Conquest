@@ -40,11 +40,14 @@ object LocationProviders {
      * driving acceptance and persistence so the matcher never treats a speed value that the
      * driving filter already rejected as authoritative evidence.
      */
-    fun reliableMeasuredSpeed(location: Location): Float {
-        if (!location.hasSpeed() || !location.speed.isFinite() || location.speed < 0f) return 0f
+    fun reliableMeasuredSpeed(location: Location): Float = measuredSpeedOrNull(location) ?: 0f
+
+    /** Keep a measured stop distinct from missing/unreliable speed metadata. */
+    fun measuredSpeedOrNull(location: Location): Float? {
+        if (!location.hasSpeed() || !location.speed.isFinite() || location.speed < 0f) return null
         if (location.hasSpeedAccuracy()) {
             val uncertainty = location.speedAccuracyMetersPerSecond
-            if (!uncertainty.isFinite() || uncertainty > MAX_MEASURED_SPEED_ACCURACY_MPS) return 0f
+            if (!uncertainty.isFinite() || uncertainty > MAX_MEASURED_SPEED_ACCURACY_MPS) return null
         }
         return location.speed
     }

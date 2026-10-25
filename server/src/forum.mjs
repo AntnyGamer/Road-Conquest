@@ -101,6 +101,8 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
   return {
     async list(user, cursorValue) {
       const cursor = cursorFrom(cursorValue);
+      // Keep the lookahead row only to detect another page. Its reactions and
+      // content are not needed by the caller or transferred out of Postgres.
       // One bounded query: page, author highlight, counts, own reaction, and viewer state.
       // No polling, N+1 profile lookups, or downloads of GIF bytes through this endpoint.
       const { rows } = await pool.query(`WITH page AS (
@@ -111,25 +113,27 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
         WHERE p.state='visible' AND ($2::timestamptz IS NULL OR (p.created_at,p.id)<($2,$3::uuid))
           AND NOT EXISTS(SELECT 1 FROM forum_blocks b WHERE b.user_id=$1 AND b.blocked_id=p.user_id)
         ORDER BY p.created_at DESC,p.id DESC LIMIT 21
+      ), displayed AS (
+        SELECT * FROM page ORDER BY created_at DESC,id DESC LIMIT 20
       ), counts AS (
         SELECT r.post_id,COUNT(*) FILTER(WHERE reaction='like') AS likes,
           COUNT(*) FILTER(WHERE reaction='love') AS loves,COUNT(*) FILTER(WHERE reaction='celebrate') AS celebrates,
           MAX(reaction) FILTER(WHERE r.user_id=$1) AS mine
-        FROM forum_reactions r JOIN page p ON p.id=r.post_id GROUP BY r.post_id
+        FROM forum_reactions r JOIN displayed p ON p.id=r.post_id GROUP BY r.post_id
       ) SELECT COALESCE((SELECT json_agg(json_build_object(
         'id',p.id,'username',p.username,'text',p.body,'gif_url',p.gif_url,'gif_hash',p.gif_hash,
         'created_at',p.created_at,'highlighted',p.highlighted,'own',COALESCE(p.user_id=$1,FALSE),
         'reactions',json_build_object('like',COALESCE(c.likes,0),'love',COALESCE(c.loves,0),
           'celebrate',COALESCE(c.celebrates,0)),'my_reaction',c.mine)
-        ORDER BY p.created_at DESC,p.id DESC) FROM page p LEFT JOIN counts c ON c.post_id=p.id),'[]'::json) AS posts,
+        ORDER BY p.created_at DESC,p.id DESC) FROM displayed p LEFT JOIN counts c ON c.post_id=p.id),'[]'::json) AS posts,
+        (SELECT COUNT(*)>20 FROM page) AS has_more,
         (SELECT json_build_object('username',u.username_display,'violations',COALESCE(f.violations,0),
           'muted_until',f.muted_until,'banned',COALESCE(f.banned,FALSE),'plus',COALESCE(f.plus_active,FALSE),
           'next_post_at',f.last_post_at + INTERVAL '10 minutes')
          FROM users u LEFT JOIN forum_profiles f ON f.user_id=u.id WHERE u.id=$1) AS viewer`,
       [user?.id || null, cursor?.[0] || null, cursor?.[1] || null]);
       const posts = rows[0].posts;
-      const hasMore = posts.length > 20;
-      if (hasMore) posts.pop();
+      const hasMore = rows[0].has_more;
       const last = posts.at(-1);
       return { available: true, posting_available: Boolean(moderate),
         purchases_available: Boolean(moderate && verifyPurchase && verifyWebhook) && !rows[0].viewer?.banned,

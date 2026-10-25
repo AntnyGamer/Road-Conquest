@@ -1,3 +1,22 @@
+# Road Conquest 1.0 Beta 63
+
+## What's new since Beta 62
+
+- **More reliable turn recording:** Keep accurate moving slow-turn fixes briefly after confirmed driving. Explicit walking/stopped speeds can no longer become driving solely because of positional GPS jitter. Existing mock, freshness and impossible-jump checks remain.
+- **Historical gap repair gets a request opportunity:** Give fully anchored turns a real retry when the newest eligible work has already been submitted, including after a restart with stale walking noise. New driving retains priority. Repair cursors advance only after an actual network attempt, within the existing provider order, cooldowns and allowances.
+- **Complete turn windows:** Retry anchored gaps of 2–23 pending fixes with their real approach/exit anchors inside the backup provider's 25-fix limit. Honor the requested island rather than jumping to nearby pending work; retain stoplight continuity checks and strict geometry validation. Provider coverage and finite allowances can still leave some fixes pending.
+- **Cleaner trip history:** Hide tiny walking/scatter groups without credible driving-speed evidence from the trip list. Retain short genuine drives and legacy driving trips whose distance totals are unavailable. Short positive distances use feet/metres, and unavailable totals say "Distance not recorded". Original GPS fixes and backups are retained.
+- **Walking marker:** Sustained reliable walking speeds display an upright pedestrian in the equipped car color. Confirmed faster movement restores the selected car, while brief slow turns and stops retain the driving mode. No extra location subscription, permission or server request is added.
+- **Automatic regional units:** Use the phone locale's measurement system for kilometres/metres and square kilometres, while preserving miles/feet and square miles for U.S./U.K. road users. Apply the same cached formatter to map/Settings totals, trips/replays/sharing, road lengths, place areas, achievement progress, tutorial tile wording and backup restore confirmation. Stored distances, physical exploration tiles, achievement IDs, goals and rewards are unchanged.
+- **Distinct map-style icons:** Streets, Satellite, Minimal and Night each have their own Settings icon and update immediately on selection. Streets also follows the app's light/dark appearance. The separate Appearance control keeps its sun/moon/automatic choices.
+- **Less database and phone work:** Aggregate and transfer only the 20 displayed forum posts, using the 21st solely to detect another page. Preserve feed ordering, cursors, blocks, highlights, reactions and viewer state in one database statement. Avoid repeating an identical bounded anchored-gap scan when no prior repair cursor exists.
+- **Older PR review:** Preserve the forum/tutorial improvements already present from newer code and the restored map artwork from PR #116. Include PR #118's real foreground Back-key dispatch for native tutorial/exit regression tests; keep all assertions and device coverage.
+- **Compatibility:** Android 12+, versionCode **89**, versionName **1.0-beta.63**. Same package, permanent signing identity, local database/backup format, saved progress, account data and purchases.
+
+The GitHub workflow publishes the signed APK, Play upload AAB, tested account function, source archive, mapping and checksums only after its required checks pass. Upload to Google Play and deployment of the account function/map gateway remain separate operations. The forum query optimization is included in the account-function artifact and takes effect on a separately deployed backend. A separately deployed verified-driving service must permit version code 89 before accepting this build's verified submissions; updating the documented allowlist does not change live settings. Private-export analysis and synthetic regression fixtures do not establish parity with live provider replies. See `server/SERVER_USAGE_AUDIT_20261025.md` for the resource measurements and tradeoffs.
+
+---
+
 # Road Conquest 1.0 Beta 62
 
 ## What's new since Beta 61

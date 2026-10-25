@@ -26,6 +26,7 @@ import android.widget.TextView
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.roadconquest.app.R
+import com.roadconquest.app.util.MeasurementUnits
 import com.roadconquest.app.map.FogBitmapRenderer
 import com.roadconquest.app.map.FogTexture
 import com.roadconquest.app.util.Appearance
@@ -115,7 +116,8 @@ class MapTour(
     private fun render() {
         val current = steps[step]
         title.setText(current.title)
-        card.findViewById<TextView>(R.id.tourBody).setText(current.body)
+        card.findViewById<TextView>(R.id.tourBody).text = if (current.body == R.string.tour_intro_body)
+            context.getString(current.body, MeasurementUnits.current().tileSpan) else context.getString(current.body)
         card.findViewById<TextView>(R.id.tourStep).text = context.getString(R.string.tour_step, step + 1, steps.size)
         card.findViewById<View>(R.id.tourDemo).visibility = if (step == 0) VISIBLE else GONE
         card.findViewById<Button>(R.id.tourBackButton).visibility = if (step == 0) GONE else VISIBLE

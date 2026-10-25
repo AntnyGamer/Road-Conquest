@@ -30,6 +30,28 @@ class DrivingFilterTest {
         assertTrue(accepts(point(40.0002, 13), point(40.0, 10)))
     }
 
+    @Test fun positionalJitterCannotOverrideTwoExplicitWalkingOrStoppedSpeeds() {
+        for (speed in listOf(0f, 1.4f)) {
+            assertFalse(accepts(point(40.0003, 13, speed), point(40.0, 10, speed)))
+        }
+        assertTrue(accepts(point(40.0003, 13).apply { removeSpeed() },
+            point(40.0, 10).apply { removeSpeed() }))
+    }
+
+    @Test fun recentDrivingKeepsSlowTurnFixesButNeverStartsWalkingTripsOrAcceptsStops() {
+        val service = TrackingService()
+        val method = TrackingService::class.java.getDeclaredMethod("isUsableDrivingLocation",
+            Location::class.java, Location::class.java).apply { isAccessible = true }
+        val previous = point(40.0, 20, 1.1f).apply { accuracy = 3f }
+        val current = point(40.00003, 23, 1.1f).apply { accuracy = 3f }
+        assertFalse(method.invoke(service, current, previous) as Boolean)
+        TrackingService::class.java.getDeclaredField("lastConfirmedDriving").apply { isAccessible = true }
+            .set(service, point(40.0, 10, 8f))
+        assertTrue(method.invoke(service, current, previous) as Boolean)
+        assertFalse(method.invoke(service, point(40.00003, 23, 0f), point(40.0, 20, 0f)) as Boolean)
+        assertFalse(method.invoke(service, point(40.00003, 63, 1.1f), point(40.0, 60, 1.1f)) as Boolean)
+    }
+
     @Test fun explicitlyUnreliableMeasuredSpeedCannotAuthorizeGpsDrift() {
         val previous = point(40.0, 10).apply { speedAccuracyMetersPerSecond = 10f }
         val current = point(40.00005, 13).apply { speedAccuracyMetersPerSecond = 10f }
