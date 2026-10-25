@@ -50,9 +50,9 @@
         <item name="android:textColor">@color/danger</item>
     </style>
 
-    <style name="RoadConquest.AlertDialog.Base" parent="@android:style/Theme.Material.Light.Dialog.Alert" />
+    <style name="RoadConquest.DialogThemeBase" parent="@android:style/Theme.Material.Light.Dialog.Alert" />
 
-    <style name="RoadConquest.AlertDialog" parent="@style/RoadConquest.AlertDialog.Base">
+    <style name="RoadConquest.AlertDialog" parent="@style/RoadConquest.DialogThemeBase">
         <item name="android:buttonBarButtonStyle">@style/RoadConquest.DialogAction</item>
         <item name="android:buttonBarPositiveButtonStyle">@style/RoadConquest.DialogAction</item>
         <item name="android:buttonBarNegativeButtonStyle">@style/RoadConquest.DialogAction</item>
