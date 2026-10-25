@@ -47,6 +47,14 @@ test('community HTTP routes preserve public reads, account authentication, persi
       assert.equal((await call('/v1/forum/posts')).body.posts.length,1);
       assert.ok((await call('/v1/forum/posts','GET',undefined,token)).body.viewer.next_post_at);
       assert.equal((await call('/v1/forum/purchase','POST',{purchase_token:'fake'},token)).status,503);
+      // Repeated purchase verification can hold an account transaction open while
+      // contacting Google Play. A separate 5/min ceiling protects that external
+      // call while keeping other forum writes on their original shared budget.
+      for (let index=0;index<4;index++)
+        assert.equal((await call('/v1/forum/purchase','POST',{purchase_token:'fake'},token)).status,503);
+      assert.equal((await call('/v1/forum/purchase','POST',{purchase_token:'fake'},token)).status,429);
+      const purchaseLimit=(await admin.query("SELECT attempts FROM auth_rate_limits WHERE bucket='forum-purchase'")).rows[0];
+      assert.equal(Number(purchaseLimit.attempts),6);
       // Reaction bursts have their own 20/minute ceiling without bypassing the
       // shared forum-write budget or turning duplicate reactions into new likes.
       const reactionPath='/v1/forum/posts/'+post.body.id+'/reaction';
