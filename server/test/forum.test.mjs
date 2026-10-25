@@ -176,10 +176,12 @@ test('existing profiles skip redundant insert and billing notifications still pr
   const input=body('A first post');
   const first=await forum.post(a,input);
   const query=pool.query.bind(pool);
-  let profileInserts=0, billingWrites=0;
+  let profileInserts=0, billingWrites=0, webhookLookups=0;
   pool.query=(sql,...args)=>{
     if (typeof sql==='string' && sql.includes('INSERT INTO forum_profiles')) profileInserts++;
     if (typeof sql==='string' && sql.includes('forum_billing_events') && sql.includes('DELETE')) billingWrites++;
+    if (typeof sql==='string' && sql.includes('forum_billing_events') && sql.includes('forum_purchases')
+      && !sql.includes('INSERT INTO forum_billing_events')) webhookLookups++;
     return query(sql,...args);
   };
   try {
@@ -192,9 +194,11 @@ test('existing profiles skip redundant insert and billing notifications still pr
       }
     })).toString('base64') } };
     assert.deepEqual(await forum.webhook('verified',notification),{ok:true});
+    assert.equal(webhookLookups,1,'Unseen events check deduplication and purchase ownership in one query');
     assert.equal(billingWrites,1,'Event insert and cleanup happen in one query');
     assert.deepEqual((await query("SELECT id FROM forum_billing_events WHERE id IN ('expired-id','fresh-id') ORDER BY id")).rows.map(x=>x.id),['fresh-id']);
     await forum.webhook('verified',notification);
+    assert.equal(webhookLookups,2,'Duplicate events need only one lookup without checking ownership separately');
     assert.equal(billingWrites,1,'Duplicate events skip maintenance and Play verification');
   } finally { pool.query=query; }
 }));
