@@ -3,7 +3,7 @@ Styles preserve the upstream design. Explicit source attribution has been added.
 Map data: OpenStreetMap contributors.
 Liberty design: OSM Liberty / OSM Bright / Mapbox.
 Positron and Dark design: CartoDB Basemaps, Stamen and Paul Norman for CartoDB Inc.
-Style code: BSD 3-Clause; design: Creative Commons Attribution (see notices below).
+Style code: BSD 3-Clause, design: Creative Commons Attribution (see notices below).
 OpenFreeMap adaptations: MIT.
 Sources:
 https://github.com/hyperknot/openfreemap-styles

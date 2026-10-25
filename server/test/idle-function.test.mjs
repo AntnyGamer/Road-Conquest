@@ -51,7 +51,7 @@ for (const applySchema of ['0', '1']) test(`cold liveness and public pages need 
           method:'POST',headers:{'Content-Type':'application/json'},body,duplex:'half'
         }));
         assert.equal(parsed.status,400);
-        assert.deepEqual(await parsed.json(),{error:'Username must be 3-24 letters, numbers, or underscores; password must be 8-128 characters.'});
+        assert.deepEqual(await parsed.json(),{error:'Username must be 3-24 letters, numbers, or underscores. Password must be 8-128 characters.'});
       }
       for (const [path,method] of [['/v1/friends','POST'],['/v1/notifications/device','POST']]) {
         const response=await api.fetch(new Request('https://offline.example'+path,

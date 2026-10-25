@@ -135,7 +135,7 @@ object DataImporter {
                 var metadata = JSONObject()
                 readEntry("metadata.json") { metadata = JSONObject(Charsets.UTF_8.newDecoder().decode(java.nio.ByteBuffer.wrap(it.readBytes())).toString()) }
                 require(metadata.getString("app") == "Road Conquest" && metadata.getInt("schema_version") in 9..12) {
-                    "Unsupported backup format; use a current Road Conquest export"
+                    "Unsupported backup format. Use a current Road Conquest export"
                 }
                 val schema = metadata.getInt("schema_version")
                 val backupTables = if (schema >= 12) tables else legacyTables
@@ -216,7 +216,7 @@ object DataImporter {
         // or the running service. Reset/restore are serialized by operationLock.
         synchronized(helper.historyLock) {
             check(helper.historyGeneration == prepared.generation && !Prefs.isDeviceDataDeletionPending(app)) {
-                "Device data changed; select the backup again"
+                "Device data changed. Select the backup again"
             }
         }
         val temporaryBackup = File(app.filesDir, "before-restore.tmp.zip")
@@ -226,7 +226,7 @@ object DataImporter {
         app.stopService(Intent(app, TrackingService::class.java))
         DataExporter.withSnapshotLock { synchronized(helper.historyLock) {
             check(helper.historyGeneration == prepared.generation && !Prefs.isDeviceDataDeletionPending(app)) {
-                "Device data changed; select the backup again"
+                "Device data changed. Select the backup again"
             }
             try {
                 temporaryBackup.outputStream().use { DataExporter.writeZip(app, TrackingRepository(app), it) }
@@ -287,7 +287,7 @@ object DataImporter {
                 val selected = setOf("car_style_${meta.optString("car_style")}", "car_color_${meta.optString("car_color")}",
                     "road_color_${meta.optString("road_color")}", "ui_standard", if (meta.optBoolean("gold_ui_enabled")) "ui_gold" else "ui_standard")
                 ShopCatalog.items.filter { it.id in selected }.forEach { Cosmetics.equip(app, it) }
-            }.onFailure { android.util.Log.w("RoadConquest", "Progress restored; appearance could not be fully restored", it) }
+            }.onFailure { android.util.Log.w("RoadConquest", "Progress restored. Appearance could not be fully restored", it) }
         }
         // A user may have returned to a still-visible map before a slow restore
         // committed. Tell it to replace its stale repository without GPS polling.

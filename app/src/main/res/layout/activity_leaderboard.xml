@@ -20,7 +20,7 @@
             android:textStyle="bold" android:textColor="?attr/rcTextPrimary" />
         <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
             android:layout_marginTop="12dp" android:textSize="14sp" android:textColor="?attr/rcTextSecondary"
-            android:text="Top 50 public profiles. Each cell counts once from verified live visits; imported history does not count." />
+            android:text="Top 50 public profiles. Each cell counts once from verified live visits. Imported history does not count." />
         <Button android:id="@+id/refreshRankingButton" style="@style/RoadConquest.SettingsAction" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="Refresh" />
         <TextView android:id="@+id/rankingEntriesText" android:layout_width="match_parent" android:layout_height="wrap_content"
             android:layout_marginTop="12dp" android:textSize="16sp" android:textColor="?attr/rcTextPrimary" />

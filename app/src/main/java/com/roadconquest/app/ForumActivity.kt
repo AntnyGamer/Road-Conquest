@@ -394,7 +394,7 @@ class ForumActivity : Activity() {
                         } else message("Posted to the community.")
                         refresh()
                     },onFailure = {
-                        message(it.message ?: "Could not submit. Try again; retries will not add another strike.")
+                        message(it.message ?: "Could not submit. Try again. Retries will not add another strike.")
                         if (it is AccountClient.ApiException && it.status in listOf(403,429)) refresh()
                     })
                 }

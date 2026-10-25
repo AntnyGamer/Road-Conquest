@@ -417,7 +417,7 @@ class TripHistoryActivity : Activity() {
             // hides the privacy choices, preventing the document picker from opening.
             .setTitle("Save GPX · Precise GPS locations")
             .setItems(arrayOf(
-                "Hide first/last 2 minutes (recommended; privacy not guaranteed)",
+                "Hide first/last 2 minutes (recommended, privacy not guaranteed)",
                 "Full route with exact endpoints (review before sharing)"
             )) { _, choice ->
                 if (choice == 0 && trip.endedAt - trip.startedAt <= 240_000L) {
@@ -490,7 +490,7 @@ class TripHistoryActivity : Activity() {
             runOnUiThread {
                 if (isDestroyed) return@runOnUiThread
                 val message = when {
-                    cleanupFailed -> "GPX export failed. The created file may remain; delete it manually in Files."
+                    cleanupFailed -> "GPX export failed. The created file may remain. Delete it manually in Files."
                     result.isFailure -> "Could not save GPX. Choose another file or reload the trip."
                     result.getOrThrow() == 0 -> "No coordinates remain after hiding endpoints. Consider a different trip."
                     else -> "GPX saved (${result.getOrThrow()} GPS points)"
