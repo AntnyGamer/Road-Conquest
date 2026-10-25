@@ -28,7 +28,8 @@ export const RATE_LIMIT_SESSION_SQL = `WITH permit AS (${RATE_LIMIT_SQL})
       AND EXISTS(SELECT 1 FROM permit WHERE allowed)) AS id`;
 // Personal profile reads and logouts use one reserved IP budget and one SQL
 // round trip. Invalid bearer tokens cannot generate unlimited session lookups
-// or DELETE statements. Once a budget is exhausted, neither touches sessions.
+// or DELETE statements. Always allow a REAL active session to revoke itself,
+// even when a shared client-address bucket has become saturated.
 export const RATE_LIMIT_PROFILE_SQL = `WITH permit AS (${RATE_LIMIT_SQL})
   SELECT COALESCE((SELECT allowed FROM permit),FALSE) AS allowed,
     profile.username_display, profile.leaderboard_visible
@@ -42,10 +43,11 @@ export const RATE_LIMIT_PROFILE_SQL = `WITH permit AS (${RATE_LIMIT_SQL})
 export const RATE_LIMIT_LOGOUT_SQL = `WITH permit AS (${RATE_LIMIT_SQL}),
   revoked AS (
     DELETE FROM sessions WHERE token_hash=$5
-      AND EXISTS(SELECT 1 FROM permit WHERE allowed)
+      AND (expires_at>CURRENT_TIMESTAMP OR EXISTS(SELECT 1 FROM permit WHERE allowed))
     RETURNING 1
   )
-  SELECT COALESCE((SELECT allowed FROM permit),FALSE) AS allowed`;
+  SELECT COALESCE((SELECT allowed FROM permit),FALSE) AS allowed,
+    EXISTS(SELECT 1 FROM revoked) AS revoked`;
 // A denied/saturated IP produces no username reservation, preserving short
 // circuit accounting. The two distinct bucket rows retain the same lock order.
 const loginBudgetCtes = `WITH ip_limit AS (${reservation()}),
