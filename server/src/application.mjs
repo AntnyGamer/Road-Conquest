@@ -16,7 +16,7 @@ import { competitionConfig, createCompetition } from "./competition.mjs";
 import { createFriends } from "./friends.mjs";
 import { createNotifications, createFcmSender } from "./notifications.mjs";
 import { createRequestMaintenance } from "./maintenance.mjs";
-import { RATE_LIMIT_SQL, RATE_LIMIT_SESSION_SQL, RATE_LIMIT_PROFILE_SQL, RATE_LIMIT_LOGOUT_SQL, LOGIN_WITH_USER_SQL } from "./rate-limits.mjs";
+import { RATE_LIMIT_SQL, RATE_LIMIT_PAIR_SQL, RATE_LIMIT_SESSION_SQL, RATE_LIMIT_PROFILE_SQL, RATE_LIMIT_LOGOUT_SQL, LOGIN_WITH_USER_SQL } from "./rate-limits.mjs";
 import { EvidenceError } from './scoring.mjs';
 
 const { Pool } = pg;
@@ -302,8 +302,20 @@ async function handle(req, res) {
     if (req.method === 'GET' && url.pathname === '/v1/forum/reports') return send(res, 200, await forum.reports(user));
     const postId = url.pathname.match(/^\/v1\/forum\/posts\/([a-f0-9-]{36})(?:\/(reaction|report))?$/i);
     const posting = req.method === 'POST' && url.pathname === '/v1/forum/posts';
-    const bucket = posting ? 'forum-post' : 'forum-write';
-    if (!await rateLimit(bucket, String(user.id), posting ? 5 : 60, 60_000)) return send(res, 429, { error: 'Please slow down and try again shortly.' });
+    const reacting = req.method === 'PUT' && postId?.[2] === 'reaction';
+    // Reactions keep the shared forum-write cap and also have a smaller
+    // 20/minute spam ceiling. Reserve both atomically in one SQL round trip.
+    const permitted = reacting ? await (async () => {
+      await prepareDatabase();
+      const key = String(user.id);
+      const { rows } = await pool.query(RATE_LIMIT_PAIR_SQL, [
+        'forum-write', opaqueRateKey('forum-write', key), 60_000, 60,
+        'forum-reaction', opaqueRateKey('forum-reaction', key), 60_000, 20
+      ]);
+      return rows[0]?.allowed === true;
+    })() : await rateLimit(posting ? 'forum-post' : 'forum-write',
+      String(user.id), posting ? 5 : 60, 60_000);
+    if (!permitted) return send(res, 429, { error: 'Please slow down and try again shortly.' });
     if (posting) return send(res, 200, await forum.post(user, await readJson(req)));
     if (postId && req.method === 'DELETE' && !postId[2]) return send(res, 200, await forum.remove(user,postId[1]));
     const body = await readJson(req);
