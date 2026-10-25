@@ -468,6 +468,9 @@ class SettingsActivity : Activity() {
             setOnCheckedChangeListener { _, enabled -> Prefs.setFogEnabled(this@SettingsActivity, enabled) }
         }
         val mapButton = findViewById<Button>(R.id.mapStyleButton)
+        mapButton.setCompoundDrawablesRelativeWithIntrinsicBounds(
+            if (Appearance.isDark(this)) R.drawable.ic_map_night else R.drawable.ic_map_day, 0, 0, 0
+        )
         mapButton.text = getString(R.string.map_style_label, Prefs.mapMode(this).label)
         mapButton.setOnClickListener {
             val modes = MapMode.entries
