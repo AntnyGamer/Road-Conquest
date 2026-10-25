@@ -230,7 +230,6 @@ class DiscoveryPreview(context: Context, attrs: AttributeSet? = null) : View(con
     private val routeMeasure = PathMeasure(route, false)
     private val driven = Path()
     private val clip = Path()
-    private val fog = Path()
     private val fogPaint = Paint(Paint.FILTER_BITMAP_FLAG).apply {
         shader = BitmapShader(texture, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
     }
@@ -279,26 +278,25 @@ class DiscoveryPreview(context: Context, attrs: AttributeSet? = null) : View(con
         routeMeasure.getPosTan(routeMeasure.length * reveal, carPosition, null)
         driven.reset()
         routeMeasure.getSegment(0f, routeMeasure.length * reveal, driven, true)
+        // Start in one clear, square map tile. Only crossing its edge reveals the next tile.
+        val crossing = (112f - 40f) / routeMeasure.length
+        val nextTile = ((reveal - crossing) / .16f).coerceIn(0f, 1f)
+        val fogAlpha = (FogBitmapRenderer.MAX_FOG_ALPHA * 255).toInt()
+        fogPaint.alpha = fogAlpha
+        canvas.drawRect(0f, 0f, 320f, 26f, fogPaint)
+        canvas.drawRect(0f, 122f, 320f, 148f, fogPaint)
+        canvas.drawRect(0f, 26f, 16f, 122f, fogPaint)
+        canvas.drawRect(208f, 26f, 320f, 122f, fogPaint)
+        fogPaint.alpha = ((1f - nextTile) * fogAlpha).toInt()
+        canvas.drawRect(112f, 26f, 208f, 122f, fogPaint)
+
+        // The live map keeps driven roads blue above the fog layer too.
         paint.style = Paint.Style.STROKE
         paint.strokeCap = Paint.Cap.ROUND
         paint.strokeJoin = Paint.Join.ROUND
         paint.strokeWidth = 5f
         paint.color = Color.rgb(130, 178, 255)
         canvas.drawPath(driven, paint)
-
-        // Start in one clear, square map tile. Only crossing its edge reveals the next tile.
-        val crossing = (112f - 40f) / routeMeasure.length
-        val nextTile = ((reveal - crossing) / .16f).coerceIn(0f, 1f)
-        val fogAlpha = (FogBitmapRenderer.MAX_FOG_ALPHA * 255).toInt()
-        fog.reset()
-        fog.fillType = Path.FillType.EVEN_ODD
-        fog.addRect(0f, 0f, 320f, 148f, Path.Direction.CW)
-        fog.addRect(16f, 26f, 112f, 122f, Path.Direction.CW)
-        fog.addRect(112f, 26f, 208f, 122f, Path.Direction.CW)
-        fogPaint.alpha = fogAlpha
-        canvas.drawPath(fog, fogPaint)
-        fogPaint.alpha = ((1f - nextTile) * fogAlpha).toInt()
-        canvas.drawRect(112f, 26f, 208f, 122f, fogPaint)
         paint.style = Paint.Style.FILL
         paint.color = Color.argb(65, 130, 178, 255)
         canvas.drawCircle(carPosition[0], carPosition[1], 11f, paint)
