@@ -115,6 +115,10 @@ test("serverless accounts enforce authentication, privacy, limits and TLS with r
     assert.equal((await call("/v1/reauth", "POST", { password: "wrong password" }, login.body.token)).status, 403);
     assert.equal((await call("/v1/reauth", "POST", { password: credentials.password }, login.body.token)).status, 200);
     assert.equal((await call("/v1/me", "GET", undefined, login.body.token)).status, 200);
+    const guarded = await admin.query("SELECT bucket,attempts FROM auth_rate_limits WHERE bucket IN ('account-ip','privacy-ip') ORDER BY bucket");
+    assert.deepEqual(guarded.rows.map(r => r.bucket), ['account-ip', 'privacy-ip'],
+      'Password-protected and privacy routes reserve a budget before attempting session validation');
+    assert.ok(guarded.rows.every(r => Number(r.attempts) >= 1));
     assert.equal((await call("/v1/account", "DELETE", { password: "wrong password" }, login.body.token)).status, 403);
     assert.equal((await call("/v1/account", "DELETE", { password: credentials.password }, login.body.token)).status, 200);
     assert.deepEqual((await call("/v1/friends", "GET", undefined, friend.body.token)).body, { friends: [] });
