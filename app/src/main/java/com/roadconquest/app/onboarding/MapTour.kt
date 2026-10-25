@@ -8,6 +8,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.ComposeShader
 import android.graphics.LinearGradient
+import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.PorterDuff
 import android.graphics.Path
@@ -228,7 +229,12 @@ class DiscoveryPreview(context: Context, attrs: AttributeSet? = null) : View(con
     private val fogPaint = Paint(Paint.FILTER_BITMAP_FLAG).apply { shader = fogShader }
     // A soft cloud transition at each new tile edge, instead of a hard checkerboard seam.
     private val secondFog = featheredFog(112f)
-    private val thirdFog = featheredFog(208f)
+    private val thirdGradient = LinearGradient(0f, 0f, 20f, 0f,
+        Color.TRANSPARENT, Color.WHITE, Shader.TileMode.CLAMP)
+    private val thirdGradientMatrix = Matrix()
+    private val thirdFog = Paint(Paint.FILTER_BITMAP_FLAG).apply {
+        shader = ComposeShader(fogShader, thirdGradient, PorterDuff.Mode.DST_IN)
+    }
 
     private fun featheredFog(left: Float) = Paint(Paint.FILTER_BITMAP_FLAG).apply {
         shader = ComposeShader(fogShader,
@@ -306,6 +312,10 @@ class DiscoveryPreview(context: Context, attrs: AttributeSet? = null) : View(con
         canvas.drawRect(304f, 26f, 320f, 122f, fogPaint)
         secondFog.alpha = ((1f - secondReveal) * fogAlpha).toInt()
         canvas.drawRect(112f, 26f, 208f, 122f, secondFog)
+        // Until the second square clears, the third has full fog. Shift its existing
+        // edge gradient smoothly as the second square reveals, with no new shaders per frame.
+        thirdGradientMatrix.setTranslate(188f + 20f * secondReveal, 0f)
+        thirdGradient.setLocalMatrix(thirdGradientMatrix)
         thirdFog.alpha = ((1f - thirdReveal) * fogAlpha).toInt()
         canvas.drawRect(208f, 26f, 304f, 122f, thirdFog)
 
