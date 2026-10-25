@@ -308,16 +308,19 @@ async function handle(req, res) {
     // reactions and expensive Google Play purchase verifications. Each pair
     // reserves both buckets in a single database round trip.
     const specialBucket = reacting ? 'forum-reaction' : purchasing ? 'forum-purchase' : null;
-    const permitted = specialBucket ? await (async () => {
+    let permitted;
+    if (specialBucket) {
       await prepareDatabase();
       const key = String(user.id);
       const { rows } = await pool.query(RATE_LIMIT_PAIR_SQL, [
         'forum-write', opaqueRateKey('forum-write', key), 60_000, 60,
         specialBucket, opaqueRateKey(specialBucket, key), 60_000, reacting ? 20 : 5
       ]);
-      return rows[0]?.allowed === true;
-    })() : await rateLimit(posting ? 'forum-post' : 'forum-write',
-      String(user.id), posting ? 5 : 60, 60_000);
+      permitted = rows[0]?.allowed === true;
+    } else {
+      permitted = await rateLimit(posting ? 'forum-post' : 'forum-write',
+        String(user.id), posting ? 5 : 60, 60_000);
+    }
     if (!permitted) return send(res, 429, { error: 'Please slow down and try again shortly.' });
     if (posting) return send(res, 200, await forum.post(user, await readJson(req)));
     if (postId && req.method === 'DELETE' && !postId[2]) return send(res, 200, await forum.remove(user,postId[1]));
