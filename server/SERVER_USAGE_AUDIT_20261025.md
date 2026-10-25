@@ -5,6 +5,32 @@ throughout the Android app, all server modules, both Workers, database schemas,
 service configuration, assets and workflows. UI/local-only code was checked for
 call sites rather than treated as an independent source of remote usage.
 
+## Complete PR inventory
+
+PR #119 contains nine earlier account/notification improvements and the nineteen
+audit changes detailed below: 28 grouped changes in total. The count groups the
+same improvement across call sites, rather than counting each edited file. The
+additional release review found no further implementation change that met the
+requested tradeoff standard.
+
+| Earlier change | Result and boundary |
+| --- | --- |
+| Atomic notification reset | Delete all data turns off friends, friend posts and weekly preferences in one commit before updating the device registration and clearing the weekly notification/reminder. |
+| Dismiss friend-request alerts on opt-out | Disabling that notification type also removes an alert already displayed. |
+| Bound profile reads and logout attempts | `/v1/me` and `/v1/logout` combine persistent IP budgets and session work in one SQL request. An active session can still revoke itself when its shared-address budget is exhausted. |
+| Reserve other account budgets before session lookup | Privacy, username change, deletion and reauthentication use the existing combined budget/session path. Remove the unthrottled helper. |
+| Independent reaction budget | Thirty reactions per user per minute, alongside the shared sixty forum writes per minute. Both reservations share one SQL request. This intentionally limits reaction spam. |
+| Independent purchase-verification budget | Five verifications per user per minute, alongside the shared forum-write budget. This intentionally bounds expensive Play calls; ordinary purchases/restores still work. |
+| Combine webhook receipt/owner lookups | Processed-event and purchase-owner checks share one SQL statement, preserving durable duplicate handling. |
+| Skip unchanged Plus profile writes | Repeat verifications still refresh receipt metadata but avoid rewriting unchanged `plus_active` profile state. |
+| Coalesce verified GIF downloads | Simultaneous views requesting the same SHA-256 digest share its download and bounded four-item byte cache. Distinct digests stay parallel, failures retry, and screen-close invalidation blocks late cache repopulation. |
+
+Beta 62 / versionCode 88 was already prepared and had not been published at the
+release review. Retain that version and extend its release notes. Merge is gated
+on the final PR checks; the existing main-branch workflow then tests the merged
+commit again before publishing its signed artifacts. Backend deployment and Play
+Console upload remain separate from GitHub release publication.
+
 ## New changes
 
 ### Geoapify and LocationIQ exact response reuse
