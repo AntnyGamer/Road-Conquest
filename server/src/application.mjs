@@ -303,14 +303,17 @@ async function handle(req, res) {
     const postId = url.pathname.match(/^\/v1\/forum\/posts\/([a-f0-9-]{36})(?:\/(reaction|report))?$/i);
     const posting = req.method === 'POST' && url.pathname === '/v1/forum/posts';
     const reacting = req.method === 'PUT' && postId?.[2] === 'reaction';
-    // Reactions keep the shared forum-write cap and also have a smaller
-    // 20/minute spam ceiling. Reserve both atomically in one SQL round trip.
-    const permitted = reacting ? await (async () => {
+    const purchasing = req.method === 'POST' && url.pathname === '/v1/forum/purchase';
+    // Keep the 60/minute shared write cap while independently limiting spammy
+    // reactions and expensive Google Play purchase verifications. Each pair
+    // reserves both buckets in a single database round trip.
+    const specialBucket = reacting ? 'forum-reaction' : purchasing ? 'forum-purchase' : null;
+    const permitted = specialBucket ? await (async () => {
       await prepareDatabase();
       const key = String(user.id);
       const { rows } = await pool.query(RATE_LIMIT_PAIR_SQL, [
         'forum-write', opaqueRateKey('forum-write', key), 60_000, 60,
-        'forum-reaction', opaqueRateKey('forum-reaction', key), 60_000, 20
+        specialBucket, opaqueRateKey(specialBucket, key), 60_000, reacting ? 20 : 5
       ]);
       return rows[0]?.allowed === true;
     })() : await rateLimit(posting ? 'forum-post' : 'forum-write',
