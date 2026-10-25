@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { createSign } from "node:crypto";
+import { createSign, createPrivateKey } from "node:crypto";
 import { boundedJson, EvidenceError, verifyIntegrityVerdict } from "./scoring.mjs";
 
 // Credentials are a server-only service-account file, never an APK property or a database row.
@@ -12,6 +12,7 @@ export async function createIntegrityVerifier(config, request = fetch) {
   }
   let cached;
   let inFlight;
+  let signingKey;
   async function accessToken() {
     if (cached && cached.expires > Date.now() + 60000) return cached.token;
     if (inFlight) return inFlight;
@@ -22,7 +23,8 @@ export async function createIntegrityVerifier(config, request = fetch) {
         iss: credentials.client_email, scope: "https://www.googleapis.com/auth/playintegrity",
         aud: "https://oauth2.googleapis.com/token", iat: now, exp: now + 3600
       })}`;
-      const signature = createSign("RSA-SHA256").update(claims).sign(credentials.private_key, "base64url");
+      signingKey ??= createPrivateKey(credentials.private_key);
+      const signature = createSign("RSA-SHA256").update(claims).sign(signingKey, "base64url");
       const json = await boundedJson(await request("https://oauth2.googleapis.com/token", {
         method: "POST", redirect: "error", signal: AbortSignal.timeout(8000),
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -36,13 +38,17 @@ export async function createIntegrityVerifier(config, request = fetch) {
   }
   return async (token, hash) => {
     if (typeof token !== "string" || token.length < 20 || token.length > 16000) throw new EvidenceError("Integrity token required.", 403);
+    const access = await accessToken();
     const response = await request(
       `https://playintegrity.googleapis.com/v1/${config.packageName}:decodeIntegrityToken`, {
         method: "POST", redirect: "error", signal: AbortSignal.timeout(8000),
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${await accessToken()}` },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${access}` },
         body: JSON.stringify({ integrity_token: token })
       }
     );
+    // Retry with fresh authorization after a rejected OAuth credential. A slow
+    // old-token failure must not invalidate a newer concurrent refresh.
+    if (response.status === 401 && cached?.token === access) cached = null;
     // Google returns 400 for a malformed/invalid token. Retrying that token as
     // a service outage wastes requests; credential/quota/server failures stay retryable.
     if (response.status === 400) {

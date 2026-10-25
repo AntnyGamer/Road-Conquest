@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, sign, verify, createPublicKey } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, sign, verify, createPrivateKey, createPublicKey } from 'node:crypto';
 import { boundedJson, EvidenceError } from './scoring.mjs';
 
 export const FORUM_PRODUCT = 'forum_plus_lifetime';
@@ -28,7 +28,7 @@ export function createForumPurchaseVerifier(raw, request = fetch, now = Date.now
   if (account.type !== 'service_account' || typeof account.client_email !== 'string' || !account.private_key) {
     throw new Error('Invalid forum Google Play service account');
   }
-  let cached, pending;
+  let cached, pending, signingKey;
   async function access() {
     if (cached && cached.until > now()) return cached.token;
     if (!pending) pending = (async () => {
@@ -37,7 +37,8 @@ export function createForumPurchaseVerifier(raw, request = fetch, now = Date.now
       const claims = encode({ alg: 'RS256', typ: 'JWT' }) + '.' + encode({ iss: account.client_email,
         scope: 'https://www.googleapis.com/auth/androidpublisher', aud: 'https://oauth2.googleapis.com/token',
         iat: issued, exp: issued + 3600 });
-      const assertion = claims + '.' + sign('RSA-SHA256', Buffer.from(claims), account.private_key).toString('base64url');
+      signingKey ??= createPrivateKey(account.private_key);
+      const assertion = claims + '.' + sign('RSA-SHA256', Buffer.from(claims), signingKey).toString('base64url');
       const reply = await boundedJson(await request('https://oauth2.googleapis.com/token', {
         method: 'POST', redirect: 'error', signal: AbortSignal.timeout(8000),
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -114,14 +115,17 @@ export function createForumWebhookVerifier(audience, email, request = fetch, now
             redirect: 'error', signal: AbortSignal.timeout(5000)
           }), 65536);
           if (!Array.isArray(reply.keys)) throw new Error('Invalid signing keys');
-          keys = reply.keys.filter(k => k.kty === 'RSA' && k.alg === 'RS256').slice(0, 10);
+          keys = reply.keys.filter(k => k.kty === 'RSA' && k.alg === 'RS256').slice(0, 10)
+            .map(jwk => ({ kid: jwk.kid, jwk, publicKey: null }));
           expires = now() + 5 * 60_000;
         })().finally(() => { pending = null; });
         await pending;
       }
       const key = keys.find(k => k.kid === header.kid);
-      return Boolean(key && verify('RSA-SHA256', Buffer.from(parts[0] + '.' + parts[1]),
-        createPublicKey({ key, format: 'jwk' }), Buffer.from(parts[2], 'base64url')));
+      if (!key) return false;
+      key.publicKey ??= createPublicKey({ key: key.jwk, format: 'jwk' });
+      return verify('RSA-SHA256', Buffer.from(parts[0] + '.' + parts[1]),
+        key.publicKey, Buffer.from(parts[2], 'base64url'));
     } catch { return false; }
   };
 }

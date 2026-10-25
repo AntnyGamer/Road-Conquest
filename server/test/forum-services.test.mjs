@@ -177,3 +177,47 @@ test('purchase notifications require a Google signature, trusted audience/email 
   assert.equal(await verify(jwt({},other.privateKey)),false);
   assert.equal(await verify('Bearer junk'),false);
 });
+
+test('GIF moderation uses exactly the supplied byte range for single and split chunks', async () => {
+  const bytes = animation(), expected = gifContactSheet(bytes).toString('base64');
+  for (const split of [false, true]) {
+    const padded = Buffer.concat([Buffer.from('junk'), bytes, Buffer.from('junk')]);
+    const chunk = new Uint8Array(padded.buffer, padded.byteOffset + 4, bytes.length);
+    const moderate = createForumModerator('test', async (url, init) => {
+      if (url.startsWith('https://media.giphy.com/')) return new Response(new ReadableStream({
+        start(controller) {
+          if (split) { controller.enqueue(chunk.subarray(0, 7)); controller.enqueue(chunk.subarray(7)); }
+          else controller.enqueue(chunk);
+          controller.close();
+        }
+      }), { headers: { 'Content-Type': 'image/gif' } });
+      assert.equal(JSON.parse(init.body).input[1].image_url.url, 'data:image/png;base64,' + expected);
+      return reply({ model: 'test', results: [{ flagged: false, categories }] });
+    });
+    assert.equal((await moderate({ text: 'Hello', gifUrl: 'https://media.giphy.com/a.gif' })).flagged, false);
+    assert.deepEqual(padded.subarray(4, -4), bytes, 'Moderation never mutates the source chunk');
+  }
+});
+
+test('cached parsed Google signing keys expire with JWKS and never accept an old rotated signature', async () => {
+  let now = Date.now(), pair = keys, fetches = 0;
+  const audience = 'https://accounts.example/notifications', email = 'push@example.test';
+  const verify = createForumWebhookVerifier(audience, email, async () => {
+    fetches++;
+    return reply({ keys: [{ ...pair.publicKey.export({ format: 'jwk' }), kid: 'same-id', alg: 'RS256' }] });
+  }, () => now);
+  function jwt(key) {
+    const encode = data => Buffer.from(JSON.stringify(data)).toString('base64url');
+    const text = encode({ alg: 'RS256', kid: 'same-id' }) + '.' + encode({ iss: 'https://accounts.google.com',
+      aud: audience, email, email_verified: true, iat: Math.floor(now / 1000), exp: Math.floor(now / 1000) + 3600 });
+    return 'Bearer ' + text + '.' + sign('RSA-SHA256', Buffer.from(text), key).toString('base64url');
+  }
+  assert.equal(await verify(jwt(pair.privateKey)), true);
+  assert.equal(await verify(jwt(pair.privateKey)), true);
+  const old = pair;
+  pair = generateKeyPairSync('rsa', { modulusLength: 2048 });
+  now += 300_001;
+  assert.equal(await verify(jwt(pair.privateKey)), true);
+  assert.equal(await verify(jwt(old.privateKey)), false);
+  assert.equal(fetches, 2);
+});

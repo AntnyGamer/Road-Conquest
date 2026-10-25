@@ -98,7 +98,9 @@ export function createForumModerator(key, request = fetch) {
         if (error instanceof EvidenceError) throw error;
         throw new EvidenceError('The GIF download was interrupted. Please try again.', 503);
       }
-      const bytes = Buffer.concat(chunks);
+      const bytes = chunks.length === 1
+        ? Buffer.from(chunks[0].buffer, chunks[0].byteOffset, chunks[0].byteLength)
+        : Buffer.concat(chunks);
       const preview = gifContactSheet(bytes);
       gifHash = createHash('sha256').update(bytes).digest('hex');
       input.push({ type: 'image_url', image_url: { url: 'data:image/png;base64,' + preview.toString('base64') } });

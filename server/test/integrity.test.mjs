@@ -42,3 +42,32 @@ test("concurrent verification shares OAuth refreshes and verifies each bound Goo
   await assert.rejects(verify("test-only-integrity-token", "changed"), error => error.status === 403);
   assert.equal(oauthCalls, 1);
 });
+
+test('rejected Integrity OAuth credentials refresh on retry without a delayed failure discarding the new token', async () => {
+  let oauth = 0;
+  const started = Promise.withResolvers(), delayed = Promise.withResolvers();
+  const verify = await createIntegrityVerifier(config, async (url, init) => {
+    if (url === 'https://oauth2.googleapis.com/token') {
+      return Response.json({ access_token: 'access-' + (++oauth), expires_in: 3600 });
+    }
+    const token = JSON.parse(init.body).integrity_token;
+    if (token === 'slow-test-integrity-token') { started.resolve(); return delayed.promise; }
+    if (token === 'rejected-test-integrity-token') return Response.json({}, { status: 401 });
+    assert.equal(init.headers.Authorization, 'Bearer access-2');
+    return Response.json({ tokenPayloadExternal: {
+      requestDetails: { requestHash: 'hash', requestPackageName: config.packageName, timestampMillis: String(Date.now()) },
+      appIntegrity: { appRecognitionVerdict: 'PLAY_RECOGNIZED', packageName: config.packageName,
+        versionCode: '71', certificateSha256Digest: config.certificates },
+      accountDetails: { appLicensingVerdict: 'LICENSED' },
+      deviceIntegrity: { deviceRecognitionVerdict: ['MEETS_DEVICE_INTEGRITY', 'MEETS_STRONG_INTEGRITY'] }
+    } });
+  });
+  const slow = assert.rejects(verify('slow-test-integrity-token', 'hash'), e => e.status === 503);
+  await started.promise;
+  await assert.rejects(verify('rejected-test-integrity-token', 'hash'), e => e.status === 503);
+  await verify('fresh-test-integrity-token', 'hash');
+  delayed.resolve(Response.json({}, { status: 401 }));
+  await slow;
+  await verify('fresh-again-test-integrity-token', 'hash');
+  assert.equal(oauth, 2);
+});

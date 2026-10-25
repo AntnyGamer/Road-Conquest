@@ -359,3 +359,65 @@ test('clearing already cleared forum penalties does not rewrite the profile', { 
     await forum.appealReview(admin, a.username_display);
     assert.deepEqual((await state()).rows[0], cleared);
   }));
+
+test('post, reaction and purchase mutations use fewer SQL round trips without changing their results',
+  { skip: !database }, async () => fixture(async (pool, [a, b]) => {
+    await pool.query('INSERT INTO forum_profiles(user_id) VALUES($1),($2)', [a.id, b.id]);
+    let statements = 0;
+    const measured = {
+      query: pool.query.bind(pool),
+      async connect() {
+        const db = await pool.connect();
+        return { query: (...args) => { statements++; return db.query(...args); }, release: () => db.release() };
+      }
+    };
+    const forum = createForum(measured, options);
+    const first = await forum.post(a, body());
+    assert.equal(statements, 5, 'Approved post transaction: BEGIN, locked profile, receipt, combined write, COMMIT');
+    statements = 0;
+    await forum.react(b, first.id, 'love');
+    assert.equal(statements, 4, 'Reaction transaction combines locked-post selection and mutation');
+    assert.equal((await forum.list(b)).posts[0].my_reaction, 'love');
+    statements = 0;
+    await forum.purchase(a, 'first-receipt');
+    assert.equal(statements, 5, 'Purchase transaction combines receipt and entitlement writes');
+    assert.equal((await forum.list(a)).viewer.plus, true);
+    await advance(pool, a);
+    statements = 0;
+    const flagged = createForum(measured, { ...options, moderate: async () => ({ flagged: true }) });
+    const result = await flagged.post(a, body('Flagged text'));
+    assert.equal(statements, 5, 'A flagged post also records its penalty in the same combined write');
+    assert.equal(result.violations, 1);
+    assert.equal(result.removed, true);
+  }));
+
+test('purchase updates preserve access from other receipts and post write failures roll back cooldowns and penalties',
+  { skip: !database }, async () => fixture(async (pool, [a]) => {
+    const active = new Set(['one', 'two']);
+    const forum = createForum(pool, { ...options, verifyPurchase: async token => active.has(token),
+      moderate: async () => ({ flagged: true }) });
+    await forum.purchase(a, 'one');
+    await forum.purchase(a, 'two');
+    active.delete('one');
+    assert.equal((await forum.purchase(a, 'one')).plus, true, 'Another active receipt still grants ownership');
+    active.delete('two');
+    assert.equal((await forum.purchase(a, 'two')).plus, false);
+    active.add('two');
+    assert.equal((await forum.purchase(a, 'two')).plus, true);
+    await pool.query(`CREATE OR REPLACE FUNCTION fail_forum_profile_test() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN RAISE EXCEPTION 'forced profile failure'; END $$`);
+    await pool.query('CREATE TRIGGER fail_forum_profile_test BEFORE UPDATE ON forum_profiles FOR EACH ROW EXECUTE FUNCTION fail_forum_profile_test()');
+    try {
+      await assert.rejects(forum.post(a, body()), /forced profile failure/);
+      assert.equal((await pool.query('SELECT id FROM forum_posts WHERE user_id=$1', [a.id])).rowCount, 0);
+      const profile = (await pool.query('SELECT violations,last_post_at FROM forum_profiles WHERE user_id=$1', [a.id])).rows[0];
+      assert.equal(profile.violations, 0);
+      assert.equal(profile.last_post_at, null);
+      active.clear();
+      await assert.rejects(forum.purchase(a, 'two'), /forced profile failure/);
+      assert.equal((await pool.query('SELECT active FROM forum_purchases WHERE user_id=$1 AND active', [a.id])).rowCount, 1);
+    } finally {
+      await pool.query('DROP TRIGGER fail_forum_profile_test ON forum_profiles');
+      await pool.query('DROP FUNCTION fail_forum_profile_test()');
+    }
+  }));

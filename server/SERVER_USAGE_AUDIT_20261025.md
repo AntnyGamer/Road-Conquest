@@ -56,6 +56,32 @@ regression checks that clearing real penalties works and a second clear leaves
 `xmin` unchanged. This is a small, occasional WAL/write saving, not a major
 capacity increase.
 
+## Additional seven changes from the extended pass
+
+| # | Change | Scope of savings and preserved behavior |
+| --- | --- | --- |
+| 4 | Combine post insertion, cooldown and optional penalty | One SQL write statement instead of two for an approved post or three for a flagged post. The profile lock, receipt check, transaction and after-commit notification remain. |
+| 5 | Combine locked-post lookup and reaction mutation | One fewer SQL round trip per reaction. Missing/blocked/deleted posts still reject, and unchanged reactions still avoid row rewrites. |
+| 6 | Combine purchase receipt refresh and entitlement reconciliation | One fewer SQL round trip per verification. The verified state of this token and other active receipts determine access within the existing locked transaction; refunds/restores and no-op profile writes are preserved. |
+| 7 | Reuse imported private OAuth signing keys | Play billing, Firebase and Integrity lazily import their fixed service key once per instance. Every assertion is still freshly signed; OAuth lifetimes, scopes and concurrent refresh behavior stay the same. This saves CPU, not provider requests. |
+| 8 | Reuse parsed Google notification verification keys | A key is imported once within its existing five-minute JWKS lifetime and ten-key bound. Every delivery still verifies its signature and claims. Rotation replaces the parsed keys too. CPU saving only. |
+| 9 | Avoid copying a single-chunk GIF download | A correctly offset Buffer view goes directly into the existing frame decoder/hash pipeline. Split downloads still concatenate. Same bytes, byte limits, contact sheet and moderation verdict; at most a 2 MiB copy avoided. Memory/CPU saving only. |
+| 10 | Invalidate rejected Integrity OAuth credentials | A Google 401 discards only the access token used by that request so the next ordinary retry refreshes it. A delayed old-token rejection cannot discard a newer refresh. No extra immediate retry and no weaker Integrity checks. |
+
+The mutation tests assert transaction statement counts of 5 for posts (including
+flagged posts), 4 for reactions and 5 for purchases, down from 6/7, 5 and 6.
+Forced profile-write errors verify rollback of post text, penalties, cooldown and
+purchase receipt changes. Multiple active receipts and refund/restore transitions
+are also tested.
+
+A small local Node benchmark (100 RSA operations, five rounds, synthetic keys)
+measured median signing time of 64.2 ms with repeated PEM parsing versus 28.8 ms
+with an imported key; verification measured 4.6 versus 2.4 ms with repeated JWK
+imports versus reuse. These are narrow CPU measurements, not API latency,
+invoice savings, or larger provider allowances. Each service retains one small
+private KeyObject; at most ten public KeyObjects share the preexisting JWKS
+lifetime. The bounded memory tradeoff avoids repeated cryptographic parsing.
+
 ## Other paths reviewed
 
 | Area | Existing protections retained / decision |
@@ -87,13 +113,15 @@ were not justified by this audit.
 
 ## Validation
 
-Local server suite: 139 passing, 26 skipped because a native PostgreSQL service
-is unavailable; the forum tests use actual PostgreSQL SQL via local PGlite.
-The added no-op appeal case brings the forum-only run to 13/13 passing. CI uses
-native PostgreSQL and performs Android unit tests, lint and builds.
+Local server and regression tests use PostgreSQL SQL via PGlite where supported.
+Native PostgreSQL-only cases run in CI. The cache helper also compiles and passes
+three JUnit cases using Kotlin 2.3.20. CI performs the Android adapter tests, unit
+tests, lint and builds; consult the latest PR checks for their current status.
 Local Gradle execution could not download its distribution through the Java
 network stack in this environment; full Android results must be read from CI.
 No live map-provider requests or Google purchase/moderation traffic were used.
 
 References: [Workers caching](https://developers.cloudflare.com/workers/cache/),
 [Geoapify open tile policy](https://www.geoapify.com/map-tiles/).
+
+SQL semantics and key reuse references: [PostgreSQL writable CTEs](https://www.postgresql.org/docs/18/queries-with.html), [Node crypto KeyObjects](https://nodejs.org/download/release/v24.18.0/docs/api/crypto.html).

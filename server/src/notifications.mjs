@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomInt, sign } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomInt, sign, createPrivateKey } from 'node:crypto';
 import { EvidenceError } from './scoring.mjs';
 import { RATE_LIMIT_SQL } from './rate-limits.mjs';
 
@@ -10,7 +10,7 @@ export function createFcmSender(raw, fetcher = fetch, now = Date.now) {
   const account = JSON.parse(raw);
   if (account.project_id !== PROJECT || !account.client_email?.endsWith('@' + PROJECT + '.iam.gserviceaccount.com') ||
       !account.private_key?.startsWith('-----BEGIN PRIVATE KEY-----')) throw new Error('Invalid FCM service account');
-  let cached; let pending;
+  let cached; let pending; let signingKey;
   async function accessToken() {
     if (cached && cached.expires > now()) return cached.token;
     if (!pending) pending = (async () => {
@@ -19,7 +19,8 @@ export function createFcmSender(raw, fetcher = fetch, now = Date.now) {
       const assertion = b64({ alg: 'RS256', typ: 'JWT' }) + '.' + b64({ iss: account.client_email,
         scope: 'https://www.googleapis.com/auth/firebase.messaging', aud: 'https://oauth2.googleapis.com/token',
         iat: issued, exp: issued + 3600 });
-      const jwt = assertion + '.' + sign('RSA-SHA256', Buffer.from(assertion), account.private_key).toString('base64url');
+      signingKey ??= createPrivateKey(account.private_key);
+      const jwt = assertion + '.' + sign('RSA-SHA256', Buffer.from(assertion), signingKey).toString('base64url');
       const response = await fetcher('https://oauth2.googleapis.com/token', { method: 'POST', redirect: 'error',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, signal: AbortSignal.timeout(3000),
         body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: jwt }).toString() });
