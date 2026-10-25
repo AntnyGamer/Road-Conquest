@@ -55,7 +55,7 @@ test('community HTTP routes preserve public reads, account authentication, persi
       assert.equal((await call('/v1/forum/purchase','POST',{purchase_token:'fake'},token)).status,429);
       const purchaseLimit=(await admin.query("SELECT attempts FROM auth_rate_limits WHERE bucket='forum-purchase'")).rows[0];
       assert.equal(Number(purchaseLimit.attempts),6);
-      // Reaction bursts have their own 20/minute ceiling without bypassing the
+      // Reaction bursts have their own 30/minute ceiling without bypassing the
       // shared forum-write budget or turning duplicate reactions into new likes.
       const reactionPath='/v1/forum/posts/'+post.body.id+'/reaction';
       for (let index=0;index<30;index++) {
