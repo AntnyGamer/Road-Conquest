@@ -8,7 +8,6 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
-import android.graphics.PathMeasure
 import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Shader
@@ -221,20 +220,11 @@ class MapTour(
 /** Lightweight, offline illustration; one short animation only when the user taps Try. */
 class DiscoveryPreview(context: Context, attrs: AttributeSet? = null) : View(context, attrs) {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val route = Path().apply {
-        moveTo(40f, 98f)
-        lineTo(160f, 98f)
-        lineTo(160f, 50f)
-        lineTo(184f, 50f)
-    }
-    private val routeMeasure = PathMeasure(route, false)
-    private val driven = Path()
     private val clip = Path()
     private val fogPaint = Paint(Paint.FILTER_BITMAP_FLAG).apply {
         shader = BitmapShader(texture, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
     }
     private val dark = Appearance.isDark(context)
-    private val carPosition = FloatArray(2)
     private var reveal = 0f
     private var animator: ValueAnimator? = null
 
@@ -275,11 +265,14 @@ class DiscoveryPreview(context: Context, attrs: AttributeSet? = null) : View(con
         paint.color = if (dark) Color.rgb(66, 78, 91) else Color.WHITE
         for (x in floatArrayOf(40f, 88f, 160f, 232f, 280f)) canvas.drawLine(x, 0f, x, 148f, paint)
         for (y in floatArrayOf(2f, 50f, 98f, 146f)) canvas.drawLine(0f, y, 320f, y, paint)
-        routeMeasure.getPosTan(routeMeasure.length * reveal, carPosition, null)
-        driven.reset()
-        routeMeasure.getSegment(0f, routeMeasure.length * reveal, driven, true)
+        val distance = 192f * reveal
+        val east = distance.coerceAtMost(120f)
+        val north = (distance - 120f).coerceIn(0f, 48f)
+        val lastEast = (distance - 168f).coerceAtLeast(0f)
+        val carX = 40f + east + lastEast
+        val carY = 98f - north
         // Start in one clear, square map tile. Only crossing its edge reveals the next tile.
-        val crossing = (112f - 40f) / routeMeasure.length
+        val crossing = (112f - 40f) / 192f
         val nextTile = ((reveal - crossing) / .16f).coerceIn(0f, 1f)
         val fogAlpha = (FogBitmapRenderer.MAX_FOG_ALPHA * 255).toInt()
         fogPaint.alpha = fogAlpha
@@ -296,12 +289,14 @@ class DiscoveryPreview(context: Context, attrs: AttributeSet? = null) : View(con
         paint.strokeJoin = Paint.Join.ROUND
         paint.strokeWidth = 5f
         paint.color = Color.rgb(130, 178, 255)
-        canvas.drawPath(driven, paint)
+        if (east > 0f) canvas.drawLine(40f, 98f, 40f + east, 98f, paint)
+        if (north > 0f) canvas.drawLine(160f, 98f, 160f, carY, paint)
+        if (lastEast > 0f) canvas.drawLine(160f, 50f, carX, 50f, paint)
         paint.style = Paint.Style.FILL
         paint.color = Color.argb(65, 130, 178, 255)
-        canvas.drawCircle(carPosition[0], carPosition[1], 11f, paint)
+        canvas.drawCircle(carX, carY, 11f, paint)
         paint.color = Color.WHITE
-        canvas.drawCircle(carPosition[0], carPosition[1], 6f, paint)
+        canvas.drawCircle(carX, carY, 6f, paint)
         canvas.restore()
     }
 
