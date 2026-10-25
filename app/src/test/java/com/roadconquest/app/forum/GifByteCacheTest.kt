@@ -82,6 +82,30 @@ class GifByteCacheTest {
         assertArrayEquals(byteArrayOf(4), cache.getOrLoad("key") { error("Should be cached") })
     }
 
+    @Test fun clearedScreenCannotBeRepublishedByAnOldDownload() {
+        val cache = GifByteCache()
+        val executor = Executors.newSingleThreadExecutor()
+        val started = CountDownLatch(1)
+        val finish = CountDownLatch(1)
+        try {
+            val old = executor.submit<ByteArray> {
+                cache.getOrLoad("digest") {
+                    started.countDown()
+                    check(finish.await(5, TimeUnit.SECONDS))
+                    byteArrayOf(1)
+                }
+            }
+            assertTrue(started.await(5, TimeUnit.SECONDS))
+            cache.clear()
+            finish.countDown()
+            assertArrayEquals(byteArrayOf(1), old.get(5, TimeUnit.SECONDS))
+            assertArrayEquals(byteArrayOf(2), cache.getOrLoad("digest") { byteArrayOf(2) })
+        } finally {
+            finish.countDown()
+            executor.shutdownNow()
+        }
+    }
+
     @Test fun cacheRetainsOnlyFourEntriesAndClearsOnClose() {
         val cache = GifByteCache()
         for (index in 0 until 5) {
