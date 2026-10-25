@@ -175,6 +175,24 @@ class AppearanceTest {
         } finally { controller.pause().stop().destroy() }
     }
 
+    @Test fun appearanceIconReflectsLightDarkOrFollowPhoneChoice() {
+        val app = RuntimeEnvironment.getApplication()
+        val icons = listOf(
+            UiTheme.LIGHT to R.drawable.ic_appearance,
+            UiTheme.DARK to R.drawable.ic_appearance_moon,
+            UiTheme.SYSTEM to R.drawable.ic_appearance_auto
+        )
+        for ((theme, icon) in icons) {
+            Prefs.setUiTheme(app, theme)
+            val controller = Robolectric.buildActivity(SettingsActivity::class.java).create()
+            try {
+                val appearance = controller.get().findViewById<Button>(R.id.uiThemeButton)
+                assertEquals(theme.label, Prefs.uiTheme(controller.get()).label)
+                assertEquals(icon, shadowOf(appearance.compoundDrawablesRelative[0]).createdFromResId)
+            } finally { controller.destroy() }
+        }
+    }
+
     @Test fun privacyPageOpensFromSettingsWithoutAThirdDeleteButton() {
         val controller = Robolectric.buildActivity(SettingsActivity::class.java).create().start().resume()
         try {
