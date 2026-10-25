@@ -1,10 +1,10 @@
 package com.roadconquest.app
 
 import android.Manifest
-import android.accessibilityservice.AccessibilityService
 import android.app.Dialog
 import android.os.Build
 import android.os.SystemClock
+import android.view.KeyEvent
 import android.widget.Button
 import android.widget.FrameLayout
 import androidx.test.core.app.ActivityScenario
@@ -53,7 +53,9 @@ class MapTourDeviceTest {
                     assertTrue(tour(activity).previewRevealed)
                     assertFalse(Prefs.isTourHandled(activity))
                 }
-                assertTrue(instrumentation.uiAutomation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK))
+                // Send a real Back key to the foreground window. An accessibility global action can
+                // report success even when the system consumes it instead of dispatching Back.
+                instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
                 val deadline = SystemClock.elapsedRealtime() + 5_000L
                 var returned = false
                 do {
@@ -65,7 +67,8 @@ class MapTourDeviceTest {
                     tour(activity).findViewById<Button>(R.id.tourSkipButton).performClick()
                     assertTrue(Prefs.isTourHandled(activity))
                 }
-                assertTrue(instrumentation.uiAutomation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK))
+                // The same foreground Back-key dispatch also verifies the exit prompt.
+                instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
                 val exitDeadline = SystemClock.elapsedRealtime() + 5_000L
                 var prompted = false
                 do {

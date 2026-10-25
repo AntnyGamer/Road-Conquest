@@ -1,4 +1,4 @@
-# Road Conquest 1.0 Beta 60
+# Road Conquest 1.0 Beta 63
 
 Road Conquest remembers the roads you drive and the places you visit, revealing them through a
 cloud-textured fog map.
@@ -7,7 +7,11 @@ cloud-textured fog map.
 [Source and issues](https://github.com/AntnyGamer/RoadConquest-Beta) ·
 [GNU AGPL v3 license](LICENSE)
 
-Beta 60 adds a replayable Quick tour, accuracy-guarded junction matching improvements, and groundwork for a moderated opt-in community. The forum and its optional paid features remain disabled until their separate server, moderation and Play services are configured. See [release notes](RELEASE_NOTES.md).
+Beta 63 improves slow-turn recording and historical road-gap retries, filters tiny walking/scatter trips without deleting their fixes, switches the live marker to a pedestrian while walking, adds automatic regional distance/area units and distinct map-style icons, and reduces unnecessary forum database work. The backup confirmation uses the same regional units. See [release notes](RELEASE_NOTES.md) for the complete changes and verification scope.
+
+Beta 62 improved forum readability, the discovery tour, notification resets, exact matching-response reuse, account/billing request efficiency and local map performance.
+
+Beta 60 added a replayable Quick tour, accuracy-guarded junction matching improvements, and groundwork for a moderated opt-in community. Forum posting and purchases depend on their separately configured backend, moderation and Play services.
 
 Beta 59 fixes spurious low-zoom map fallback caused by HTTP 304 and isolated auxiliary tile errors, repairs the trip GPX privacy-choice save flow, improves dark-mode Cancel contrast and simplifies strictly equivalent road-matching and visit logic. It also clarifies Satellite-only failures. See [release notes](RELEASE_NOTES.md).
 
