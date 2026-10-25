@@ -278,8 +278,14 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
         if (active) await db.query(`INSERT INTO forum_purchases(token_hash,user_id,encrypted_token,active)
           VALUES($1,$2,$3,TRUE) ON CONFLICT(token_hash) DO UPDATE SET active=TRUE,checked_at=CURRENT_TIMESTAMP`, [digest,user.id,codec.seal(token)]);
         else await db.query('UPDATE forum_purchases SET active=FALSE,checked_at=CURRENT_TIMESTAMP WHERE token_hash=$1 AND user_id=$2', [digest,user.id]);
-        const { rows } = await db.query(`UPDATE forum_profiles SET plus_active=EXISTS(
-          SELECT 1 FROM forum_purchases WHERE user_id=$1 AND active) WHERE user_id=$1 RETURNING plus_active`, [user.id]);
+        // Repeated ownership confirmations must still refresh the purchase receipt,
+        // but should not rewrite an unchanged forum profile (or generate WAL).
+        const { rows } = await db.query(`WITH desired AS (
+          SELECT EXISTS(SELECT 1 FROM forum_purchases WHERE user_id=$1 AND active) AS owned
+        ), changed AS (
+          UPDATE forum_profiles SET plus_active=desired.owned FROM desired
+          WHERE user_id=$1 AND plus_active IS DISTINCT FROM desired.owned RETURNING 1
+        ) SELECT desired.owned AS plus_active FROM desired LEFT JOIN changed ON TRUE`, [user.id]);
         return { plus: rows[0].plus_active };
       });
     },
