@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import pg from 'pg';
-import { LOGIN_LIMIT_SQL, LOGIN_WITH_USER_SQL, RATE_LIMIT_SESSION_SQL } from '../src/rate-limits.mjs';
+import { LOGIN_LIMIT_SQL, LOGIN_WITH_USER_SQL, RATE_LIMIT_SESSION_SQL, RATE_LIMIT_PROFILE_SQL, RATE_LIMIT_LOGOUT_SQL } from '../src/rate-limits.mjs';
 
 test('paired login budgets preserve short circuit counts, saturation and independent window resets', { skip: !process.env.DATABASE_URL }, async () => {
   const pool = new pg.Pool({ connectionString:process.env.DATABASE_URL });
@@ -94,5 +94,41 @@ test('single-query session and IP budget preserve expiry, denial and window acco
     await pool.query("UPDATE sessions SET created_at=CURRENT_TIMESTAMP-INTERVAL '2 days', expires_at=CURRENT_TIMESTAMP-INTERVAL '1 day' WHERE token_hash=$1",[valid]);
     const expired=await check(valid);
     assert.equal(expired.allowed,true);assert.equal(expired.id,null);
+  } finally { await pool.end(); }
+});
+
+test('profile reads and logout revocations share bounded single-statement IP budgets', { skip: !process.env.DATABASE_URL }, async () => {
+  const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    await pool.query(await readFile(new URL('../schema.sql', import.meta.url), 'utf8'));
+    await pool.query('TRUNCATE auth_rate_limits, sessions, users CASCADE');
+    const { rows: [user] } = await pool.query(`INSERT INTO users(username_display,username_key,password_salt,password_hash)
+      VALUES ('BudgetDriver','budgetdriver',$1,$2) RETURNING id`, [Buffer.alloc(16), Buffer.alloc(64)]);
+    const token = Buffer.alloc(32, 24), invalidToken = Buffer.alloc(32, 25);
+    await pool.query("INSERT INTO sessions(token_hash,user_id,expires_at) VALUES($1,$2,CURRENT_TIMESTAMP+INTERVAL '1 day')", [token, user.id]);
+
+    const profileParams = ['profile-ip', Buffer.alloc(32, 26), 60_000, 2];
+    const read = async hash => (await pool.query(RATE_LIMIT_PROFILE_SQL, [...profileParams, hash])).rows[0];
+    assert.deepEqual(await read(token), { allowed: true, username_display: 'BudgetDriver', leaderboard_visible: true });
+    assert.deepEqual(await read(invalidToken), { allowed: true, username_display: null, leaderboard_visible: null });
+    assert.deepEqual(await read(token), { allowed: false, username_display: null, leaderboard_visible: null });
+    const saturated = (await pool.query("SELECT attempts,xmin::text AS version FROM auth_rate_limits WHERE bucket='profile-ip'")).rows[0];
+    assert.deepEqual(await read(token), { allowed: false, username_display: null, leaderboard_visible: null });
+    assert.deepEqual((await pool.query("SELECT attempts,xmin::text AS version FROM auth_rate_limits WHERE bucket='profile-ip'")).rows[0], saturated);
+    await pool.query("UPDATE auth_rate_limits SET window_started_at=CURRENT_TIMESTAMP-INTERVAL '2 minutes' WHERE bucket='profile-ip'");
+    assert.equal((await read(token)).username_display, 'BudgetDriver');
+    await pool.query("UPDATE sessions SET expires_at=CURRENT_TIMESTAMP-INTERVAL '1 second' WHERE token_hash=$1", [token]);
+    assert.equal((await read(token)).username_display, null);
+    await pool.query("UPDATE sessions SET expires_at=CURRENT_TIMESTAMP+INTERVAL '1 day' WHERE token_hash=$1", [token]);
+
+    const logoutParams = ['logout-ip', Buffer.alloc(32, 27), 60_000, 1];
+    const logout = async hash => (await pool.query(RATE_LIMIT_LOGOUT_SQL, [...logoutParams, hash])).rows[0].allowed;
+    assert.equal(await logout(invalidToken), true);
+    assert.equal(await logout(token), false, 'An exhausted budget must never revoke a session');
+    assert.equal((await pool.query('SELECT 1 FROM sessions WHERE token_hash=$1', [token])).rowCount, 1);
+    await pool.query("UPDATE auth_rate_limits SET window_started_at=CURRENT_TIMESTAMP-INTERVAL '2 minutes' WHERE bucket='logout-ip'");
+    assert.equal(await logout(token), true);
+    assert.equal((await pool.query('SELECT 1 FROM sessions WHERE token_hash=$1', [token])).rowCount, 0);
+    assert.equal(await logout(token), false);
   } finally { await pool.end(); }
 });
