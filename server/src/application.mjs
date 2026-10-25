@@ -245,27 +245,6 @@ function bearerToken(req) {
   return TOKEN_RE.test(token) ? token : null;
 }
 
-async function authenticatedUser(req, profile = false) {
-  const token = bearerToken(req);
-  if (!token) return null;
-  await prepareDatabase();
-  const sessionHash = hashSessionToken(token);
-  // Most routes need only account identity. The non-deferrable session foreign
-  // key already guarantees its user exists; logout/deletion still revoke the
-  // session immediately. Only /me needs a joined profile. The hash is already
-  // known locally, so do not send the same 32 bytes back from PostgreSQL.
-  const result = await pool.query(
-    profile ? `SELECT u.username_display, u.leaderboard_visible
-       FROM sessions s
-       JOIN users u ON u.id = s.user_id
-      WHERE s.token_hash = $1 AND s.expires_at > CURRENT_TIMESTAMP`
-    : `SELECT user_id AS id FROM sessions
-       WHERE token_hash = $1 AND expires_at > CURRENT_TIMESTAMP`,
-    [sessionHash]
-  );
-  return result.rows[0] ? { ...result.rows[0], session_hash: sessionHash } : null;
-}
-
 async function createSession(userId, db = pool) {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const { token, tokenHash } = createSessionToken();
@@ -526,7 +505,9 @@ async function handle(req, res) {
   const deleteAccount = req.method === "DELETE" && url.pathname === "/v1/account";
   const reauthenticate = req.method === "POST" && url.pathname === "/v1/reauth";
   if (renameAccount || deleteAccount || reauthenticate) {
-    const user = await authenticatedUser(req);
+    const access = await rateLimitedUser(req, "account-ip", 240, 60_000);
+    if (!access.allowed) return send(res, 429, { error: "Try again later." });
+    const user = access.user;
     if (!user) return send(res, 401, { error: "Authentication required." });
     const body = await readJson(req);
     const username = renameAccount ? normalizeUsername(body.username) : null;
@@ -610,7 +591,9 @@ async function handle(req, res) {
   }
 
   if (req.method === "PUT" && url.pathname === "/v1/privacy") {
-    const user = await authenticatedUser(req);
+    const access = await rateLimitedUser(req, "privacy-ip", 240, 60_000);
+    if (!access.allowed) return send(res, 429, { error: "Try again later." });
+    const user = access.user;
     if (!user) return send(res, 401, { error: "Authentication required." });
     const body = await readJson(req);
     if (typeof body.leaderboard_visible !== "boolean") {
