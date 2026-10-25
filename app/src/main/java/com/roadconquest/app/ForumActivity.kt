@@ -207,6 +207,7 @@ class ForumActivity : Activity() {
         val viewer = current?.viewer
         val busy = loading || writing
         val wait = cooldownSeconds()
+        val minutes = (wait + 59) / 60
         val canCompose = !busy && current?.available == true && current.posting && !restricted(viewer) && wait == 0L
         if (compose.isEnabled != canCompose) compose.isEnabled = canCompose
         val composeLabel = when {
@@ -231,7 +232,7 @@ class ForumActivity : Activity() {
             restricted(viewer) -> "Forum mute ends " + date(viewer!!.mutedUntil!!) + ". You can still read posts."
             !current.posting -> "Posting is temporarily unavailable. You can still read the community."
             viewer == null -> "Explore together. Sign in when you want to join in."
-            wait > 0 -> "Next post in ${(wait + 59) / 60} min · One post every 10 minutes."
+            wait > 0 -> "You can post again in $minutes minute${if (minutes == 1L) "" else "s"}."
             viewer.strikes > 0 -> "Signed in as ${viewer.username} · ${viewer.strikes} moderation violation(s)."
             else -> "Share discoveries. Find inspiration. Be kind."
         }
@@ -523,7 +524,7 @@ class ForumActivity : Activity() {
             val post = posts[position]
             view.background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE; cornerRadius = dp(22).toFloat()
-                setColor(Appearance.color(this@ForumActivity,R.attr.rcPanelBg))
+                setColor(Appearance.color(this@ForumActivity,R.attr.rcPanelBg) or Color.BLACK) // Forum posts stay opaque.
                 setStroke(dp(1),Appearance.color(this@ForumActivity,if (post.highlighted) R.attr.rcAccent else R.attr.rcOutline))
             }
             view.findViewById<TextView>(R.id.postAuthor).text = post.username
