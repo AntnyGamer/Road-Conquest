@@ -49,7 +49,10 @@ export function createFcmSender(raw, fetcher = fetch, now = Date.now) {
     });
     // A delayed rejection of an older token must not discard a newer refresh.
     if (response.status === 401 && cached?.token === access) cached = null;
-    if (response.ok) { await response.body?.cancel(); return 'sent'; }
+    if (response.ok) {
+      void response.body?.cancel().catch(() => {});
+      return 'sent';
+    }
     const error = await response.json().catch(() => ({}));
     return error.error?.details?.some(item => item.errorCode === 'UNREGISTERED') ? 'unregistered' : 'unavailable';
   };

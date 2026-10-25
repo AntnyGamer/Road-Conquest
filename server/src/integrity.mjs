@@ -52,7 +52,7 @@ export async function createIntegrityVerifier(config, request = fetch) {
     // Google returns 400 for a malformed/invalid token. Retrying that token as
     // a service outage wastes requests; credential/quota/server failures stay retryable.
     if (response.status === 400) {
-      await response.body?.cancel();
+      void response.body?.cancel().catch(() => {});
       throw new EvidenceError("App/device verification failed.", 403);
     }
     const payload = await boundedJson(response, 32768);

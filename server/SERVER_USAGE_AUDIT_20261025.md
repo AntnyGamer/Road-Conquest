@@ -82,6 +82,22 @@ invoice savings, or larger provider allowances. Each service retains one small
 private KeyObject; at most ten public KeyObjects share the preexisting JWKS
 lifetime. The bounded memory tradeoff avoids repeated cryptographic parsing.
 
+## Final strict pass: four more changes
+
+| # | Change | Evidence / boundaries |
+| --- | --- | --- |
+| 11 | Disabled public leaderboard needs no database | With verification disabled, the same empty availability response now uses zero SQL, including a signed-in `mine=1` request. Invalid metrics still reject. An offline cold-start test verifies no connections or queries. This static endpoint no longer spends the inactive competition rate budget; all enabled competition/auth limits remain. |
+| 12 | Reject announced oversized upstream bodies early | JSON verification replies and GIF moderation downloads cancel a truthful oversized Content-Length before reading. Unknown lengths retain stream limits. Encoded responses skip this header shortcut because Fetch reports wire length while delivering decoded bytes. Lazy-stream tests confirm zero reads and unchanged decoded limits. |
+| 13 | Return only needed forum profile columns | Reactions return two columns instead of five; purchase and moderation preflights return one instead of five. Fixed internal column lists preserve missing-profile creation and row locks. Transaction tests check both the reduced projections and functional results. This reduces Neon response metadata/data, not query count. |
+| 14 | Do not await cleanup after definitive Google results | Accepted FCM sends return after requesting cleanup; invalid Integrity-token HTTP 400 responses remain permanent 403 failures. Failed/stalled body cleanup cannot hold the request open or turn an invalid token into a retryable outage. Tests cover rejecting and never-settling cleanup. |
+
+The follow-up requested searching for 100 worthwhile improvements. Fourteen
+were justified across the whole pass; the implementation does not force the
+count to 100 by treating the same fix at multiple call sites as separate work.
+Broader caching, lower sampling/detail, wider road snapping, longer delays,
+changed verification, more batching, cache TTL changes, extra indexes and
+infrastructure replacement did not meet the required tradeoff standard.
+
 ## Other paths reviewed
 
 | Area | Existing protections retained / decision |
@@ -113,7 +129,8 @@ were not justified by this audit.
 
 ## Validation
 
-Local server and regression tests use PostgreSQL SQL via PGlite where supported.
+Local server suite: 149 passing, 26 skipped native-PostgreSQL-only cases, no failures.
+Server and regression tests use PostgreSQL SQL via PGlite where supported.
 Native PostgreSQL-only cases run in CI. The cache helper also compiles and passes
 three JUnit cases using Kotlin 2.3.20. CI performs the Android adapter tests, unit
 tests, lint and builds; consult the latest PR checks for their current status.

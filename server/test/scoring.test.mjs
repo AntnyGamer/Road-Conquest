@@ -156,3 +156,21 @@ test("failed verification cancels an actual unfinished upstream HTTP response", 
     await new Promise(resolve => server.close(resolve));
   }
 });
+
+test('oversized announced JSON is cancelled before reading while encoded responses retain the decoded-byte limit', async () => {
+  let reads = 0, cancelled = false;
+  const oversized = new Response(new ReadableStream({
+    pull() { reads++; throw new Error('Oversized announced reply must not be downloaded'); },
+    cancel() { cancelled = true; }
+  }, { highWaterMark: 0 }), { headers: { 'Content-Length': '100' } });
+  await assert.rejects(boundedJson(oversized, 10), e => e.status === 503 && /too large/.test(e.message));
+  assert.equal(reads, 0);
+  assert.equal(cancelled, true);
+  // Fetch transparently decompresses bodies but retains the wire-length header.
+  for (const encoding of ['gzip', 'br']) {
+    assert.deepEqual(await boundedJson(new Response('{}', { headers: {
+      'Content-Encoding': encoding, 'Content-Length': '100'
+    } }), 2), {});
+  }
+  await assert.rejects(boundedJson(new Response('x'.repeat(11)), 10), /too large/);
+});

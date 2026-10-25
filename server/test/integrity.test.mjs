@@ -71,3 +71,17 @@ test('rejected Integrity OAuth credentials refresh on retry without a delayed fa
   await verify('fresh-again-test-integrity-token', 'hash');
   assert.equal(oauth, 2);
 });
+
+test('invalid Integrity tokens stay permanent failures even if body cleanup fails or stalls', { timeout: 2000 }, async () => {
+  for (const fail of [true, false]) {
+    let cleaned = false;
+    const verify = await createIntegrityVerifier(config, async url => url === 'https://oauth2.googleapis.com/token'
+      ? Response.json({ access_token: 'access', expires_in: 3600 })
+      : { status: 400, body: { cancel() {
+        cleaned = true;
+        return fail ? Promise.reject(new Error('cleanup failed')) : new Promise(() => {});
+      } } });
+    await assert.rejects(verify('invalid-test-integrity-token', 'hash'), e => e.status === 403);
+    assert.equal(cleaned, true);
+  }
+});

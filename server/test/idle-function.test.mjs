@@ -19,7 +19,7 @@ for (const applySchema of ['0', '1']) test(`cold liveness and public pages need 
     pool.query=(...args)=>{queries++;return query(...args);};
     try {
       for (const [path,status] of [['/health/live',200],['/privacy',200],['/delete-account',200],
-        ['/v1/competition',200],['/missing',404],['/v1/me',401],['/v1/verified/batch',404],
+        ['/v1/competition',200],['/v1/leaderboard',200],['/v1/leaderboard?metric=invalid',400],['/missing',404],['/v1/me',401],['/v1/verified/batch',404],
         ['/v1/friends',401],['/v1/friends/weekly',401],['/v1/notifications/device',401]]) {
         const response=await api.fetch(new Request('https://offline.example'+path));
         assert.equal(response.status,status,path);
@@ -59,9 +59,14 @@ for (const applySchema of ['0', '1']) test(`cold liveness and public pages need 
         assert.equal(response.status,401);
         await response.text();
       }
+      const unavailableRanking=await api.fetch(new Request('https://offline.example/v1/leaderboard?mine=1', {
+        headers:{Authorization:'Bearer '+'x'.repeat(43)}
+      }));
+      assert.equal(unavailableRanking.status,200);
+      assert.deepEqual(await unavailableRanking.json(),{metric:'cells',dataset:null,entries:[],verification_available:false});
       assert.equal(queries,0);assert.equal(pool.totalCount,0);
-      console.log(JSON.stringify({publicRequests:11,unauthenticatedPosts:2,rejectedBodies:2,parsedBodies:3,bodyReads,queries,connections:pool.totalCount}));
+      console.log(JSON.stringify({publicRequests:14,unauthenticatedPosts:2,rejectedBodies:2,parsedBodies:3,bodyReads,queries,connections:pool.totalCount}));
     } finally {await pool.end();}
   `], { env: environment, timeout: 15000 });
-  assert.deepEqual(JSON.parse(stdout.trim()), { publicRequests: 11, unauthenticatedPosts:2, rejectedBodies:2, parsedBodies:3, bodyReads:0, queries: 0, connections: 0 });
+  assert.deepEqual(JSON.parse(stdout.trim()), { publicRequests: 14, unauthenticatedPosts:2, rejectedBodies:2, parsedBodies:3, bodyReads:0, queries: 0, connections: 0 });
 });

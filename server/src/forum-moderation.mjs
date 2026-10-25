@@ -87,6 +87,12 @@ export function createForumModerator(key, request = fetch) {
         void response.body?.cancel().catch(() => {});
         throw new EvidenceError('The GIF link is unavailable. Choose another GIF.', 400);
       }
+      const length = response.headers.get('Content-Length');
+      const encoding = response.headers.get('Content-Encoding');
+      if ((!encoding || encoding.toLowerCase() === 'identity') && length && /^\d+$/.test(length) && Number(length) > GIF_MAX_BYTES) {
+        void response.body.cancel().catch(() => {});
+        throw new EvidenceError('GIFs must be 2 MB or smaller.', 400);
+      }
       const chunks = []; let size = 0;
       try {
         for await (const chunk of response.body) {

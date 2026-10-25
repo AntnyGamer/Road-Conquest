@@ -382,18 +382,21 @@ async function handle(req, res) {
     return send(res, 405, { error: "Method not allowed." });
   }
   if (req.method === "GET" && url.pathname === "/v1/leaderboard") {
+    if (!competition) {
+      // An unavailable public ranking contains no account/database data.
+      // Like /v1/competition, this static response must not wake Neon.
+      const metric = url.searchParams.get("metric") || "cells";
+      if (metric !== "cells") return send(res, 400, { error: "Choose cells." });
+      return send(res, 200, { metric, dataset: null, entries: [], verification_available: false });
+    }
     // The public route stays public. Signed-in opt-in requests share a single
     // SQL statement for the same IP allowance and fresh session validation.
-    const wantsMine = Boolean(competition) && url.searchParams.get("mine") === "1" && bearerToken(req) != null;
+    const wantsMine = url.searchParams.get("mine") === "1" && bearerToken(req) != null;
     const access = wantsMine ? await rateLimitedUser(req, "competition-ip", 180, 60 * 1000) : null;
     const allowed = access ? access.allowed : await rateLimit("competition-ip", ip, 180, 60 * 1000);
     if (!allowed) return send(res, 429, { error: "Try again later." });
     const metric = url.searchParams.get("metric") || "cells";
     if (metric !== "cells") return send(res, 400, { error: "Choose cells." });
-    // The public page can load before verification is provisioned. No scores are invented,
-    // and every drive-writing endpoint below remains gated on strict competition setup.
-    if (!competition) return send(res, 200,
-      { metric, dataset: null, entries: [], verification_available: false });
     // The requested total is still tied to a freshly checked session. Public
     // rankings and invalid/anonymous sessions never reveal another user's score.
     const user = access?.user || null;

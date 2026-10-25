@@ -46,9 +46,10 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
   const pendingWebhooks = new Map();
   const binding = id => forumAccountBinding(pepper, id);
 
-  async function profile(db, userId, lock = false) {
-    const query = `SELECT violations,muted_until,banned,plus_active,
-      last_post_at + INTERVAL '10 minutes' AS next_post_at FROM forum_profiles
+  // Column lists are fixed internal SQL, never request input.
+  async function profile(db, userId, lock = false, columns = `violations,muted_until,banned,plus_active,
+      last_post_at + INTERVAL '10 minutes' AS next_post_at`) {
+    const query = `SELECT ${columns} FROM forum_profiles
       WHERE user_id=$1${lock ? ' FOR UPDATE' : ''}`;
     let { rows } = await db.query(query, [userId]);
     if (rows[0]) return rows[0];
@@ -201,7 +202,7 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
     async react(user, postId, reaction) {
       if (!UUID.test(postId) || (reaction !== null && !REACTIONS.has(reaction))) throw new EvidenceError('Invalid reaction.', 400);
       return transact(async db => {
-        enforce(await profile(db,user.id,true));
+        enforce(await profile(db,user.id,true,'muted_until,banned'));
         const { rows } = await db.query(`WITH post AS (
           SELECT id FROM forum_posts p WHERE id=$1 AND state='visible'
             AND NOT EXISTS(SELECT 1 FROM forum_blocks b WHERE b.user_id=$2 AND b.blocked_id=p.user_id) FOR UPDATE
@@ -256,7 +257,7 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
         const found = await db.query('SELECT user_id FROM forum_posts WHERE id=$1', [postId]);
         if (!found.rowCount) throw new EvidenceError('Post is unavailable.', 404);
         // Lock account before post everywhere, preventing moderation/reaction lock inversion.
-        const current = await profile(db,found.rows[0].user_id,true);
+        const current = await profile(db,found.rows[0].user_id,true,'violations');
         const { rows } = await db.query('SELECT user_id,state FROM forum_posts WHERE id=$1 FOR UPDATE', [postId]);
         if (remove && rows[0].state === 'visible') {
           await strike(db, rows[0].user_id, current);
@@ -280,7 +281,7 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
       if (typeof token !== 'string' || !token.length || token.length > 4096) throw new EvidenceError('Invalid purchase token.', 400);
       const digest = purchaseHash(token);
       return transact(async db => {
-        const current = await profile(db,user.id,true);
+        const current = await profile(db,user.id,true,'banned');
         const prior = await db.query('SELECT user_id FROM forum_purchases WHERE token_hash=$1 FOR UPDATE', [digest]);
         if (prior.rowCount && String(prior.rows[0].user_id) !== String(user.id)) throw new EvidenceError('Purchase belongs to another account.', 403);
         if (current.banned && !prior.rowCount) throw new EvidenceError('New Forum Plus purchases are unavailable for banned accounts.', 403);

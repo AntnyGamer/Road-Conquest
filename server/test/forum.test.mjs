@@ -364,11 +364,17 @@ test('post, reaction and purchase mutations use fewer SQL round trips without ch
   { skip: !database }, async () => fixture(async (pool, [a, b]) => {
     await pool.query('INSERT INTO forum_profiles(user_id) VALUES($1),($2)', [a.id, b.id]);
     let statements = 0;
+    const profileFields = [];
     const measured = {
       query: pool.query.bind(pool),
       async connect() {
         const db = await pool.connect();
-        return { query: (...args) => { statements++; return db.query(...args); }, release: () => db.release() };
+        return { query: async (...args) => {
+          statements++;
+          const result = await db.query(...args);
+          if (args[0].includes('FROM forum_profiles') && result.rows[0]) profileFields.push(Object.keys(result.rows[0]));
+          return result;
+        }, release: () => db.release() };
       }
     };
     const forum = createForum(measured, options);
@@ -377,10 +383,12 @@ test('post, reaction and purchase mutations use fewer SQL round trips without ch
     statements = 0;
     await forum.react(b, first.id, 'love');
     assert.equal(statements, 4, 'Reaction transaction combines locked-post selection and mutation');
+    assert.deepEqual(profileFields.at(-1), ['muted_until', 'banned'], 'Reaction authorization returns only the two fields it uses');
     assert.equal((await forum.list(b)).posts[0].my_reaction, 'love');
     statements = 0;
     await forum.purchase(a, 'first-receipt');
     assert.equal(statements, 5, 'Purchase transaction combines receipt and entitlement writes');
+    assert.deepEqual(profileFields.at(-1), ['banned'], 'Purchase preflight does not transfer unused profile fields');
     assert.equal((await forum.list(a)).viewer.plus, true);
     await advance(pool, a);
     statements = 0;

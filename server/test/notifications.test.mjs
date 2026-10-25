@@ -298,3 +298,20 @@ test('forum post alerts are sampled, consent aware, blocked and capped at one pe
       'Account deletion erases the push throttle record');
   } finally { await pool.end(); }
 });
+
+test('accepted FCM sends do not wait for body cleanup or turn cleanup failures into delivery failures', { timeout: 2000 }, async () => {
+  const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const account = { project_id: 'roadconquest-9f0eb', client_email: 'test@roadconquest-9f0eb.iam.gserviceaccount.com',
+    private_key: privateKey.export({ type: 'pkcs8', format: 'pem' }) };
+  for (const fail of [true, false]) {
+    let cleaned = false;
+    const sender = createFcmSender(JSON.stringify(account), async url => url === 'https://oauth2.googleapis.com/token'
+      ? Response.json({ access_token: 'access', expires_in: 3600 })
+      : { status: 200, ok: true, body: { cancel() {
+        cleaned = true;
+        return fail ? Promise.reject(new Error('cleanup failed')) : new Promise(() => {});
+      } } });
+    assert.equal(await sender('test-fid', randomUUID()), 'sent');
+    assert.equal(cleaned, true);
+  }
+});

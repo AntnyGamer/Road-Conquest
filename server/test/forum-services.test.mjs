@@ -221,3 +221,20 @@ test('cached parsed Google signing keys expire with JWKS and never accept an old
   assert.equal(await verify(jwt(old.privateKey)), false);
   assert.equal(fetches, 2);
 });
+
+test('announced oversized GIFs stop before download or moderation but compressed byte counts are not confused', async () => {
+  let reads = 0, cancelled = false, calls = 0;
+  const moderate = createForumModerator('test', async () => {
+    calls++;
+    return new Response(new ReadableStream({
+      pull() { reads++; throw new Error('Must not download'); },
+      cancel() { cancelled = true; }
+    }, { highWaterMark: 0 }), { headers: { 'Content-Type': 'image/gif', 'Content-Length': String(2 * 1024 * 1024 + 1) } });
+  });
+  await assert.rejects(moderate({ text: 'A GIF', gifUrl: 'https://media.giphy.com/a.gif' }), e => e.status === 400 && /2 MB/.test(e.message));
+  assert.equal(reads, 0); assert.equal(cancelled, true); assert.equal(calls, 1);
+  const encoded = createForumModerator('test', async url => url.startsWith('https://media.giphy.com/')
+    ? new Response(animation(), { headers: { 'Content-Type': 'image/gif', 'Content-Encoding': 'gzip', 'Content-Length': String(2 * 1024 * 1024 + 1) } })
+    : reply({ model: 'test', results: [{ flagged: false, categories }] }));
+  assert.equal((await encoded({ text: 'A GIF', gifUrl: 'https://media.giphy.com/a.gif' })).flagged, false);
+});
