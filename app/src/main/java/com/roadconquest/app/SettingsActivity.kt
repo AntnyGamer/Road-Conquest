@@ -468,13 +468,17 @@ class SettingsActivity : Activity() {
             setOnCheckedChangeListener { _, enabled -> Prefs.setFogEnabled(this@SettingsActivity, enabled) }
         }
         val mapButton = findViewById<Button>(R.id.mapStyleButton)
-        mapButton.text = getString(R.string.map_style_label, Prefs.mapMode(this).label)
+        fun showMapStyle(mode: MapMode) {
+            mapButton.text = getString(R.string.map_style_label, mode.label)
+            mapButton.setCompoundDrawablesRelativeWithIntrinsicBounds(Appearance.mapStyleIcon(this, mode), 0, 0, 0)
+        }
+        showMapStyle(Prefs.mapMode(this))
         mapButton.setOnClickListener {
             val modes = MapMode.entries
             AlertDialog.Builder(this).setTitle("Map style")
                 .setSingleChoiceItems(Array(modes.size) { modes[it].label }, modes.indexOf(Prefs.mapMode(this))) { dialog, index ->
                     Prefs.setMapMode(this, modes[index])
-                    mapButton.text = getString(R.string.map_style_label, modes[index].label)
+                    showMapStyle(modes[index])
                     dialog.dismiss()
                 }.setNegativeButton("Cancel", null).show()
         }

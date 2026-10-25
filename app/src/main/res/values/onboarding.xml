@@ -11,7 +11,7 @@
     <string name="tour_next">Next</string>
     <string name="tour_finish">Explore map</string>
     <string name="tour_intro_title">A map that grows with you.</string>
-    <string name="tour_intro_body">Fog covers places you haven’t explored. Enter a new one-mile square to uncover it. Driving also marks your roads in blue and adds mileage.</string>
+    <string name="tour_intro_body">Fog covers places you haven’t explored. Enter a new %1$s square to uncover it. Driving also marks your roads in blue and adds distance.</string>
     <string name="tour_demo_action">Try a discovery</string>
     <string name="tour_demo_reset">Reset preview</string>
     <string name="tour_demo_hint">A little preview. No location needed.</string>
@@ -21,7 +21,7 @@
     <string name="tour_layers_title">Find your next discovery.</string>
     <string name="tour_layers_body">Open Layers for Explore nearby: a grid showing which nearby tiles you have visited. You can also highlight towns, states or regions, and countries.\n\nThe location button above brings the map back to you.</string>
     <string name="tour_progress_title">Every trip has a story.</string>
-    <string name="tour_progress_body">Trips keeps your drives and animated replays. Badges shows achievements. Goals gives you weekly challenges. Forum opens the public community for discoveries and tips.\n\nWalking can uncover tiles too. Driving earns road and mileage credit.</string>
+    <string name="tour_progress_body">Trips keeps your drives and animated replays. Badges shows achievements. Goals gives you weekly challenges. Forum opens the public community for discoveries and tips.\n\nWalking can uncover tiles too. Driving earns road and distance credit.</string>
     <string name="tour_garage_title">Make it yours.</string>
     <string name="tour_garage_body">Earn points from new roads, achievements, and first visits to new places. Tap Garage to spend them on car styles, colors, and other cosmetics.</string>
     <string name="tour_settings_title">Your map. Your choices.</string>

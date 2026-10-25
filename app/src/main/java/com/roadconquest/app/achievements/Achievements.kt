@@ -19,7 +19,7 @@ data class AchievementMetrics(
 enum class AchievementCategory(val label: String) {
     ROADS("Road Conquest"),
     TILES("Map Tiles"),
-    DISTANCE("Mileage"),
+    DISTANCE("Distance"),
     PLACES("Exploration"),
     ADS("Ad Rewards"),
     EXTRA("Bonus")
@@ -69,7 +69,7 @@ object Achievements {
             AchievementProgress("roads_2500", "Road Master", "Unlock 2,500 roads", AchievementCategory.ROADS, roads, 2500.0, "roads", 2_500),
             AchievementProgress("roads_5000", "Road Legend", "Unlock 5,000 roads", AchievementCategory.ROADS, roads, 5000.0, "roads", 4_000),
             AchievementProgress("roads_10000", "Road Pioneer", "Unlock 10,000 roads", AchievementCategory.ROADS, roads, 10000.0, "roads", 6_500),
-            AchievementProgress("tiles_1", "First Square", "Explore your first one-mile map tile", AchievementCategory.TILES, metrics.tilesUnlocked.toDouble(), 1.0, "tiles", 75),
+            AchievementProgress("tiles_1", "First Square", "Explore your first map tile", AchievementCategory.TILES, metrics.tilesUnlocked.toDouble(), 1.0, "tiles", 75),
             AchievementProgress("tiles_10", "Square Scout", "Explore 10 unique map tiles", AchievementCategory.TILES, metrics.tilesUnlocked.toDouble(), 10.0, "tiles", 150),
             AchievementProgress("tiles_25", "Tile Tracker", "Explore 25 unique map tiles", AchievementCategory.TILES, metrics.tilesUnlocked.toDouble(), 25.0, "tiles", 250),
             AchievementProgress("tiles_50", "Grid Explorer", "Explore 50 unique map tiles", AchievementCategory.TILES, metrics.tilesUnlocked.toDouble(), 50.0, "tiles", 450),

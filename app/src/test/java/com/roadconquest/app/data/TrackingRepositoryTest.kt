@@ -189,6 +189,27 @@ class TrackingRepositoryTest {
         assertTrue(window.points.any { it.id == ids[6] })
     }
 
+    @Test fun aTwentyFixDrivingGapKeepsItsWholeTurnAndBothMatchedAnchors() {
+        val ids = (0..21).map { point(1_000_000L + it * 2_000L, lat = 40.0 + it * 0.00007) }
+        repository.markMatched(listOf(ids.first(), ids.last()))
+        assertEquals(ids[1], repository.newestEligibleAnchoredGapStartId())
+        val window = repository.loadMatchingWindow(limit = 25, retryGapStartId = ids[1])
+        assertEquals(ids, window.points.map { it.id })
+        assertEquals(ids.subList(1, 21).toSet(), window.markableIds)
+        assertTrue(window.points.first().matched)
+        assertTrue(window.points.last().matched)
+    }
+
+    @Test fun explicitRetryCannotJumpToAnotherNearbyPendingIsland() {
+        val ids = (0..15).map { point(1_000_000L + it * 2_000L, lat = 40.0 + it * 0.00007) }
+        repository.markMatched(ids.filterIndexed { i, _ -> i !in 3..4 && i !in 9..10 })
+        val window = repository.loadMatchingWindow(limit = 25, retryGapStartId = ids[3])
+        assertEquals(ids.subList(3, 5).toSet(), window.markableIds)
+        assertTrue(window.points.any { it.id == ids[2] })
+        assertTrue(window.points.any { it.id == ids[5] })
+        assertEquals(ids[9], repository.newestEligibleAnchoredGapStartId())
+    }
+
     @Test fun newestAnchoredMultiPointGapWinsOverHundredsOfOlderIsolatedFixes() {
         // The October 10 export has 319 old isolated unmatched fixes ahead of
         // the six/eight-point intersections. Prioritize the latest recoverable

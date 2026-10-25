@@ -132,6 +132,29 @@ object Cosmetics {
         return true
     }
 
+    /** Temporary walking marker. The player's equipped car and color stay saved. */
+    fun renderPedestrianIcon(context: Context): Bitmap {
+        val size = (42f * context.resources.displayMetrics.density.coerceAtLeast(1f)).toInt().coerceAtLeast(42)
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        canvas.scale(size / 48f, size / 48f)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
+        canvas.drawCircle(24f, 24f, 22f, paint)
+        paint.color = carColor(context).argb
+        canvas.drawCircle(26f, 10f, 4f, paint)
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 4.5f
+        paint.strokeCap = Paint.Cap.ROUND
+        paint.strokeJoin = Paint.Join.ROUND
+        canvas.drawPath(Path().apply {
+            moveTo(24f, 17f); lineTo(21f, 28f); lineTo(15f, 39f)
+            moveTo(21f, 28f); lineTo(29f, 32f); lineTo(32f, 40f)
+            moveTo(24f, 18f); lineTo(31f, 25f); lineTo(36f, 25f)
+            moveTo(24f, 18f); lineTo(17f, 21f); lineTo(13f, 28f)
+        }, paint)
+        return bitmap
+    }
+
     /** The preview uses the exact same renderer as the live map car marker. */
     fun renderCarIcon(context: Context, style: CarStyle = carStyle(context), tint: CarColor = carColor(context)): Bitmap {
         val scale = context.resources.displayMetrics.density.coerceAtLeast(1f)

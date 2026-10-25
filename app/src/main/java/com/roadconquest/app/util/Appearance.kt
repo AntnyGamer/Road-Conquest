@@ -5,6 +5,7 @@ import android.content.res.Configuration
 import android.util.TypedValue
 import androidx.annotation.AttrRes
 import com.roadconquest.app.R
+import com.roadconquest.app.map.MapMode
 
 enum class UiTheme(val label: String) { SYSTEM("Use phone setting"), LIGHT("Light"), DARK("Dark") }
 
@@ -38,6 +39,13 @@ object Appearance {
         UiTheme.DARK -> R.attr.rcAccent
         UiTheme.SYSTEM -> R.attr.rcTextSecondary
     })
+
+    fun mapStyleIcon(context: Context, mode: MapMode): Int = when (mode) {
+        MapMode.STREETS -> if (isDark(context)) R.drawable.ic_map_streets_night else R.drawable.ic_map_day
+        MapMode.TERRAIN -> R.drawable.ic_map_satellite
+        MapMode.MINIMAL -> R.drawable.ic_map_minimal
+        MapMode.NIGHT -> R.drawable.ic_map_night
+    }
 
     fun isDark(context: Context): Boolean =
         !Prefs.isGoldUiEnabled(context) &&

@@ -111,6 +111,8 @@ class TrackingService : Service(), LocationListener {
     // Unlike the per-callback driving anchor, this accumulates small genuine movements.
     private var lastExplorationAnchor: Location? = null
     private var lastAccepted: Location? = null
+    private var lastConfirmedDriving: Location? = null
+    private var lastRemoteNewestPendingId: Long? = null
     // Accepted fixes omitted from network matching, also retained privately on disk.
     private val skippedSinceRetained = ArrayList<Location>(4)
 
@@ -390,6 +392,9 @@ class TrackingService : Service(), LocationListener {
         ) previous else null
 
         val accepted = requireNotNull(lastObserved)
+        if (LocationProviders.reliableMeasuredSpeed(accepted) >= 4f) {
+            lastConfirmedDriving = accepted
+        }
         // Keep the live car, fog and verification stream at the original GPS rate.
         // Only omit redundant high-quality straight-line *stored* fixes; retain every
         // uncertain fix and directional change so junctions can still be matched.
@@ -616,6 +621,8 @@ class TrackingService : Service(), LocationListener {
                 .putExtra(EXTRA_LATITUDE, location.latitude)
                 .putExtra(EXTRA_LONGITUDE, location.longitude)
                 .putExtra(EXTRA_BEARING, bearingDegrees)
+                .putExtra(EXTRA_SPEED_MPS, LocationProviders.measuredSpeedOrNull(location) ?: Float.NaN)
+                .putExtra(EXTRA_ACCURACY_M, location.accuracy)
                 .putExtra(EXTRA_LOCATION_AGE_MS, if (location.elapsedRealtimeNanos > 0L) {
                     ((SystemClock.elapsedRealtimeNanos() - location.elapsedRealtimeNanos) / 1_000_000L).coerceAtLeast(0L)
                 } else (System.currentTimeMillis() - location.time).coerceAtLeast(0L))
@@ -683,8 +690,19 @@ class TrackingService : Service(), LocationListener {
             LocationProviders.reliableMeasuredSpeed(location)
         )
         val movedBeyondAccuracy = distance > maxOf(5f, previous.accuracy + location.accuracy)
-        return measuredSpeed >= MIN_DRIVING_SPEED_MPS ||
-            (movedBeyondAccuracy && inferredSpeed >= MIN_DRIVING_SPEED_MPS)
+        if (measuredSpeed >= MIN_DRIVING_SPEED_MPS) return true
+        // Keep a moving slow turn after confirmed driving. A stop or an old drive
+        // cannot authorize fresh GPS drift, and walking alone never opens this window.
+        if (lastConfirmedDriving?.let { elapsedMillis(it, location) in 1..45_000L } == true &&
+            previous.accuracy <= 12f && location.accuracy <= 12f && measuredSpeed >= 0.8f &&
+            inferredSpeed >= 0.5f && distance > maxOf(1.5f, (previous.accuracy + location.accuracy) / 4f)
+        ) return true
+        // Do not override two explicit low-speed readings with positional jitter.
+        // Providers without usable speed metadata retain the displacement fallback.
+        if (LocationProviders.measuredSpeedOrNull(previous) != null &&
+            LocationProviders.measuredSpeedOrNull(location) != null
+        ) return false
+        return movedBeyondAccuracy && inferredSpeed >= MIN_DRIVING_SPEED_MPS
     }
 
     /** Conservative on-device GPS compression: never skip a bend, uncertain fix or gap. */
@@ -833,32 +851,35 @@ class TrackingService : Service(), LocationListener {
         var needsRecovery = false
         try {
             repeat(MAX_MATCH_BATCHES_PER_RUN) { batchIndex ->
-                // Keep the first batch focused on the freshest drive for responsive live
-                // updates. Spare slots preferentially revisit expired retries so isolated
-                // old holes cannot stay thin/provisional forever while new fixes arrive.
-                // First batch still favors fresh tracking. Give ONE spare batch
-                // to a recent accurate and fully anchored multi-fix turn. The other
-                // spare batches stay oldest-first so ordinary history is not starved.
-                // No additional requests or relaxed matching acceptance are involved.
-                val retryStartId = when (batchIndex) {
+                var priorityStartId: Long? = null
+                fun repairStart(): Long? {
+                    priorityStartId = repository.newestEligibleAnchoredGapStartId(
+                        beforeId = previousPriorityGapStartId
+                    ) ?: repository.newestEligibleAnchoredGapStartId()
+                    return priorityStartId ?: repository.oldestEligibleRetryId()
+                }
+                var retryStartId = when (batchIndex) {
                     0 -> null
-                    1 -> {
-                        val selected = repository.newestEligibleAnchoredGapStartId(
-                            beforeId = previousPriorityGapStartId
-                        ) ?: repository.newestEligibleAnchoredGapStartId()
-                        if (selected != null) previousPriorityGapStartId = selected
-                        selected ?: repository.oldestEligibleRetryId()
-                    }
+                    1 -> repairStart()
                     else -> repository.oldestEligibleRetryId()
                 }
-                // Select a complete unresolved turn (up to eight fixes), not a
-                // single old fix with seven context points and no opposite anchor.
-                // Priority turn repairs keep ten-point context; bulk successful driving
-                // uses up to 100 points per paid credit. Shorter traces avoid repeatedly
-                // rejecting an entire long route at one complex junction.
-                val pointLimit = if (retryStartId != null) minOf(10, adaptiveMatchPointLimit, matcher.maxPoints)
-                    else minOf(adaptiveMatchPointLimit, matcher.maxPoints)
-                val window = repository.loadMatchingWindow(pointLimit, retryGapStartId = retryStartId)
+                fun repairLimit() = if (priorityStartId != null) minOf(25, matcher.maxPoints)
+                    else minOf(10, adaptiveMatchPointLimit, matcher.maxPoints)
+                var window = repository.loadMatchingWindow(
+                    if (retryStartId == null) minOf(adaptiveMatchPointLimit, matcher.maxPoints) else repairLimit(),
+                    retryGapStartId = retryStartId)
+                // Every remote batch has a cooldown. Later loop iterations usually cannot
+                // dispatch, so they cannot be the only path to historical repairs. Once the
+                // newest eligible fixes have already been submitted, use the next permitted
+                // request for a gap instead. New driving fixes retain first priority.
+                val newestPendingId = window.markableIds.maxOrNull()
+                if (batchIndex == 0 && newestPendingId != null &&
+                    lastRemoteNewestPendingId?.let { newestPendingId <= it } == true
+                ) {
+                    retryStartId = repairStart()
+                    if (retryStartId != null) window = repository.loadMatchingWindow(
+                        repairLimit(), retryGapStartId = retryStartId)
+                }
                 val points = window.points
                 if (points.isEmpty()) return
 
@@ -914,6 +935,14 @@ class TrackingService : Service(), LocationListener {
                 // The 25-point backup has its own shorter capacity-based cadence.
                 val submittedPointIds = matcher.lastSubmittedPoints(points).map { it.id }
                 val submittedPendingIds = window.markableIds intersect submittedPointIds.toSet()
+                if (matcher.lastCallUsedNetwork) {
+                    // Only actual submitted work advances either cursor. Cache hits,
+                    // cooldown checks and unsent backup-window points do not consume a turn.
+                    submittedPendingIds.maxOrNull()?.let {
+                        lastRemoteNewestPendingId = maxOf(lastRemoteNewestPendingId ?: it, it)
+                    }
+                    if (priorityStartId != null) previousPriorityGapStartId = priorityStartId
+                }
                 if (result == null) {
                     noMatchBackoff.clear(submittedPendingIds)
                     val providerCooldown = matcher.rateLimitRemainingMs()
@@ -1104,6 +1133,8 @@ class TrackingService : Service(), LocationListener {
         const val EXTRA_LATITUDE = "latitude"
         const val EXTRA_LONGITUDE = "longitude"
         const val EXTRA_BEARING = "bearing"
+        const val EXTRA_SPEED_MPS = "speed_mps"
+        const val EXTRA_ACCURACY_M = "accuracy_m"
         const val EXTRA_LOCATION_AGE_MS = "location_age_ms"
 
         private const val CHANNEL_ID = "roadconquest_tracking"

@@ -119,7 +119,7 @@ class AppearanceTest {
         val details = StatsText.settingsOverview(context, summary, progression)
         assertTrue(details, details.indexOf("DRIVING") < details.indexOf("EXPLORATION"))
         assertTrue(details, details.indexOf("EXPLORATION") < details.indexOf("PROGRESSION"))
-        assertTrue(details, details.contains("18 mile tiles"))
+        assertTrue(details, details.contains("18 map tiles"))
         assertTrue(details, details.contains("3 towns"))
         assertTrue(details, details.contains("1,240 points"))
     }
@@ -191,6 +191,42 @@ class AppearanceTest {
                 assertEquals(icon, shadowOf(appearance.compoundDrawablesRelative[0]).createdFromResId)
             } finally { controller.destroy() }
         }
+    }
+
+    @Test @Config(qualifiers = "night") fun mapStyleIconFollowsResolvedAppearanceIncludingPhoneAndGold() {
+        val app = RuntimeEnvironment.getApplication()
+        for ((theme, gold, expected) in listOf(
+            Triple(UiTheme.LIGHT, false, R.drawable.ic_map_day),
+            Triple(UiTheme.DARK, false, R.drawable.ic_map_streets_night),
+            Triple(UiTheme.SYSTEM, false, R.drawable.ic_map_streets_night),
+            Triple(UiTheme.DARK, true, R.drawable.ic_map_day)
+        )) {
+            Prefs.setUiTheme(app, theme)
+            Prefs.setGoldUiEnabled(app, gold)
+            Prefs.setMapMode(app, MapMode.STREETS)
+            val controller = Robolectric.buildActivity(SettingsActivity::class.java).create()
+            try {
+                val button = controller.get().findViewById<Button>(R.id.mapStyleButton)
+                assertEquals(expected, shadowOf(button.compoundDrawablesRelative[0]).createdFromResId)
+                val icons = listOf(expected, R.drawable.ic_map_satellite, R.drawable.ic_map_minimal, R.drawable.ic_map_night)
+                assertEquals(4, icons.toSet().size)
+                for ((index, mode) in MapMode.entries.withIndex()) {
+                    button.performClick()
+                    val dialog = ShadowAlertDialog.getLatestAlertDialog()
+                    dialog.listView.performItemClick(dialog.listView.getChildAt(index), index, index.toLong())
+                    assertEquals(mode, Prefs.mapMode(app))
+                    assertEquals(icons[index], shadowOf(button.compoundDrawablesRelative[0]).createdFromResId)
+                }
+            } finally { controller.destroy(); Prefs.setGoldUiEnabled(app, false) }
+        }
+    }
+
+    @Test @Config(qualifiers = "notnight") fun mapStyleIconUsesDayMapWhenFollowingALightPhone() {
+        val controller = Robolectric.buildActivity(SettingsActivity::class.java).create()
+        try {
+            assertEquals(R.drawable.ic_map_day, shadowOf(controller.get()
+                .findViewById<Button>(R.id.mapStyleButton).compoundDrawablesRelative[0]).createdFromResId)
+        } finally { controller.destroy() }
     }
 
     @Test fun mapSettingsGearTintChangesWithTheSelectedAppearance() {

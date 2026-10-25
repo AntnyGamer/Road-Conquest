@@ -33,6 +33,7 @@ import com.roadconquest.app.data.TripReplayRoute
 import com.roadconquest.app.util.Appearance
 import com.roadconquest.app.util.ForegroundSession
 import com.roadconquest.app.util.Prefs
+import com.roadconquest.app.util.StatsText
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
@@ -334,14 +335,13 @@ class TripHistoryActivity : Activity() {
                     fun appendBatch(start: Int) {
                         val end = minOf(start + 40, trips.size)
                         trips.subList(start, end).forEach { trip ->
-                        val miles = trip.distanceMeters / 1609.344
                         column.addView(Button(this@TripHistoryActivity, null, 0,
                             R.style.RoadConquest_SettingsAction).apply {
                             val duration = DateUtils.formatElapsedTime(
                                 ((trip.endedAt - trip.startedAt).coerceAtLeast(0L)) / 1000
                             )
-                            text = String.format(Locale.getDefault(), "%s\n%.1f mi  •  %s",
-                                formatter.format(Date(trip.startedAt)), miles, duration)
+                            text = "%s\n%s  •  %s".format(formatter.format(Date(trip.startedAt)),
+                                StatsText.tripDistance(trip.distanceMeters), duration)
                             minHeight = dp(66)
                             gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
                             setPadding(dp(16), dp(8), dp(16), dp(8))
@@ -397,9 +397,9 @@ class TripHistoryActivity : Activity() {
         if (!requireVip() || !isTripSafeToShare(trip)) return
         val details = insightsText?.text?.toString().orEmpty()
         val message = String.format(Locale.getDefault(),
-            "Road Conquest drive • %s\n%.1f miles • %d minutes\n%s\nShared without exact GPS coordinates.",
+            "Road Conquest drive • %s\n%s • %d minutes\n%s\nShared without exact GPS coordinates.",
             DateFormat.getDateInstance().format(Date(trip.startedAt)),
-            trip.distanceMeters / 1609.344,
+            StatsText.tripDistance(trip.distanceMeters),
             (trip.endedAt - trip.startedAt).coerceAtLeast(0L) / 60_000,
             details
         )
@@ -540,8 +540,8 @@ class TripHistoryActivity : Activity() {
                     seek?.progress = 0
                     routeStatus?.text = if (loaded.size < 2) "Drive unavailable."
                         else String.format(Locale.getDefault(),
-                            "%.1f mi • %d min • %d recorded fixes",
-                            trip.distanceMeters / 1609.344,
+                            "%s • %d min • %d recorded fixes",
+                            StatsText.tripDistance(trip.distanceMeters),
                             (trip.endedAt - trip.startedAt).coerceAtLeast(0L) / 60_000,
                             trip.pointCount)
                     renderReplay()

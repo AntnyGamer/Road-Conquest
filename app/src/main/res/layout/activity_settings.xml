@@ -60,7 +60,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
                 android:text="Map: Streets"
-                android:drawableStart="@drawable/ic_layers"
+                android:drawableStart="@drawable/ic_map_day"
                 android:drawableTint="?attr/rcAccent"
                 android:drawablePadding="12dp" />
 

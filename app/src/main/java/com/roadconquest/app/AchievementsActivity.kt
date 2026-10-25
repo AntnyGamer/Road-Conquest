@@ -19,6 +19,7 @@ import com.roadconquest.app.billing.VipEntitlement
 import com.roadconquest.app.data.TrackingRepository
 import com.roadconquest.app.progression.ProgressionManager
 import com.roadconquest.app.util.Appearance
+import com.roadconquest.app.util.MeasurementUnits
 import com.roadconquest.app.util.ForegroundSession
 import java.util.Locale
 import java.util.concurrent.Executors
@@ -151,6 +152,8 @@ class AchievementsActivity : Activity() {
     }
 
     private fun addAchievement(container: LinearLayout, item: AchievementProgress) {
+        val units = MeasurementUnits.current()
+        val metricDistance = units.metric && item.unit == "mi"
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundResource(R.drawable.panel_background)
@@ -158,13 +161,17 @@ class AchievementsActivity : Activity() {
             setPadding(padding, padding, padding, padding)
         }
         card.addView(TextView(this).apply {
-            text = (if (item.unlocked) "✓  " else "○  ") + item.title
+            val title = if (metricDistance && item.id == "miles_10000") "Distance Champion"
+                else if (metricDistance && item.id == "miles_5000") "Distance Legend" else item.title
+            text = (if (item.unlocked) "✓  " else "○  ") + title
             setTextColor(Appearance.color(this@AchievementsActivity, R.attr.rcTextPrimary))
             textSize = 17f
             setTypeface(typeface, android.graphics.Typeface.BOLD)
         })
         card.addView(TextView(this).apply {
-            text = item.description + String.format(Locale.getDefault(), "  •  +%,d points", item.rewardPoints)
+            val description = if (metricDistance) "Travel " + units.longDistance(
+                item.goal * MeasurementUnits.METERS_PER_MILE) else item.description
+            text = description + String.format(Locale.getDefault(), "  •  +%,d points", item.rewardPoints)
             setTextColor(Appearance.color(this@AchievementsActivity, R.attr.rcTextSecondary))
             textSize = 14f
             setPadding(0, dp(4), 0, dp(8))
@@ -187,10 +194,8 @@ class AchievementsActivity : Activity() {
     }
 
     private fun progressText(item: AchievementProgress): String = when (item.unit) {
-        "mi" -> String.format(
-            Locale.getDefault(), "%,.1f / %,.0f mi",
-            item.progress.coerceAtMost(item.goal), item.goal
-        )
+        "mi" -> MeasurementUnits.current().distanceProgress(item.progress * MeasurementUnits.METERS_PER_MILE,
+            item.goal * MeasurementUnits.METERS_PER_MILE)
         "complete" -> if (item.unlocked) "Completed" else "Not completed"
         else -> String.format(
             Locale.getDefault(), "%,.0f / %,.0f %s",

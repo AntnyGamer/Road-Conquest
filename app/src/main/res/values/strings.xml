@@ -10,13 +10,13 @@
     <string name="center_on_car">Center on your location</string>
     <string name="waiting_for_location">Waiting for a fresh location. Check Location and Precise location permission.</string>
     <string name="saved_data_unavailable">Saved data is temporarily unavailable</string>
-    <string name="map_stats">%1$.1f mi traveled\n%2$s</string>
+    <string name="map_stats">%1$s traveled\n%2$s</string>
     <plurals name="roads_unlocked">
         <item quantity="one">%1$d road unlocked</item>
         <item quantity="other">%1$d roads unlocked</item>
     </plurals>
     <!-- Compact overview: full categorized breakdown is in Settings. -->
-    <string name="map_stats_grouped">Driving · %1$.1f mi · %2$s\nExplore · %3$s</string>
+    <string name="map_stats_grouped">Driving · %1$s · %2$s\nExplore · %3$s</string>
     <plurals name="roads_short">
         <item quantity="one">%1$d road</item>
         <item quantity="other">%1$d roads</item>
@@ -25,7 +25,7 @@
         <item quantity="one">%1$d tile</item>
         <item quantity="other">%1$d tiles</item>
     </plurals>
-    <string name="stats_grouped_initial">Driving · 0.0 mi · 0 roads\nExplore · 0 tiles</string>
+    <string name="stats_grouped_initial">Driving · 0 roads\nExplore · 0 tiles</string>
 
     <string name="map_style_label">Map: %1$s</string>
     <string name="ui_theme_label">Appearance: %1$s</string>
