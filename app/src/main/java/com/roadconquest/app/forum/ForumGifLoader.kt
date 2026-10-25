@@ -150,6 +150,8 @@ internal class GifByteCache {
     private var generation = 0L
 
     fun getOrLoad(digest: String, download: () -> ByteArray): ByteArray {
+        // The common cached-image path needs only one lock, not a per-key gate.
+        synchronized(values) { values[digest] }?.let { return it }
         val (gate, expectedGeneration) = synchronized(values) {
             gates.getOrPut(digest) { Gate() }.also { it.users++ } to generation
         }
