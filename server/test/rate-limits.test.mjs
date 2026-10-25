@@ -117,7 +117,7 @@ test('profile reads and logout revocations share bounded single-statement IP bud
     assert.deepEqual((await pool.query("SELECT attempts,xmin::text AS version FROM auth_rate_limits WHERE bucket='profile-ip'")).rows[0], saturated);
     await pool.query("UPDATE auth_rate_limits SET window_started_at=CURRENT_TIMESTAMP-INTERVAL '2 minutes' WHERE bucket='profile-ip'");
     assert.equal((await read(token)).username_display, 'BudgetDriver');
-    await pool.query("UPDATE sessions SET expires_at=CURRENT_TIMESTAMP-INTERVAL '1 second' WHERE token_hash=$1", [token]);
+    await pool.query("UPDATE sessions SET created_at=CURRENT_TIMESTAMP-INTERVAL '2 days', expires_at=CURRENT_TIMESTAMP-INTERVAL '1 day' WHERE token_hash=$1", [token]);
     assert.equal((await read(token)).username_display, null);
     await pool.query("UPDATE sessions SET expires_at=CURRENT_TIMESTAMP+INTERVAL '1 day' WHERE token_hash=$1", [token]);
 
