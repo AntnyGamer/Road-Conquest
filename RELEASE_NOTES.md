@@ -1,3 +1,19 @@
+# Road Conquest 1.0 Beta 61
+
+## What's new since Beta 60
+
+- **A discovery preview that matches the map:** The Quick tour uses the app's cloud fog, starts with one clear square, and follows the illustrated streets. Entering the next square clears its fog.
+- **Clearer Settings:** Move Quick tour near the bottom, add icons to action buttons, keep privacy descriptions beside their toggles, and explain that exit confirmation applies when pressing Back from the map.
+- **Friend-post alerts:** Simplify the description and enable occasional friend-post alerts by default. Existing saved choices stay respected.
+- **Community posting:** Enable the forum backend with automatic moderation and recognize signed-in accounts correctly. Temporary service failures show an availability message instead of incorrectly asking signed-in players to sign in again.
+- **Readable dialog buttons:** Use white action text in dark mode across community rules and other standard dialogs, with matching light and gold styling and distinct disabled states.
+- **Cleaner wording:** Replace semicolons in the app's sentences with periods or commas and replace the overlay labels' em dashes with colons.
+- **Compatibility:** Android 12+, versionCode **87**, versionName **1.0-beta.61**. Keep the same package, upload certificate, saved progress, accounts, and backup format.
+
+Forum Plus checkout remains unavailable until its separate Google Play product and refund configuration is complete. The GitHub release includes the signed APK, signed Play upload AAB, source archive, tested account function, deobfuscation mapping, and checksums. Google Play upload is a separate step.
+
+---
+
 # Road Conquest 1.0 Beta 60
 
 ## What's new since Beta 59
