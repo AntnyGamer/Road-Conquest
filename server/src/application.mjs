@@ -16,7 +16,7 @@ import { competitionConfig, createCompetition } from "./competition.mjs";
 import { createFriends } from "./friends.mjs";
 import { createNotifications, createFcmSender } from "./notifications.mjs";
 import { createRequestMaintenance } from "./maintenance.mjs";
-import { RATE_LIMIT_SQL, RATE_LIMIT_SESSION_SQL, LOGIN_WITH_USER_SQL } from "./rate-limits.mjs";
+import { RATE_LIMIT_SQL, RATE_LIMIT_PAIR_SQL, RATE_LIMIT_SESSION_SQL, RATE_LIMIT_PROFILE_SQL, RATE_LIMIT_LOGOUT_SQL, LOGIN_WITH_USER_SQL } from "./rate-limits.mjs";
 import { EvidenceError } from './scoring.mjs';
 
 const { Pool } = pg;
@@ -245,27 +245,6 @@ function bearerToken(req) {
   return TOKEN_RE.test(token) ? token : null;
 }
 
-async function authenticatedUser(req, profile = false) {
-  const token = bearerToken(req);
-  if (!token) return null;
-  await prepareDatabase();
-  const sessionHash = hashSessionToken(token);
-  // Most routes need only account identity. The non-deferrable session foreign
-  // key already guarantees its user exists; logout/deletion still revoke the
-  // session immediately. Only /me needs a joined profile. The hash is already
-  // known locally, so do not send the same 32 bytes back from PostgreSQL.
-  const result = await pool.query(
-    profile ? `SELECT u.username_display, u.leaderboard_visible
-       FROM sessions s
-       JOIN users u ON u.id = s.user_id
-      WHERE s.token_hash = $1 AND s.expires_at > CURRENT_TIMESTAMP`
-    : `SELECT user_id AS id FROM sessions
-       WHERE token_hash = $1 AND expires_at > CURRENT_TIMESTAMP`,
-    [sessionHash]
-  );
-  return result.rows[0] ? { ...result.rows[0], session_hash: sessionHash } : null;
-}
-
 async function createSession(userId, db = pool) {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const { token, tokenHash } = createSessionToken();
@@ -323,8 +302,26 @@ async function handle(req, res) {
     if (req.method === 'GET' && url.pathname === '/v1/forum/reports') return send(res, 200, await forum.reports(user));
     const postId = url.pathname.match(/^\/v1\/forum\/posts\/([a-f0-9-]{36})(?:\/(reaction|report))?$/i);
     const posting = req.method === 'POST' && url.pathname === '/v1/forum/posts';
-    const bucket = posting ? 'forum-post' : 'forum-write';
-    if (!await rateLimit(bucket, String(user.id), posting ? 5 : 60, 60_000)) return send(res, 429, { error: 'Please slow down and try again shortly.' });
+    const reacting = req.method === 'PUT' && postId?.[2] === 'reaction';
+    const purchasing = req.method === 'POST' && url.pathname === '/v1/forum/purchase';
+    // Keep the 60/minute shared write cap while independently limiting spammy
+    // reactions and expensive Google Play purchase verifications. Each pair
+    // reserves both buckets in a single database round trip.
+    const specialBucket = reacting ? 'forum-reaction' : purchasing ? 'forum-purchase' : null;
+    let permitted;
+    if (specialBucket) {
+      await prepareDatabase();
+      const key = String(user.id);
+      const { rows } = await pool.query(RATE_LIMIT_PAIR_SQL, [
+        'forum-write', opaqueRateKey('forum-write', key), 60_000, 60,
+        specialBucket, opaqueRateKey(specialBucket, key), 60_000, reacting ? 30 : 5
+      ]);
+      permitted = rows[0]?.allowed === true;
+    } else {
+      permitted = await rateLimit(posting ? 'forum-post' : 'forum-write',
+        String(user.id), posting ? 5 : 60, 60_000);
+    }
+    if (!permitted) return send(res, 429, { error: 'Please slow down and try again shortly.' });
     if (posting) return send(res, 200, await forum.post(user, await readJson(req)));
     if (postId && req.method === 'DELETE' && !postId[2]) return send(res, 200, await forum.remove(user,postId[1]));
     const body = await readJson(req);
@@ -385,18 +382,21 @@ async function handle(req, res) {
     return send(res, 405, { error: "Method not allowed." });
   }
   if (req.method === "GET" && url.pathname === "/v1/leaderboard") {
+    if (!competition) {
+      // An unavailable public ranking contains no account/database data.
+      // Like /v1/competition, this static response must not wake Neon.
+      const metric = url.searchParams.get("metric") || "cells";
+      if (metric !== "cells") return send(res, 400, { error: "Choose cells." });
+      return send(res, 200, { metric, dataset: null, entries: [], verification_available: false });
+    }
     // The public route stays public. Signed-in opt-in requests share a single
     // SQL statement for the same IP allowance and fresh session validation.
-    const wantsMine = Boolean(competition) && url.searchParams.get("mine") === "1" && bearerToken(req) != null;
+    const wantsMine = url.searchParams.get("mine") === "1" && bearerToken(req) != null;
     const access = wantsMine ? await rateLimitedUser(req, "competition-ip", 180, 60 * 1000) : null;
     const allowed = access ? access.allowed : await rateLimit("competition-ip", ip, 180, 60 * 1000);
     if (!allowed) return send(res, 429, { error: "Try again later." });
     const metric = url.searchParams.get("metric") || "cells";
     if (metric !== "cells") return send(res, 400, { error: "Choose cells." });
-    // The public page can load before verification is provisioned. No scores are invented,
-    // and every drive-writing endpoint below remains gated on strict competition setup.
-    if (!competition) return send(res, 200,
-      { metric, dataset: null, entries: [], verification_available: false });
     // The requested total is still tied to a freshly checked session. Public
     // rankings and invalid/anonymous sessions never reveal another user's score.
     const user = access?.user || null;
@@ -508,11 +508,17 @@ async function handle(req, res) {
   }
 
   if (req.method === "GET" && url.pathname === "/v1/me") {
-    const user = await authenticatedUser(req, true);
-    if (!user) return send(res, 401, { error: "Authentication required." });
+    const token = bearerToken(req);
+    if (!token) return send(res, 401, { error: "Authentication required." });
+    await prepareDatabase();
+    const { rows } = await pool.query(RATE_LIMIT_PROFILE_SQL,
+      ["profile-ip", opaqueRateKey("profile-ip", ip), 60_000, 240, hashSessionToken(token)]);
+    const profile = rows[0];
+    if (!profile?.allowed) return send(res, 429, { error: "Try again later." });
+    if (!profile.username_display) return send(res, 401, { error: "Authentication required." });
     return send(res, 200, {
-      username: user.username_display,
-      leaderboard_visible: user.leaderboard_visible
+      username: profile.username_display,
+      leaderboard_visible: profile.leaderboard_visible
     });
   }
 
@@ -520,7 +526,9 @@ async function handle(req, res) {
   const deleteAccount = req.method === "DELETE" && url.pathname === "/v1/account";
   const reauthenticate = req.method === "POST" && url.pathname === "/v1/reauth";
   if (renameAccount || deleteAccount || reauthenticate) {
-    const user = await authenticatedUser(req);
+    const access = await rateLimitedUser(req, "account-ip", 240, 60_000);
+    if (!access.allowed) return send(res, 429, { error: "Try again later." });
+    const user = access.user;
     if (!user) return send(res, 401, { error: "Authentication required." });
     const body = await readJson(req);
     const username = renameAccount ? normalizeUsername(body.username) : null;
@@ -604,7 +612,9 @@ async function handle(req, res) {
   }
 
   if (req.method === "PUT" && url.pathname === "/v1/privacy") {
-    const user = await authenticatedUser(req);
+    const access = await rateLimitedUser(req, "privacy-ip", 240, 60_000);
+    if (!access.allowed) return send(res, 429, { error: "Try again later." });
+    const user = access.user;
     if (!user) return send(res, 401, { error: "Authentication required." });
     const body = await readJson(req);
     if (typeof body.leaderboard_visible !== "boolean") {
@@ -621,7 +631,11 @@ async function handle(req, res) {
     const token = bearerToken(req);
     if (token) {
       await prepareDatabase();
-      await pool.query("DELETE FROM sessions WHERE token_hash = $1", [hashSessionToken(token)]);
+      const { rows } = await pool.query(RATE_LIMIT_LOGOUT_SQL,
+        ["logout-ip", opaqueRateKey("logout-ip", ip), 60_000, 120, hashSessionToken(token)]);
+      // A real active session must still be revocable when many users share
+      // one serverless client-IP budget and its minute window is full.
+      if (!rows[0]?.allowed && !rows[0]?.revoked) return send(res, 429, { error: "Try again later." });
     }
     return send(res, 200, { ok: true });
   }

@@ -163,8 +163,11 @@ test('purchase verification outages preserve existing paid access and receipt st
     return true;
   }});
   await forum.purchase(a,'receipt');
+  const profileBefore=(await pool.query('SELECT plus_active,xmin::text AS version FROM forum_profiles WHERE user_id=$1',[a.id])).rows[0];
   assert.deepEqual(await createForum(pool,{...options,moderate:null}).purchase(a,'receipt'),{plus:true},
     'Temporarily disabled posting must still allow verification of an existing purchase');
+  const profileAfter=(await pool.query('SELECT plus_active,xmin::text AS version FROM forum_profiles WHERE user_id=$1',[a.id])).rows[0];
+  assert.deepEqual(profileAfter,profileBefore,'Repeated verified purchases do not rewrite an unchanged entitlement profile');
   const refreshed=(await pool.query('SELECT active,checked_at FROM forum_purchases')).rows[0];
   outage=true;
   await assert.rejects(forum.purchase(a,'receipt'),e=>e.status===503);
@@ -176,10 +179,12 @@ test('existing profiles skip redundant insert and billing notifications still pr
   const input=body('A first post');
   const first=await forum.post(a,input);
   const query=pool.query.bind(pool);
-  let profileInserts=0, billingWrites=0;
+  let profileInserts=0, billingWrites=0, webhookLookups=0;
   pool.query=(sql,...args)=>{
     if (typeof sql==='string' && sql.includes('INSERT INTO forum_profiles')) profileInserts++;
     if (typeof sql==='string' && sql.includes('forum_billing_events') && sql.includes('DELETE')) billingWrites++;
+    if (typeof sql==='string' && sql.includes('forum_billing_events') && sql.includes('forum_purchases')
+      && !sql.includes('INSERT INTO forum_billing_events')) webhookLookups++;
     return query(sql,...args);
   };
   try {
@@ -192,9 +197,11 @@ test('existing profiles skip redundant insert and billing notifications still pr
       }
     })).toString('base64') } };
     assert.deepEqual(await forum.webhook('verified',notification),{ok:true});
+    assert.equal(webhookLookups,1,'Unseen events check deduplication and purchase ownership in one query');
     assert.equal(billingWrites,1,'Event insert and cleanup happen in one query');
     assert.deepEqual((await query("SELECT id FROM forum_billing_events WHERE id IN ('expired-id','fresh-id') ORDER BY id")).rows.map(x=>x.id),['fresh-id']);
     await forum.webhook('verified',notification);
+    assert.equal(webhookLookups,2,'Duplicate events need only one lookup without checking ownership separately');
     assert.equal(billingWrites,1,'Duplicate events skip maintenance and Play verification');
   } finally { pool.query=query; }
 }));
@@ -245,4 +252,180 @@ test('friend post alerts follow only newly committed visible posts and never dup
       friendPosted: async () => { sent++; } });
     await assert.rejects(unavailable.post(author, body('Temporary failure')), /outage/);
     assert.equal(sent, 1);
+  }));
+
+const billingNotification = (id, token = 'receipt', type = 'purchase') => ({ message: {
+  messageId: id, data: Buffer.from(JSON.stringify({ packageName: 'com.roadconquest.app',
+    ...(type === 'purchase' ? { oneTimeProductNotification: {
+      sku: 'forum_plus_lifetime', purchaseToken: token
+    } } : { voidedPurchaseNotification: { productType: 2, purchaseToken: token } })
+  })).toString('base64')
+} });
+
+test('overlapping identical billing deliveries share one lookup and Play check, while every caller authenticates',
+  { skip: !database }, async () => fixture(async (pool, [a], setup) => {
+    await setup.purchase(a, 'receipt');
+    let checks = 0, identities = 0, lookups = 0;
+    const started = Promise.withResolvers(), gate = Promise.withResolvers();
+    const query = pool.query.bind(pool);
+    pool.query = (sql, ...args) => {
+      if (sql.includes('AS processed')) lookups++;
+      return query(sql, ...args);
+    };
+    const forum = createForum(pool, { ...options,
+      verifyWebhook: async auth => { identities++; return auth === 'verified'; },
+      verifyPurchase: async () => { checks++; started.resolve(); await gate.promise; return true; }
+    });
+    const notification = billingNotification('same-event');
+    const deliveries = Array.from({ length: 16 }, () => forum.webhook('verified', notification));
+    await started.promise;
+    try {
+      await assert.rejects(forum.webhook('fake', notification), e => e.status === 401);
+      assert.equal(checks, 1);
+      assert.equal(lookups, 1);
+    } finally { gate.resolve(); }
+    assert.ok((await Promise.all(deliveries)).every(r => r.ok));
+    assert.equal(identities, 17, 'Shared processing never shares the authorization decision');
+    assert.equal(checks, 1, 'Sixteen overlapping copies require only one Google purchase check');
+    assert.equal((await query("SELECT id FROM forum_billing_events WHERE id='same-event'")).rowCount, 1);
+    await forum.webhook('verified', notification);
+    assert.equal(lookups, 2, 'A later delivery must check the durable receipt again');
+    assert.equal(checks, 1);
+  }));
+
+test('failed billing work remains retryable and distinct refund events always recheck current ownership',
+  { skip: !database }, async () => fixture(async (pool, [a], setup) => {
+    await setup.purchase(a, 'receipt');
+    let checks = 0, active = true;
+    const started = Promise.withResolvers(), gate = Promise.withResolvers();
+    const forum = createForum(pool, { ...options, verifyPurchase: async () => {
+      checks++;
+      if (checks === 1) { started.resolve(); await gate.promise; throw new EvidenceError('Play outage', 503); }
+      return active;
+    } });
+    const notification = billingNotification('retry-event');
+    const deliveries = Promise.allSettled(Array.from({ length: 8 }, () => forum.webhook('verified', notification)));
+    await started.promise;
+    gate.resolve();
+    assert.ok((await deliveries).every(r => r.status === 'rejected' && r.reason.status === 503));
+    assert.equal(checks, 1);
+    assert.equal((await pool.query("SELECT id FROM forum_billing_events WHERE id='retry-event'")).rowCount, 0);
+    await forum.webhook('verified', notification);
+    assert.equal(checks, 2);
+    active = false;
+    await forum.webhook('verified', billingNotification('refund-event', 'receipt', 'refund'));
+    assert.equal(checks, 3, 'A new event for the same token cannot reuse an old purchase verdict');
+    assert.equal((await forum.list(a)).viewer.plus, false);
+    active = true;
+    await forum.webhook('verified', billingNotification('restore-event'));
+    assert.equal(checks, 4);
+    assert.equal((await forum.list(a)).viewer.plus, true);
+  }));
+
+test('billing coalescing is bounded, does not combine different payloads, and keeps overflow processing', async () => {
+  const started = Promise.withResolvers(), gate = Promise.withResolvers();
+  let lookups = 0;
+  const pool = { query: async sql => {
+    if (sql.includes('AS processed')) {
+      lookups++;
+      if (lookups === 34) started.resolve();
+      await gate.promise;
+      return { rows: [{ processed: false, user_id: null }] };
+    }
+    return { rows: [] };
+  } };
+  const forum = createForum(pool, options);
+  const deliveries = Array.from({ length: 32 }, (_, i) => forum.webhook('verified', billingNotification('event-' + i)));
+  // Same ID but changed signed content is independent, even at capacity.
+  deliveries.push(forum.webhook('verified', billingNotification('event-0', 'different-receipt')));
+  deliveries.push(forum.webhook('verified', billingNotification('event-0', 'different-receipt')));
+  await started.promise;
+  try { assert.equal(lookups, 34); } finally { gate.resolve(); }
+  assert.ok((await Promise.all(deliveries)).every(r => r.ok));
+  await forum.webhook('verified', billingNotification('event-0'));
+  assert.equal(lookups, 35, 'Completed operations are not held in memory');
+});
+
+test('clearing already cleared forum penalties does not rewrite the profile', { skip: !database }, async () =>
+  fixture(async (pool, [a, , , admin], forum) => {
+    await forum.post(a, body());
+    await pool.query("UPDATE forum_profiles SET violations=2,muted_until=CURRENT_TIMESTAMP+INTERVAL '7 days' WHERE user_id=$1", [a.id]);
+    await forum.appealReview(admin, a.username_display);
+    const state = () => pool.query('SELECT violations,muted_until,banned,xmin::text AS version FROM forum_profiles WHERE user_id=$1', [a.id]);
+    const cleared = (await state()).rows[0];
+    assert.equal(cleared.violations, 0);
+    assert.equal(cleared.muted_until, null);
+    assert.equal(cleared.banned, false);
+    await forum.appealReview(admin, a.username_display);
+    assert.deepEqual((await state()).rows[0], cleared);
+  }));
+
+test('post, reaction and purchase mutations use fewer SQL round trips without changing their results',
+  { skip: !database }, async () => fixture(async (pool, [a, b]) => {
+    await pool.query('INSERT INTO forum_profiles(user_id) VALUES($1),($2)', [a.id, b.id]);
+    let statements = 0;
+    const profileFields = [];
+    const measured = {
+      query: pool.query.bind(pool),
+      async connect() {
+        const db = await pool.connect();
+        return { query: async (...args) => {
+          statements++;
+          const result = await db.query(...args);
+          if (args[0].includes('FROM forum_profiles') && result.rows[0]) profileFields.push(Object.keys(result.rows[0]));
+          return result;
+        }, release: () => db.release() };
+      }
+    };
+    const forum = createForum(measured, options);
+    const first = await forum.post(a, body());
+    assert.equal(statements, 5, 'Approved post transaction: BEGIN, locked profile, receipt, combined write, COMMIT');
+    statements = 0;
+    await forum.react(b, first.id, 'love');
+    assert.equal(statements, 4, 'Reaction transaction combines locked-post selection and mutation');
+    assert.deepEqual(profileFields.at(-1), ['muted_until', 'banned'], 'Reaction authorization returns only the two fields it uses');
+    assert.equal((await forum.list(b)).posts[0].my_reaction, 'love');
+    statements = 0;
+    await forum.purchase(a, 'first-receipt');
+    assert.equal(statements, 5, 'Purchase transaction combines receipt and entitlement writes');
+    assert.deepEqual(profileFields.at(-1), ['banned'], 'Purchase preflight does not transfer unused profile fields');
+    assert.equal((await forum.list(a)).viewer.plus, true);
+    await advance(pool, a);
+    statements = 0;
+    const flagged = createForum(measured, { ...options, moderate: async () => ({ flagged: true }) });
+    const result = await flagged.post(a, body('Flagged text'));
+    assert.equal(statements, 5, 'A flagged post also records its penalty in the same combined write');
+    assert.equal(result.violations, 1);
+    assert.equal(result.removed, true);
+  }));
+
+test('purchase updates preserve access from other receipts and post write failures roll back cooldowns and penalties',
+  { skip: !database }, async () => fixture(async (pool, [a]) => {
+    const active = new Set(['one', 'two']);
+    const forum = createForum(pool, { ...options, verifyPurchase: async token => active.has(token),
+      moderate: async () => ({ flagged: true }) });
+    await forum.purchase(a, 'one');
+    await forum.purchase(a, 'two');
+    active.delete('one');
+    assert.equal((await forum.purchase(a, 'one')).plus, true, 'Another active receipt still grants ownership');
+    active.delete('two');
+    assert.equal((await forum.purchase(a, 'two')).plus, false);
+    active.add('two');
+    assert.equal((await forum.purchase(a, 'two')).plus, true);
+    await pool.query(`CREATE OR REPLACE FUNCTION fail_forum_profile_test() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN RAISE EXCEPTION 'forced profile failure'; END $$`);
+    await pool.query('CREATE TRIGGER fail_forum_profile_test BEFORE UPDATE ON forum_profiles FOR EACH ROW EXECUTE FUNCTION fail_forum_profile_test()');
+    try {
+      await assert.rejects(forum.post(a, body()), /forced profile failure/);
+      assert.equal((await pool.query('SELECT id FROM forum_posts WHERE user_id=$1', [a.id])).rowCount, 0);
+      const profile = (await pool.query('SELECT violations,last_post_at FROM forum_profiles WHERE user_id=$1', [a.id])).rows[0];
+      assert.equal(profile.violations, 0);
+      assert.equal(profile.last_post_at, null);
+      active.clear();
+      await assert.rejects(forum.purchase(a, 'two'), /forced profile failure/);
+      assert.equal((await pool.query('SELECT active FROM forum_purchases WHERE user_id=$1 AND active', [a.id])).rowCount, 1);
+    } finally {
+      await pool.query('DROP TRIGGER fail_forum_profile_test ON forum_profiles');
+      await pool.query('DROP FUNCTION fail_forum_profile_test()');
+    }
   }));

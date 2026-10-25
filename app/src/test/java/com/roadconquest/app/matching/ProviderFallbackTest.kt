@@ -637,13 +637,13 @@ class ProviderFallbackTest {
             server.enqueue(MockResponse().setBody(example))
             server.enqueue(MockResponse().setBody(example))
             server.start()
-            val matcher = GeoapifyMatcher(server.url("/").toString(), ProviderHealth())
+            var now = 1_000_000L
+            val matcher = GeoapifyMatcher(server.url("/").toString(), ProviderHealth()) { now }
             assertNotNull(matcher.match(points))
-            val storedAt = GeoapifyMatcher::class.java.getDeclaredField("cachedAt").apply { isAccessible = true }
-            storedAt.setLong(matcher, System.currentTimeMillis() - 2 * 60_000L)
+            now += 2 * 60_000L
             assertNotNull(matcher.match(points))
             assertEquals(1, server.requestCount)
-            storedAt.setLong(matcher, System.currentTimeMillis() - 16 * 60_000L)
+            now += 14 * 60_000L
             assertNotNull(matcher.match(points))
             assertEquals(2, server.requestCount)
         }

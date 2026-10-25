@@ -110,6 +110,7 @@ object OptionalNotifications {
     }
     fun setFriendsEnabled(context: Context, enabled: Boolean) {
         prefs(context).edit().putBoolean("friends", enabled).commit()
+        if (!enabled) context.getSystemService(NotificationManager::class.java).cancel(9101)
         updatePushPreference(context)
     }
     fun setFriendPostsEnabled(context: Context, enabled: Boolean) {
@@ -139,8 +140,14 @@ object OptionalNotifications {
         WeeklyReminderReceiver.schedule(context)
     }
     fun clear(context: Context) {
-        setFriendsEnabled(context, false)
-        setWeeklyEnabled(context, false)
+        // Turn off all three notification types before changing the push registration.
+        // Updating them individually could briefly re-register a device for the
+        // still-enabled friend-post channel during a Delete all data operation.
+        check(prefs(context).edit().putBoolean("friends", false)
+            .putBoolean("friend_posts", false).putBoolean("weekly", false).commit())
+        updatePushPreference(context)
+        context.getSystemService(NotificationManager::class.java).cancel(9102)
+        WeeklyReminderReceiver.schedule(context)
     }
     fun register(context: Context, token: String) {
         val app = context.applicationContext

@@ -43,11 +43,13 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
   const codec = purchaseCodec(pepper);
   const admins = new Set(adminIds.map(String));
   const pendingPosts = new Map();
+  const pendingWebhooks = new Map();
   const binding = id => forumAccountBinding(pepper, id);
 
-  async function profile(db, userId, lock = false) {
-    const query = `SELECT violations,muted_until,banned,plus_active,
-      last_post_at + INTERVAL '10 minutes' AS next_post_at FROM forum_profiles
+  // Column lists are fixed internal SQL, never request input.
+  async function profile(db, userId, lock = false, columns = `violations,muted_until,banned,plus_active,
+      last_post_at + INTERVAL '10 minutes' AS next_post_at`) {
+    const query = `SELECT ${columns} FROM forum_profiles
       WHERE user_id=$1${lock ? ' FOR UPDATE' : ''}`;
     let { rows } = await db.query(query, [userId]);
     if (rows[0]) return rows[0];
@@ -169,16 +171,23 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
           enforce(current);
           enforceCooldown(current);
           if (input.gifUrl && !current.plus_active) throw new EvidenceError('Forum Plus is required to attach GIFs.', 403);
-          const penalty = verdict.flagged ? await strike(db, user.id, current) : current;
+          const penalty = verdict.flagged ? moderationPenalty(current.violations) : current;
           const id = randomUUID(), state = verdict.flagged ? 'removed' : 'visible';
-          await db.query(`INSERT INTO forum_posts(id,user_id,request_id,content_hash,body,gif_url,gif_hash,state,moderation)
-            VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, [id,user.id,input.requestId,input.contentHash,
+          // The profile is already locked. Record the post, cooldown and optional
+          // penalty in one statement, keeping all writes in the same transaction.
+          const updated = await db.query(`WITH posted AS (
+            INSERT INTO forum_posts(id,user_id,request_id,content_hash,body,gif_url,gif_hash,state,moderation)
+            VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING 1
+          ) UPDATE forum_profiles SET rules_version=$10,last_post_at=CURRENT_TIMESTAMP
+            ${verdict.flagged ? ',violations=$11,muted_until=$12,banned=$13' : ''}
+            WHERE user_id=$2 AND EXISTS(SELECT 1 FROM posted)
+            RETURNING last_post_at + INTERVAL '10 minutes' AS next_post_at`,
+          [id,user.id,input.requestId,input.contentHash,
             verdict.flagged ? '' : input.text, verdict.flagged ? null : input.gifUrl,
             verdict.flagged ? null : verdict.gifHash, state,
-            JSON.stringify({ model: verdict.model, categories: verdict.categories || [], rules_version: FORUM_RULES_VERSION })]);
+            JSON.stringify({ model: verdict.model, categories: verdict.categories || [], rules_version: FORUM_RULES_VERSION }),
+            FORUM_RULES_VERSION, ...(verdict.flagged ? [penalty.violations,penalty.muted_until,penalty.banned] : [])]);
           published = state === 'visible';
-          const updated = await db.query(`UPDATE forum_profiles SET rules_version=$2,last_post_at=CURRENT_TIMESTAMP
-            WHERE user_id=$1 RETURNING last_post_at + INTERVAL '10 minutes' AS next_post_at`, [user.id,FORUM_RULES_VERSION]);
           return postResult({ id, state }, { ...penalty, ...updated.rows[0] });
         });
         // Only a newly committed, visible post can trigger the occasional alert.
@@ -193,14 +202,17 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
     async react(user, postId, reaction) {
       if (!UUID.test(postId) || (reaction !== null && !REACTIONS.has(reaction))) throw new EvidenceError('Invalid reaction.', 400);
       return transact(async db => {
-        enforce(await profile(db,user.id,true));
-        const post = await db.query(`SELECT id FROM forum_posts p WHERE id=$1 AND state='visible'
-          AND NOT EXISTS(SELECT 1 FROM forum_blocks b WHERE b.user_id=$2 AND b.blocked_id=p.user_id) FOR UPDATE`, [postId,user.id]);
-        if (!post.rowCount) throw new EvidenceError('Post is unavailable.', 404);
-        if (reaction === null) await db.query('DELETE FROM forum_reactions WHERE post_id=$1 AND user_id=$2', [postId,user.id]);
-        else await db.query(`INSERT INTO forum_reactions(post_id,user_id,reaction) VALUES($1,$2,$3)
-          ON CONFLICT(post_id,user_id) DO UPDATE SET reaction=EXCLUDED.reaction
-          WHERE forum_reactions.reaction IS DISTINCT FROM EXCLUDED.reaction`, [postId,user.id,reaction]);
+        enforce(await profile(db,user.id,true,'muted_until,banned'));
+        const { rows } = await db.query(`WITH post AS (
+          SELECT id FROM forum_posts p WHERE id=$1 AND state='visible'
+            AND NOT EXISTS(SELECT 1 FROM forum_blocks b WHERE b.user_id=$2 AND b.blocked_id=p.user_id) FOR UPDATE
+        ), changed AS (${reaction === null
+          ? 'DELETE FROM forum_reactions r USING post p WHERE r.post_id=p.id AND r.user_id=$2'
+          : `INSERT INTO forum_reactions(post_id,user_id,reaction) SELECT id,$2,$3 FROM post
+            ON CONFLICT(post_id,user_id) DO UPDATE SET reaction=EXCLUDED.reaction
+            WHERE forum_reactions.reaction IS DISTINCT FROM EXCLUDED.reaction`}
+        ) SELECT EXISTS(SELECT 1 FROM post) AS available`, reaction === null ? [postId,user.id] : [postId,user.id,reaction]);
+        if (!rows[0].available) throw new EvidenceError('Post is unavailable.', 404);
         return { ok: true };
       });
     },
@@ -245,7 +257,7 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
         const found = await db.query('SELECT user_id FROM forum_posts WHERE id=$1', [postId]);
         if (!found.rowCount) throw new EvidenceError('Post is unavailable.', 404);
         // Lock account before post everywhere, preventing moderation/reaction lock inversion.
-        const current = await profile(db,found.rows[0].user_id,true);
+        const current = await profile(db,found.rows[0].user_id,true,'violations');
         const { rows } = await db.query('SELECT user_id,state FROM forum_posts WHERE id=$1 FOR UPDATE', [postId]);
         if (remove && rows[0].state === 'visible') {
           await strike(db, rows[0].user_id, current);
@@ -260,7 +272,8 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
       const target = normalizeUsername(username);
       if (!target) throw new EvidenceError('Invalid username.', 400);
       await pool.query(`UPDATE forum_profiles SET violations=0,muted_until=NULL,banned=FALSE
-        WHERE user_id=(SELECT id FROM users WHERE username_key=$1)`, [target.key]);
+        WHERE user_id=(SELECT id FROM users WHERE username_key=$1)
+          AND (violations<>0 OR muted_until IS NOT NULL OR banned)`, [target.key]);
       return { ok: true };
     },
     async purchase(user, token) {
@@ -268,18 +281,28 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
       if (typeof token !== 'string' || !token.length || token.length > 4096) throw new EvidenceError('Invalid purchase token.', 400);
       const digest = purchaseHash(token);
       return transact(async db => {
-        const current = await profile(db,user.id,true);
+        const current = await profile(db,user.id,true,'banned');
         const prior = await db.query('SELECT user_id FROM forum_purchases WHERE token_hash=$1 FOR UPDATE', [digest]);
         if (prior.rowCount && String(prior.rows[0].user_id) !== String(user.id)) throw new EvidenceError('Purchase belongs to another account.', 403);
         if (current.banned && !prior.rowCount) throw new EvidenceError('New Forum Plus purchases are unavailable for banned accounts.', 403);
         if (!moderate && !prior.rowCount) throw new EvidenceError('New Forum Plus purchases are temporarily unavailable.', 503);
         // Serialize verification with refunds/restores so an older response cannot overwrite a refund.
         const active = await verifyPurchase(token, binding(user.id));
-        if (active) await db.query(`INSERT INTO forum_purchases(token_hash,user_id,encrypted_token,active)
-          VALUES($1,$2,$3,TRUE) ON CONFLICT(token_hash) DO UPDATE SET active=TRUE,checked_at=CURRENT_TIMESTAMP`, [digest,user.id,codec.seal(token)]);
-        else await db.query('UPDATE forum_purchases SET active=FALSE,checked_at=CURRENT_TIMESTAMP WHERE token_hash=$1 AND user_id=$2', [digest,user.id]);
-        const { rows } = await db.query(`UPDATE forum_profiles SET plus_active=EXISTS(
-          SELECT 1 FROM forum_purchases WHERE user_id=$1 AND active) WHERE user_id=$1 RETURNING plus_active`, [user.id]);
+        // A writable CTE's table scan sees the statement's original snapshot.
+        // Use the freshly verified state for this token and scan only OTHER
+        // receipts, so refunds/restores and multiple purchases stay accurate.
+        const { rows } = await db.query(`WITH recorded AS (${active
+          ? `INSERT INTO forum_purchases(token_hash,user_id,encrypted_token,active)
+            VALUES($1,$2,$3,TRUE) ON CONFLICT(token_hash) DO UPDATE SET active=TRUE,checked_at=CURRENT_TIMESTAMP`
+          : 'UPDATE forum_purchases SET active=FALSE,checked_at=CURRENT_TIMESTAMP WHERE token_hash=$1 AND user_id=$2'}
+        ), desired AS (
+          SELECT ${active ? '$4' : '$3'}::boolean OR EXISTS(SELECT 1 FROM forum_purchases
+            WHERE user_id=$2 AND token_hash<>$1 AND active) AS owned
+        ), changed AS (
+          UPDATE forum_profiles SET plus_active=desired.owned FROM desired
+          WHERE user_id=$2 AND plus_active IS DISTINCT FROM desired.owned RETURNING 1
+        ) SELECT desired.owned AS plus_active FROM desired LEFT JOIN changed ON TRUE`,
+        active ? [digest,user.id,codec.seal(token),active] : [digest,user.id,active]);
         return { plus: rows[0].plus_active };
       });
     },
@@ -294,16 +317,29 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
       const item = notification.oneTimeProductNotification || notification.voidedPurchaseNotification;
       if (!item || (notification.oneTimeProductNotification ? item.sku !== FORUM_PRODUCT : item.productType !== 2)) return { ok: true };
       if (typeof item.purchaseToken !== 'string' || !item.purchaseToken.length || item.purchaseToken.length > 4096) throw new EvidenceError('Invalid purchase notification.', 400);
-      if ((await pool.query('SELECT 1 FROM forum_billing_events WHERE id=$1', [id])).rowCount) return { ok: true };
-      const digest = purchaseHash(item.purchaseToken);
-      const found = await pool.query('SELECT user_id FROM forum_purchases WHERE token_hash=$1', [digest]);
-      if (found.rowCount) await this.purchase({ id: found.rows[0].user_id }, item.purchaseToken);
-      // The insert and age cleanup share one database round trip. They touch
-      // disjoint rows because an incoming notification is never 30 days old.
-      await pool.query(`WITH recorded AS (
-        INSERT INTO forum_billing_events(id) VALUES($1) ON CONFLICT DO NOTHING RETURNING id
-      ) DELETE FROM forum_billing_events WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '30 days'`, [id]);
-      return { ok: true };
+      // Authenticate every delivery above, then share only an identical event
+      // already in flight. Distinct refund/purchase events must reverify Play.
+      const key = hash(JSON.stringify([id, encoded]));
+      if (pendingWebhooks.has(key)) return pendingWebhooks.get(key);
+      const processEvent = async () => {
+        const digest = purchaseHash(item.purchaseToken);
+        const { rows: [lookup] } = await pool.query(`SELECT
+          EXISTS(SELECT 1 FROM forum_billing_events WHERE id=$1) AS processed,
+          (SELECT user_id FROM forum_purchases WHERE token_hash=$2) AS user_id`,
+          [id, digest]);
+        if (lookup.processed) return { ok: true };
+        if (lookup.user_id != null) await this.purchase({ id: lookup.user_id }, item.purchaseToken);
+        // Keep the durable receipt and normal age cleanup for cross-instance retries.
+        await pool.query(`WITH recorded AS (
+          INSERT INTO forum_billing_events(id) VALUES($1) ON CONFLICT DO NOTHING RETURNING id
+        ) DELETE FROM forum_billing_events WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '30 days'`, [id]);
+        return { ok: true };
+      };
+      // At capacity, keep ordinary processing rather than evicting active work.
+      if (pendingWebhooks.size >= 32) return processEvent();
+      const task = processEvent();
+      pendingWebhooks.set(key, task);
+      try { return await task; } finally { pendingWebhooks.delete(key); }
     }
   };
 }

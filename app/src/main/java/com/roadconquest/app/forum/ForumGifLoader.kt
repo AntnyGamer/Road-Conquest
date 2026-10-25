@@ -25,7 +25,7 @@ class ForumGifLoader {
         var successful = false
     }
     private val main = Handler(Looper.getMainLooper())
-    private var closed = false
+    @Volatile private var closed = false
     private var foreground = false
     private val views = java.util.Collections.newSetFromMap(java.util.WeakHashMap<ImageView, Boolean>())
     fun setForeground(value: Boolean) {
@@ -34,9 +34,7 @@ class ForumGifLoader {
             (view.drawable as? AnimatedImageDrawable)?.let { if (value && view.isAttachedToWindow) it.start() else it.stop() }
         }
     }
-    private val cache = object : LinkedHashMap<String, ByteArray>(4,0.75f,true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ByteArray>?) = size > 4
-    }
+    private val cache = GifByteCache()
     companion object {
         private val hosts = setOf("media.giphy.com","i.giphy.com","media.tenor.com")
         private const val HEX_DIGITS = "0123456789abcdef"
@@ -83,8 +81,7 @@ class ForumGifLoader {
         val work = Runnable {
             val image = runCatching {
                 check(!ticket.cancelled.get())
-                val cached = synchronized(cache) { cache[expectedHash] }
-                val bytes = cached ?: download(url,expectedDigest,ticket).also { synchronized(cache) { cache[expectedHash] = it } }
+                val bytes = cache.getOrLoad(expectedHash) { download(url,expectedDigest,ticket) }
                 check(!ticket.cancelled.get())
                 ImageDecoder.decodeDrawable(ImageDecoder.createSource(ByteBuffer.wrap(bytes))) { decoder, info, _ ->
                     require(info.size.width in 1..512 && info.size.height in 1..512)
@@ -106,6 +103,8 @@ class ForumGifLoader {
         workers.execute(work)
     }
     private fun download(url: String, expectedDigest: ByteArray, ticket: Ticket): ByteArray {
+        // A cancelled view may have waited behind another download's cache lock.
+        check(!ticket.cancelled.get())
         val connection = URI(url).toURL().openConnection() as HttpsURLConnection
         connection.instanceFollowRedirects = false
         connection.connectTimeout = 8000
@@ -133,6 +132,47 @@ class ForumGifLoader {
         closed = true
         views.toList().forEach(::clear)
         workers.shutdownNow(); main.removeCallbacksAndMessages(null)
-        synchronized(cache) { cache.clear() }
+        cache.clear()
     }
+}
+
+// A single GIF may be visible in multiple rows or views. Use a per-digest
+// monitor to avoid duplicate CDN downloads without serializing different GIFs.
+// Keep the monitor until every waiting caller leaves, including after failure
+// or cancellation, so an unsuccessful first download can be retried normally.
+internal class GifByteCache {
+    private class Gate {
+        val monitor = Any()
+        var users = 0
+    }
+    private val values = object : LinkedHashMap<String, ByteArray>(4, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ByteArray>?) = size > 4
+    }
+    private val gates = HashMap<String, Gate>()
+    private var generation = 0L
+
+    fun getOrLoad(digest: String, download: () -> ByteArray): ByteArray {
+        // The common cached-image path needs only one lock, not a per-key gate.
+        synchronized(values) { values[digest] }?.let { return it }
+        val (gate, expectedGeneration) = synchronized(values) {
+            gates.getOrPut(digest) { Gate() }.also { it.users++ } to generation
+        }
+        try {
+            return synchronized(gate.monitor) {
+                synchronized(values) { values[digest]?.takeIf { generation == expectedGeneration } }
+                    ?: download().also { bytes ->
+                        synchronized(values) {
+                            // A closed screen must not be repopulated by late downloads.
+                            if (generation == expectedGeneration) values[digest] = bytes
+                        }
+                    }
+            }
+        } finally {
+            synchronized(values) {
+                if (--gate.users == 0) gates.remove(digest)
+            }
+        }
+    }
+
+    fun clear() = synchronized(values) { generation++; values.clear() }
 }

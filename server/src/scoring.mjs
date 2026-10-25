@@ -85,6 +85,12 @@ export async function boundedJson(response, limit = 1024 * 1024) {
     void response.body?.cancel().catch(() => {});
     throw new EvidenceError("Verification service unavailable.", 503);
   }
+  const length = response.headers?.get("Content-Length");
+  const encoding = response.headers?.get("Content-Encoding");
+  if ((!encoding || encoding.toLowerCase() === "identity") && length && /^\d+$/.test(length) && Number(length) > limit) {
+    void response.body.cancel().catch(() => {});
+    throw new EvidenceError("Verification response too large.", 503);
+  }
   let size = 0;
   const chunks = [];
   for await (const chunk of response.body) {
