@@ -73,6 +73,14 @@ test("serverless accounts enforce authentication, privacy, limits and TLS with r
     assert.equal((await call("/v1/notifications/device", "POST", {})).status, 401);
     assert.equal((await call("/v1/notifications/device", "POST", {}, login.body.token)).status, 400);
     assert.equal((await call("/v1/notifications/device", "DELETE", undefined, login.body.token)).status, 200);
+    // Personal profile lookup now reserves an IP budget in the same SQL call.
+    const meQuery = runtimePool.query.bind(runtimePool);
+    let profileQueries = 0;
+    runtimePool.query = (...args) => { profileQueries++; return meQuery(...args); };
+    const profileCheck = await call("/v1/me", "GET", undefined, login.body.token);
+    runtimePool.query = meQuery;
+    assert.equal(profileCheck.status, 200);
+    assert.equal(profileQueries, 1, 'Profile lookup and budget must share one database round trip');
     // Warm authenticated reads now reserve the IP budget and check the session
     // together, then query the friend list. No extra session SELECT is needed.
     const realQuery = runtimePool.query.bind(runtimePool);
@@ -111,7 +119,12 @@ test("serverless accounts enforce authentication, privacy, limits and TLS with r
     assert.equal((await call("/v1/account", "DELETE", { password: credentials.password }, login.body.token)).status, 200);
     assert.deepEqual((await call("/v1/friends", "GET", undefined, friend.body.token)).body, { friends: [] });
     assert.equal((await call("/v1/me", "GET", undefined, signup.body.token)).status, 401);
+    let logoutQueries = 0;
+    const logoutQuery = runtimePool.query.bind(runtimePool);
+    runtimePool.query = (...args) => { logoutQueries++; return logoutQuery(...args); };
     assert.equal((await call("/v1/logout", "POST", {}, login.body.token)).status, 200);
+    runtimePool.query = logoutQuery;
+    assert.equal(logoutQueries, 1, 'Logout revocation and budget must share one database round trip');
     assert.equal((await call("/v1/me", "GET", undefined, login.body.token)).status, 401);
     let last;
     for (let i = 0; i < 7; i++) {
