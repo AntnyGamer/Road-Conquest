@@ -92,6 +92,25 @@ class OptionalServicesTest {
         assertNull(OptionalNotifications.prepareBinding(app, "account-session"))
     }
 
+    @Test fun clearingLocalDataDisablesEveryNotificationAndCancelsWeeklyReminder() {
+        val app = RuntimeEnvironment.getApplication()
+        OptionalNotifications.initialize(app)
+        val alarms = Shadows.shadowOf(app.getSystemService(AlarmManager::class.java))
+        assertEquals(1, alarms.scheduledAlarms.size)
+        assertTrue(OptionalNotifications.friendsEnabled(app))
+        assertTrue(OptionalNotifications.friendPostsEnabled(app))
+        assertTrue(OptionalNotifications.weeklyEnabled(app))
+
+        OptionalNotifications.clear(app)
+
+        assertFalse(OptionalNotifications.friendsEnabled(app))
+        assertFalse(OptionalNotifications.friendPostsEnabled(app))
+        assertFalse(OptionalNotifications.weeklyEnabled(app))
+        assertTrue(alarms.scheduledAlarms.isEmpty())
+        assertNull(OptionalNotifications.prepareBinding(app, "post-reset-account"))
+        assertTrue(FirebaseApp.getApps(app).isEmpty())
+    }
+
     @Test fun notificationSessionDigestPreservesExactExistingHexValues() {
         assertEquals("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
             OptionalNotifications.sessionDigest("abc"))
