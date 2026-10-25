@@ -50,14 +50,18 @@ export const RATE_LIMIT_LOGOUT_SQL = `WITH permit AS (${RATE_LIMIT_SQL}),
     EXISTS(SELECT 1 FROM revoked) AS revoked`;
 // A denied/saturated IP produces no username reservation, preserving short
 // circuit accounting. The two distinct bucket rows retain the same lock order.
-const loginBudgetCtes = `WITH ip_limit AS (${reservation()}),
+// Shared, ordered two-bucket reservation for login and heavier forum actions.
+// Both limits are checked in one PostgreSQL round trip and deny together if
+// either is exhausted. A denied second bucket still consumes the first budget.
+const pairedBudgetCtes = `WITH ip_limit AS (${reservation()}),
   user_limit AS (${reservation(4, 'ip_limit')})`;
-export const LOGIN_LIMIT_SQL = `${loginBudgetCtes}
+export const RATE_LIMIT_PAIR_SQL = `${pairedBudgetCtes}
   SELECT COALESCE((SELECT allowed FROM user_limit),FALSE) AS allowed`;
+export const LOGIN_LIMIT_SQL = RATE_LIMIT_PAIR_SQL;
 // The normal sign-in path can retrieve its account data in the SAME round trip
 // as both budgets. A denied budget yields only {allowed:false}, never a
 // password hash; unknown usernames still take the existing dummy scrypt path.
-export const LOGIN_WITH_USER_SQL = `${loginBudgetCtes},
+export const LOGIN_WITH_USER_SQL = `${pairedBudgetCtes},
   permission AS (SELECT COALESCE((SELECT allowed FROM user_limit),FALSE) AS allowed)
   SELECT p.allowed,u.id,u.username_display,u.password_salt,u.password_hash,u.leaderboard_visible
   FROM permission p LEFT JOIN users u ON p.allowed AND u.username_key=$9`;
