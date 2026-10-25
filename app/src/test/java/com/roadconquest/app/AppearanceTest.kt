@@ -52,6 +52,7 @@ class AppearanceTest {
                 assertEquals("Got it", gotIt.text.toString())
                 assertEquals("Rules action in $theme (gold=$gold)", expected, gotIt.currentTextColor)
                 gotIt.performClick()
+                shadowOf(android.os.Looper.getMainLooper()).idle()
                 assertFalse(rules.isShowing)
 
                 val dialog = AlertDialog.Builder(activity)
