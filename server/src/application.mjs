@@ -634,7 +634,7 @@ async function handle(req, res) {
       const { rows } = await pool.query(RATE_LIMIT_LOGOUT_SQL,
         ["logout-ip", opaqueRateKey("logout-ip", ip), 60_000, 120, hashSessionToken(token)]);
       // A real active session must still be revocable when many users share
-      // one serverless client-IP budget and its hourly minute window is full.
+      // one serverless client-IP budget and its minute window is full.
       if (!rows[0]?.allowed && !rows[0]?.revoked) return send(res, 429, { error: "Try again later." });
     }
     return send(res, 200, { ok: true });

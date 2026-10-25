@@ -92,11 +92,37 @@ lifetime. The bounded memory tradeoff avoids repeated cryptographic parsing.
 | 14 | Do not await cleanup after definitive Google results | Accepted FCM sends return after requesting cleanup; invalid Integrity-token HTTP 400 responses remain permanent 403 failures. Failed/stalled body cleanup cannot hold the request open or turn an invalid token into a retryable outage. Tests cover rejecting and never-settling cleanup. |
 
 The follow-up requested searching for 100 worthwhile improvements. Fourteen
-were justified across the whole pass; the implementation does not force the
+were justified in the server-focused pass; the implementation does not force the
 count to 100 by treating the same fix at multiple call sites as separate work.
 Broader caching, lower sampling/detail, wider road snapping, longer delays,
 changed verification, more batching, cache TTL changes, extra indexes and
 infrastructure replacement did not meet the required tradeoff standard.
+
+## Deep review and app performance follow-up
+
+| # | Change | Behavior preserved |
+| --- | --- | --- |
+| 15 | Recheck GIF cancellation immediately before opening a connection | A worker that waited for another digest download must not start network I/O for a view cancelled while waiting. Existing cancellation, hashing, decode and close checks remain. |
+| 16 | Reuse each adjacent-road identity comparison | Geometry split bridging computes its pure normalized-name/reference comparison once instead of twice. Same thresholds, snap gates, corner evidence and accepted roads. |
+| 17 | Fill resolved-ID sets directly | Known-road reuse uses `flatMapTo(HashSet())` in two places instead of building a temporary flattened list and then a set. The same point IDs are removed from the same eligible set. |
+| 18 | Reuse the initial fog quad | Three initially transparent fog sources share one read-only camera-coordinate snapshot during style installation. This avoids two repeated projection passes; subsequent per-source positioning and bitmap publication are unchanged. |
+| 19 | Precompute municipality prefix/suffix forms | Fixed legal-type strings are constructed once rather than up to 36 temporary strings per identity lookup. Same order, normalization, conflicting-type rejection and town/state/country rules. |
+
+The changed matcher/geometry classes compile with Kotlin 2.3.20. A host-JVM
+run passed 104 existing pure matching/cache/geometry cases, using the pinned
+HTTP fixture dependencies and a host JSON implementation. Android annotations
+were omitted only in temporary copies; three Android database integration cases
+were excluded rather than replaced with fake storage. This is additional
+verification, not a substitute for Robolectric/device CI. Separately, 100,000
+municipality names gave identical before/after identity results using the actual
+extracted old/new methods. The unchanged server behavior has passed all 175
+server cases on native PostgreSQL in CI. The latest follow-up reruns full Android
+checks; consult the PR rather than assuming an earlier run covers a later commit.
+
+The earlier fourteen improvements cover the server-focused pass. This follow-up
+adds one cancellation fix and four small app optimizations. The older account,
+notification, rate-limit and GIF coalescing changes already in PR #119 remain
+part of the complete PR and are described in its body.
 
 ## Other paths reviewed
 

@@ -350,13 +350,14 @@ class RoadGeometryValidator {
             // Different named roads also meet at actual intersections. provider can split the
             // short crossing between two confident matchings; allow only a very short bridge
             // with GPS position + course evidence and never award a new road for it.
-            val crossRoadBridge = !sameMergeIdentity(left, right) && !unnamedBridge &&
+            val sameIdentity = sameMergeIdentity(left, right)
+            val crossRoadBridge = !sameIdentity && !unnamedBridge &&
                 left.countTowardsRoads && right.countTowardsRoads &&
                 left.confidence >= MIN_CROSS_ROAD_BRIDGE_CONFIDENCE &&
                 right.confidence >= MIN_CROSS_ROAD_BRIDGE_CONFIDENCE
             if (left.confidence < MIN_ACCEPTABLE_CONFIDENCE ||
                 right.confidence < MIN_ACCEPTABLE_CONFIDENCE ||
-                (!sameMergeIdentity(left, right) && !unnamedBridge && !crossRoadBridge)
+                (!sameIdentity && !unnamedBridge && !crossRoadBridge)
             ) continue
 
             val leftPoint = points.indexOfLast { it.timestampMillis == left.lastTimestamp }

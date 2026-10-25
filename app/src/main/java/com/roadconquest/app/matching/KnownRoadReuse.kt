@@ -25,7 +25,7 @@ internal object KnownRoadReuse {
             )?.segmentId
         }
         val original = identify(points, markableIds, nearby)
-        val remaining = markableIds - original.flatMap { it.pointIds }.toSet()
+        val remaining = markableIds - original.flatMapTo(HashSet()) { it.pointIds }
         if (remaining.isEmpty()) return original
         val evidence = repository.knownRoadEvidence(points)
         if (evidence.size == points.size) return withExtraApproach(repository, points, remaining, original, nearby)
@@ -57,7 +57,7 @@ internal object KnownRoadReuse {
         visits: List<KnownRoadVisit>, nearby: (TrackPoint) -> String?
     ): List<KnownRoadVisit> {
         if (points.size != 4) return visits
-        val remaining = pendingIds - visits.flatMap { it.pointIds }.toSet()
+        val remaining = pendingIds - visits.flatMapTo(HashSet()) { it.pointIds }
         if (remaining.isEmpty()) return visits
         val context = repository.knownRoadApproach(points)
         return if (context.size == points.size) visits else visits + identify(context, remaining, nearby)

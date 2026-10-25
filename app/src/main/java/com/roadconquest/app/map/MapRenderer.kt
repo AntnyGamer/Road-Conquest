@@ -1237,14 +1237,15 @@ class MapRenderer(
                 setRasterOpacityTransition(TransitionOptions(0L, 0L))
             })
         val transparent = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888)
+        val initialQuad = currentFogQuad()
         // Kept at a broader map scale while idle. Only one fog raster is visible:
         // stacking world/regional/detail would darken the unexplored map and cover holes.
-        installFogRaster(style, REGIONAL_FOG_SOURCE_ID, REGIONAL_FOG_LAYER_ID, currentFogQuad(), transparent, 0f)
-        installFogRaster(style, FOG_SOURCE_ID, FOG_LAYER_ID, currentFogQuad(), transparent, 0f)
+        installFogRaster(style, REGIONAL_FOG_SOURCE_ID, REGIONAL_FOG_LAYER_ID, initialQuad, transparent, 0f)
+        installFogRaster(style, FOG_SOURCE_ID, FOG_LAYER_ID, initialQuad, transparent, 0f)
         // Prepare the NEXT georeferenced raster while it is invisible.
         // Updating pixels and corners in place on the visible ImageSource
         // displayed the old clearing at the new coordinates for a frame.
-        installFogRaster(style, FOG_ALT_SOURCE_ID, FOG_ALT_LAYER_ID, currentFogQuad(), transparent, 0f)
+        installFogRaster(style, FOG_ALT_SOURCE_ID, FOG_ALT_LAYER_ID, initialQuad, transparent, 0f)
         transparent.recycle()
     }
 

@@ -103,6 +103,8 @@ class ForumGifLoader {
         workers.execute(work)
     }
     private fun download(url: String, expectedDigest: ByteArray, ticket: Ticket): ByteArray {
+        // A cancelled view may have waited behind another download's cache lock.
+        check(!ticket.cancelled.get())
         val connection = URI(url).toURL().openConnection() as HttpsURLConnection
         connection.instanceFollowRedirects = false
         connection.connectTimeout = 8000
