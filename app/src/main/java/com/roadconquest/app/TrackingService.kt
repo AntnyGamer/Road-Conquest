@@ -852,11 +852,11 @@ class TrackingService : Service(), LocationListener {
         try {
             repeat(MAX_MATCH_BATCHES_PER_RUN) { batchIndex ->
                 var priorityStartId: Long? = null
-                fun repairStart(): Long? {
+                fun repairStart(onlyAnchored: Boolean = false): Long? {
                     priorityStartId = repository.newestEligibleAnchoredGapStartId(
                         beforeId = previousPriorityGapStartId
                     ) ?: repository.newestEligibleAnchoredGapStartId()
-                    return priorityStartId ?: repository.oldestEligibleRetryId()
+                    return priorityStartId ?: if (onlyAnchored) null else repository.oldestEligibleRetryId()
                 }
                 var retryStartId = when (batchIndex) {
                     0 -> null
@@ -873,10 +873,17 @@ class TrackingService : Service(), LocationListener {
                 // newest eligible fixes have already been submitted, use the next permitted
                 // request for a gap instead. New driving fixes retain first priority.
                 val newestPendingId = window.markableIds.maxOrNull()
+                val wallNow = System.currentTimeMillis()
+                val staleSlowWindow = lastRemoteNewestPendingId == null && window.points.all {
+                    it.id !in window.markableIds ||
+                        (wallNow - it.timestampMillis > 120_000L && it.speedMps >= 0f && it.speedMps < 4f)
+                }
                 if (batchIndex == 0 && newestPendingId != null &&
-                    lastRemoteNewestPendingId?.let { newestPendingId <= it } == true
+                    (lastRemoteNewestPendingId?.let { newestPendingId <= it } == true || staleSlowWindow)
                 ) {
-                    retryStartId = repairStart()
+                    // A restart must not spend its first request on stale walking noise
+                    // while a precise, fully anchored driving turn is already available.
+                    retryStartId = repairStart(onlyAnchored = staleSlowWindow)
                     if (retryStartId != null) window = repository.loadMatchingWindow(
                         repairLimit(), retryGapStartId = retryStartId)
                 }
