@@ -16,7 +16,7 @@ import { competitionConfig, createCompetition } from "./competition.mjs";
 import { createFriends } from "./friends.mjs";
 import { createNotifications, createFcmSender } from "./notifications.mjs";
 import { createRequestMaintenance } from "./maintenance.mjs";
-import { RATE_LIMIT_SQL, RATE_LIMIT_SESSION_SQL, LOGIN_WITH_USER_SQL } from "./rate-limits.mjs";
+import { RATE_LIMIT_SQL, RATE_LIMIT_SESSION_SQL, RATE_LIMIT_PROFILE_SQL, RATE_LIMIT_LOGOUT_SQL, LOGIN_WITH_USER_SQL } from "./rate-limits.mjs";
 import { EvidenceError } from './scoring.mjs';
 
 const { Pool } = pg;
@@ -508,11 +508,17 @@ async function handle(req, res) {
   }
 
   if (req.method === "GET" && url.pathname === "/v1/me") {
-    const user = await authenticatedUser(req, true);
-    if (!user) return send(res, 401, { error: "Authentication required." });
+    const token = bearerToken(req);
+    if (!token) return send(res, 401, { error: "Authentication required." });
+    await prepareDatabase();
+    const { rows } = await pool.query(RATE_LIMIT_PROFILE_SQL,
+      ["profile-ip", opaqueRateKey("profile-ip", ip), 60_000, 240, hashSessionToken(token)]);
+    const profile = rows[0];
+    if (!profile?.allowed) return send(res, 429, { error: "Try again later." });
+    if (!profile.username_display) return send(res, 401, { error: "Authentication required." });
     return send(res, 200, {
-      username: user.username_display,
-      leaderboard_visible: user.leaderboard_visible
+      username: profile.username_display,
+      leaderboard_visible: profile.leaderboard_visible
     });
   }
 
@@ -621,7 +627,9 @@ async function handle(req, res) {
     const token = bearerToken(req);
     if (token) {
       await prepareDatabase();
-      await pool.query("DELETE FROM sessions WHERE token_hash = $1", [hashSessionToken(token)]);
+      const { rows } = await pool.query(RATE_LIMIT_LOGOUT_SQL,
+        ["logout-ip", opaqueRateKey("logout-ip", ip), 60_000, 120, hashSessionToken(token)]);
+      if (!rows[0]?.allowed) return send(res, 429, { error: "Try again later." });
     }
     return send(res, 200, { ok: true });
   }
