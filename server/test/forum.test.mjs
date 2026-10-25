@@ -163,8 +163,11 @@ test('purchase verification outages preserve existing paid access and receipt st
     return true;
   }});
   await forum.purchase(a,'receipt');
+  const profileBefore=(await pool.query('SELECT plus_active,xmin::text AS version FROM forum_profiles WHERE user_id=$1',[a.id])).rows[0];
   assert.deepEqual(await createForum(pool,{...options,moderate:null}).purchase(a,'receipt'),{plus:true},
     'Temporarily disabled posting must still allow verification of an existing purchase');
+  const profileAfter=(await pool.query('SELECT plus_active,xmin::text AS version FROM forum_profiles WHERE user_id=$1',[a.id])).rows[0];
+  assert.deepEqual(profileAfter,profileBefore,'Repeated verified purchases do not rewrite an unchanged entitlement profile');
   const refreshed=(await pool.query('SELECT active,checked_at FROM forum_purchases')).rows[0];
   outage=true;
   await assert.rejects(forum.purchase(a,'receipt'),e=>e.status===503);
