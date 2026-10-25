@@ -110,6 +110,7 @@ object OptionalNotifications {
     }
     fun setFriendsEnabled(context: Context, enabled: Boolean) {
         prefs(context).edit().putBoolean("friends", enabled).commit()
+        if (!enabled) context.getSystemService(NotificationManager::class.java).cancel(9101)
         updatePushPreference(context)
     }
     fun setFriendPostsEnabled(context: Context, enabled: Boolean) {
