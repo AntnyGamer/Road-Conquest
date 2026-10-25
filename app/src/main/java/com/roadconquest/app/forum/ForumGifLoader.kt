@@ -147,16 +147,21 @@ internal class GifByteCache {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ByteArray>?) = size > 4
     }
     private val gates = HashMap<String, Gate>()
+    private var generation = 0L
 
     fun getOrLoad(digest: String, download: () -> ByteArray): ByteArray {
-        val gate = synchronized(values) {
-            gates.getOrPut(digest) { Gate() }.also { it.users++ }
+        val (gate, expectedGeneration) = synchronized(values) {
+            gates.getOrPut(digest) { Gate() }.also { it.users++ } to generation
         }
         try {
             return synchronized(gate.monitor) {
-                synchronized(values) { values[digest] } ?: download().also { bytes ->
-                    synchronized(values) { values[digest] = bytes }
-                }
+                synchronized(values) { values[digest]?.takeIf { generation == expectedGeneration } }
+                    ?: download().also { bytes ->
+                        synchronized(values) {
+                            // A closed screen must not be repopulated by late downloads.
+                            if (generation == expectedGeneration) values[digest] = bytes
+                        }
+                    }
             }
         } finally {
             synchronized(values) {
@@ -165,5 +170,5 @@ internal class GifByteCache {
         }
     }
 
-    fun clear() = synchronized(values) { values.clear() }
+    fun clear() = synchronized(values) { generation++; values.clear() }
 }
