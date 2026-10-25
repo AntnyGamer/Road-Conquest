@@ -1,6 +1,7 @@
 package com.roadconquest.app
 
 import com.roadconquest.app.util.MeasurementUnits
+import com.roadconquest.app.util.StatsText
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -44,6 +45,7 @@ class MeasurementUnitsTest {
             val us = MeasurementUnits.current()
             assertSame(us, MeasurementUnits.current())
             assertEquals("164 ft", us.distance(50.0))
+            assertEquals("Distance not recorded", StatsText.tripDistance(0.0))
             Locale.setDefault(Locale.CANADA)
             val metric = MeasurementUnits.current()
             assertNotSame(us, metric)

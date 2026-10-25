@@ -25,12 +25,14 @@ class TripHistoryRepositoryTest {
         insert(5_000_000, 8.0, 40.0, 30.0)
         insert(7_000_000, 8.0, 3.0, 12.0)
         insert(9_000_000, 8.0, 3.0, 0.0)
-        val trips = TripHistoryRepository(context).recentTrips(1)
-        assertEquals(1, trips.size)
-        assertEquals(7_000_000L, trips.single().startedAt)
-        assertEquals(12.0, trips.single().distanceMeters, 0.0)
+        insert(11_000_000, 0.0, 3.0, 0.0)
+        val trips = TripHistoryRepository(context).recentTrips(2)
+        // Legacy driving history can have no computed distance. Preserve its
+        // replay/export when speed evidence exists, even with a zero total.
+        assertEquals(listOf(9_000_000L, 7_000_000L), trips.map { it.startedAt })
+        assertEquals(listOf(0.0, 12.0), trips.map { it.distanceMeters })
         db.rawQuery("SELECT COUNT(*) FROM track_points", null).use {
-            assertTrue(it.moveToFirst()); assertEquals(10, it.getInt(0))
+            assertTrue(it.moveToFirst()); assertEquals(12, it.getInt(0))
         }
     }
 

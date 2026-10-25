@@ -210,6 +210,20 @@ class TrackingRepositoryTest {
         assertEquals(ids[9], repository.newestEligibleAnchoredGapStartId())
     }
 
+    @Test fun aStoplightInsideAnAnchoredTurnDoesNotExcludeTheWholeGap() {
+        val seconds = listOf(0L, 2, 4, 6, 68, 70, 72, 74, 76, 78)
+        val ids = seconds.mapIndexed { index, second ->
+            point(1_000_000L + second * 1000, lat = 40.0 + index * 0.00007)
+        }
+        repository.readableDatabase().execSQL("UPDATE track_points SET speed_mps=0 WHERE id IN (?,?)",
+            arrayOf(ids[3], ids[4]))
+        repository.markMatched(listOf(ids.first(), ids.last()))
+        assertEquals(ids[1], repository.newestEligibleAnchoredGapStartId())
+        val window = repository.loadMatchingWindow(limit = 25, retryGapStartId = ids[1])
+        assertEquals(ids, window.points.map { it.id })
+        assertEquals(ids.subList(1, 9).toSet(), window.markableIds)
+    }
+
     @Test fun newestAnchoredMultiPointGapWinsOverHundredsOfOlderIsolatedFixes() {
         // The October 10 export has 319 old isolated unmatched fixes ahead of
         // the six/eight-point intersections. Prioritize the latest recoverable

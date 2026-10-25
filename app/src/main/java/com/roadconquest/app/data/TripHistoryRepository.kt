@@ -57,7 +57,7 @@ class TripHistoryRepository(context: Context) {
             // Small walking/GPS-scatter groups used to fill the list with 0.0 mi
             // drives. Keep short genuine drives with credible speed evidence.
             // This only filters the list: all original fixes remain in the backup.
-            if (count >= 2 && lastTime >= firstTime && distance > 0.0 &&
+            if (count >= 2 && lastTime >= firstTime &&
                 (distance >= 80.4672 || hasDrivingSpeed)) {
                 output += SavedTrip(firstId, lastId, firstTime, lastTime, count, distance, generation)
             }

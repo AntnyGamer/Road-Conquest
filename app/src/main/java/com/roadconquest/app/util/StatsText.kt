@@ -8,7 +8,8 @@ import java.util.Locale
 
 object StatsText {
     /** Short genuine drives should not round down to a misleading 0.0 miles. */
-    fun tripDistance(meters: Double): String = MeasurementUnits.current().distance(meters)
+    fun tripDistance(meters: Double): String = if (meters > 0.0)
+        MeasurementUnits.current().distance(meters) else "Distance not recorded"
 
     /** Two compact, clearly labeled categories on top of the map. */
     fun mapOverview(context: Context, summary: DataSummary, tiles: Long): String {
