@@ -480,6 +480,12 @@ class SettingsActivity : Activity() {
         }
         val themeButton = findViewById<Button>(R.id.uiThemeButton)
         themeButton.text = getString(R.string.ui_theme_label, Prefs.uiTheme(this).label)
+        themeButton.setCompoundDrawablesRelativeWithIntrinsicBounds(
+            when (Prefs.uiTheme(this)) {
+                UiTheme.LIGHT -> R.drawable.ic_appearance
+                UiTheme.DARK -> R.drawable.ic_appearance_moon
+                UiTheme.SYSTEM -> R.drawable.ic_appearance_auto
+            }, 0, 0, 0)
         themeButton.setOnClickListener {
             val themes = UiTheme.entries
             AlertDialog.Builder(this).setTitle("Appearance")
