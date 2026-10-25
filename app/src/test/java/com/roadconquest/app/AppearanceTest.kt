@@ -78,6 +78,30 @@ class AppearanceTest {
         }
     }
 
+    @Test fun mapStyleIconUpdatesForTheSelectedAppearance() {
+        val app = RuntimeEnvironment.getApplication()
+        val icons = mutableListOf<android.graphics.Bitmap>()
+        try {
+            for (theme in listOf(UiTheme.LIGHT, UiTheme.DARK)) {
+                Prefs.setUiTheme(app, theme)
+                val controller = Robolectric.buildActivity(SettingsActivity::class.java).create()
+                try {
+                    val button = controller.get().findViewById<Button>(R.id.mapStyleButton)
+                    val drawable = requireNotNull(button.compoundDrawablesRelative[0])
+                    val bitmap = android.graphics.Bitmap.createBitmap(
+                        drawable.intrinsicWidth, drawable.intrinsicHeight, android.graphics.Bitmap.Config.ARGB_8888)
+                    drawable.setBounds(0, 0, bitmap.width, bitmap.height)
+                    drawable.draw(android.graphics.Canvas(bitmap))
+                    icons.add(bitmap)
+                } finally { controller.destroy() }
+            }
+            assertFalse("The Settings map icon must change for dark appearance", icons[0].sameAs(icons[1]))
+        } finally {
+            icons.forEach { it.recycle() }
+            Prefs.setUiTheme(app, UiTheme.SYSTEM)
+        }
+    }
+
     @Test fun settingsCanReplayTheTourAndChangeExitConfirmationWithoutResettingProgress() {
         val controller = Robolectric.buildActivity(SettingsActivity::class.java).create().start().resume()
         try {
