@@ -314,7 +314,7 @@ async function handle(req, res) {
       const key = String(user.id);
       const { rows } = await pool.query(RATE_LIMIT_PAIR_SQL, [
         'forum-write', opaqueRateKey('forum-write', key), 60_000, 60,
-        specialBucket, opaqueRateKey(specialBucket, key), 60_000, reacting ? 20 : 5
+        specialBucket, opaqueRateKey(specialBucket, key), 60_000, reacting ? 30 : 5
       ]);
       permitted = rows[0]?.allowed === true;
     } else {
