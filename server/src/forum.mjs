@@ -294,10 +294,15 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
       const item = notification.oneTimeProductNotification || notification.voidedPurchaseNotification;
       if (!item || (notification.oneTimeProductNotification ? item.sku !== FORUM_PRODUCT : item.productType !== 2)) return { ok: true };
       if (typeof item.purchaseToken !== 'string' || !item.purchaseToken.length || item.purchaseToken.length > 4096) throw new EvidenceError('Invalid purchase notification.', 400);
-      if ((await pool.query('SELECT 1 FROM forum_billing_events WHERE id=$1', [id])).rowCount) return { ok: true };
+      // Look up the replay receipt and account ownership in one database round
+      // trip. A duplicate event must never reverify a purchase with Google Play.
       const digest = purchaseHash(item.purchaseToken);
-      const found = await pool.query('SELECT user_id FROM forum_purchases WHERE token_hash=$1', [digest]);
-      if (found.rowCount) await this.purchase({ id: found.rows[0].user_id }, item.purchaseToken);
+      const { rows: [lookup] } = await pool.query(`SELECT
+        EXISTS(SELECT 1 FROM forum_billing_events WHERE id=$1) AS processed,
+        (SELECT user_id FROM forum_purchases WHERE token_hash=$2) AS user_id`,
+        [id, digest]);
+      if (lookup.processed) return { ok: true };
+      if (lookup.user_id != null) await this.purchase({ id: lookup.user_id }, item.purchaseToken);
       // The insert and age cleanup share one database round trip. They touch
       // disjoint rows because an incoming notification is never 30 days old.
       await pool.query(`WITH recorded AS (
