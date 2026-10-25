@@ -2,6 +2,7 @@ package com.roadconquest.app
 
 import android.app.Application
 import android.app.AlarmManager
+import android.app.NotificationManager
 import android.Manifest
 import com.google.firebase.FirebaseApp
 import com.roadconquest.app.account.AccountStore
@@ -90,6 +91,17 @@ class OptionalServicesTest {
         OptionalNotifications.setFriendPostsEnabled(app, false)
         assertFalse(OptionalNotifications.friendPostsEnabled(app))
         assertNull(OptionalNotifications.prepareBinding(app, "account-session"))
+    }
+
+    @Test fun switchingOffFriendRequestsDismissesAlreadyDisplayedAlert() {
+        val app = RuntimeEnvironment.getApplication()
+        val manager = app.getSystemService(NotificationManager::class.java)
+        OptionalNotifications.post(app, false)
+        assertTrue(manager.activeNotifications.any { it.id == 9101 })
+        OptionalNotifications.setFriendsEnabled(app, false)
+        assertFalse(OptionalNotifications.friendsEnabled(app))
+        assertTrue(OptionalNotifications.friendPostsEnabled(app))
+        assertTrue(manager.activeNotifications.none { it.id == 9101 })
     }
 
     @Test fun clearingLocalDataDisablesEveryNotificationAndCancelsWeeklyReminder() {
