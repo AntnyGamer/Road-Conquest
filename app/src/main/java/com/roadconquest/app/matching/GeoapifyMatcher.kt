@@ -13,7 +13,8 @@ import kotlin.math.*
 /** Geoapify's contract is independent of the network provider. No API key is embedded in Android. */
 class GeoapifyMatcher(
     private val origin: String,
-    private val health: ProviderHealth = ProviderHealth.shared
+    private val health: ProviderHealth = ProviderHealth.shared,
+    now: () -> Long = System::currentTimeMillis
 ) : RoadMatcher {
     companion object {
         const val MAX_MATCH_POINTS = 200
@@ -28,9 +29,7 @@ class GeoapifyMatcher(
     private val validator = RoadGeometryValidator()
     override var lastCallUsedNetwork = false
         private set
-    private var cachedRequest: String? = null
-    private var cachedBody: String? = null
-    private var cachedAt = 0L
+    private val responses = ExactMatchResponseCache(now)
     override fun rateLimitRemainingMs(): Long = health.remaining(providerId)
 
     // Reject corrupt/out-of-range fixes before JSONObject serializes doubles:
@@ -55,10 +54,9 @@ class GeoapifyMatcher(
 
     @Synchronized override fun cachedMatch(points: List<TrackPoint>): MatchResult? {
         lastCallUsedNetwork = false
-        val request = cachedRequest ?: return null
-        if (!validPoints(points) || System.currentTimeMillis() - cachedAt !in 0L..900_000L) return null
-        if (request != payload(points)) return null
-        return runCatching { parse(requireNotNull(cachedBody), points) }.getOrNull()
+        if (responses.isEmpty || !validPoints(points)) return null
+        val body = responses.get(payload(points)) ?: return null
+        return runCatching { parse(body, points) }.getOrNull()
     }
 
     @Synchronized override fun match(points: List<TrackPoint>): MatchResult? {
@@ -66,8 +64,8 @@ class GeoapifyMatcher(
         lastCallUsedNetwork = false
         if (!validPoints(points)) return null
         val payload = payload(points)
-        if (cachedRequest == payload && System.currentTimeMillis() - cachedAt in 0L..900_000L) {
-            return runCatching { parse(requireNotNull(cachedBody), points) }.getOrNull()
+        responses.get(payload)?.let { body ->
+            return runCatching { parse(body, points) }.getOrNull()
         }
         if (rateLimitRemainingMs() > 0) { unavailable = true; return null }
         val payloadBytes = payload.toByteArray(Charsets.UTF_8)
@@ -98,9 +96,7 @@ class GeoapifyMatcher(
             }
             val body = connection.inputStream.use { readBoundedUtf8(it, 4 * 1024 * 1024) }
             val result = parse(body, points)
-            if (body.length <= 256_000 && result != null) {
-                cachedRequest = payload; cachedBody = body; cachedAt = System.currentTimeMillis()
-            }
+            if (result != null) responses.put(payload, body)
             result
         } catch (_: Exception) {
             unavailable = true
