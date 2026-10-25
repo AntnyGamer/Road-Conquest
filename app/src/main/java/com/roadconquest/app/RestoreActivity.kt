@@ -15,6 +15,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import com.roadconquest.app.export.DataImporter
 import com.roadconquest.app.util.Appearance
+import com.roadconquest.app.util.MeasurementUnits
 import android.graphics.Typeface
 import com.roadconquest.app.util.ForegroundSession
 import java.util.Locale
@@ -61,7 +62,7 @@ class RestoreActivity : Activity() {
             setPadding(0, 0, 0, (12 * dp).toInt())
         })
         root.addView(TextView(this).apply {
-            text = "Choose a Road Conquest backup ZIP to restore trips, roads, mileage, fog, discoveries, points and garage items.\n\nThe file is checked before confirmation, and your current progress is backed up. Tracking and verified sharing remain off afterward.\n\nSign in and restore Google Play VIP separately. Imported trips do not count toward verified rankings."
+            text = "Choose a Road Conquest backup ZIP to restore trips, roads, distance, fog, discoveries, points and garage items.\n\nThe file is checked before confirmation, and your current progress is backed up. Tracking and verified sharing remain off afterward.\n\nSign in and restore Google Play VIP separately. Imported trips do not count toward verified rankings."
             textSize = 15f
             setTextColor(Appearance.color(this@RestoreActivity, R.attr.rcTextSecondary))
             setBackgroundResource(R.drawable.settings_card_background)
@@ -124,8 +125,8 @@ class RestoreActivity : Activity() {
                     status.text = "Backup validated."
                     val summary = backup.summary
                     val message = String.format(Locale.getDefault(),
-                        "Backup: %d roads • %.2f mi • %d GPS fixes\nPoints: %d\nExported: %s\n\nReplace this phone's current progress? A recovery backup is saved before replacement. Tracking and verified sharing will be turned off.",
-                        summary.roadsUnlockedCount, summary.distanceMeters / 1609.344, summary.trackPointCount,
+                        "Backup: %d roads • %s • %d GPS fixes\nPoints: %d\nExported: %s\n\nReplace this phone's current progress? A recovery backup is saved before replacement. Tracking and verified sharing will be turned off.",
+                        summary.roadsUnlockedCount, MeasurementUnits.current().longDistance(summary.distanceMeters, decimals = 2), summary.trackPointCount,
                         backup.metadata.getLong("points_balance"), backup.metadata.getString("exported_at"))
                     AlertDialog.Builder(this).setTitle("Replace device progress?").setMessage(message)
                         .setNegativeButton("Cancel", null)

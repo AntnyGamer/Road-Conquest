@@ -403,7 +403,7 @@ class SettingsActivity : Activity() {
         val dialog = AlertDialog.Builder(this)
             .setTitle("Delete local data?")
             .setMessage(
-                "This permanently deletes saved Road Conquest progress on this phone, including trips, mileage, roads, explored places, points and cosmetics bought with points. Your cloud account and lifetime VIP purchase in Google Play remain. VIP can be restored through Google Play if needed. Tracking stops and verified-drive sharing turns off. Exported files must be deleted separately. Deleted progress cannot be recovered without an existing backup.\n\nType exactly:\n$DELETE_LOCAL_DATA_CONFIRMATION"
+                "This permanently deletes saved Road Conquest progress on this phone, including trips, distance, roads, explored places, points and cosmetics bought with points. Your cloud account and lifetime VIP purchase in Google Play remain. VIP can be restored through Google Play if needed. Tracking stops and verified-drive sharing turns off. Exported files must be deleted separately. Deleted progress cannot be recovered without an existing backup.\n\nType exactly:\n$DELETE_LOCAL_DATA_CONFIRMATION"
             )
             .setView(fields)
             .setNegativeButton("Cancel", null)

@@ -89,6 +89,19 @@ class MapRenderingDeviceTest {
                 assertTrue(map.style!!.getLayer("roadconquest-fog-raster") is RasterLayer)
                 assertTrue(map.style!!.getSource("roadconquest-car") is GeoJsonSource)
                 assertTrue(map.style!!.getLayer("roadconquest-car-symbol") is SymbolLayer)
+
+                // Historical ages exercise real marker transitions without sleeping or
+                // moving its coordinates. A mode change must update a stationary source too.
+                renderer.clearCurrentLocation()
+                renderer.updateCar(car.latitude, car.longitude, 15.0, 18_000L, 1.4f, 3f)
+                renderer.updateCar(car.latitude, car.longitude, 15.0, 5_000L, 1.4f, 3f)
+                val marker = map.style!!.getLayer("roadconquest-car-symbol") as SymbolLayer
+                assertEquals("Walking marker stays upright", 0f, marker.iconRotate.value!!, 0f)
+                assertEquals("viewport", marker.iconRotationAlignment.value)
+                renderer.updateCar(car.latitude, car.longitude, 15.0, 3_000L, 8f, 3f)
+                renderer.updateCar(car.latitude, car.longitude, 15.0, 0L, 8f, 3f)
+                assertEquals("Driving restores the car's heading", 15f, marker.iconRotate.value!!, 0f)
+                assertEquals("map", marker.iconRotationAlignment.value)
             }
 
             fun moveAndAssert(target: LatLng, zoom: Double, bearing: Double) {
