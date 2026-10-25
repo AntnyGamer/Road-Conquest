@@ -67,7 +67,8 @@ class MapTourDeviceTest {
                     tour(activity).findViewById<Button>(R.id.tourSkipButton).performClick()
                     assertTrue(Prefs.isTourHandled(activity))
                 }
-                assertTrue(instrumentation.uiAutomation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK))
+                // The same foreground Back-key dispatch also verifies the exit prompt.
+                instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
                 val exitDeadline = SystemClock.elapsedRealtime() + 5_000L
                 var prompted = false
                 do {
