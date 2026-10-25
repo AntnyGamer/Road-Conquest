@@ -141,7 +141,7 @@ class ForumTest {
                 assertEquals("Sign in to post",compose.text.toString()); assertTrue(compose.isEnabled)
                 assertEquals(View.VISIBLE,activity.findViewById<View>(R.id.forumEmpty).visibility)
                 activity.renderPage(page(viewer(next=Instant.now().plusSeconds(540).toString())))
-                assertFalse(compose.isEnabled); assertTrue(status.text.toString().contains("Next post"))
+                assertFalse(compose.isEnabled); assertTrue(status.text.toString().matches(Regex("You can post again in 9 minute[s]?\\.")))
                 activity.renderPage(page(viewer(until=Instant.now().plusSeconds(3600).toString())))
                 assertFalse(compose.isEnabled); assertTrue(status.text.toString().contains("mute"))
                 activity.renderPage(page(viewer(banned=true)))
@@ -169,6 +169,28 @@ class ForumTest {
             assertNotNull(row.findViewById<Button>(R.id.postLike).contentDescription)
             assertEquals(View.GONE,row.findViewById<View>(R.id.postGif).visibility)
         } finally { controller.destroy() }
+    }
+
+    @Test fun postCardsAreOpaqueInLightDarkAndGold() {
+        val app = RuntimeEnvironment.getApplication()
+        for ((theme, gold) in listOf(UiTheme.LIGHT to false, UiTheme.DARK to false, UiTheme.DARK to true)) {
+            Prefs.setUiTheme(app, theme)
+            Prefs.setGoldUiEnabled(app, gold)
+            val controller = Robolectric.buildActivity(ForumActivity::class.java).create()
+            try {
+                val activity = controller.get()
+                val post = ForumClient.Post("id","Driver","Road update",null,null,Instant.now().toString(),
+                    false,false,emptyMap(),null)
+                activity.renderPage(page(viewer()).copy(posts=listOf(post)))
+                val list = activity.findViewById<ListView>(R.id.forumList)
+                val card = list.adapter.getView(0,null,list)
+                val color = requireNotNull((card.background as android.graphics.drawable.GradientDrawable).color).defaultColor
+                assertEquals("Forum post cards must be opaque in $theme (gold=$gold)",255,android.graphics.Color.alpha(color))
+            } finally {
+                controller.destroy()
+                Prefs.setGoldUiEnabled(app,false)
+            }
+        }
     }
 
     @Test fun serverPagesParseOptionalCooldownAndRejectOversizedPages() {
