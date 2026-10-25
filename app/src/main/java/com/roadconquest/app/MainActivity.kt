@@ -7,6 +7,7 @@ import android.app.AlertDialog
 import android.app.Dialog
 import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.res.ColorStateList
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
@@ -299,6 +300,7 @@ class MainActivity : Activity() {
         }
 
         val settingsButton = findViewById<ImageButton>(R.id.settingsButton)
+        settingsButton.imageTintList = ColorStateList.valueOf(Appearance.mapSettingsIconColor(this))
         val centerButton = findViewById<ImageButton>(R.id.centerCarButton)
         val overlayButton = findViewById<ImageButton>(R.id.overlayButton)
         val controlPanel = findViewById<View>(R.id.controlPanel)

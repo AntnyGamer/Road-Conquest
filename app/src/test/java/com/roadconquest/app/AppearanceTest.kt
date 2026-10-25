@@ -175,6 +175,37 @@ class AppearanceTest {
         } finally { controller.pause().stop().destroy() }
     }
 
+    @Test fun appearanceIconReflectsLightDarkOrFollowPhoneChoice() {
+        val app = RuntimeEnvironment.getApplication()
+        val icons = listOf(
+            UiTheme.LIGHT to R.drawable.ic_appearance,
+            UiTheme.DARK to R.drawable.ic_appearance_moon,
+            UiTheme.SYSTEM to R.drawable.ic_appearance_auto
+        )
+        for ((theme, icon) in icons) {
+            Prefs.setUiTheme(app, theme)
+            val controller = Robolectric.buildActivity(SettingsActivity::class.java).create()
+            try {
+                val appearance = controller.get().findViewById<Button>(R.id.uiThemeButton)
+                assertEquals(theme.label, Prefs.uiTheme(controller.get()).label)
+                assertEquals(icon, shadowOf(appearance.compoundDrawablesRelative[0]).createdFromResId)
+            } finally { controller.destroy() }
+        }
+    }
+
+    @Test fun mapSettingsGearTintChangesWithTheSelectedAppearance() {
+        val app = RuntimeEnvironment.getApplication()
+        for ((theme, attribute) in listOf(
+            UiTheme.LIGHT to R.attr.rcTextPrimary,
+            UiTheme.DARK to R.attr.rcAccent,
+            UiTheme.SYSTEM to R.attr.rcTextSecondary
+        )) {
+            Prefs.setUiTheme(app, theme)
+            val context = ContextThemeWrapper(Appearance.wrap(app), R.style.Theme_RoadConquest)
+            assertEquals(Appearance.color(context, attribute), Appearance.mapSettingsIconColor(context))
+        }
+    }
+
     @Test fun privacyPageOpensFromSettingsWithoutAThirdDeleteButton() {
         val controller = Robolectric.buildActivity(SettingsActivity::class.java).create().start().resume()
         try {

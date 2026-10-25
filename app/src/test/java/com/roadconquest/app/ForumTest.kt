@@ -1,5 +1,7 @@
 package com.roadconquest.app
 
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.view.View
 import android.widget.Button
 import android.widget.CheckBox
@@ -141,7 +143,9 @@ class ForumTest {
                 assertEquals("Sign in to post",compose.text.toString()); assertTrue(compose.isEnabled)
                 assertEquals(View.VISIBLE,activity.findViewById<View>(R.id.forumEmpty).visibility)
                 activity.renderPage(page(viewer(next=Instant.now().plusSeconds(540).toString())))
-                assertFalse(compose.isEnabled); assertTrue(status.text.toString().contains("Next post"))
+                assertFalse(compose.isEnabled); assertEquals("You can post again in 9 minutes.", status.text.toString())
+                activity.renderPage(page(viewer(next=Instant.now().plusSeconds(55).toString())))
+                assertEquals("You can post again in 1 minute.", status.text.toString())
                 activity.renderPage(page(viewer(until=Instant.now().plusSeconds(3600).toString())))
                 assertFalse(compose.isEnabled); assertTrue(status.text.toString().contains("mute"))
                 activity.renderPage(page(viewer(banned=true)))
@@ -169,6 +173,32 @@ class ForumTest {
             assertNotNull(row.findViewById<Button>(R.id.postLike).contentDescription)
             assertEquals(View.GONE,row.findViewById<View>(R.id.postGif).visibility)
         } finally { controller.destroy() }
+    }
+
+    @Test fun postsAndComposerAreFullyOpaqueInLightDarkAndGold() {
+        for ((theme, gold) in listOf(UiTheme.LIGHT to false, UiTheme.DARK to false, UiTheme.DARK to true)) {
+            val app = RuntimeEnvironment.getApplication()
+            Prefs.setUiTheme(app, theme)
+            Prefs.setGoldUiEnabled(app, gold)
+            val controller = Robolectric.buildActivity(ForumActivity::class.java).create()
+            try {
+                val activity = controller.get()
+                val post = ForumClient.Post("id", "Explorer", "An open road", null, null,
+                    Instant.now().toString(), false, false, emptyMap(), null)
+                activity.renderPage(page(viewer()).copy(posts = listOf(post)))
+                val list = activity.findViewById<ListView>(R.id.forumList)
+                val card = list.adapter.getView(0, null, list)
+                assertEquals(255, Color.alpha((card.background as GradientDrawable).color!!.defaultColor))
+                ForumActivity::class.java.getDeclaredMethod("showComposer").apply { isAccessible = true }.invoke(activity)
+                val dialog = requireNotNull(ShadowDialog.getLatestDialog())
+                val panel = dialog.findViewById<EditText>(R.id.forumDraftText).parent as View
+                assertEquals(255, Color.alpha((panel.background as GradientDrawable).color!!.defaultColor))
+                dialog.dismiss()
+            } finally {
+                controller.destroy()
+                Prefs.setGoldUiEnabled(app, false)
+            }
+        }
     }
 
     @Test fun serverPagesParseOptionalCooldownAndRejectOversizedPages() {

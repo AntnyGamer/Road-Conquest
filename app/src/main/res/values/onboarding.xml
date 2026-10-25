@@ -15,7 +15,7 @@
     <string name="tour_demo_action">Try a discovery</string>
     <string name="tour_demo_reset">Reset preview</string>
     <string name="tour_demo_hint">A little preview. No location needed.</string>
-    <string name="tour_demo_revealed">Entering a new square clears its fog. This preview saves no progress.</string>
+    <string name="tour_demo_revealed">Driving reveals two more squares with a soft fog fade. This preview saves no progress.</string>
     <string name="tour_tracking_title">Ready when you are.</string>
     <string name="tour_tracking_body">This is your tracking control. Allow Precise location to record roads. Automatic tracking is the default. Choose manual tracking in Settings if you prefer.\n\nSet up while parked. Stop tracking from its notification.</string>
     <string name="tour_layers_title">Find your next discovery.</string>

@@ -231,7 +231,7 @@ class ForumActivity : Activity() {
             restricted(viewer) -> "Forum mute ends " + date(viewer!!.mutedUntil!!) + ". You can still read posts."
             !current.posting -> "Posting is temporarily unavailable. You can still read the community."
             viewer == null -> "Explore together. Sign in when you want to join in."
-            wait > 0 -> "Next post in ${(wait + 59) / 60} min · One post every 10 minutes."
+            wait > 0 -> resources.getQuantityString(R.plurals.forum_post_again_minutes, ((wait + 59) / 60).toInt(), (wait + 59) / 60)
             viewer.strikes > 0 -> "Signed in as ${viewer.username} · ${viewer.strikes} moderation violation(s)."
             else -> "Share discoveries. Find inspiration. Be kind."
         }
@@ -297,12 +297,21 @@ class ForumActivity : Activity() {
         composer?.findViewById<EditText>(R.id.forumDraftText)?.let { draftText = it.text.toString() }
         composer?.findViewById<EditText>(R.id.forumDraftGif)?.let { draftGif = it.text.toString() }
     }
+    private fun forumPanelBackground(radiusDp: Int, highlighted: Boolean = false) = GradientDrawable().apply {
+        shape = GradientDrawable.RECTANGLE
+        cornerRadius = dp(radiusDp).toFloat()
+        // Standard panel colors are intentionally translucent over maps. Forum content must be opaque.
+        setColor(Appearance.color(this@ForumActivity, R.attr.rcPanelBg) or Color.BLACK)
+        setStroke(dp(1), Appearance.color(this@ForumActivity,
+            if (highlighted) R.attr.rcAccent else R.attr.rcOutline))
+    }
+
     private fun panel(title: String): Pair<Dialog,LinearLayout> {
         val dialog = Dialog(this)
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; setPadding(dp(22),dp(22),dp(22),dp(22))
-            setBackgroundResource(R.drawable.tour_card_background)
+            background = forumPanelBackground(28)
         }
         dialog.setContentView(android.widget.ScrollView(this).apply { addView(content) })
         dialog.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
@@ -521,11 +530,7 @@ class ForumActivity : Activity() {
                 })
             }
             val post = posts[position]
-            view.background = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE; cornerRadius = dp(22).toFloat()
-                setColor(Appearance.color(this@ForumActivity,R.attr.rcPanelBg))
-                setStroke(dp(1),Appearance.color(this@ForumActivity,if (post.highlighted) R.attr.rcAccent else R.attr.rcOutline))
-            }
+            view.background = forumPanelBackground(22, post.highlighted)
             view.findViewById<TextView>(R.id.postAuthor).text = post.username
             view.findViewById<TextView>(R.id.postDate).text = date(post.createdAt)
             view.findViewById<TextView>(R.id.postBody).apply { text = post.text; visibility = if (post.text.isEmpty()) View.GONE else View.VISIBLE }

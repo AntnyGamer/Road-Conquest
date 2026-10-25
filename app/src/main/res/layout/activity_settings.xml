@@ -71,7 +71,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:text="Appearance: Use phone setting"
-                android:drawableStart="@drawable/ic_appearance"
+                android:drawableStart="@drawable/ic_appearance_auto"
                 android:drawableTint="?attr/rcAccent"
                 android:drawablePadding="12dp" />
 
