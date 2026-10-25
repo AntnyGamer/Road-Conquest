@@ -6,7 +6,10 @@ import android.content.Context
 import android.graphics.BitmapShader
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.ComposeShader
+import android.graphics.LinearGradient
 import android.graphics.Paint
+import android.graphics.PorterDuff
 import android.graphics.Path
 import android.graphics.Rect
 import android.graphics.RectF
@@ -221,8 +224,29 @@ class MapTour(
 class DiscoveryPreview(context: Context, attrs: AttributeSet? = null) : View(context, attrs) {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val clip = Path()
-    private val fogPaint = Paint(Paint.FILTER_BITMAP_FLAG).apply {
-        shader = BitmapShader(texture, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
+    private val fogShader = BitmapShader(texture, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
+    private val fogPaint = Paint(Paint.FILTER_BITMAP_FLAG).apply { shader = fogShader }
+    // A soft cloud transition at each new tile edge, instead of a hard checkerboard seam.
+    private val secondFog = featheredFog(112f)
+    private val thirdFog = featheredFog(208f)
+
+    private fun featheredFog(left: Float) = Paint(Paint.FILTER_BITMAP_FLAG).apply {
+        shader = ComposeShader(fogShader,
+            LinearGradient(left, 0f, left + 20f, 0f,
+                Color.TRANSPARENT, Color.WHITE, Shader.TileMode.CLAMP), PorterDuff.Mode.DST_IN)
+    }
+
+    internal companion object {
+        const val DRIVE_LENGTH = 288f
+        const val SECOND_TILE_ENTRY = 72f
+        const val THIRD_TILE_ENTRY = 216f
+        fun fadeAfterEntry(distance: Float, entry: Float, transition: Float): Float {
+            val fraction = ((distance - entry) / transition).coerceIn(0f, 1f)
+            return fraction * fraction * (3f - 2f * fraction)
+        }
+
+        // The same cloud generator as the live map; a small shared texture keeps this offline demo cheap.
+        private val texture by lazy { FogTexture.create(128) }
     }
     private val dark = Appearance.isDark(context)
     private var reveal = 0f
@@ -265,23 +289,25 @@ class DiscoveryPreview(context: Context, attrs: AttributeSet? = null) : View(con
         paint.color = if (dark) Color.rgb(66, 78, 91) else Color.WHITE
         for (x in floatArrayOf(40f, 88f, 160f, 232f, 280f)) canvas.drawLine(x, 0f, x, 148f, paint)
         for (y in floatArrayOf(2f, 50f, 98f, 146f)) canvas.drawLine(0f, y, 320f, y, paint)
-        val distance = 192f * reveal
+        val distance = DRIVE_LENGTH * reveal
         val east = distance.coerceAtMost(120f)
         val north = (distance - 120f).coerceIn(0f, 48f)
-        val lastEast = (distance - 168f).coerceAtLeast(0f)
+        val lastEast = (distance - 168f).coerceIn(0f, 120f)
         val carX = 40f + east + lastEast
         val carY = 98f - north
-        // Start in one clear, square map tile. Only crossing its edge reveals the next tile.
-        val crossing = (112f - 40f) / 192f
-        val nextTile = ((reveal - crossing) / .16f).coerceIn(0f, 1f)
+        // Three adjacent mile squares. Each clears only after the dot drives across its boundary.
+        val secondReveal = fadeAfterEntry(distance, SECOND_TILE_ENTRY, 40f)
+        val thirdReveal = fadeAfterEntry(distance, THIRD_TILE_ENTRY, 48f)
         val fogAlpha = (FogBitmapRenderer.MAX_FOG_ALPHA * 255).toInt()
         fogPaint.alpha = fogAlpha
         canvas.drawRect(0f, 0f, 320f, 26f, fogPaint)
         canvas.drawRect(0f, 122f, 320f, 148f, fogPaint)
         canvas.drawRect(0f, 26f, 16f, 122f, fogPaint)
-        canvas.drawRect(208f, 26f, 320f, 122f, fogPaint)
-        fogPaint.alpha = ((1f - nextTile) * fogAlpha).toInt()
-        canvas.drawRect(112f, 26f, 208f, 122f, fogPaint)
+        canvas.drawRect(304f, 26f, 320f, 122f, fogPaint)
+        secondFog.alpha = ((1f - secondReveal) * fogAlpha).toInt()
+        canvas.drawRect(112f, 26f, 208f, 122f, secondFog)
+        thirdFog.alpha = ((1f - thirdReveal) * fogAlpha).toInt()
+        canvas.drawRect(208f, 26f, 304f, 122f, thirdFog)
 
         // The live map keeps driven roads blue above the fog layer too.
         paint.style = Paint.Style.STROKE
@@ -300,8 +326,4 @@ class DiscoveryPreview(context: Context, attrs: AttributeSet? = null) : View(con
         canvas.restore()
     }
 
-    companion object {
-        // The same cloud generator as the live map; a small shared texture keeps this offline demo cheap.
-        private val texture by lazy { FogTexture.create(128) }
-    }
 }
