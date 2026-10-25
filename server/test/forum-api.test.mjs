@@ -58,7 +58,7 @@ test('community HTTP routes preserve public reads, account authentication, persi
       // Reaction bursts have their own 20/minute ceiling without bypassing the
       // shared forum-write budget or turning duplicate reactions into new likes.
       const reactionPath='/v1/forum/posts/'+post.body.id+'/reaction';
-      for (let index=0;index<20;index++) {
+      for (let index=0;index<30;index++) {
         const response=await call(reactionPath,'PUT',{reaction:index%2===0?'like':'love'},token);
         assert.equal(response.status,200,'Normal reactions remain available');
       }
@@ -66,8 +66,8 @@ test('community HTTP routes preserve public reads, account authentication, persi
       assert.equal(tooManyReactions.status,429,'Automated reaction bursts are throttled');
       const limits=(await admin.query("SELECT bucket,attempts FROM auth_rate_limits WHERE bucket IN ('forum-write','forum-reaction') ORDER BY bucket")).rows;
       assert.deepEqual(limits.map(x=>x.bucket),['forum-reaction','forum-write']);
-      assert.equal(Number(limits[0].attempts),21,'Saturated reaction attempts stop at the sentinel count');
-      assert.ok(Number(limits[1].attempts)>=21,'The shared forum-write budget still applies');
+      assert.equal(Number(limits[0].attempts),31,'Saturated reaction attempts stop at the sentinel count');
+      assert.ok(Number(limits[1].attempts)>=31,'The shared forum-write budget still applies');
       const reactionList=await call('/v1/forum/posts');
       assert.equal(reactionList.body.posts[0].reactions.love,1);
       assert.equal(reactionList.body.posts[0].reactions.celebrate,0);
