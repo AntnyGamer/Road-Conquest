@@ -439,8 +439,6 @@ class TripHistoryActivity : Activity() {
                 }
             }
             .setNegativeButton("Cancel", null).show()
-            .getButton(AlertDialog.BUTTON_NEGATIVE)
-            ?.setTextColor(Appearance.color(this, R.attr.rcTextPrimary))
     }
 
     @Deprecated("Uses Android document picker for direct user-controlled GPX files")

@@ -948,7 +948,7 @@ class MainActivity : Activity() {
         val choices = arrayOf("No overlay", "Countries — blue", "States and regions — purple", "Towns — green")
         val current = renderer?.placeOverlayMode() ?: Prefs.placeOverlayMode(this)
         val selected = modes.indexOf(current).coerceAtLeast(0)
-        val dialog = AlertDialog.Builder(this)
+        AlertDialog.Builder(this)
             .setTitle("Map overlay")
             .setSingleChoiceItems(choices, selected) { dialog, which ->
                 val next = modes[which]
@@ -966,13 +966,7 @@ class MainActivity : Activity() {
             }
             .setNeutralButton(if (renderer?.isNearbyExplorationVisible() == true) "Hide nearby" else "Explore nearby") { _, _ -> showNearbyExploration() }
             .setNegativeButton("Cancel", null)
-            .create()
-        dialog.setOnShowListener {
-            val textColor = Appearance.color(this, R.attr.rcTextPrimary)
-            dialog.getButton(AlertDialog.BUTTON_NEUTRAL)?.setTextColor(textColor)
-            dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(textColor)
-        }
-        dialog.show()
+            .show()
     }
 
     /** A numbered, georeferenced 5×5 mile-cell overlay, computed entirely on device. */

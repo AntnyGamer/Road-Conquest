@@ -1,7 +1,10 @@
 <resources>
+    <style name="RoadConquest.AlertDialog.Base" parent="@android:style/Theme.Material.Dialog.Alert" />
+
     <style name="Theme.RoadConquest" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:fontFamily">sans-serif</item>
         <item name="android:buttonStyle">@style/RoadConquest.Button</item>
+        <item name="android:alertDialogTheme">@style/RoadConquest.AlertDialog</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar">false</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
