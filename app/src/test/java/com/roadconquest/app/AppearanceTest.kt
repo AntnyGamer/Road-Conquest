@@ -193,6 +193,19 @@ class AppearanceTest {
         }
     }
 
+    @Test fun mapSettingsGearTintChangesWithTheSelectedAppearance() {
+        val app = RuntimeEnvironment.getApplication()
+        for ((theme, attribute) in listOf(
+            UiTheme.LIGHT to R.attr.rcTextPrimary,
+            UiTheme.DARK to R.attr.rcAccent,
+            UiTheme.SYSTEM to R.attr.rcTextSecondary
+        )) {
+            Prefs.setUiTheme(app, theme)
+            val context = ContextThemeWrapper(Appearance.wrap(app), R.style.Theme_RoadConquest)
+            assertEquals(Appearance.color(context, attribute), Appearance.mapSettingsIconColor(context))
+        }
+    }
+
     @Test fun privacyPageOpensFromSettingsWithoutAThirdDeleteButton() {
         val controller = Robolectric.buildActivity(SettingsActivity::class.java).create().start().resume()
         try {
