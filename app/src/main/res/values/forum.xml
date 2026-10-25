@@ -12,6 +12,10 @@
     <string name="forum_shared_gif">Shared GIF</string>
     <string name="forum_new_post">Share a discovery</string>
     <string name="forum_posting_unavailable">Posting unavailable</string>
+    <plurals name="forum_post_again_minutes">
+        <item quantity="one">You can post again in %d minute.</item>
+        <item quantity="other">You can post again in %d minutes.</item>
+    </plurals>
     <string name="forum_unavailable_title">Community unavailable</string>
     <string name="forum_unavailable_body">The community service is unavailable right now. Try Refresh later.</string>
     <string name="forum_plus">Forum Plus</string>
