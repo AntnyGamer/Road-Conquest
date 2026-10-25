@@ -194,3 +194,39 @@ References: [Workers caching](https://developers.cloudflare.com/workers/cache/),
 [Geoapify open tile policy](https://www.geoapify.com/map-tiles/).
 
 SQL semantics and key reuse references: [PostgreSQL writable CTEs](https://www.postgresql.org/docs/18/queries-with.html), [Node crypto KeyObjects](https://nodejs.org/download/release/v24.18.0/docs/api/crypto.html).
+
+## PR #120 follow-up
+
+The subsequent road-gap, motion-marker and regional-units work includes two
+additional optimizations. These are separate from the 28 changes released in
+PR #119.
+
+- Forum paging still reads at most 21 candidate posts to detect a next page, but
+  aggregates reactions and builds/transfers JSON for only the 20 displayed posts.
+  The extra row becomes one `has_more` boolean. The query remains one statement
+  with one database snapshot; its cursor, blocking, visibility, author highlights,
+  viewer state and reaction counts retain their existing meanings. There is one
+  extra bounded CTE over at most 21 rows in exchange for avoiding the discarded
+  post's reaction aggregation, serialization, transfer and JSON parsing.
+- An anchored-gap lookup with no previous repair cursor now performs its newest
+  scan once. Previously a failed lookup repeated the identical bounded scan.
+  When a cursor exists, the older-first lookup and newest-gap wrap remain. This
+  saves phone CPU/SQLite work; it does not change provider requests or retry order.
+
+A synthetic local PostgreSQL-WASM comparison with 30 posts of 1,200 characters
+and 800 reactions per post produced the same displayed feed. The database result
+had 20 posts instead of 21; its serialized JSON size fell from 30,412 to 28,981
+bytes. EXPLAIN ANALYZE showed 20 reaction index/heap scans of 800 rows instead of
+21. Those are fixture measurements, not a claim about production invoice savings
+or every query plan. The added database-boundary regression covers timestamp
+ties, pagination, blocked/deleted/removed posts, reactions, highlights and viewer
+state. All 16 forum tests pass locally; the full local server suite has 150 passes,
+26 native-PostgreSQL-only skips and no failures. Native PostgreSQL and Android
+checks run in CI on the PR's final commit.
+
+The follow-up rechecked matching/cache/cooldown paths, both provider gateways,
+account/session queries, friends/rankings, device registration/push delivery,
+forum/billing, boundary/population lookups and map-style reloads. Further quota,
+sampling, cache-lifetime and identity-cache changes did not meet the requested
+tradeoff standard. No production database, service setting or deployment was
+changed for this pass.

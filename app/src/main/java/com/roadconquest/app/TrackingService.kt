@@ -853,9 +853,9 @@ class TrackingService : Service(), LocationListener {
             repeat(MAX_MATCH_BATCHES_PER_RUN) { batchIndex ->
                 var priorityStartId: Long? = null
                 fun repairStart(onlyAnchored: Boolean = false): Long? {
-                    priorityStartId = repository.newestEligibleAnchoredGapStartId(
-                        beforeId = previousPriorityGapStartId
-                    ) ?: repository.newestEligibleAnchoredGapStartId()
+                    priorityStartId = previousPriorityGapStartId?.let {
+                        repository.newestEligibleAnchoredGapStartId(beforeId = it)
+                    } ?: repository.newestEligibleAnchoredGapStartId()
                     return priorityStartId ?: if (onlyAnchored) null else repository.oldestEligibleRetryId()
                 }
                 var retryStartId = when (batchIndex) {
