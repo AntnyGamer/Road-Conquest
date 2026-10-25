@@ -186,7 +186,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
-                android:text="Rankings count verified live exploration only; imports and local points do not count. Sharing live GPS requires consent."
+                android:text="Rankings count verified live exploration only. Imports and local points do not count. Sharing live GPS requires consent."
                 android:textColor="?attr/rcTextSecondary"
                 android:textSize="13sp" />
 

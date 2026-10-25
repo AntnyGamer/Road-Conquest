@@ -5,5 +5,5 @@ https://goto.arcgisonline.com/maps/World_Imagery
 https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer
 
 Labels: OpenFreeMap / OpenMapTiles / OpenStreetMap contributors.
-Label style derived from OpenFreeMap Liberty; notices are in map-credits.txt.
-Map data and imagery retain their providers' terms; the app's AGPL license covers its own source.
+Label style derived from OpenFreeMap Liberty. Notices are in map-credits.txt.
+Map data and imagery retain their providers' terms. The app's AGPL license covers its own source.

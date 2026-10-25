@@ -209,7 +209,11 @@ class ForumActivity : Activity() {
         val wait = cooldownSeconds()
         val canCompose = !busy && current?.available == true && current.posting && !restricted(viewer) && wait == 0L
         if (compose.isEnabled != canCompose) compose.isEnabled = canCompose
-        val composeLabel = if (viewer == null) "Sign in to post" else getString(R.string.forum_new_post)
+        val composeLabel = when {
+            current?.available != true && !busy -> getString(R.string.forum_posting_unavailable)
+            viewer != null || sessionToken() != null -> getString(R.string.forum_new_post)
+            else -> "Sign in to post"
+        }
         if (compose.text.toString() != composeLabel) compose.text = composeLabel
         val canPurchase = !busy && current?.available == true && viewer?.banned != true
         if (plus.isEnabled != canPurchase) plus.isEnabled = canPurchase
@@ -232,8 +236,15 @@ class ForumActivity : Activity() {
             else -> "Share discoveries. Find inspiration. Be kind."
         }
         if (status.text != statusText) status.text = statusText
-        val emptyLabel = if (loading) "One moment…" else getString(R.string.forum_empty_title)
+        val emptyLabel = when {
+            loading -> "One moment…"
+            current?.available != true -> getString(R.string.forum_unavailable_title)
+            else -> getString(R.string.forum_empty_title)
+        }
         if (emptyTitle.text.toString() != emptyLabel) emptyTitle.text = emptyLabel
+        val emptyBody = findViewById<TextView>(R.id.forumEmptyBody)
+        val emptyMessage = getString(if (!loading && current?.available != true) R.string.forum_unavailable_body else R.string.forum_empty_body)
+        if (emptyBody.text.toString() != emptyMessage) emptyBody.text = emptyMessage
         val listVisibility = if (posts.isEmpty()) View.GONE else View.VISIBLE
         if (list.visibility != listVisibility) list.visibility = listVisibility
         val emptyVisibility = if (posts.isEmpty()) View.VISIBLE else View.GONE
@@ -383,7 +394,7 @@ class ForumActivity : Activity() {
                         } else message("Posted to the community.")
                         refresh()
                     },onFailure = {
-                        message(it.message ?: "Could not submit. Try again; retries will not add another strike.")
+                        message(it.message ?: "Could not submit. Try again. Retries will not add another strike.")
                         if (it is AccountClient.ApiException && it.status in listOf(403,429)) refresh()
                     })
                 }

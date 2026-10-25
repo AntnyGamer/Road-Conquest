@@ -459,7 +459,7 @@ class TrackingService : Service(), LocationListener {
                 sendUiBroadcast(ACTION_STATS_UPDATED)
                 maybeRunMatching()
             } catch (error: Exception) {
-                Log.e("RoadConquest", "Could not save driving locations; stopping tracking", error)
+                Log.e("RoadConquest", "Could not save driving locations. Stopping tracking", error)
                 stopSelf()
             }
         }
@@ -562,7 +562,7 @@ class TrackingService : Service(), LocationListener {
                                 matchingInFlight.set(true)
                                 runMatchingBatches()
                             } catch (error: Exception) {
-                                Log.e("RoadConquest", "Final matching failed; saved GPS remains for next launch", error)
+                                Log.e("RoadConquest", "Final matching failed. Saved GPS remains for next launch", error)
                             }
                         }
                     } finally {
@@ -988,7 +988,7 @@ class TrackingService : Service(), LocationListener {
             Thread.currentThread().interrupt()
         } catch (error: Exception) {
             needsRecovery = true
-            Log.e("RoadConquest", "Road matching failed; pending points retained for retry", error)
+            Log.e("RoadConquest", "Road matching failed. Pending points retained for retry", error)
         } finally {
             matchingInFlight.set(false)
             if (ready) scheduleDeferredRetry(needsRecovery)

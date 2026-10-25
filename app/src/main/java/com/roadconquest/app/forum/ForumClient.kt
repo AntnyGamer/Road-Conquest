@@ -18,8 +18,18 @@ object ForumClient {
 
     fun posts(token: String?, before: String? = null): Page {
         val path = "posts" + if (before == null) "" else "?before=" + Uri.encode(before)
-        val body = AccountClient.forumRequest(path,"GET",null,token)
-        return parsePage(body)
+        val body = try {
+            AccountClient.forumRequest(path,"GET",null,token)
+        } catch (error: AccountClient.ApiException) {
+            // Older account deployments have no forum routes yet. Keep the account signed in.
+            if (error.status != 404) throw error
+            return Page(false,false,false,emptyList(),null,null)
+        }
+        val page = parsePage(body)
+        if (token != null && page.available && page.viewer == null) {
+            throw AccountClient.ApiException("Could not verify your forum access. Tap Refresh to retry.")
+        }
+        return page
     }
     internal fun parsePage(body: JSONObject): Page {
         val array = body.optJSONArray("posts")

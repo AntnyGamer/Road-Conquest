@@ -36,23 +36,6 @@
             android:textStyle="bold" />
 
         <LinearLayout
-            android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:layout_marginTop="18dp" android:orientation="vertical" android:padding="16dp"
-            android:background="@drawable/settings_card_background" android:elevation="3dp">
-            <Button android:id="@+id/quickTourButton" style="@style/RoadConquest.SettingsAction"
-                android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:drawableStart="@drawable/ic_tour" android:drawableTint="?attr/rcAccent"
-                android:drawablePadding="12dp" android:text="@string/tour_replay" />
-            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:layout_marginTop="6dp" android:text="@string/tour_replay_detail"
-                android:textColor="?attr/rcTextSecondary" android:textSize="13sp" />
-            <Switch android:id="@+id/exitConfirmationSwitch" android:layout_width="match_parent"
-                android:layout_height="wrap_content" android:minHeight="52dp" android:layout_marginTop="12dp"
-                android:text="@string/exit_confirmation_setting" android:textColor="?attr/rcTextPrimary"
-                android:textSize="15sp" />
-        </LinearLayout>
-
-        <LinearLayout
             android:id="@+id/mapSettingsCard"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -76,7 +59,10 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:text="Map: Streets" />
+                android:text="Map: Streets"
+                android:drawableStart="@drawable/ic_layers"
+                android:drawableTint="?attr/rcAccent"
+                android:drawablePadding="12dp" />
 
             <Button
                 android:id="@+id/uiThemeButton"
@@ -84,7 +70,10 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="Appearance: Use phone setting" />
+                android:text="Appearance: Use phone setting"
+                android:drawableStart="@drawable/ic_appearance"
+                android:drawableTint="?attr/rcAccent"
+                android:drawablePadding="12dp" />
 
             <Switch
                 android:id="@+id/fogSwitch"
@@ -103,7 +92,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="7dp"
-                android:text="Fog only changes the map view; tracking and progress continue."
+                android:text="Fog only changes the map view. Tracking and progress continue."
                 android:textColor="?attr/rcTextSecondary"
                 android:textSize="12sp" />
         </LinearLayout>
@@ -153,7 +142,10 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:text="Location permission" />
+                android:text="Location permission"
+                android:drawableStart="@drawable/ic_my_location"
+                android:drawableTint="?attr/rcAccent"
+                android:drawablePadding="12dp" />
 
             <Button
                 android:id="@+id/deviceLocationButton"
@@ -161,7 +153,10 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="Device location settings" />
+                android:text="Device location settings"
+                android:drawableStart="@drawable/ic_my_location"
+                android:drawableTint="?attr/rcAccent"
+                android:drawablePadding="12dp" />
 
             <Button
                 android:id="@+id/notificationSettingsButton"
@@ -169,7 +164,10 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="Notification settings" />
+                android:text="Notification settings"
+                android:drawableStart="@drawable/ic_notifications"
+                android:drawableTint="?attr/rcAccent"
+                android:drawablePadding="12dp" />
 
             <Button
                 android:id="@+id/batterySettingsButton"
@@ -177,7 +175,10 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="Battery settings" />
+                android:text="Battery settings"
+                android:drawableStart="@drawable/ic_battery"
+                android:drawableTint="?attr/rcAccent"
+                android:drawablePadding="12dp" />
         </LinearLayout>
 
         <LinearLayout
@@ -213,7 +214,10 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:text="Manage account" />
+                android:text="Manage account"
+                android:drawableStart="@drawable/ic_account"
+                android:drawableTint="?attr/rcAccent"
+                android:drawablePadding="12dp" />
             <Button
                 android:id="@+id/communityButton"
                 style="@style/RoadConquest.SettingsAction"
@@ -272,7 +276,10 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:text="Global leaderboards" />
+                android:text="Global leaderboards"
+                android:drawableStart="@drawable/ic_nav_badges"
+                android:drawableTint="?attr/rcAccent"
+                android:drawablePadding="12dp" />
         </LinearLayout>
 
         <LinearLayout
@@ -299,7 +306,10 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:text="Achievements" />
+                android:text="Achievements"
+                android:drawableStart="@drawable/ic_nav_badges"
+                android:drawableTint="?attr/rcAccent"
+                android:drawablePadding="12dp" />
 
             <Button
                 android:id="@+id/shopButton"
@@ -307,7 +317,10 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="Garage &amp; Shop" />
+                android:text="Garage &amp; Shop"
+                android:drawableStart="@drawable/ic_garage"
+                android:drawableTint="?attr/rcAccent"
+                android:drawablePadding="12dp" />
 
             <Button
                 android:id="@+id/tripHistoryButton"
@@ -315,12 +328,18 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="Trip history" />
+                android:text="Trip history"
+                android:drawableStart="@drawable/ic_nav_trips"
+                android:drawableTint="?attr/rcAccent"
+                android:drawablePadding="12dp" />
 
             <Button android:id="@+id/challengesButton"
                 style="@style/RoadConquest.SettingsAction"
                 android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:layout_marginTop="8dp" android:text="Weekly goals &amp; friends" />
+                android:layout_marginTop="8dp" android:text="Weekly goals &amp; friends"
+                android:drawableStart="@drawable/ic_nav_weekly"
+                android:drawableTint="?attr/rcAccent"
+                android:drawablePadding="12dp" />
 
             <TextView
                 android:id="@+id/dataSummaryText"
@@ -351,50 +370,28 @@
                 android:textSize="19sp"
                 android:textStyle="bold" />
 
-            <Switch
-                android:id="@+id/friendNotificationsSwitch"
-                android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp"
-                android:text="Friend request notifications" android:textColor="?attr/rcTextPrimary" />
-            <TextView
+            <Switch android:id="@+id/friendNotificationsSwitch" style="@style/RoadConquest.PrivacyToggle"
                 android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:text="On by default. Requires sign-in and notification permission. Firebase receives an installation ID, but not your routes or account credentials."
-                android:textColor="?attr/rcTextSecondary" android:textSize="13sp" />
-            <Switch
-                android:id="@+id/friendForumPostsSwitch"
-                android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp"
-                android:text="Occasional posts from friends" android:textColor="?attr/rcTextPrimary" />
-            <TextView
+                android:text="@string/friend_notifications_title" />
+            <Switch android:id="@+id/friendForumPostsSwitch" style="@style/RoadConquest.PrivacyToggle"
                 android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:text="Off by default. Roughly 1 in 4 approved posts can trigger an alert, at most once every 7 days per account. Requires sign-in and notification permission."
-                android:textColor="?attr/rcTextSecondary" android:textSize="13sp" />
-            <Switch
-                android:id="@+id/weeklyRemindersSwitch"
-                android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp"
-                android:text="Weekly challenge reminders" android:textColor="?attr/rcTextPrimary" />
-            <TextView
+                android:text="@string/friend_posts_title" />
+            <Switch android:id="@+id/weeklyRemindersSwitch" style="@style/RoadConquest.PrivacyToggle"
                 android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:text="On by default. Reminds you around Monday at 6 PM with notification permission; Android may delay it."
-                android:textColor="?attr/rcTextSecondary" android:textSize="13sp" />
-            <Switch
-                android:id="@+id/crashReportingSwitch"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:minHeight="48dp"
-                android:text="Share crash reports with Firebase"
-                android:textColor="?attr/rcTextPrimary" />
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Optional crash and device diagnostics; saved routes and account details are not attached."
-                android:textColor="?attr/rcTextSecondary"
-                android:textSize="13sp" />
+                android:text="@string/weekly_reminders_title" />
+            <Switch android:id="@+id/crashReportingSwitch" style="@style/RoadConquest.PrivacyToggle"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="@string/crash_reporting_title" />
             <Button
                 android:id="@+id/privacyPolicyButton"
                 style="@style/RoadConquest.SettingsAction"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:text="Privacy policy" />
+                android:text="Privacy policy"
+                android:drawableStart="@drawable/ic_privacy"
+                android:drawableTint="?attr/rcAccent"
+                android:drawablePadding="12dp" />
 
             <Button
                 android:id="@+id/exportButton"
@@ -402,12 +399,18 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:text="Export data (.zip)" />
+                android:text="Export data (.zip)"
+                android:drawableStart="@drawable/ic_export"
+                android:drawableTint="?attr/rcAccent"
+                android:drawablePadding="12dp" />
 
             <Button android:id="@+id/importButton"
                 style="@style/RoadConquest.SettingsAction"
                 android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:layout_marginTop="8dp" android:text="Restore progress" />
+                android:layout_marginTop="8dp" android:text="Restore progress"
+                android:drawableStart="@drawable/ic_restore"
+                android:drawableTint="?attr/rcAccent"
+                android:drawablePadding="12dp" />
 
             <Button
                 android:id="@+id/deleteDeviceDataButton"
@@ -415,7 +418,10 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="Delete local data" />
+                android:text="Delete local data"
+                android:drawableStart="@drawable/ic_delete"
+                android:drawableTint="@color/danger"
+                android:drawablePadding="12dp" />
 
             <TextView
                 android:layout_width="match_parent"
@@ -432,6 +438,26 @@
                 android:text="Saved trips stay on your phone unless exported. Place overlays request boundaries by name. Road matching sends GPS data through Road Conquest’s map service to Geoapify or LocationIQ. Verified scoring sends live GPS and integrity evidence only when enabled."
                 android:textColor="?attr/rcTextSecondary"
                 android:textSize="12sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="14dp" android:orientation="vertical" android:padding="16dp"
+            android:background="@drawable/settings_card_background" android:elevation="3dp">
+            <Button android:id="@+id/quickTourButton" style="@style/RoadConquest.SettingsAction"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:drawableStart="@drawable/ic_tour" android:drawableTint="?attr/rcAccent"
+                android:drawablePadding="12dp" android:text="@string/tour_replay" />
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="6dp" android:text="@string/tour_replay_detail"
+                android:textColor="?attr/rcTextSecondary" android:textSize="13sp" />
+            <Switch android:id="@+id/exitConfirmationSwitch" android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:minHeight="52dp" android:layout_marginTop="12dp"
+                android:text="@string/exit_confirmation_setting" android:textColor="?attr/rcTextPrimary"
+                android:textSize="15sp" />
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="@string/exit_confirmation_detail"
+                android:textColor="?attr/rcTextSecondary" android:textSize="13sp" />
         </LinearLayout>
 
         <LinearLayout
@@ -475,7 +501,10 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:text="Licenses and map credits" />
+                android:text="Licenses and map credits"
+                android:drawableStart="@drawable/ic_info"
+                android:drawableTint="?attr/rcAccent"
+                android:drawablePadding="12dp" />
 
             <Button
                 android:id="@+id/githubButton"
@@ -483,7 +512,10 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="@string/github_button" />
+                android:text="@string/github_button"
+                android:drawableStart="@drawable/ic_code"
+                android:drawableTint="?attr/rcAccent"
+                android:drawablePadding="12dp" />
 
             <Button
                 android:id="@+id/supportDeveloperButton"

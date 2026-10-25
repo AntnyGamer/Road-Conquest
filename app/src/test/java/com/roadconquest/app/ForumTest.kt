@@ -56,7 +56,8 @@ class ForumTest {
             val unchangedControls = listOf(
                 activity.findViewById<TextView>(R.id.forumCompose),
                 activity.findViewById<TextView>(R.id.forumPlus),
-                activity.findViewById<TextView>(R.id.forumEmptyTitle)
+                activity.findViewById<TextView>(R.id.forumEmptyTitle),
+                activity.findViewById<TextView>(R.id.forumEmptyBody)
             )
             val changesByControl = IntArray(unchangedControls.size)
             unchangedControls.forEachIndexed { index,control ->
@@ -131,6 +132,11 @@ class ForumTest {
                 val activity=controller.get()
                 val compose=activity.findViewById<Button>(R.id.forumCompose)
                 val status=activity.findViewById<TextView>(R.id.forumStatus)
+                activity.renderPage(page().copy(available=false, posting=false))
+                assertEquals("Posting unavailable",compose.text.toString())
+                assertFalse(compose.isEnabled)
+                assertEquals("Community unavailable",activity.findViewById<TextView>(R.id.forumEmptyTitle).text.toString())
+                assertFalse(status.text.toString().contains("Sign in"))
                 activity.renderPage(page())
                 assertEquals("Sign in to post",compose.text.toString()); assertTrue(compose.isEnabled)
                 assertEquals(View.VISIBLE,activity.findViewById<View>(R.id.forumEmpty).visibility)

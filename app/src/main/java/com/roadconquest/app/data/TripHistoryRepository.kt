@@ -152,7 +152,7 @@ class TripHistoryRepository(context: Context) {
         // Use the same independent WAL snapshot as trip browsing. Slow cloud
         // document writes must never hold the main GPS history lock.
         return withHistorySnapshot { snapshot, generation ->
-            check(trip.historyGeneration == generation) { "Trip history changed; select it again." }
+            check(trip.historyGeneration == generation) { "Trip history changed. Select it again." }
             val endPadding = if (hideTripEnds) 120_000L else 0L
             val from = trip.startedAt + endPadding
             val until = trip.endedAt - endPadding

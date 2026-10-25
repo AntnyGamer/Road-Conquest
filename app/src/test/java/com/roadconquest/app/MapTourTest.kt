@@ -1,6 +1,7 @@
 package com.roadconquest.app
 
 import android.app.Activity
+import android.animation.ValueAnimator
 import android.content.Context
 import android.content.res.Configuration
 import android.graphics.Bitmap
@@ -18,6 +19,7 @@ import androidx.core.graphics.Insets
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.roadconquest.app.onboarding.MapTour
+import com.roadconquest.app.onboarding.DiscoveryPreview
 import com.roadconquest.app.util.Prefs
 import org.junit.Assert.*
 import org.junit.Before
@@ -129,6 +131,35 @@ class MapTourTest {
             assertSame(root, tour.parent)
             tour.dismiss()
         } finally { controller.pause().stop().destroy() }
+    }
+
+    @Test fun discoveryFollowsRoadsAndRevealsTheNextSquareOnlyAfterCrossingItsEdge() {
+        val preview = DiscoveryPreview(RuntimeEnvironment.getApplication())
+        preview.layout(0, 0, 320, 148)
+        fun frame() = Bitmap.createBitmap(320, 148, Bitmap.Config.ARGB_8888).also { preview.draw(Canvas(it)) }
+        val initial = frame()
+        preview.setRevealed(true, animate = true)
+        val animator = DiscoveryPreview::class.java.getDeclaredField("animator").apply { isAccessible = true }
+            .get(preview) as ValueAnimator
+        animator.setCurrentFraction(.3f)
+        val beforeCrossing = frame()
+        assertEquals(Color.WHITE, beforeCrossing.getPixel(98, 98))
+        assertEquals("The next square stays fogged before entry", initial.getPixel(194, 110), beforeCrossing.getPixel(194, 110))
+        animator.setCurrentFraction(.8f)
+        val afterTurn = frame()
+        assertEquals("The dot turns along the vertical street", Color.WHITE, afterTurn.getPixel(160, 64))
+        preview.setRevealed(true)
+        val finished = frame()
+        assertEquals(Color.WHITE, finished.getPixel(184, 50))
+        assertEquals(Color.rgb(130, 178, 255), finished.getPixel(100, 98))
+        assertEquals(Color.rgb(130, 178, 255), finished.getPixel(160, 80))
+        assertEquals("The starting square remains clear", initial.getPixel(60, 70), finished.getPixel(60, 70))
+        assertNotEquals("The entered square clears", initial.getPixel(194, 110), finished.getPixel(194, 110))
+        assertEquals("Unvisited areas stay fogged", initial.getPixel(260, 70), finished.getPixel(260, 70))
+        preview.setRevealed(false)
+        val reset = frame()
+        assertTrue(initial.sameAs(reset))
+        listOf(initial, beforeCrossing, afterTurn, finished, reset).forEach { it.recycle() }
     }
 
     @Test fun restoredLandscapeTourKeepsTheHighlightedNavigationClearOnItsFirstLayout() {

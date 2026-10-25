@@ -1,5 +1,6 @@
 package com.roadconquest.app
 
+import android.app.AlertDialog
 import android.content.res.Configuration
 import android.graphics.Color
 import android.view.ContextThemeWrapper
@@ -33,6 +34,48 @@ class AppearanceTest {
     @Before fun setup() {
         val app = RuntimeEnvironment.getApplication()
         app.getSharedPreferences("roadconquest_preferences", 0).edit().clear().commit()
+    }
+
+    @Test fun rulesAndAllDialogActionsStayReadableInDarkLightAndGoldThemes() {
+        val app = RuntimeEnvironment.getApplication()
+        for ((theme, gold) in listOf(UiTheme.LIGHT to false, UiTheme.DARK to false, UiTheme.DARK to true)) {
+            Prefs.setUiTheme(app, theme)
+            Prefs.setGoldUiEnabled(app, gold)
+            val controller = Robolectric.buildActivity(ForumActivity::class.java).create()
+            try {
+                val activity = controller.get()
+                val expected = if (theme == UiTheme.DARK && !gold) Color.WHITE
+                    else Appearance.color(activity, R.attr.rcTextPrimary)
+                ForumActivity::class.java.getDeclaredMethod("rules").apply { isAccessible = true }.invoke(activity)
+                val rules = requireNotNull(ShadowAlertDialog.getLatestAlertDialog())
+                val gotIt = rules.getButton(AlertDialog.BUTTON_POSITIVE)
+                assertEquals("Got it", gotIt.text.toString())
+                assertEquals("Rules action in $theme (gold=$gold)", expected, gotIt.currentTextColor)
+                gotIt.performClick()
+                shadowOf(android.os.Looper.getMainLooper()).idle()
+                assertFalse(rules.isShowing)
+
+                val dialog = AlertDialog.Builder(activity)
+                    .setTitle("Dialog actions")
+                    .setPositiveButton("Confirm", null)
+                    .setNegativeButton("Cancel", null)
+                    .setNeutralButton("Other action", null)
+                    .show()
+                try {
+                    for (which in listOf(AlertDialog.BUTTON_POSITIVE, AlertDialog.BUTTON_NEGATIVE, AlertDialog.BUTTON_NEUTRAL)) {
+                        val button = dialog.getButton(which)
+                        assertEquals("Action $which in $theme (gold=$gold)", expected, button.currentTextColor)
+                        button.isEnabled = false
+                        assertEquals(Appearance.color(activity, R.attr.rcTextSecondary), button.currentTextColor)
+                        button.isEnabled = true
+                        assertEquals(expected, button.currentTextColor)
+                    }
+                } finally { dialog.dismiss() }
+            } finally {
+                controller.destroy()
+                Prefs.setGoldUiEnabled(app, false)
+            }
+        }
     }
 
     @Test fun settingsCanReplayTheTourAndChangeExitConfirmationWithoutResettingProgress() {

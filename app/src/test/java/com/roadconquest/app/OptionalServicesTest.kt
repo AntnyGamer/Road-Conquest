@@ -31,7 +31,7 @@ class OptionalServicesTest {
     @Test fun defaultsScheduleWeeklyReminderWithoutStartingFirebaseWhileSignedOut() {
         val app = RuntimeEnvironment.getApplication()
         assertTrue(OptionalNotifications.friendsEnabled(app))
-        assertFalse(OptionalNotifications.friendPostsEnabled(app))
+        assertTrue(OptionalNotifications.friendPostsEnabled(app))
         assertTrue(OptionalNotifications.weeklyEnabled(app))
         assertFalse(CrashReporting.enabled(app))
         assertFalse(OptionalNotifications.acceptsFriend(app, "friend_request", "stale"))
@@ -43,10 +43,12 @@ class OptionalServicesTest {
     @Test fun explicitOptOutSurvivesStartupLogoutAndLaterBindingAttempts() {
         val app = RuntimeEnvironment.getApplication()
         OptionalNotifications.setFriendsEnabled(app, false)
+        OptionalNotifications.setFriendPostsEnabled(app, false)
         OptionalNotifications.setWeeklyEnabled(app, false)
         OptionalNotifications.initialize(app)
         AccountStore.clear(app)
         assertFalse(OptionalNotifications.friendsEnabled(app))
+        assertFalse(OptionalNotifications.friendPostsEnabled(app))
         assertFalse(OptionalNotifications.weeklyEnabled(app))
         assertNull(OptionalNotifications.prepareBinding(app, "a-new-login"))
         assertTrue(Shadows.shadowOf(app.getSystemService(AlarmManager::class.java)).scheduledAlarms.isEmpty())
@@ -72,10 +74,11 @@ class OptionalServicesTest {
         assertNotNull(OptionalNotifications.prepareBinding(app, "a-login"))
         assertFalse(CrashReporting.enabled(app))
     }
-    @Test fun friendForumPostsHaveIndependentOptInAndRejectUnboundPushes() {
+    @Test fun friendForumPostsHaveIndependentControlAndRejectUnboundPushes() {
         val app = RuntimeEnvironment.getApplication()
-        assertFalse(OptionalNotifications.friendPostsEnabled(app))
+        assertTrue(OptionalNotifications.friendPostsEnabled(app))
         assertFalse(OptionalNotifications.acceptsForumPost(app, "friend_post", "stale"))
+        OptionalNotifications.setFriendPostsEnabled(app, false)
         OptionalNotifications.setFriendsEnabled(app, false)
         assertNull(OptionalNotifications.prepareBinding(app, "not-logged-in"))
         OptionalNotifications.setFriendPostsEnabled(app, true)

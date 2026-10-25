@@ -50,9 +50,26 @@
         <item name="android:textColor">@color/danger</item>
     </style>
 
+    <style name="RoadConquest.DialogThemeBase" parent="@android:style/Theme.Material.Light.Dialog.Alert" />
+
+    <style name="RoadConquest.AlertDialog" parent="@style/RoadConquest.DialogThemeBase">
+        <item name="android:buttonBarButtonStyle">@style/RoadConquest.DialogAction</item>
+        <item name="android:buttonBarPositiveButtonStyle">@style/RoadConquest.DialogAction</item>
+        <item name="android:buttonBarNegativeButtonStyle">@style/RoadConquest.DialogAction</item>
+        <item name="android:buttonBarNeutralButtonStyle">@style/RoadConquest.DialogAction</item>
+    </style>
+
+    <style name="RoadConquest.DialogAction" parent="@android:style/Widget.Material.Button.Borderless">
+        <item name="android:textColor">@color/dialog_button_text</item>
+        <item name="android:minWidth">64dp</item>
+        <item name="android:minHeight">48dp</item>
+        <item name="android:maxLines">2</item>
+    </style>
+
     <style name="Theme.RoadConquest" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:fontFamily">sans-serif</item>
         <item name="android:buttonStyle">@style/RoadConquest.Button</item>
+        <item name="android:alertDialogTheme">@style/RoadConquest.AlertDialog</item>
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:windowLightNavigationBar">true</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
@@ -72,6 +89,7 @@
     <style name="Theme.RoadConquest.Gold" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:fontFamily">sans-serif</item>
         <item name="android:buttonStyle">@style/RoadConquest.Button</item>
+        <item name="android:alertDialogTheme">@style/RoadConquest.AlertDialog</item>
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:windowLightNavigationBar">true</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
