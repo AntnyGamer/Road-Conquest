@@ -4,10 +4,13 @@ import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.BitmapShader
+import android.graphics.BlurMaskFilter
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffXfermode
 import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Shader
@@ -224,7 +227,14 @@ class DiscoveryPreview(context: Context, attrs: AttributeSet? = null) : View(con
     private val fogPaint = Paint(Paint.FILTER_BITMAP_FLAG).apply {
         shader = BitmapShader(texture, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
     }
+    private val revealPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_OUT)
+        maskFilter = BlurMaskFilter(9f, BlurMaskFilter.Blur.NORMAL)
+    }
     private val dark = Appearance.isDark(context)
+
+    init { setLayerType(LAYER_TYPE_SOFTWARE, null) } // Required for the soft-edged reveal mask.
     private var reveal = 0f
     private var animator: ValueAnimator? = null
 
@@ -265,23 +275,22 @@ class DiscoveryPreview(context: Context, attrs: AttributeSet? = null) : View(con
         paint.color = if (dark) Color.rgb(66, 78, 91) else Color.WHITE
         for (x in floatArrayOf(40f, 88f, 160f, 232f, 280f)) canvas.drawLine(x, 0f, x, 148f, paint)
         for (y in floatArrayOf(2f, 50f, 98f, 146f)) canvas.drawLine(0f, y, 320f, y, paint)
-        val distance = 192f * reveal
+        val distance = 264f * reveal
         val east = distance.coerceAtMost(120f)
         val north = (distance - 120f).coerceIn(0f, 48f)
-        val lastEast = (distance - 168f).coerceAtLeast(0f)
+        val lastEast = (distance - 168f).coerceIn(0f, 96f)
         val carX = 40f + east + lastEast
         val carY = 98f - north
-        // Start in one clear, square map tile. Only crossing its edge reveals the next tile.
-        val crossing = (112f - 40f) / 192f
-        val nextTile = ((reveal - crossing) / .16f).coerceIn(0f, 1f)
-        val fogAlpha = (FogBitmapRenderer.MAX_FOG_ALPHA * 255).toInt()
-        fogPaint.alpha = fogAlpha
-        canvas.drawRect(0f, 0f, 320f, 26f, fogPaint)
-        canvas.drawRect(0f, 122f, 320f, 148f, fogPaint)
-        canvas.drawRect(0f, 26f, 16f, 122f, fogPaint)
-        canvas.drawRect(208f, 26f, 320f, 122f, fogPaint)
-        fogPaint.alpha = ((1f - nextTile) * fogAlpha).toInt()
-        canvas.drawRect(112f, 26f, 208f, 122f, fogPaint)
+        // Unlock the second and third mile tiles only after driving across their boundaries.
+        val secondTile = ((distance - 72f) / 24f).coerceIn(0f, 1f)
+        val thirdTile = ((distance - 216f) / 24f).coerceIn(0f, 1f)
+        // The fog is the same cloud texture/opacity as the map. Remove it with one
+        // softly faded mask over the visited tiles' union, without interior seams.
+        val layer = canvas.saveLayer(0f, 0f, 320f, 148f, null)
+        fogPaint.alpha = (FogBitmapRenderer.MAX_FOG_ALPHA * 255).toInt()
+        canvas.drawRect(0f, 0f, 320f, 148f, fogPaint)
+        canvas.drawRect(16f, 26f, 112f + 96f * (secondTile + thirdTile), 122f, revealPaint)
+        canvas.restoreToCount(layer)
 
         // The live map keeps driven roads blue above the fog layer too.
         paint.style = Paint.Style.STROKE
