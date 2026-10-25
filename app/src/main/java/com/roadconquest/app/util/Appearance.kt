@@ -33,6 +33,12 @@ object Appearance {
         return if (value.resourceId != 0) context.getColor(value.resourceId) else value.data
     }
 
+    fun mapSettingsIconColor(context: Context): Int = color(context, when (Prefs.uiTheme(context)) {
+        UiTheme.LIGHT -> R.attr.rcTextPrimary
+        UiTheme.DARK -> R.attr.rcAccent
+        UiTheme.SYSTEM -> R.attr.rcTextSecondary
+    })
+
     fun isDark(context: Context): Boolean =
         !Prefs.isGoldUiEnabled(context) &&
             context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK ==
