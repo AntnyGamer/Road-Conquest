@@ -10,6 +10,8 @@ import android.widget.ImageView
 import android.widget.ListView
 import android.widget.TextView
 import com.roadconquest.app.forum.ForumClient
+import com.roadconquest.app.account.AccountStore
+import com.roadconquest.app.account.AccountStoreDecryptionTest
 import com.roadconquest.app.forum.ForumGifLoader
 import com.roadconquest.app.util.Prefs
 import com.roadconquest.app.util.UiTheme
@@ -17,6 +19,10 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
+import org.junit.After
+import org.robolectric.annotation.ConscryptMode
+import java.security.Security
+import java.security.Provider
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RuntimeEnvironment
@@ -28,7 +34,33 @@ import java.security.MessageDigest
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31, 37], manifest = Config.NONE)
+@ConscryptMode(ConscryptMode.Mode.OFF)
 class ForumTest {
+    private var installedFixture = false
+    private var originalKeyStore: Provider? = null
+
+    // UI tests exercise a genuine saved session, not an unsigned/mock forum user.
+    // Production showComposer must keep its sign-in check.
+    private fun signInForComposerTest() {
+        val app = RuntimeEnvironment.getApplication()
+        originalKeyStore = Security.getProvider("AndroidKeyStore")
+        Security.removeProvider("AndroidKeyStore")
+        Security.insertProviderAt(object : Provider("AndroidKeyStore", 1.0, "Forum test keystore") {
+            init { put("KeyStore.AndroidKeyStore", AccountStoreDecryptionTest.FixtureKeyStore::class.java.name) }
+        }, 1)
+        installedFixture = true
+        AccountStore.save(app, AccountStore.Session("Driver", "forum-test-session", false))
+    }
+
+    @After fun resetFixture() {
+        if (!installedFixture) return
+        RuntimeEnvironment.getApplication().getSharedPreferences("roadconquest_account", 0)
+            .edit().clear().commit()
+        Security.removeProvider("AndroidKeyStore")
+        originalKeyStore?.let { Security.addProvider(it) }
+        installedFixture = false
+    }
+
     @Test fun clearingRecycledGifAlsoClearsItsPreviousAccessibilityLabel() {
         val view = ImageView(RuntimeEnvironment.getApplication())
         val loader = ForumGifLoader()
@@ -110,6 +142,7 @@ class ForumTest {
         ForumClient.Page(true,posting,false,emptyList(),null,viewer)
 
     @Test fun plusChangesUpdateTheOpenComposerWithoutLosingItsDraftOrRulesAgreement() {
+        signInForComposerTest()
         for (theme in listOf(UiTheme.LIGHT,UiTheme.DARK)) {
             Prefs.setUiTheme(RuntimeEnvironment.getApplication(),theme)
             val controller = Robolectric.buildActivity(ForumActivity::class.java).create()
@@ -193,6 +226,7 @@ class ForumTest {
     }
 
     @Test fun postsAndComposerAreFullyOpaqueInLightDarkAndGold() {
+        signInForComposerTest()
         for ((theme, gold) in listOf(UiTheme.LIGHT to false, UiTheme.DARK to false, UiTheme.DARK to true)) {
             val app = RuntimeEnvironment.getApplication()
             Prefs.setUiTheme(app, theme)
