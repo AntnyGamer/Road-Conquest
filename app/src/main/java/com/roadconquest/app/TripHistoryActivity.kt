@@ -34,6 +34,9 @@ import com.roadconquest.app.util.Appearance
 import com.roadconquest.app.util.ForegroundSession
 import com.roadconquest.app.util.Prefs
 import com.roadconquest.app.util.StatsText
+import com.roadconquest.app.map.BaseMapProviders
+import com.roadconquest.app.map.MapMode
+import com.roadconquest.app.services.ServiceConfig
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
@@ -66,6 +69,13 @@ class TripHistoryActivity : Activity() {
     private var mapView: MapView? = null
     private var map: MapLibreMap? = null
     private var mapReady = false
+    private var replayProvider = ""
+    private var replayMode: MapMode? = null
+    private var replayStyleGeneration = 0
+    private val retryReplayProvider = Runnable { refreshReplayProvider() }
+    private val providerListener: () -> Unit = {
+        handler.post { refreshReplayProvider() }
+    }
     private var seek: SeekBar? = null
     private var playButton: Button? = null
     private var routeStatus: TextView? = null
@@ -147,6 +157,11 @@ class TripHistoryActivity : Activity() {
             isAppearanceLightNavigationBars = lightSystemBars
         }
         MapLibre.getInstance(this)
+        // Trip Replay needs the same provider health and failover as the main
+        // map. A direct asset style could stay blank during a tile outage.
+        BaseMapProviders.install()
+        ServiceConfig.refresh(this)
+        BaseMapProviders.addListener(providerListener)
         // Keep the entire replay and trip list scrollable at every screen size.
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -200,21 +215,7 @@ class TripHistoryActivity : Activity() {
             view.getMapAsync { ready ->
                 if (isDestroyed) return@getMapAsync
                 map = ready
-                val json = assets.open(Prefs.mapMode(this).styleAsset)
-                    .bufferedReader().use { it.readText() }
-                ready.setStyle(Style.Builder().fromJson(json)) { style ->
-                    if (!isDestroyed) {
-                        style.addSource(GeoJsonSource(ROUTE, emptyFeatures))
-                        style.addSource(GeoJsonSource(MARKER, emptyFeatures))
-                        style.addLayer(LineLayer(ROUTE_LINE, ROUTE)
-                            .withProperties(lineColor("#337BF2"), lineWidth(4f)))
-                        style.addLayer(CircleLayer(ROUTE_MARKER, MARKER)
-                            .withProperties(circleColor("#E33B3B"), circleRadius(8f)))
-                        mapReady = true
-                        lastRenderedIndex = -1
-                        renderReplay()
-                    }
-                }
+                loadReplayStyle()
             }
         }
         seek = SeekBar(this).apply {
@@ -282,6 +283,45 @@ class TripHistoryActivity : Activity() {
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         tripList = column
         refreshTripList()
+    }
+
+    /** Reload only when a provider or style actually changes. Saved GPS never changes. */
+    private fun refreshReplayProvider() {
+        if (isDestroyed || map == null) return
+        val mode = Prefs.mapMode(this)
+        if (mode != replayMode || BaseMapProviders.preferred(mode) != replayProvider) {
+            loadReplayStyle()
+        }
+    }
+
+    private fun loadReplayStyle() {
+        val ready = map ?: return
+        val mode = Prefs.mapMode(this)
+        val provider = BaseMapProviders.preferred(mode)
+        val revision = ++replayStyleGeneration
+        replayMode = mode
+        replayProvider = provider
+        mapReady = false
+        val json = BaseMapProviders.style(this, mode, provider)
+        ready.setStyle(Style.Builder().fromJson(json)) { style ->
+            if (!isDestroyed && revision == replayStyleGeneration) {
+                style.addSource(GeoJsonSource(ROUTE, emptyFeatures))
+                style.addSource(GeoJsonSource(MARKER, emptyFeatures))
+                style.addLayer(LineLayer(ROUTE_LINE, ROUTE)
+                    .withProperties(lineColor("#337BF2"), lineWidth(4f)))
+                style.addLayer(CircleLayer(ROUTE_MARKER, MARKER)
+                    .withProperties(circleColor("#E33B3B"), circleRadius(8f)))
+                mapReady = true
+                lastRenderedIndex = -1
+                renderReplay()
+            }
+        }
+        // A provider cooldown can expire without another tile response or config
+        // change. Retry once when it expires; never poll continuously.
+        handler.removeCallbacks(retryReplayProvider)
+        if (provider != "openfreemap") {
+            BaseMapProviders.retryInMs()?.let { handler.postDelayed(retryReplayProvider, it) }
+        }
     }
 
     private fun refreshVipControls() {
@@ -633,6 +673,7 @@ class TripHistoryActivity : Activity() {
     override fun onResume() {
         super.onResume()
         mapView?.onResume()
+        refreshReplayProvider()
         val currentGeneration = TripHistoryRepository(applicationContext).currentHistoryGeneration()
         if (shownHistoryGeneration != -1L && shownHistoryGeneration != currentGeneration) {
             // A restore or Delete all data occurred while this screen was paused.
@@ -671,6 +712,7 @@ class TripHistoryActivity : Activity() {
     override fun onDestroy() {
         generation++
         pauseReplay()
+        BaseMapProviders.removeListener(providerListener)
         handler.removeCallbacksAndMessages(null)
         worker.shutdownNow()
         vipBilling.close()
