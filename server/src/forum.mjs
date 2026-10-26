@@ -55,7 +55,7 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
     if (rows[0]) return rows[0];
     // Missing profiles are uncommon. Insert only on first participation, then
     // re-read so competing instances still acquire the requested row lock.
-    await db.query('INSERT INTO forum_profiles(user_id) VALUES($1) ON CONFLICT DO NOTHING', [userId]);
+    await db.query('INSERT INTO forum_profiles(user_id) SELECT id FROM users WHERE id=$1 ON CONFLICT DO NOTHING', [userId]);
     ({ rows } = await db.query(query, [userId]));
     if (!rows[0]) throw new EvidenceError('Authentication required.', 401);
     return rows[0];

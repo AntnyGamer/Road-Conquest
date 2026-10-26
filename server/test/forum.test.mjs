@@ -268,7 +268,7 @@ test('repeat purchase checks retain encrypted receipts without resending them, i
       assert.equal(updated.active, state);
       assert.ok(new Date(updated.checked_at).getTime() > Date.parse('2000-01-01T00:00:00Z'));
       assert.equal(binaryBytes, 0, 'Stored receipts need no replacement ciphertext parameter');
-      assert.equal(statements, 5, 'No extra database round trip');
+      assert.equal(statements, 5, 'The apply transaction keeps five statements, separate from the read-only preflight');
     }
     assert.equal(checks, 4, 'Every request still verifies the current state with Play');
   }));
@@ -317,7 +317,7 @@ for (const [initial, changed] of [[true, false], [false, true]]) {
         await started.promise;
         // A different service instance handles the newer authenticated event.
         const current = createForum(pool, { ...options, verifyPurchase: async () => changed });
-        await current.webhook('verified', billingNotification('newer-event', 'receipt', changed ? 'purchase' : 'refund'));
+        await current.webhook('verified', billingNotification(randomUUID(), 'receipt', changed ? 'purchase' : 'refund'));
       } finally { gate.resolve(); }
       assert.deepEqual(await pending, { plus: changed });
       assert.equal(checks, 2, 'The stale verdict must be discarded and verified again after releasing the lock');
@@ -356,6 +356,23 @@ test('repeated receipt changes bound retries and preserve the last committed ent
     assert.equal(checks, 3);
     assert.equal((await setup.list(a)).viewer.plus, false);
     assert.deepEqual(await setup.purchase(a, 'receipt'), { plus: true }, 'A later independent restore remains retryable');
+  }));
+
+test('account deletion during Play verification cannot recreate forum data', { skip: !database }, async () =>
+  fixture(async (pool, [a], setup) => {
+    await setup.purchase(a, 'receipt');
+    const started = Promise.withResolvers(), gate = Promise.withResolvers();
+    const forum = createForum(pool, { ...options, verifyPurchase: async () => {
+      started.resolve(); await gate.promise; return true;
+    } });
+    const pending = assert.rejects(forum.purchase(a, 'receipt'), error => error.status === 401);
+    try {
+      await started.promise;
+      await pool.query('DELETE FROM users WHERE id=$1', [a.id]);
+    } finally { gate.resolve(); }
+    await pending;
+    assert.equal((await pool.query('SELECT user_id FROM forum_profiles WHERE user_id=$1', [a.id])).rowCount, 0);
+    assert.equal((await pool.query('SELECT user_id FROM forum_purchases WHERE user_id=$1', [a.id])).rowCount, 0);
   }));
 
 test('overlapping first claims cannot grant a receipt to two accounts', { skip: !database }, async () =>

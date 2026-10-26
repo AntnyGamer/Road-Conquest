@@ -6,7 +6,10 @@ import { promisify } from 'node:util';
 const execute = promisify(execFile);
 
 test('bundled liveness reports the checked-out revision without opening the database or trusting runtime overrides', async () => {
-  const { stdout: revision } = await execute('git', ['rev-parse', 'HEAD'], { cwd: new URL('../', import.meta.url) });
+  let revision = process.env.ROADCONQUEST_SERVER_REVISION || process.env.GITHUB_SHA || null;
+  try {
+    revision = (await execute('git', ['rev-parse', 'HEAD'], { cwd: new URL('../', import.meta.url) })).stdout.trim();
+  } catch { /* Source archives use the explicit build revision, or null. */ }
   const moduleUrl = new URL('../dist/index.mjs', import.meta.url).href;
   const { stdout } = await execute(process.execPath, ['--input-type=module', '-e', `
     const { default: api, pool } = await import(${JSON.stringify(moduleUrl)});
@@ -20,7 +23,7 @@ test('bundled liveness reports the checked-out revision without opening the data
     PASSWORD_PEPPER: 'synthetic-build-info-test-pepper-32', REQUIRE_HTTPS: '1', TRUST_PROXY: '1',
     FORUM_ENABLED: '0', LEADERBOARDS_ENABLED: '0', ROADCONQUEST_SERVER_REVISION: 'f'.repeat(40) }, timeout: 15000 });
   assert.deepEqual(JSON.parse(stdout), { status: 200, cache: 'no-store',
-    body: { ok: true, api_version: 1, revision: revision.trim() }, connections: 0 });
+    body: { ok: true, api_version: 1, revision: revision?.toLowerCase() ?? null }, connections: 0 });
 });
 
 test('native revision metadata accepts only a full public commit hash', async () => {
