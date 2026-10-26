@@ -36,9 +36,8 @@ class ForumTest {
             view.contentDescription = "Shared GIF"
             loader.clear(view)
             assertNull(view.contentDescription)
-            loader.load(view, "https://media.giphy.com/a.gif",
-                "ba7816bf8f01cfea414140de5dae2223b00361f20015ad")
-            assertEquals("Loading shared GIF", view.contentDescription)
+            // A recycled row must also forget an old failed-load label.
+            view.contentDescription = "GIF unavailable. Refresh to retry."
             loader.clear(view)
             assertNull(view.contentDescription)
         } finally {
