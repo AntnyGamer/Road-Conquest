@@ -6,6 +6,7 @@ import android.view.View
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.ListView
 import android.widget.TextView
 import com.roadconquest.app.forum.ForumClient
@@ -28,6 +29,23 @@ import java.security.MessageDigest
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31, 37], manifest = Config.NONE)
 class ForumTest {
+    @Test fun clearingRecycledGifAlsoClearsItsPreviousAccessibilityLabel() {
+        val view = ImageView(RuntimeEnvironment.getApplication())
+        val loader = ForumGifLoader()
+        try {
+            view.contentDescription = "Shared GIF"
+            loader.clear(view)
+            assertNull(view.contentDescription)
+            loader.load(view, "https://media.giphy.com/a.gif",
+                "ba7816bf8f01cfea414140de5dae2223b00361f20015ad")
+            assertEquals("Loading shared GIF", view.contentDescription)
+            loader.clear(view)
+            assertNull(view.contentDescription)
+        } finally {
+            loader.close()
+        }
+    }
+
     @Test fun gifHashesKeepExactLowercaseSha256ValidationAndBinaryValues() {
         val digest = MessageDigest.getInstance("SHA-256").digest("abc".toByteArray())
         val hex = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
