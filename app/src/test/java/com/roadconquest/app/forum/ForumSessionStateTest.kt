@@ -4,6 +4,17 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ForumSessionStateTest {
+    @Test fun savedComposerDraftIsRestoredOnlyToTheSameSession() {
+        val firstOwner = ForumSessionState.draftOwner("first-account-token")
+        assertNotNull(firstOwner)
+        assertNotEquals(firstOwner, "first-account-token")
+        assertTrue(ForumSessionState.canRestoreDraft(firstOwner, "first-account-token"))
+        assertFalse(ForumSessionState.canRestoreDraft(firstOwner, "second-account-token"))
+        assertFalse(ForumSessionState.canRestoreDraft(firstOwner, null))
+        assertFalse(ForumSessionState.canRestoreDraft(null, "first-account-token"))
+        assertNull(ForumSessionState.draftOwner(null))
+    }
+
     @Test fun aPurchaseCheckBelongsOnlyToItsOriginalAccount() {
         val state = ForumSessionState()
         assertFalse(state.switchTo("account-a"))

@@ -1,10 +1,22 @@
 package com.roadconquest.app.forum
 
+import java.security.MessageDigest
+
 /**
  * Activity-local account scope. An ownership check is valid only for the session
  * that requested it. Initial attachment retains a draft restored after rotation.
  */
 internal class ForumSessionState {
+    companion object {
+        /** A saved draft belongs to a specific session without persisting its bearer token. */
+        fun draftOwner(token: String?): String? = token?.let {
+            MessageDigest.getInstance("SHA-256").digest(it.toByteArray(Charsets.UTF_8))
+                .take(16).joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+        }
+
+        fun canRestoreDraft(savedOwner: String?, currentToken: String?): Boolean =
+            savedOwner != null && savedOwner == draftOwner(currentToken)
+    }
     private var initialized = false
     private var token: String? = null
     private var ownershipCheckedFor: String? = null

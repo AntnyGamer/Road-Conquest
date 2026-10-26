@@ -68,6 +68,7 @@ class ForumActivity : Activity() {
     private var composer: Dialog? = null
     private var draftText = ""
     private var draftGif = ""
+    private var draftOwner: String? = null
     private var submissionId = UUID.randomUUID().toString()
     private var submittedContent = ""
     private var restoreComposer = false
@@ -101,11 +102,15 @@ class ForumActivity : Activity() {
             insets
         }
         ViewCompat.requestApplyInsets(root)
-        draftText = savedInstanceState?.getString("draft_text") ?: ""
-        draftGif = savedInstanceState?.getString("draft_gif") ?: ""
-        submissionId = savedInstanceState?.getString("submission_id") ?: submissionId
-        submittedContent = savedInstanceState?.getString("submitted_content") ?: ""
-        restoreComposer = savedInstanceState?.getBoolean("composer_open") ?: false
+        // Never restore another account's unsent text after rotation or process recreation.
+        val owner = savedInstanceState?.getString("draft_owner")
+        val sameAccount = ForumSessionState.canRestoreDraft(owner, sessionToken())
+        draftOwner = owner.takeIf { sameAccount }
+        draftText = if (sameAccount) savedInstanceState?.getString("draft_text").orEmpty() else ""
+        draftGif = if (sameAccount) savedInstanceState?.getString("draft_gif").orEmpty() else ""
+        submissionId = if (sameAccount) savedInstanceState?.getString("submission_id") ?: submissionId else submissionId
+        submittedContent = if (sameAccount) savedInstanceState?.getString("submitted_content").orEmpty() else ""
+        restoreComposer = sameAccount && savedInstanceState?.getBoolean("composer_open") == true
         list = findViewById(R.id.forumList)
         status = findViewById(R.id.forumStatus)
         emptyTitle = findViewById(R.id.forumEmptyTitle)
@@ -129,9 +134,12 @@ class ForumActivity : Activity() {
     override fun onPause() { foreground = false; gifs.setForeground(false); status.removeCallbacks(cooldownTick); super.onPause() }
     override fun onSaveInstanceState(out: Bundle) {
         saveDraft()
-        out.putString("draft_text",draftText); out.putString("draft_gif",draftGif)
-        out.putString("submission_id",submissionId); out.putString("submitted_content",submittedContent)
-        out.putBoolean("composer_open",composer?.isShowing == true)
+        if (ForumSessionState.canRestoreDraft(draftOwner, sessionToken())) {
+            out.putString("draft_owner", draftOwner)
+            out.putString("draft_text",draftText); out.putString("draft_gif",draftGif)
+            out.putString("submission_id",submissionId); out.putString("submitted_content",submittedContent)
+            out.putBoolean("composer_open",composer?.isShowing == true)
+        }
         super.onSaveInstanceState(out)
     }
     override fun onDestroy() {
@@ -161,6 +169,8 @@ class ForumActivity : Activity() {
             restoreRequested = false
             draftText = ""
             draftGif = ""
+            draftOwner = null
+            restoreComposer = false
             submittedContent = ""
             submissionId = UUID.randomUUID().toString()
             page = null
@@ -354,6 +364,14 @@ class ForumActivity : Activity() {
 
     private fun showComposer() {
         if (composer?.isShowing == true || restricted(page?.viewer) || cooldownSeconds() > 0) return
+        val owner = ForumSessionState.draftOwner(sessionToken()) ?: return
+        if (draftOwner != owner) {
+            draftText = ""
+            draftGif = ""
+            submittedContent = ""
+            submissionId = UUID.randomUUID().toString()
+        }
+        draftOwner = owner
         val (dialog,content) = panel("Share a discovery")
         composer = dialog
         val text = EditText(this).apply {
