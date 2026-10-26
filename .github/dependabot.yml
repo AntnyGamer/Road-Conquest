@@ -26,3 +26,11 @@ updates:
       server-patches:
         patterns: ['*']
         update-types: [patch]
+  - package-ecosystem: pip
+    directory: /tools
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      emulator-client:
+        patterns: ['*']

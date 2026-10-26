@@ -124,7 +124,7 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: Install emulator GPS client dependencies
-        run: python3 -m pip install grpcio==1.84.0 protobuf==7.36.2
+        run: python3 -m pip install -r tools/requirements.txt
       - name: Replay GPS through the actual release tracking service
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
         with:
