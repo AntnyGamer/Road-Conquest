@@ -299,8 +299,8 @@ class ForumActivity : Activity() {
             val result = runCatching { work(token) }
             runOnUiThread {
                 if (!active()) return@runOnUiThread
-                writing = false
                 if (sessionToken() != token) { refresh(); return@runOnUiThread }
+                writing = false
                 result.fold(onSuccess = { message(success); refresh() },onFailure = {
                     message(it.message ?: "The action could not be completed. Please try again.")
                     updateControls()
@@ -430,10 +430,10 @@ class ForumActivity : Activity() {
                 val result = runCatching { ForumClient.post(token,submittedText,gifUrl,requestId) }
                 runOnUiThread {
                     if (!active()) return@runOnUiThread
+                    if (sessionToken() != token) { dialog.dismiss(); refresh(); return@runOnUiThread }
                     writing = false; updateControls()
                     text.isEnabled = true; gif.isEnabled = true
                     send.isEnabled = true
-                    if (sessionToken() != token) { dialog.dismiss(); refresh(); return@runOnUiThread }
                     result.fold(onSuccess = { response ->
                         dialog.dismiss(); composer = null; draftText = ""; draftGif = ""; submittedContent = ""
                         if (response.optBoolean("removed")) {

@@ -2,6 +2,7 @@ package com.roadconquest.app
 
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
+import android.os.Looper
 import android.view.View
 import android.widget.Button
 import android.widget.CheckBox
@@ -11,6 +12,7 @@ import android.widget.ListView
 import android.widget.TextView
 import com.roadconquest.app.forum.ForumClient
 import com.roadconquest.app.account.AccountStore
+import com.roadconquest.app.account.AccountClient
 import com.roadconquest.app.account.AccountStoreDecryptionTest
 import com.roadconquest.app.forum.ForumGifLoader
 import com.roadconquest.app.util.Prefs
@@ -21,6 +23,10 @@ import org.junit.Assert.*
 import org.junit.Test
 import org.junit.After
 import org.robolectric.annotation.ConscryptMode
+import org.robolectric.annotation.LooperMode
+import org.robolectric.Shadows.shadowOf
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.security.Security
 import java.security.Provider
 import org.junit.runner.RunWith
@@ -59,6 +65,46 @@ class ForumTest {
         Security.removeProvider("AndroidKeyStore")
         originalKeyStore?.let { Security.addProvider(it) }
         installedFixture = false
+    }
+
+    @Test @LooperMode(LooperMode.Mode.PAUSED)
+    fun previousAccountActionCannotUnlockAnInFlightActionForTheCurrentAccount() {
+        signInForComposerTest()
+        val originalEndpoint = AccountClient.endpointOverrideForTests
+        AccountClient.endpointOverrideForTests = ""
+        val controller = Robolectric.buildActivity(ForumActivity::class.java).create()
+        val firstStarted = CountDownLatch(1)
+        val firstFinish = CountDownLatch(1)
+        val secondStarted = CountDownLatch(1)
+        val secondFinish = CountDownLatch(1)
+        try {
+            val activity = controller.get()
+            val scope = ForumActivity::class.java.getDeclaredField("sessionState")
+                .apply { isAccessible = true }.get(activity) as com.roadconquest.app.forum.ForumSessionState
+            val writing = ForumActivity::class.java.getDeclaredField("writing").apply { isAccessible = true }
+            val action = ForumActivity::class.java.getDeclaredMethod("action", Function1::class.java, String::class.java)
+                .apply { isAccessible = true }
+            scope.switchTo("forum-test-session")
+            val first: (String) -> Unit = { firstStarted.countDown(); check(firstFinish.await(10, TimeUnit.SECONDS)) }
+            action.invoke(activity, first, "First action complete")
+            assertTrue(firstStarted.await(10, TimeUnit.SECONDS))
+            AccountStore.save(RuntimeEnvironment.getApplication(), AccountStore.Session("Other", "second-session", false))
+            // Reproduce refresh's account transition without starting a feed request.
+            scope.switchTo("second-session")
+            writing.setBoolean(activity, false)
+            val second: (String) -> Unit = { secondStarted.countDown(); check(secondFinish.await(10, TimeUnit.SECONDS)) }
+            action.invoke(activity, second, "Second action complete")
+            firstFinish.countDown()
+            // The serial worker posts the first callback before starting the second action.
+            assertTrue(secondStarted.await(10, TimeUnit.SECONDS))
+            shadowOf(Looper.getMainLooper()).idle()
+            assertTrue("The old account's response must retain the current action's busy guard", writing.getBoolean(activity))
+        } finally {
+            firstFinish.countDown()
+            secondFinish.countDown()
+            controller.destroy()
+            AccountClient.endpointOverrideForTests = originalEndpoint
+        }
     }
 
     @Test fun clearingRecycledGifAlsoClearsItsPreviousAccessibilityLabel() {

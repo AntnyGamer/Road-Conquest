@@ -1,3 +1,21 @@
+# Road Conquest 1.0 Beta 64
+
+## What's new since Beta 63
+
+- **Replay map recovery:** Trip replay uses the main map's provider health and failover. It retries after provider cooldowns and defers style/provider changes while hidden, then applies the current selection when resumed.
+- **Redrawn map-style icons:** Streets, Minimal and Night have new artwork using the current appearance's colors.
+- **Forum account isolation:** Drafts, feed results, checkout and restoration belong to the session that requested them. Old account responses cannot unlock a new account's pending action. Switching accounts clears the previous account's unsent composer.
+- **Forum Plus handling:** Overlapping verification callbacks for the same session/receipt share one request, with fresh retries after completion. Missing products, eligible Buy options and store failures have clearer feedback. Backend verification can reuse the existing approved Play credential when no dedicated one is set. Pending payments never grant access.
+- **Less receipt processing:** Repeat verified purchases update the stored encrypted receipt directly, avoiding replacement encryption and database transfer. Every request still checks Play and reconciles refunds/restores inside the existing transaction.
+- **Cleaner community media:** Recycled GIF rows clear stale accessibility labels and hide media without a moderated digest.
+- **Trip and configuration fixes:** Require stronger speed evidence before listing effectively zero-distance walking/scatter groups. Very short, slow drives may also be omitted from the recent list, while original fixes remain saved. Removed provider overrides restore defaults, malformed configuration is rejected and redundant provider checks/temporary collections are avoided.
+- **Account feedback:** A username change that finishes after switching accounts reports which account was changed.
+- **Compatibility:** Android 12+, versionCode **90**, versionName **1.0-beta.64**. Existing package, signing identity, progress, backup format and purchases are retained.
+
+The GitHub workflow publishes the signed APK, Play upload AAB, tested account function, source archive, mapping and checksums only after all required checks pass. Upload to Google Play and backend/map-gateway deployment remain separate operations. Forum Plus production notification delivery was tested through Google Play, Pub/Sub and the authenticated Neon webhook. An actual device checkout/restore/refund remains untested. The included account-function artifact contains the receipt optimization. A separately deployed verified-driving service must permit version code 90 before accepting this build's verified submissions. Public competitive uploads remain disabled by default. No provider allowances, matching accuracy gates or schema are changed by this release.
+
+---
+
 # Road Conquest 1.0 Beta 63
 
 ## What's new since Beta 62
