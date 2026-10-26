@@ -222,6 +222,12 @@ class ForumTest {
             assertTrue(row.findViewById<Button>(R.id.postLove).isSelected)
             assertNotNull(row.findViewById<Button>(R.id.postLike).contentDescription)
             assertEquals(View.GONE,row.findViewById<View>(R.id.postGif).visibility)
+            // A legacy or malformed post can contain a URL without the
+            // mandatory SHA-256 digest. Its recycled row must not show blank media.
+            val partial = post.copy(gifUrl = "https://media.giphy.com/a.gif", gifHash = null)
+            activity.renderPage(page(viewer()).copy(posts = listOf(partial)))
+            val recycled = list.adapter.getView(0, row, list)
+            assertEquals(View.GONE,recycled.findViewById<View>(R.id.postGif).visibility)
         } finally { controller.destroy() }
     }
 

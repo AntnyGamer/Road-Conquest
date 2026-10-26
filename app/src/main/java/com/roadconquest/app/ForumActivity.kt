@@ -585,8 +585,12 @@ class ForumActivity : Activity() {
             view.findViewById<TextView>(R.id.postDate).text = date(post.createdAt)
             view.findViewById<TextView>(R.id.postBody).apply { text = post.text; visibility = if (post.text.isEmpty()) View.GONE else View.VISIBLE }
             val image = view.findViewById<ImageView>(R.id.postGif)
-            image.visibility = if (post.gifUrl != null) View.VISIBLE else View.GONE
-            if (post.gifUrl != null && post.gifHash != null) gifs.load(image,post.gifUrl,post.gifHash)
+            // A URL without its moderated digest cannot be displayed.
+            // Hide the image slot rather than leaving a blank GIF placeholder.
+            val gifUrl = post.gifUrl
+            val gifHash = post.gifHash
+            image.visibility = if (gifUrl != null && gifHash != null) View.VISIBLE else View.GONE
+            if (gifUrl != null && gifHash != null) gifs.load(image,gifUrl,gifHash)
             else gifs.clear(image)
             bindReaction(view,post,R.id.postLike,"like","👍")
             bindReaction(view,post,R.id.postLove,"love","♡")
