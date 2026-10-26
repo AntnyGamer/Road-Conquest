@@ -47,6 +47,44 @@ class BackupProtectionTest {
             .put("signature", BackupProtection.encode(signature))
     }
 
+    @Test fun signatureBytesMustFitTheRestoreLimitBeforeTheArchiveIsChanged() {
+        val file = raw()
+        try {
+            val seal = sign(file)
+            val original = file.readBytes()
+            val completeSize = file.length() + seal.toString().toByteArray(Charsets.UTF_8).size
+            assertThrows(IllegalArgumentException::class.java) {
+                BackupProtection.attach(file, seal, maxBytes = completeSize - 1)
+            }
+            assertArrayEquals(original, file.readBytes())
+            BackupProtection.attach(file, seal, maxBytes = completeSize)
+            assertEquals(completeSize, file.length())
+            BackupProtection.verify(context, file)
+        } finally { file.delete() }
+    }
+
+    @Test fun firstExportCleansOrphansBeforeStartingNetworkOrCreatingAnActiveArchive() {
+        val initialized = DataImporter::class.java.getDeclaredField("temporaryFilesInitialized").apply { isAccessible = true }
+        val previousInitialized = initialized.getBoolean(null)
+        val endpoint = com.roadconquest.app.account.AccountClient.endpointOverrideForTests
+        val cacheOrphan = File(context.cacheDir, "roadconquest-protected-old.zip").apply { writeText("interrupted export") }
+        val recoveryOrphan = File(context.filesDir, "before-restore.tmp.zip").apply { writeText("interrupted recovery") }
+        try {
+            initialized.setBoolean(null, false)
+            com.roadconquest.app.account.AccountClient.endpointOverrideForTests = ""
+            assertThrows(com.roadconquest.app.account.AccountClient.ApiException::class.java) {
+                BackupProtection.writePortable(context, TrackingRepository(context), java.io.ByteArrayOutputStream())
+            }
+            assertTrue(initialized.getBoolean(null))
+            assertFalse(cacheOrphan.exists())
+            assertFalse(recoveryOrphan.exists())
+        } finally {
+            initialized.setBoolean(null, previousInitialized)
+            com.roadconquest.app.account.AccountClient.endpointOverrideForTests = endpoint
+            cacheOrphan.delete(); recoveryOrphan.delete()
+        }
+    }
+
     @Test fun authenticatedArchiveRestoresButRepackingValidEditedDataOrRemovingSealFails() {
         val file = raw()
         val changed = raw()

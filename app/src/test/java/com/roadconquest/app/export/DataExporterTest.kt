@@ -23,6 +23,23 @@ import java.util.zip.ZipInputStream
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31, 37], manifest = Config.NONE)
 class DataExporterTest {
+    @Test fun zipBudgetCountsExpandedBytesAcrossEntriesIncludingSingleByteWrites() {
+        val output = ByteArrayOutputStream()
+        DataExporter.BoundedZipOutputStream(output, expandedLimit = 1024).use { zip ->
+            zip.putNextEntry(java.util.zip.ZipEntry("first.csv"))
+            zip.write(ByteArray(512))
+            zip.closeEntry()
+            zip.putNextEntry(java.util.zip.ZipEntry("second.csv"))
+            repeat(512) { zip.write(0) }
+            assertThrows(IOException::class.java) { zip.write(0) }
+        }
+        assertTrue("Small compressed files must still obey the expanded limit", output.size() < 1024)
+        ZipInputStream(ByteArrayInputStream(output.toByteArray())).use { zip ->
+            assertNotNull(zip.nextEntry); assertEquals(512, zip.readBytes().size)
+            assertNotNull(zip.nextEntry); assertEquals(512, zip.readBytes().size)
+        }
+    }
+
     @Test fun exportsReadableZipWithAccurateCountsAndSafeRoadNames() {
         val context = RuntimeEnvironment.getApplication()
         val repository = TrackingRepository(context)

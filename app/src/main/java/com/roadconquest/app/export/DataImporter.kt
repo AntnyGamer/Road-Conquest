@@ -31,7 +31,7 @@ import java.util.zip.ZipFile
 
 /** Imports only data into our own schema. Never executes SQL or opens a database from a ZIP. */
 object DataImporter {
-    private const val MAX_BYTES = 512L * 1024 * 1024
+    internal const val MAX_BYTES = 512L * 1024 * 1024
     // Provider responses can contain more than 50,000 valid vertices. Keep their
     // backed-up geometry bounded without rejecting an ordinary saved road.
     private const val MAX_ROAD_GEOMETRY_CHARS = 8_000_000
@@ -61,6 +61,7 @@ object DataImporter {
         if (temporaryFilesInitialized) return
         temporaryFilesInitialized = true
         BackupProtection.clearTemporaryFiles(context)
+        File(context.applicationContext.filesDir, "before-restore.tmp.zip").delete()
         context.cacheDir.listFiles().orEmpty().filter { it.name.startsWith(PREFIX) }.forEach {
             if (it.name.endsWith(".db")) SQLiteDatabase.deleteDatabase(it) else it.delete()
         }

@@ -9,6 +9,7 @@ import com.roadconquest.app.util.Prefs
 import org.json.JSONObject
 import java.io.OutputStream
 import java.io.File
+import java.io.IOException
 import java.time.Instant
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -31,7 +32,7 @@ object DataExporter {
                 SQLiteDatabase.openOrCreateDatabase(snapshotFile, null).use { snapshot ->
                     repository.copyExportSnapshot(snapshot)
                     val summary = TrackingRepository.summaryOf(snapshot)
-                    ZipOutputStream(output.buffered()).use { zip ->
+                    BoundedZipOutputStream(output.buffered()).use { zip ->
                         val points = writeTrackPoints(snapshot, zip)
                         writeSkippedDrivingFixes(snapshot, zip)
                         val roadCount = writeRoads(snapshot, zip)
@@ -48,6 +49,18 @@ object DataExporter {
                 SQLiteDatabase.deleteDatabase(snapshotFile)
             }
         }
+
+    /** Enforce restore's expanded-byte budget while streaming, before compressing oversized data. */
+    internal class BoundedZipOutputStream(output: OutputStream, private val expandedLimit: Long = DataImporter.MAX_BYTES) :
+        ZipOutputStream(output) {
+        private var expandedBytes = 0L
+
+        override fun write(buffer: ByteArray, offset: Int, length: Int) {
+            if (length.toLong() > expandedLimit - expandedBytes) throw IOException("Expanded backup exceeds 512 MB")
+            super.write(buffer, offset, length)
+            expandedBytes += length
+        }
+    }
 
     /** Delete private snapshots left behind by an interrupted export, including SQLite sidecars. */
     fun clearTemporarySnapshots(context: Context) = synchronized(snapshotLock) {

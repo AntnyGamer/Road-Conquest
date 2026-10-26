@@ -34,13 +34,16 @@ object BackupProtection {
 
     /** Only the digest and Play attestation leave the phone, never the backup or GPS history. */
     fun writePortable(context: Context, repository: TrackingRepository, output: OutputStream) {
+        // A restored Android task can open Settings without first opening the map.
+        // Finish one-time cleanup before creating any active export it could delete.
+        DataImporter.clearTemporaryFiles(context)
         val status = AccountClient.backupKeys()
         check(status.optBoolean("available")) { "Protected backups are unavailable. Try again when the backup service is ready." }
         cacheKeys(context, status)
         val file = File.createTempFile(TEMP_PREFIX, ".zip", context.cacheDir)
         try {
             file.outputStream().use { DataExporter.writeZip(context, repository, it) }
-            check(file.length() <= 512L * 1024 * 1024) { "Backup exceeds 512 MB" }
+            check(file.length() <= DataImporter.MAX_BYTES) { "Backup exceeds 512 MB" }
             val hash = digest(file, endOfZip(file))
             val requestHash = encode(MessageDigest.getInstance("SHA-256").digest(message(hash)))
             // Attestation and the signing request run after releasing the history/snapshot locks.
@@ -173,11 +176,12 @@ object BackupProtection {
         return encode(hash.digest())
     }
 
-    internal fun attach(file: File, seal: JSONObject) {
+    internal fun attach(file: File, seal: JSONObject, maxBytes: Long = DataImporter.MAX_BYTES) {
         val end = endOfZip(file)
         require(end.commentLength == 0) { "Backup is already signed" }
         val comment = seal.toString().toByteArray(Charsets.UTF_8)
         require(comment.size in 1..MAX_COMMENT)
+        require(file.length() <= maxBytes - comment.size) { "Signed backup exceeds 512 MB" }
         RandomAccessFile(file, "rw").use {
             it.seek(end.offset + 20); it.write(comment.size and 255); it.write(comment.size shr 8)
             it.write(comment); it.fd.sync()
