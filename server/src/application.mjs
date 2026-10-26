@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { databaseConfig } from "./database-config.mjs";
+import { SERVER_INFO } from "./build-info.mjs";
 import {
   boundedLoginPassword,
   createSessionToken,
@@ -262,13 +263,13 @@ async function createSession(userId, db = pool) {
 async function handle(req, res) {
   const url = new URL(req.url || "/", "http://localhost");
   if (["GET", "HEAD"].includes(req.method) && url.pathname === "/health/live") {
-    return send(res, 200, { ok: true }, req.method === "HEAD"); // No database query.
+    return send(res, 200, { ok: true, ...SERVER_INFO }, req.method === "HEAD"); // No database query.
   }
 
   if (req.method === "GET" && url.pathname === "/health") {
     await prepareDatabase();
     await pool.query("SELECT 1");
-    return send(res, 200, { ok: true });
+    return send(res, 200, { ok: true, ...SERVER_INFO });
   }
 
   if (REQUIRE_HTTPS && req.headers["x-forwarded-proto"] !== "https") {

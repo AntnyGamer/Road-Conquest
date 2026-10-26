@@ -36,6 +36,9 @@ ROADCONQUEST_ACCOUNT_API_URL=https://accounts.example.com
 
 Use a TLS reverse proxy in production and set `REQUIRE_HTTPS=1`. If `TRUST_PROXY=1` is used,
 configure the proxy to replace, not merely append untrusted client forwarding headers.
+This requirement applies to the native Node HTTP server. The public Function adapter
+discards ordinary forwarding headers and accepts a distinct client IP only from the
+authenticated ingress described below. `TRUST_PROXY=1` alone does not authorize caller headers there.
 
 ## Required environment
 
@@ -61,6 +64,35 @@ npm start
 The CI job runs the security tests against an isolated PostgreSQL cluster using the
 Ubuntu runner's preinstalled binaries, avoiding container-registry download quotas. It includes a
 concurrent duplicate-signup constraint test.
+
+## Verify the deployed backend
+
+`GET /health/live` (and `HEAD /health/live`) checks the running process without
+opening a database connection. Its JSON contains `ok`, `api_version` (currently `1`)
+and `revision`, a public source commit hash. `GET /health` also checks the database
+and returns the same metadata after success. Both responses use `Cache-Control: no-store`.
+
+`npm run build:function` embeds the checked-out Git revision in the function bundle.
+Exported source archives can set `ROADCONQUEST_SERVER_REVISION` to the full 40-character
+commit hash at build time. A native `npm start` deployment can set that variable at runtime.
+An unknown revision is `null`, never an inferred claim about deployment freshness.
+
+After deploying the account function, fetch `/health/live` through the actual public
+account URL and compare `revision` with the intended source commit (`git rev-parse HEAD`).
+Publishing an Android release or attaching the account-function ZIP to GitHub does not
+deploy the backend. A mismatched or null revision needs investigation before claiming
+the backend includes a release's changes. This identifies code only: credentials,
+database grants, moderation availability and real Google Play purchases still need
+their own deployment checks. API version 1 remains compatible with the existing client.
+
+Forum Plus verification releases its preflight database connection before contacting
+Google. A short transaction then locks the profile and receipt, rechecks ownership and
+bans, and applies entitlement changes atomically. If the receipt's PostgreSQL MVCC version
+changed while verification was in flight, the old verdict is discarded and Play is
+checked again outside the transaction, up to three checks. Continued contention returns
+a retryable 503 without overwriting the last committed entitlement. This adds one read
+per uncontended verification, avoids holding a scarce pool connection during remote
+timeouts, and requires no schema migration. Existing encrypted receipts stay unchanged.
 
 ## Free Neon deployment
 

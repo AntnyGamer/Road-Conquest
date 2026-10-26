@@ -29,7 +29,10 @@ test("serverless accounts enforce authentication, privacy, limits and TLS with r
       assert.match(response.headers.get("Strict-Transport-Security"), /max-age=31536000/);
       return { status: response.status, body: await response.json() };
     }
-    assert.equal((await call("/health")).status, 200);
+    const health = await call("/health");
+    assert.equal(health.status, 200);
+    assert.deepEqual(health.body, (await call("/health/live")).body);
+    assert.equal(health.body.api_version, 1);
     const privacyPage = await api.fetch(new Request("https://accounts.example/privacy"));
     assert.equal(privacyPage.status, 200);
     assert.match(privacyPage.headers.get("Content-Type"), /^text\/html/u);

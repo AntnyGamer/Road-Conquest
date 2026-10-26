@@ -97,6 +97,12 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
     if (rows[0] && rows[0].content_hash !== input.contentHash) throw new EvidenceError('This submission ID was already used for another post.', 409);
     return rows[0];
   }
+  function enforcePurchase(userId, current, prior) {
+    if (!current) throw new EvidenceError('Authentication required.', 401);
+    if (prior && String(prior.user_id) !== String(userId)) throw new EvidenceError('Purchase belongs to another account.', 403);
+    if (!prior && current.banned) throw new EvidenceError('New Forum Plus purchases are unavailable for banned accounts.', 403);
+    if (!prior && !moderate) throw new EvidenceError('New Forum Plus purchases are temporarily unavailable.', 503);
+  }
 
   return {
     async list(user, cursorValue) {
@@ -284,34 +290,50 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
       if (!verifyPurchase || !verifyWebhook) throw new EvidenceError('Forum Plus purchases are temporarily unavailable.', 503);
       if (typeof token !== 'string' || !token.length || token.length > 4096) throw new EvidenceError('Invalid purchase token.', 400);
       const digest = purchaseHash(token);
-      return transact(async db => {
-        const current = await profile(db,user.id,true,'banned');
-        const prior = await db.query('SELECT user_id FROM forum_purchases WHERE token_hash=$1 FOR UPDATE', [digest]);
-        if (prior.rowCount && String(prior.rows[0].user_id) !== String(user.id)) throw new EvidenceError('Purchase belongs to another account.', 403);
-        if (current.banned && !prior.rowCount) throw new EvidenceError('New Forum Plus purchases are unavailable for banned accounts.', 403);
-        if (!moderate && !prior.rowCount) throw new EvidenceError('New Forum Plus purchases are temporarily unavailable.', 503);
-        // Serialize verification with refunds/restores so an older response cannot overwrite a refund.
+      for (let attempt = 0; attempt < 3; attempt++) {
+        // Read only the receipt's MVCC version, never its encrypted token. Release
+        // the connection before OAuth, Play verification or acknowledgement.
+        const { rows: [snapshot] } = await pool.query(`SELECT COALESCE(f.banned,FALSE) AS banned,
+          p.user_id,p.xmin::text AS version FROM users u
+          LEFT JOIN forum_profiles f ON f.user_id=u.id
+          LEFT JOIN forum_purchases p ON p.token_hash=$2 WHERE u.id=$1`, [user.id,digest]);
+        enforcePurchase(user.id, snapshot, snapshot?.user_id == null ? null : snapshot);
         const active = await verifyPurchase(token, binding(user.id));
-        // Existing receipts are already encrypted. Refresh their verified state
-        // without encrypting/transferring a replacement the conflict path discards.
-        const newPurchase = active && !prior.rowCount;
-        // A writable CTE's table scan sees the statement's original snapshot.
-        // Use the freshly verified state for this token and scan only OTHER
-        // receipts, so refunds/restores and multiple purchases stay accurate.
-        const { rows } = await db.query(`WITH recorded AS (${newPurchase
-          ? `INSERT INTO forum_purchases(token_hash,user_id,encrypted_token,active)
-            VALUES($1,$2,$3,TRUE) ON CONFLICT(token_hash) DO UPDATE SET active=TRUE,checked_at=CURRENT_TIMESTAMP`
-          : 'UPDATE forum_purchases SET active=$3,checked_at=CURRENT_TIMESTAMP WHERE token_hash=$1 AND user_id=$2'}
-        ), desired AS (
-          SELECT ${newPurchase ? '$4' : '$3'}::boolean OR EXISTS(SELECT 1 FROM forum_purchases
-            WHERE user_id=$2 AND token_hash<>$1 AND active) AS owned
-        ), changed AS (
-          UPDATE forum_profiles SET plus_active=desired.owned FROM desired
-          WHERE user_id=$2 AND plus_active IS DISTINCT FROM desired.owned RETURNING 1
-        ) SELECT desired.owned AS plus_active FROM desired LEFT JOIN changed ON TRUE`,
-        newPurchase ? [digest,user.id,codec.seal(token),active] : [digest,user.id,active]);
-        return { plus: rows[0].plus_active };
-      });
+        if (typeof active !== 'boolean') throw new EvidenceError('Purchase verification is temporarily unavailable.', 503);
+        const result = await transact(async db => {
+          const current = await profile(db,user.id,true,'banned');
+          const { rows: [prior] } = await db.query('SELECT user_id,xmin::text AS version FROM forum_purchases WHERE token_hash=$1 FOR UPDATE', [digest]);
+          enforcePurchase(user.id, current, prior);
+          // Another instance may have committed a refund/restore while Google was
+          // responding. Discard that stale verdict and reverify OUTSIDE the lock.
+          if ((prior?.version ?? null) !== snapshot.version) return null;
+          // Existing receipts are already encrypted. Refresh their verified state
+          // without encrypting/transferring a replacement the conflict path discards.
+          const newPurchase = active && !prior;
+          // A writable CTE's table scan sees the statement's original snapshot.
+          // Use the freshly verified state for this token and scan only OTHER
+          // receipts, so refunds/restores and multiple purchases stay accurate.
+          const { rows } = await db.query(`WITH recorded AS (${newPurchase
+            ? `INSERT INTO forum_purchases(token_hash,user_id,encrypted_token,active)
+              VALUES($1,$2,$3,TRUE) ON CONFLICT(token_hash) DO NOTHING RETURNING 1`
+            : 'UPDATE forum_purchases SET active=$3,checked_at=CURRENT_TIMESTAMP WHERE token_hash=$1 AND user_id=$2'}
+          ), desired AS (
+            SELECT ${newPurchase ? '$4' : '$3'}::boolean OR EXISTS(SELECT 1 FROM forum_purchases
+              WHERE user_id=$2 AND token_hash<>$1 AND active) AS owned
+            ${newPurchase ? 'WHERE EXISTS(SELECT 1 FROM recorded)' : ''}
+          ), changed AS (
+            UPDATE forum_profiles SET plus_active=desired.owned FROM desired
+            WHERE user_id=$2 AND plus_active IS DISTINCT FROM desired.owned RETURNING 1
+          ) SELECT desired.owned AS plus_active FROM desired LEFT JOIN changed ON TRUE`,
+          newPurchase ? [digest,user.id,codec.seal(token),active] : [digest,user.id,active]);
+          // A different account can race to insert a previously unseen token.
+          // Never grant access from a conflict without checking its owner again.
+          if (!rows.length) return null;
+          return { plus: rows[0].plus_active };
+        });
+        if (result) return result;
+      }
+      throw new EvidenceError('Purchase state changed during verification. Please try again.', 503);
     },
     async webhook(authorization, body) {
       if (!verifyWebhook || !await verifyWebhook(authorization)) throw new EvidenceError('Invalid notification identity.', 401);

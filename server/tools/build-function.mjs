@@ -1,7 +1,14 @@
 import { build } from "esbuild";
 import { fileURLToPath } from "node:url";
+import { execFileSync } from "node:child_process";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
+let revision = process.env.ROADCONQUEST_SERVER_REVISION || process.env.GITHUB_SHA || null;
+try {
+  revision = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+} catch { /* Exported source archives can supply the revision explicitly. */ }
+if (revision !== null && !/^[a-f0-9]{40}$/i.test(revision)) throw new Error('Invalid server source revision');
 await build({
   absWorkingDir: root,
   entryPoints: ["src/function.mjs"],
@@ -10,6 +17,7 @@ await build({
   platform: "node",
   target: "node24",
   format: "esm",
+  define: { __ROADCONQUEST_SERVER_REVISION__: JSON.stringify(revision) },
   external: ["pg-native"],
   // pg has CommonJS dependencies. Neon requires these helpers in an ESM bundle.
   banner: { js: "import{createRequire as ___cr}from'node:module';import{fileURLToPath as ___f}from'node:url';import{dirname as ___d}from'node:path';const require=___cr(import.meta.url);const __filename=___f(import.meta.url);const __dirname=___d(__filename);" }
