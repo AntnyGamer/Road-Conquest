@@ -230,3 +230,29 @@ forum/billing, boundary/population lookups and map-style reloads. Further quota,
 sampling, cache-lifetime and identity-cache changes did not meet the requested
 tradeoff standard. No production database, service setting or deployment was
 changed for this pass.
+
+## PR #121 receipt recheck follow-up
+
+Repeat Forum Plus purchase checks now update the already locked receipt directly.
+Previously an active receipt was encrypted again and sent in an INSERT whose
+conflict handler discarded the replacement ciphertext. New receipts still store
+an encrypted token. Every request still verifies with Play, refreshes `checked_at`
+and reconciles ownership inside the same transaction and lock order, including
+refunds, restores and other active receipts. No schema or infrastructure change
+is needed.
+
+A database-boundary regression with a synthetic 4,096-byte ASCII token confirms
+that repeat active checks omit a 4,124-byte ciphertext parameter (token plus
+nonce/tag), with the same five SQL statements for an existing profile. The test
+also decrypts the original stored receipt, confirms it survives refund/restore
+updates, and counts a fresh Play check on every request. This is a reduction in
+encryption work and database-bound request bytes, not a measured production
+latency improvement or a reduction in Google API calls.
+
+The pass also reviewed forum refresh/restore/GIF paths, replay rendering and
+provider recovery, remote switches and recent-trip loading. Additional caches,
+longer refresh intervals and coalescing of distinct store queries were not
+justified by the requested tradeoff standard.
+
+Local validation passed all 18 forum SQL cases. The full server suite passed
+152 cases with no failures; 27 native-PostgreSQL-only cases remain for CI.
