@@ -14,6 +14,7 @@ import {
   verifyPassword
 } from "./security.mjs";
 import { competitionConfig, createCompetition } from "./competition.mjs";
+import { createBackups } from "./backups.mjs";
 import { createFriends } from "./friends.mjs";
 import { createNotifications, createFcmSender } from "./notifications.mjs";
 import { createRequestMaintenance } from "./maintenance.mjs";
@@ -51,7 +52,7 @@ const PRIVACY_HTML = `<!doctype html>
 <p>Forum Plus is an optional, one-time Google Play purchase tied to your Road Conquest account. The server verifies and acknowledges the purchase with Google, storing a keyed account identifier, a purchase-token fingerprint, an encrypted token and entitlement state. Authenticated Google notifications update refunded purchases. Notification IDs expire after 30 days during subsequent notification activity. Deleting the account deletes these records and its Forum Plus access. The optional Buy Me a Coffee support link opens an external site and grants no app benefits.</p>
 <h2>Retention and deletion</h2>
 <p>Competitive accounts count only server-verified exploration cells. Private visited-cell identifiers and weekly cell counts are stored until account deletion. These identifiers describe coarse geographic areas. Older totals and imported or local progress cannot enter hardened rankings. For anti-cheating continuity, the account service keeps one latest accepted GPS fix encrypted with an account-bound server key, plus its timestamp and keyed fingerprint. It is replaced by the next accepted batch and removed with account deletion. Full GPS traces are processed transiently for verification rather than stored in the ranking database.</p>
-<p>Importing a backup validates and replaces local progress without uploading that history for verified scores. Before replacement, the app keeps one private recovery ZIP on this phone. Delete all data and uninstalling remove this recovery copy. Google Play VIP ownership and account credentials are not imported. Weekly local challenges award local points. Accepted friends can compare newly verified exploration cells each week. Friendships require consent, may be removed by either person, and are deleted with the account. Hiding a profile hides it from friend rankings as well as public leaderboards. Weekly verified totals remain with the account until account deletion.</p>
+<p>Protected backup export sends only a SHA-256 file fingerprint and Google Play Integrity evidence to the account service for signing. The file and its saved GPS history are not uploaded. Signing requires an internet connection and app/device verification. Restore rejects altered or unsigned archives; trusted public keys are fetched over HTTPS and saved privately for later offline checks. A new installation needs internet to obtain these keys. Restored history, including delayed road matching and place discovery, cannot earn new weekly challenge credit or change global or friend verified rankings. Previously earned local rewards remain part of restored history. Importing a backup validates and replaces local progress without uploading that history for verified scores. Before replacement, the app keeps one private recovery ZIP on this phone. Delete all data and uninstalling remove this recovery copy. Google Play VIP ownership and account credentials are not imported. Weekly local challenges award local points. Accepted friends can compare newly verified exploration cells each week. Friendships require consent, may be removed by either person, and are deleted with the account. Hiding a profile hides it from friend rankings as well as public leaderboards. Weekly verified totals remain with the account until account deletion.</p>
 <p>Local app data remains on your device until you use Delete all data, uninstall the app, or otherwise clear app storage. Delete all data requires typing the exact in-app confirmation phrase and removes local Road Conquest data while keeping the cloud account and leaderboard scores. It does not require account sign-in or network access. Exported files are controlled by you and must be deleted separately. Delete account requires the current account password and removes the cloud account, forum data and Forum Plus access, sessions, leaderboard scores, visited-cell and legacy verified-road records, live runs, and verification receipts while leaving saved device history in place. Some short-lived anti-abuse and verification records expire automatically.</p>
 <h2>Security and choices</h2>
 <p>Network account traffic uses HTTPS. You can use Road Conquest without an account, hide yourself from leaderboards, leave verified-drive sharing off, use manual tracking, export your data, delete only your cloud account, or delete all local Road Conquest data while keeping your account.</p>
@@ -102,6 +103,7 @@ const prepareDatabase = createRequestMaintenance(pool, { initialize: async () =>
   }
 } });
 const competition = await createCompetition(pool, competitionConfig(process.env));
+const backups = await createBackups(process.env);
 const notifications = createNotifications(pool, { pepper: PEPPER, sender: createFcmSender(process.env.FCM_SERVICE_ACCOUNT_JSON),
   deliveryLimit: target => ["push-delivery", opaqueRateKey("push-delivery", String(target)), 5 * 60 * 1000, 3] });
 const friends = createFriends(pool, async target => {
@@ -281,8 +283,16 @@ async function handle(req, res) {
   if (req.method === "GET" && url.pathname === "/v1/competition") {
     return send(res, 200, competition?.status() || { available: false });
   }
+  if (req.method === "GET" && url.pathname === "/v1/backups") {
+    return send(res, 200, backups.status()); // Public verification keys do not wake the database.
+  }
 
   const ip = clientIp(req);
+  if (req.method === "POST" && url.pathname === "/v1/backups/sign") {
+    if (!backups.status().available) return send(res, 503, { error: "Protected backup signing is unavailable." });
+    if (!await rateLimit("backup-sign", ip, 6, 60 * 60 * 1000)) return send(res, 429, { error: "Try again later." });
+    return send(res, 200, await backups.sign(await readJson(req)));
+  }
   if (url.pathname.startsWith('/v1/forum/')) {
     if (!forum) return send(res, req.method === 'GET' ? 200 : 503,
       { available: false, posts: [], viewer: null, posting_available: false, purchases_available: false });

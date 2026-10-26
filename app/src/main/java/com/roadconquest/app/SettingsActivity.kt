@@ -30,7 +30,6 @@ import com.roadconquest.app.account.AccountClient
 import com.roadconquest.app.account.AccountStore
 import com.roadconquest.app.data.LocalDataReset
 import com.roadconquest.app.data.TrackingRepository
-import com.roadconquest.app.export.DataExporter
 import com.roadconquest.app.export.DataImporter
 import com.roadconquest.app.util.Prefs
 import com.roadconquest.app.util.Appearance
@@ -307,7 +306,7 @@ class SettingsActivity : Activity() {
         Thread {
             val result = runCatching {
                 contentResolver.openOutputStream(uri, "w")?.use { output ->
-                    DataExporter.writeZip(this, repository, output)
+                    com.roadconquest.app.export.BackupProtection.writePortable(this, repository, output)
                 } ?: error("Could not open export destination")
             }
             var cleanupFailed = false

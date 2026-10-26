@@ -416,3 +416,43 @@ These are verified GPS-based visits, not proof of physical travel. External GNSS
 spoofing and sophisticated attacks remain possible. Do not advertise this as
 unfakeable. Monitor hosting and Integrity quotas; smaller backend requirements
 do not guarantee unlimited free service.
+
+
+## Protected local backups
+
+Portable backup exports are authenticated with server-held P-256 signatures. Configure
+`BACKUP_SIGNING_PRIVATE_KEY` with a dedicated PKCS#8 PEM private key in the function's secret
+configuration, alongside the existing production `PLAY_SERVICE_ACCOUNT_JSON` (or file),
+`PLAY_CERTIFICATES`, `PLAY_VERSION_CODES` and `PLAY_CLOUD_PROJECT_NUMBER`. This works independently
+of `LEADERBOARDS_ENABLED`; no account, scores or GPS history are used by the signer. Generate the
+key in a trusted environment with `openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256`.
+Keep a durable private copy outside source control. Do not reuse the APK, account or checkpoint keys.
+
+`GET /v1/backups` publishes availability and SPKI public keys without a database query.
+`POST /v1/backups/sign` accepts only a SHA-256 backup fingerprint and a fresh production Play
+Integrity token bound to `SHA256("RoadConquestBackup/v1\n" + fingerprint)`. IP rate limiting
+precedes external verification. Only the official licensed app on a device meeting strong integrity
+can request signatures; arbitrary unauthenticated digests are never blindly signed. No file content
+or saved GPS is uploaded or stored, and the signing service never reads/writes competition tables.
+
+The ZIP comment contains the signature, key ID and format version. Its signature covers every
+original ZIP byte, including CSVs, metadata, directory records and the zero-length original comment.
+Repacking, changing metadata, changing data, stripping the seal and changing checksums fail restore.
+Restore gets trusted keys only from the HTTPS service and caches them privately, allowing later
+offline verification. A fresh installation needs internet once. Older unsigned backups cannot be
+authenticated and are rejected rather than silently promoted to protected backups.
+
+For rotation, retain previous public SPKI keys in `BACKUP_VERIFICATION_KEYS_JSON`, a JSON array of
+base64url DER strings (up to seven previous keys). These remain available even with signing disabled.
+Never discard old verification keys while backups using them remain supported. Deploy/configure the
+signer before shipping the Android protected-export UI; signing fails closed while unconfigured.
+Private pre-restore recovery ZIPs instead use an installation-specific HMAC key in Android's private
+no-backup directory, keeping recovery offline. The key is never exported. Another installation cannot
+authenticate that private recovery copy.
+
+Restores mark track points, roads, visited places and pending place candidates ineligible for local
+weekly challenges. Delayed matching, backfill and geocoding carry that provenance forward. New live
+driving remains eligible; prior reward ledgers remain history and cannot pay twice. Existing pre-upgrade
+rows keep their eligibility because old imports were not previously labeled and cannot be identified
+retrospectively. Local restored totals remain visible on-device; global and friend rankings continue
+to accept only fresh attested evidence and are unaffected by restore.

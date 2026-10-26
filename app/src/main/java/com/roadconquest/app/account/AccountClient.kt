@@ -88,6 +88,11 @@ object AccountClient {
         if (it.optBoolean("available")) requireVerifiedPolicy(it)
     }
 
+    fun backupKeys(): JSONObject = request("/v1/backups", "GET", null, null)
+
+    fun signBackup(hash: String, integrityToken: String): JSONObject = request("/v1/backups/sign", "POST",
+        JSONObject().put("hash", hash).put("integrity_token", integrityToken), null)
+
     fun leaderboard(token: String? = null): JSONObject {
         val includeMine = !token.isNullOrBlank()
         return request(

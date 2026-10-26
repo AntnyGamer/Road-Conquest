@@ -2,6 +2,21 @@ import { readFile } from "node:fs/promises";
 import { createSign, createPrivateKey } from "node:crypto";
 import { boundedJson, EvidenceError, verifyIntegrityVerdict } from "./scoring.mjs";
 
+export function playIntegrityConfig(env) {
+  const config = {
+    credentialsFile: env.PLAY_SERVICE_ACCOUNT_FILE, credentialsJson: env.PLAY_SERVICE_ACCOUNT_JSON,
+    packageName: "com.roadconquest.app", certificates: (env.PLAY_CERTIFICATES || "").split(",").filter(Boolean),
+    versions: (env.PLAY_VERSION_CODES || "").split(",").filter(Boolean), cloudProject: env.PLAY_CLOUD_PROJECT_NUMBER
+  };
+  if ((!config.credentialsFile && !config.credentialsJson) ||
+      !config.certificates.length || config.certificates.some(c => !/^[A-Za-z0-9_-]{43}$/u.test(c)) ||
+      !config.versions.length || config.versions.some(v => !/^[1-9][0-9]*$/u.test(v) || !Number.isSafeInteger(Number(v)) || Number(v) < 71) ||
+      !/^[1-9][0-9]{5,14}$/u.test(config.cloudProject || "")) {
+    throw new Error("Production Play Integrity configuration is required");
+  }
+  return config;
+}
+
 // Credentials are a server-only service-account file, never an APK property or a database row.
 export async function createIntegrityVerifier(config, request = fetch) {
   const credentials = config.credentialsJson

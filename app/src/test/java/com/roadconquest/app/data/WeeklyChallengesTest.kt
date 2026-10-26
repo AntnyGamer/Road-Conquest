@@ -30,7 +30,7 @@ class WeeklyChallengesTest {
         repeat(25) { road("r$it", "g$it", monday + 10) }
         val repository = ProgressionRepository(context)
         repeat(3) { repository.recordPlace(PlaceDiscovery(PlaceKind.TOWN, "town$it", "Town $it", visitedAt = monday + 10, latitude = 0.0, longitude = 0.0)) }
-        TrackingRepository(context).readableDatabase().execSQL("INSERT INTO visited_places VALUES ('TOWN','start','Start','','',?,0,0)", arrayOf(monday + 10))
+        TrackingRepository(context).readableDatabase().execSQL("INSERT INTO visited_places(kind,place_key,display_name,parent_name,country_name,first_visited_at,latitude,longitude) VALUES ('TOWN','start','Start','','',?,0,0)", arrayOf(monday + 10))
         val before = repository.snapshot().balance
         val week = WeeklyChallenges.status(context, monday + 100)
         assertEquals(listOf(25L, 25L, 3L, 3L), week.challenges.map { it.progress })
@@ -107,5 +107,14 @@ class WeeklyChallengesTest {
         assertEquals(before + 700, repository.snapshot().balance)
         WeeklyChallenges.status(context, monday + 2000)
         assertEquals(before + 700, repository.snapshot().balance)
+    }
+
+    @Test fun freshFragmentsOfImportedRoadGroupsCannotBecomeNewWeeklyRoads() {
+        road("imported", "restored-group", monday + 10)
+        val db = AppDatabase.get(context).writableDatabase
+        db.execSQL("UPDATE roads SET weekly_eligible=0 WHERE segment_id='imported'")
+        road("new-fragment", "restored-group", monday + 20)
+        road("new-road", "fresh-group", monday + 20)
+        assertEquals(1L, WeeklyChallenges.status(context, monday + 100).challenges.first().progress)
     }
 }

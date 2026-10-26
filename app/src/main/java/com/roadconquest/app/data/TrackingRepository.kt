@@ -800,7 +800,14 @@ class TrackingRepository(context: Context) {
             val db = dbHelper.writableDatabase
             db.beginTransaction()
             try {
-                upsertRoads(roads)
+                // A delayed match over imported fixes remains historical, even if
+                // forged timestamps put it in the current challenge week.
+                val eligible = ids.chunked(400).all { chunk ->
+                    db.rawQuery("SELECT 1 FROM track_points WHERE weekly_eligible=0 AND id IN (" +
+                        chunk.joinToString(",") { "?" } + ") LIMIT 1",
+                        Array(chunk.size) { chunk[it].toString() }).use { !it.moveToFirst() }
+                }
+                upsertRoads(roads, eligible)
                 markMatched(ids)
                 db.setTransactionSuccessful()
             } finally {
@@ -857,7 +864,7 @@ class TrackingRepository(context: Context) {
     }
 
     @Synchronized
-    fun upsertRoads(roads: List<MatchedRoad>) {
+    fun upsertRoads(roads: List<MatchedRoad>, weeklyEligible: Boolean = true) {
         synchronized(dbHelper.historyLock) {
             if (historyGeneration != dbHelper.historyGeneration) return
             if (roads.isEmpty()) return
@@ -872,7 +879,8 @@ class TrackingRepository(context: Context) {
                         countTowardsRoads = road.countTowardsRoads,
                         geometryJson = road.coordinatesJson,
                         firstTimestamp = road.firstTimestamp,
-                        lastTimestamp = road.lastTimestamp
+                        lastTimestamp = road.lastTimestamp,
+                        weeklyEligible = weeklyEligible
                     )
                 }
                 db.setTransactionSuccessful()
@@ -890,7 +898,8 @@ class TrackingRepository(context: Context) {
         countTowardsRoads: Boolean,
         geometryJson: String,
         firstTimestamp: Long,
-        lastTimestamp: Long
+        lastTimestamp: Long,
+        weeklyEligible: Boolean
     ) {
         val coordinates = requireNotNull(runCatching { JSONArray(geometryJson) }.getOrNull()) { "Invalid road geometry JSON" }
         val bounds = requireNotNull(coordinateBounds(coordinates)) { "Invalid road coordinates" }
@@ -938,6 +947,9 @@ class TrackingRepository(context: Context) {
             put("max_lat", bounds.maxLat)
             put("min_lon", bounds.minLon)
             put("max_lon", bounds.maxLon)
+            if (existing == null || (!weeklyEligible && firstTimestamp < existing.firstUnlockedAt)) {
+                put("weekly_eligible", if (weeklyEligible) 1 else 0)
+            }
         }
         if (existing == null) {
             db.insertOrThrow("roads", null, values)

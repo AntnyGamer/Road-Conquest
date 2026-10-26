@@ -288,6 +288,13 @@ coordinate batches through the Road Conquest gateway to Geoapify. Town/state/cou
 Android's system geocoder only while Road Conquest is foregrounded; the geocoder implementation and
 network behavior are supplied by the device. Pending data remains saved for retry after network or
 matching failures. User-selected ZIP exports contain precise history, road geometry and progression data.
+Protected exports require internet and production Play app verification; only a SHA-256 fingerprint
+and attestation are sent for signing. Restore rejects changed or unsigned files. Verification keys
+are fetched over HTTPS once per installation/key and saved for later offline checks. The private
+pre-restore recovery copy works offline on the same installation. Imported history, including delayed
+matching and town discovery, cannot earn new weekly challenge credit or change verified rankings.
+Restored local history and previously earned local rewards remain visible. See the account server
+README for signing-key setup required before releasing this change.
 
 When enabled and available, verified scoring sends precise live GPS batches with Play Integrity
 evidence for independent server matching. The server retains scores, short-lived receipt hashes,
