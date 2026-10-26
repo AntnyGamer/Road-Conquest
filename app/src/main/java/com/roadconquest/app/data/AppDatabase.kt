@@ -277,6 +277,7 @@ class AppDatabase private constructor(context: Context) :
             for (table in listOf("track_points", "roads", "visited_places", "place_candidates")) {
                 db.execSQL("ALTER TABLE $table ADD COLUMN weekly_eligible INTEGER NOT NULL DEFAULT 1 CHECK(weekly_eligible IN (0,1))")
             }
+            if (oldVersion >= 15) db.execSQL("ALTER TABLE skipped_driving_fixes ADD COLUMN weekly_eligible INTEGER NOT NULL DEFAULT 1 CHECK(weekly_eligible IN (0,1))")
         }
         if (oldVersion < 13 && newVersion >= 13) {
             pruneHistoricalFogDrift(db)
@@ -310,7 +311,8 @@ class AppDatabase private constructor(context: Context) :
                 accuracy_m REAL NOT NULL,
                 speed_mps REAL NOT NULL,
                 bearing_deg REAL NOT NULL,
-                timestamp_ms INTEGER NOT NULL
+                timestamp_ms INTEGER NOT NULL,
+                weekly_eligible INTEGER NOT NULL DEFAULT 1 CHECK(weekly_eligible IN (0,1))
             )
         """.trimIndent())
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_skipped_driving_time ON skipped_driving_fixes(timestamp_ms)")

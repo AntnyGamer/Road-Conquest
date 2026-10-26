@@ -926,7 +926,7 @@ class ProgressionRepository(context: Context) {
                         put("longitude", discovery.longitude)
                         if (!weeklyEligible) put("weekly_eligible", 0)
                     },
-                    "kind = ? AND place_key = ? AND first_visited_at > ?",
+                    "kind = ? AND place_key = ? AND first_visited_at " + (if (weeklyEligible) "> ?" else ">= ?"),
                     arrayOf(discovery.kind.name, discovery.key, discovery.visitedAt.toString())
                 )
             }

@@ -145,18 +145,21 @@ class TrackingRepository(context: Context) {
         if (historyGeneration != dbHelper.historyGeneration) return@synchronized false
         val db = dbHelper.writableDatabase
         val endpoint = db.rawQuery(
-            """SELECT latitude, longitude, accuracy_m, speed_mps, bearing_deg, timestamp_ms
+            """SELECT latitude, longitude, accuracy_m, speed_mps, bearing_deg, timestamp_ms, weekly_eligible
                FROM skipped_driving_fixes
                WHERE timestamp_ms > COALESCE((SELECT MAX(timestamp_ms) FROM track_points), 0)
                ORDER BY timestamp_ms DESC, id DESC LIMIT 1""", null
         ).use { cursor ->
-            if (!cursor.moveToFirst()) null else Location("gps").apply {
-                latitude = cursor.getDouble(0); longitude = cursor.getDouble(1)
-                accuracy = cursor.getFloat(2); speed = cursor.getFloat(3)
-                bearing = cursor.getFloat(4); time = cursor.getLong(5)
+            if (!cursor.moveToFirst()) null else {
+                val location = Location("gps").apply {
+                    latitude = cursor.getDouble(0); longitude = cursor.getDouble(1)
+                    accuracy = cursor.getFloat(2); speed = cursor.getFloat(3)
+                    bearing = cursor.getFloat(4); time = cursor.getLong(5)
+                }
+                location to (cursor.getInt(6) == 1)
             }
         } ?: return@synchronized false
-        insertLocation(endpoint)
+        insertLocation(endpoint.first, endpoint.second)
         true
     }
 
@@ -190,7 +193,10 @@ class TrackingRepository(context: Context) {
     }
 
     @Synchronized
-    fun insertLocation(location: Location): Long {
+    fun insertLocation(location: Location): Long = insertLocation(location, weeklyEligible = true)
+
+    @Synchronized
+    private fun insertLocation(location: Location, weeklyEligible: Boolean): Long {
         synchronized(dbHelper.historyLock) {
             if (historyGeneration != dbHelper.historyGeneration) return -1L
             val db = dbHelper.writableDatabase
@@ -199,7 +205,7 @@ class TrackingRepository(context: Context) {
             db.beginTransaction()
             val id = try {
                 val previous = loadLastPoint(db)
-                insertLocationInTransaction(db, location, previous, delta).also {
+                insertLocationInTransaction(db, location, previous, delta, weeklyEligible).also {
                     persistedPoint = previous
                     db.setTransactionSuccessful()
                 }
@@ -285,7 +291,8 @@ class TrackingRepository(context: Context) {
         db: SQLiteDatabase,
         location: Location,
         previous: LastPoint,
-        delta: TrackInsertDelta
+        delta: TrackInsertDelta,
+        weeklyEligible: Boolean = true
     ): Long {
         val timestamp = location.time.takeIf { it > 0L } ?: System.currentTimeMillis()
         // Restore the actual path length from locally kept intervening fixes.
@@ -327,6 +334,7 @@ class TrackingRepository(context: Context) {
         val values = drivingValues(location, timestamp).apply {
             put("matched", 0)
             put("distance_m", distance)
+            put("weekly_eligible", if (weeklyEligible) 1 else 0)
         }
         val id = db.insertOrThrow("track_points", null, values)
         previous.present = true
@@ -906,7 +914,7 @@ class TrackingRepository(context: Context) {
         val segmentId = roadSegmentId(db, name, coordinates, geometryJson)
         val existing = db.query(
             "roads",
-            arrayOf("first_unlocked_at", "last_driven_at", "road_group_id"),
+            arrayOf("first_unlocked_at", "last_driven_at", "road_group_id", "weekly_eligible"),
             "segment_id = ?",
             arrayOf(segmentId),
             null,
@@ -917,10 +925,13 @@ class TrackingRepository(context: Context) {
             else ExistingRoad(
                 firstUnlockedAt = cursor.getLong(0),
                 lastDrivenAt = cursor.getLong(1),
-                groupId = cursor.getString(2)
+                groupId = cursor.getString(2),
+                weeklyEligible = cursor.getInt(3) == 1
             )
         }
         val previousGroup = existing?.groupId.orEmpty()
+        val eligible = existing?.weeklyEligible != false &&
+            (weeklyEligible || (existing != null && firstTimestamp > existing.firstUnlockedAt))
         val groupId = when {
             !countTowardsRoads && previousGroup.isNotBlank() && !isExcludedRoadGroup(previousGroup) ->
                 previousGroup
@@ -947,9 +958,7 @@ class TrackingRepository(context: Context) {
             put("max_lat", bounds.maxLat)
             put("min_lon", bounds.minLon)
             put("max_lon", bounds.maxLon)
-            if (existing == null || (!weeklyEligible && firstTimestamp < existing.firstUnlockedAt)) {
-                put("weekly_eligible", if (weeklyEligible) 1 else 0)
-            }
+            put("weekly_eligible", if (eligible) 1 else 0)
         }
         if (existing == null) {
             db.insertOrThrow("roads", null, values)
@@ -1147,7 +1156,8 @@ class TrackingRepository(context: Context) {
     private data class ExistingRoad(
         val firstUnlockedAt: Long,
         val lastDrivenAt: Long,
-        val groupId: String?
+        val groupId: String?,
+        val weeklyEligible: Boolean
     )
 
     /**
@@ -1951,7 +1961,7 @@ class TrackingRepository(context: Context) {
     companion object {
         private val ROAD_UPDATE_COLUMNS = listOf(
             "name", "geometry_json", "first_unlocked_at", "last_driven_at", "road_group_id",
-            "min_lat", "max_lat", "min_lon", "max_lon"
+            "min_lat", "max_lat", "min_lon", "max_lon", "weekly_eligible"
         )
         private val ROAD_UPDATE_IF_CHANGED = "segment_id = ? AND (" +
             ROAD_UPDATE_COLUMNS.joinToString(" OR ") { "$it IS NOT ?" } + ")"

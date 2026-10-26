@@ -55,6 +55,7 @@ class DataImporterTest {
         val time = minOf(week + 1_000L, now)
         val tracker = TrackingRepository(context)
         val first = tracker.insertLocation(fix(time))
+        tracker.recordSkippedDrivingFix(fix(now - 500L, -73.95))
         repeat(25) { i -> tracker.upsertRoads(listOf(MatchedRoad("Imported $i",
             "[[-74,40],[${-73.999 + i * 0.001},40]]", time, time, 1.0))) }
         val progression = ProgressionRepository(context)
@@ -67,6 +68,10 @@ class DataImporterTest {
         val original = export()
         prepareFixture(context, ByteArrayInputStream(original)).use { DataImporter.restore(context, it) }
         val restoredTracker = TrackingRepository(context)
+        assertTrue(restoredTracker.recoverTrailingSkippedDrivingFix())
+        restoredTracker.readableDatabase().rawQuery("SELECT weekly_eligible FROM track_points ORDER BY id DESC LIMIT 1", null).use {
+            assertTrue(it.moveToFirst()); assertEquals(0, it.getInt(0))
+        }
         val restoredProgression = ProgressionRepository(context)
         val before = restoredProgression.snapshot().balance
         assertEquals(listOf(0L, 0L, 0L, 0L), WeeklyChallenges.status(context, now).challenges.map { it.progress })
@@ -90,6 +95,27 @@ class DataImporterTest {
         assertEquals(listOf(1L, 1L, 1L, 1L), goals.map { it.progress })
         assertEquals(listOf(false, false, true, false), goals.map { it.rewarded })
         assertFalse(Prefs.isDriveVerificationEnabled(context))
+    }
+
+    @Test fun backfillingRestoredRawGpsCannotCreateWeeklyTownCredit() {
+        val now = System.currentTimeMillis()
+        val tracker = TrackingRepository(context)
+        val progression = ProgressionRepository(context)
+        assertTrue(progression.recordBaselineCandidate(fix(1_000)))
+        val baseline = progression.pendingPlaceCandidates().single()
+        progression.resolveCandidate(baseline, PlaceKind.entries.map {
+            PlaceDiscovery(it, "start-${it.name}", "Start ${it.name}", visitedAt = 1_000,
+                latitude = 40.0, longitude = -74.0)
+        })
+        tracker.insertLocation(fix(now - 1_000, -73.5))
+        prepareFixture(context, ByteArrayInputStream(export())).use { DataImporter.restore(context, it) }
+        val restored = ProgressionRepository(context)
+        assertEquals(1, restored.backfillPlaceCandidates())
+        val candidate = restored.pendingPlaceCandidates().single()
+        assertFalse(candidate.weeklyEligible)
+        restored.resolveCandidate(candidate, listOf(PlaceDiscovery(PlaceKind.TOWN, "backfill", "Backfilled town",
+            visitedAt = candidate.visitedAt, latitude = candidate.latitude, longitude = candidate.longitude)))
+        assertEquals(0L, WeeklyChallenges.status(context, now).challenges.last().progress)
     }
 
     @Test fun restoresEveryTableAndKeepsRecoveryWithoutUploadingOrDuplicatingRewards() {

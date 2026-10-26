@@ -308,7 +308,7 @@ object DataImporter {
     }
 
     private fun count(db: SQLiteDatabase, table: String) = db.rawQuery("SELECT COUNT(*) FROM $table", null).use { it.moveToFirst(); it.getLong(0) }
-    private val WEEKLY_HISTORY_TABLES = setOf("track_points", "roads", "visited_places", "place_candidates")
+    private val WEEKLY_HISTORY_TABLES = setOf("track_points", "skipped_driving_fixes", "roads", "visited_places", "place_candidates")
     private fun sum(db: SQLiteDatabase, table: String, column: String) = db.rawQuery("SELECT COALESCE(SUM($column),0) FROM $table", null).use { it.moveToFirst(); it.getLong(0) }
 
     private fun validateRow(table: String, v: ContentValues) {

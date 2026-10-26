@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash, generateKeyPairSync, createPublicKey, verify } from "node:crypto";
 import { createBackups, backupMessage } from "../src/backups.mjs";
+import { readFile } from "node:fs/promises";
 
 const { privateKey, publicKey } = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
 const env = { BACKUP_SIGNING_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }),
@@ -9,6 +10,12 @@ const env = { BACKUP_SIGNING_PRIVATE_KEY: privateKey.export({ type: "pkcs8", for
   PLAY_CLOUD_PROJECT_NUMBER: "123456789" };
 const hash = createHash("sha256").update("unchanged backup").digest("base64url");
 const body = { hash, integrity_token: "official-app-token-12345" };
+
+test("Node and Android share a server-generated P-256 signature fixture", async () => {
+  const fixture = JSON.parse(await readFile(new URL("../../app/src/test/resources/backup-signature.json", import.meta.url), "utf8"));
+  const key = createPublicKey({ key: Buffer.from(fixture.spki, "base64url"), format: "der", type: "spki" });
+  assert.equal(verify("sha256", backupMessage(fixture.hash), key, Buffer.from(fixture.signature, "base64url")), true);
+});
 
 test("backup signatures bind exact contents and attestation without accessing accounts or scores", async () => {
   const checks = [];
