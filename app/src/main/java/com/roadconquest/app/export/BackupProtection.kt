@@ -52,6 +52,9 @@ object BackupProtection {
                 .setRequestHash(requestHash).build()), 15, TimeUnit.SECONDS).token()
             val seal = AccountClient.signBackup(hash, token)
             verifyServerSeal(context, hash, seal)
+            check(repository.isHistoryCurrent() && !com.roadconquest.app.util.Prefs.isDeviceDataDeletionPending(context)) {
+                "Device progress changed while exporting. Export again."
+            }
             attach(file, seal)
             file.inputStream().use { it.copyTo(output) }
         } finally { file.delete() }
@@ -183,5 +186,10 @@ object BackupProtection {
 
     internal fun clearTemporaryFiles(context: Context) {
         context.cacheDir.listFiles().orEmpty().filter { it.name.startsWith(TEMP_PREFIX) }.forEach { it.delete() }
+    }
+
+    internal fun clearRecoveryKey(context: Context) = synchronized(localKeyLock) {
+        val file = File(context.noBackupFilesDir, KEY_FILE)
+        check(!file.exists() || file.delete()) { "Could not remove recovery key" }
     }
 }

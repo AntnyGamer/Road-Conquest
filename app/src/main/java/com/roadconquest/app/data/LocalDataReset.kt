@@ -33,6 +33,8 @@ object LocalDataReset {
             ProgressionManager.resetLocalProgression(app)
             com.roadconquest.app.map.PlacePopulationLookup.clearCache(app)
             DataExporter.clearTemporarySnapshots(app)
+            com.roadconquest.app.export.BackupProtection.clearTemporaryFiles(app)
+            com.roadconquest.app.export.BackupProtection.clearRecoveryKey(app)
             // A new empty profile must not display the former profile's backup date.
             app.getSharedPreferences("roadconquest_export_history", Context.MODE_PRIVATE)
                 .edit().clear().commit()

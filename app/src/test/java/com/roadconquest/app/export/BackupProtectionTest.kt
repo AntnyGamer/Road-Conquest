@@ -88,6 +88,19 @@ class BackupProtectionTest {
         } finally { file.delete() }
     }
 
+    @Test fun deletingLocalDataRemovesRecoverySecretsAndInterruptedProtectedSnapshots() {
+        val file = raw()
+        try {
+            BackupProtection.sealRecovery(context, file)
+            val snapshot = File(context.cacheDir, "roadconquest-protected-orphan.zip").apply { writeText("private history") }
+            com.roadconquest.app.data.LocalDataReset.stopTracking(context)
+            com.roadconquest.app.data.LocalDataReset.clearStoppedData(context)
+            assertFalse(snapshot.exists())
+            assertFalse(File(context.noBackupFilesDir, "backup-recovery.key").exists())
+            assertThrows(IllegalArgumentException::class.java) { BackupProtection.verify(context, file) }
+        } finally { file.delete() }
+    }
+
     @Test fun androidVerifiesTheSameServerGeneratedSignatureAsNode() {
         val fixture = javaClass.classLoader!!.getResourceAsStream("backup-signature.json")!!.use {
             JSONObject(it.bufferedReader().readText())
