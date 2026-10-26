@@ -7,6 +7,11 @@ test('remote switches accept only known booleans and coalesce/cache KV reads', a
   const parsed = parseSwitches({ version: 1, providers: { 'geoapify-matching': false, openfreemap: 'false', host: 'evil' } });
   assert.equal(parsed['geoapify-matching'], false); assert.equal(parsed.openfreemap, true); assert.equal(parsed.host, undefined);
   assert.throws(() => parseSwitches({ version: 2, providers: {} }));
+  // A scalar providers field must not silently enable a previously disabled
+  // service by being interpreted as a valid empty collection of switches.
+  for (const invalid of [null, true, 4, 'disabled', []]) {
+    assert.throws(() => parseSwitches({ version: 1, providers: invalid }), /Invalid configuration/);
+  }
   let reads = 0; let fail = false; let removed = false;
   const env = { SERVICE_CONFIG: { get: async () => { reads++; if (fail) throw new Error();
     return removed ? null : JSON.stringify({ version: 1, providers: { 'geoapify-matching': false } }); } } };

@@ -8,7 +8,8 @@ export function parseSwitches(value) {
     if (value.length > 4096) throw new Error('Oversized configuration');
     value = JSON.parse(value);
   }
-  if (value?.version !== 1 || !value.providers || Array.isArray(value.providers)) throw new Error('Invalid configuration');
+  if (value?.version !== 1 || !value.providers || typeof value.providers !== 'object' ||
+      Array.isArray(value.providers)) throw new Error('Invalid configuration');
   return Object.fromEntries(Object.entries(DEFAULT_SWITCHES).map(([key, fallback]) =>
     [key, typeof value.providers[key] === 'boolean' ? value.providers[key] : fallback]));
 }
