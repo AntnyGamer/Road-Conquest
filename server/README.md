@@ -98,7 +98,8 @@ First checks also guard the profile's MVCC version: an inactive, unowned receipt
 receipt row to update, so that result touches the profile to invalidate older first-check
 responses without claiming the token. Ordinary rechecks of saved receipts continue to
 avoid rewriting an unchanged entitlement profile. Initial profile creation happens before
-the external request; malformed tokens are rejected before either database or Play work.
+the external request. The purchase handler rejects malformed tokens before its profile
+and receipt reads or any Play call; HTTP authentication and rate limits still apply.
 
 ## Free Neon deployment
 
