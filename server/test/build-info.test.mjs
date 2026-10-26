@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 const execute = promisify(execFile);
 
 test('bundled liveness reports the checked-out revision without opening the database or trusting runtime overrides', async () => {
-  let revision = process.env.ROADCONQUEST_SERVER_REVISION || process.env.GITHUB_SHA || null;
+  let revision = process.env.ROADCONQUEST_SERVER_REVISION || null;
   try {
     const [checkout, head] = (await execute('git', ['rev-parse', '--show-toplevel', 'HEAD'],
       { cwd: new URL('../', import.meta.url) })).stdout.trim().split(/\r?\n/);
@@ -57,7 +57,7 @@ test('exported source inside another repository never claims the parent commit',
     await symlink(fileURLToPath(new URL('../node_modules', import.meta.url)), join(archive, 'node_modules'), 'junction');
     const environment = { ...process.env, DATABASE_URL: 'postgresql://unused@127.0.0.1:1/unavailable',
       PASSWORD_PEPPER: 'synthetic-build-info-test-pepper-32', FORUM_ENABLED: '0', LEADERBOARDS_ENABLED: '0' };
-    delete environment.GITHUB_SHA;
+    environment.GITHUB_SHA = 'b'.repeat(40); // A packaging job's commit need not identify the exported source.
     delete environment.ROADCONQUEST_SERVER_REVISION;
     // Each process reads a newly built bundle, rather than reusing the module cache.
     const inspect = join(archive, 'inspect.mjs');

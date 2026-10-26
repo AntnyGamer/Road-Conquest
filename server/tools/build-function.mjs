@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
-let revision = process.env.ROADCONQUEST_SERVER_REVISION || process.env.GITHUB_SHA || null;
+let revision = process.env.ROADCONQUEST_SERVER_REVISION || null;
 try {
   const [checkout, head] = execFileSync('git', ['rev-parse', '--show-toplevel', 'HEAD'],
     { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim().split(/\r?\n/);
