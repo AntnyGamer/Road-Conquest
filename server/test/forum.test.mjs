@@ -34,6 +34,14 @@ test('forum penalties are deletion, seven days, then a capped forum ban', () => 
   assert.equal(moderationPenalty(3).violations,3);
 });
 
+test('malformed purchase tokens fail before any database or Play work', async () => {
+  const unexpected = () => { throw Error('Invalid tokens must not start work'); };
+  const forum = createForum({ query: unexpected, connect: unexpected }, { ...options, verifyPurchase: unexpected });
+  for (const token of [null, 42, '', 'x'.repeat(4097), 'receipt\n', 'receipt\r']) {
+    await assert.rejects(forum.purchase({ id: 1 }, token), error => error.status === 400);
+  }
+});
+
 test('manual billing delivery tests log only authenticated notifications for this app without querying purchases', async () => {
   const logs = [], originalInfo = console.info;
   console.info = message => logs.push(message);
@@ -234,10 +242,10 @@ test('purchase verification outages preserve existing paid access and receipt st
 test('repeat purchase checks retain encrypted receipts without resending them, including refund and restore',
   { skip: !database }, async () => fixture(async (pool, [a]) => {
     await pool.query('INSERT INTO forum_profiles(user_id) VALUES($1)', [a.id]);
-    let binaryBytes = 0, statements = 0, checks = 0, active = true;
+    let binaryBytes = 0, statements = 0, preflightReads = 0, checks = 0, active = true;
     const token = 'r'.repeat(4096);
     const measured = {
-      query: pool.query.bind(pool),
+      query: (...args) => { preflightReads++; return pool.query(...args); },
       async connect() {
         const db = await pool.connect();
         return { query: async (sql, parameters) => {
@@ -258,10 +266,11 @@ test('repeat purchase checks retain encrypted receipts without resending them, i
     assert.equal(purchaseCodec(options.pepper).open(original.encrypted_token), token);
     assert.equal(binaryBytes, 4124, 'Only the first check sends the encrypted token and its nonce/tag');
     assert.equal(statements, 5);
+    assert.equal(preflightReads, 1, 'Profile authorization and receipt versions share one read');
     for (const state of [true, false, true]) {
       active = state;
       await pool.query("UPDATE forum_purchases SET checked_at='2000-01-01T00:00:00Z'");
-      binaryBytes = statements = 0;
+      binaryBytes = statements = preflightReads = 0;
       assert.deepEqual(await forum.purchase(a, token), { plus: state });
       const updated = await receipt();
       assert.deepEqual(updated.encrypted_token, original.encrypted_token);
@@ -269,6 +278,7 @@ test('repeat purchase checks retain encrypted receipts without resending them, i
       assert.ok(new Date(updated.checked_at).getTime() > Date.parse('2000-01-01T00:00:00Z'));
       assert.equal(binaryBytes, 0, 'Stored receipts need no replacement ciphertext parameter');
       assert.equal(statements, 5, 'The apply transaction keeps five statements, separate from the read-only preflight');
+      assert.equal(preflightReads, 1);
     }
     assert.equal(checks, 4, 'Every request still verifies the current state with Play');
   }));
@@ -284,7 +294,9 @@ test('slow Play checks hold no database connections or account locks', { skip: !
       return { query: db.query.bind(db), release() { held--; db.release(); } };
     } };
     const forum = createForum(measured, { ...options, verifyPurchase: async () => {
-      assert.equal(held, 0, 'No transaction client may be held during the external request');
+      // Initial checks all pause together. A later conflict retry can overlap
+      // another request's short transaction, but never holds its own client.
+      if (started < 5) assert.equal(held, 0, 'No transaction client may be held during the external request');
       if (++started === 5) ready.resolve();
       await gate.promise;
       return true;
@@ -322,6 +334,30 @@ for (const [initial, changed] of [[true, false], [false, true]]) {
       assert.deepEqual(await pending, { plus: changed });
       assert.equal(checks, 2, 'The stale verdict must be discarded and verified again after releasing the lock');
       assert.equal((await setup.list(a)).viewer.plus, changed);
+    }));
+}
+
+for (const existingProfile of [false, true]) {
+  test(`a delayed first purchase cannot overwrite a newer inactive check with ${existingProfile ? 'an existing' : 'a new'} profile`,
+    { skip: !database }, async () => fixture(async (pool, [a], setup) => {
+      if (existingProfile) await pool.query('INSERT INTO forum_profiles(user_id) VALUES($1)', [a.id]);
+      let checks = 0;
+      const started = Promise.withResolvers(), gate = Promise.withResolvers();
+      const delayed = createForum(pool, { ...options, verifyPurchase: async () => {
+        if (++checks === 1) { started.resolve(); await gate.promise; return true; }
+        return false;
+      } });
+      const pending = delayed.purchase(a, 'first-receipt');
+      try {
+        await started.promise;
+        assert.deepEqual(await createForum(pool, { ...options, verifyPurchase: async () => false })
+          .purchase(a, 'first-receipt'), { plus: false });
+      } finally { gate.resolve(); }
+      assert.deepEqual(await pending, { plus: false });
+      assert.equal(checks, 2);
+      assert.equal((await setup.list(a)).viewer.plus, false);
+      assert.equal((await pool.query('SELECT token_hash FROM forum_purchases')).rowCount, 0,
+        'An unverified or inactive first receipt must not reserve an owner');
     }));
 }
 
@@ -629,7 +665,7 @@ test('post, reaction and purchase mutations use fewer SQL round trips without ch
     statements = 0;
     await forum.purchase(a, 'first-receipt');
     assert.equal(statements, 5, 'Purchase transaction combines receipt and entitlement writes');
-    assert.deepEqual(profileFields.at(-1), ['banned'], 'Purchase preflight does not transfer unused profile fields');
+    assert.deepEqual(profileFields.at(-1), ['banned', 'version'], 'Purchase authorization transfers only the ban and required MVCC version');
     assert.equal((await forum.list(a)).viewer.plus, true);
     await advance(pool, a);
     statements = 0;

@@ -48,15 +48,16 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
 
   // Column lists are fixed internal SQL, never request input.
   async function profile(db, userId, lock = false, columns = `violations,muted_until,banned,plus_active,
-      last_post_at + INTERVAL '10 minutes' AS next_post_at`) {
+      last_post_at + INTERVAL '10 minutes' AS next_post_at`, parameters = []) {
     const query = `SELECT ${columns} FROM forum_profiles
       WHERE user_id=$1${lock ? ' FOR UPDATE' : ''}`;
-    let { rows } = await db.query(query, [userId]);
+    const values = [userId, ...parameters];
+    let { rows } = await db.query(query, values);
     if (rows[0]) return rows[0];
     // Missing profiles are uncommon. Insert only on first participation, then
     // re-read so competing instances still acquire the requested row lock.
     await db.query('INSERT INTO forum_profiles(user_id) SELECT id FROM users WHERE id=$1 ON CONFLICT DO NOTHING', [userId]);
-    ({ rows } = await db.query(query, [userId]));
+    ({ rows } = await db.query(query, values));
     if (!rows[0]) throw new EvidenceError('Authentication required.', 401);
     return rows[0];
   }
@@ -98,7 +99,6 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
     return rows[0];
   }
   function enforcePurchase(userId, current, prior) {
-    if (!current) throw new EvidenceError('Authentication required.', 401);
     if (prior && String(prior.user_id) !== String(userId)) throw new EvidenceError('Purchase belongs to another account.', 403);
     if (!prior && current.banned) throw new EvidenceError('New Forum Plus purchases are unavailable for banned accounts.', 403);
     if (!prior && !moderate) throw new EvidenceError('New Forum Plus purchases are temporarily unavailable.', 503);
@@ -288,31 +288,34 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
     },
     async purchase(user, token) {
       if (!verifyPurchase || !verifyWebhook) throw new EvidenceError('Forum Plus purchases are temporarily unavailable.', 503);
-      if (typeof token !== 'string' || !token.length || token.length > 4096) throw new EvidenceError('Invalid purchase token.', 400);
+      if (typeof token !== 'string' || !token.length || token.length > 4096 || /[\r\n]/.test(token)) throw new EvidenceError('Invalid purchase token.', 400);
       const digest = purchaseHash(token);
       for (let attempt = 0; attempt < 3; attempt++) {
-        // Read only the receipt's MVCC version, never its encrypted token. Release
-        // the connection before OAuth, Play verification or acknowledgement.
-        const { rows: [snapshot] } = await pool.query(`SELECT COALESCE(f.banned,FALSE) AS banned,
-          p.user_id,p.xmin::text AS version FROM users u
-          LEFT JOIN forum_profiles f ON f.user_id=u.id
-          LEFT JOIN forum_purchases p ON p.token_hash=$2 WHERE u.id=$1`, [user.id,digest]);
-        enforcePurchase(user.id, snapshot, snapshot?.user_id == null ? null : snapshot);
+        // Read only ownership and MVCC versions, never the encrypted token.
+        // Establish a profile before Google so even an inactive first check can
+        // invalidate older in-flight results without claiming an unverified token.
+        const snapshot = await profile(pool,user.id,false, `banned,xmin::text AS version,
+          (SELECT json_build_object('user_id',p.user_id::text,'version',p.xmin::text)
+           FROM forum_purchases p WHERE p.token_hash=$2) AS receipt`, [digest]);
+        enforcePurchase(user.id, snapshot, snapshot.receipt);
         const active = await verifyPurchase(token, binding(user.id));
         if (typeof active !== 'boolean') throw new EvidenceError('Purchase verification is temporarily unavailable.', 503);
         const result = await transact(async db => {
-          const current = await profile(db,user.id,true,'banned');
+          const current = await profile(db,user.id,true,'banned,xmin::text AS version');
           const { rows: [prior] } = await db.query('SELECT user_id,xmin::text AS version FROM forum_purchases WHERE token_hash=$1 FOR UPDATE', [digest]);
           enforcePurchase(user.id, current, prior);
           // Another instance may have committed a refund/restore while Google was
           // responding. Discard that stale verdict and reverify OUTSIDE the lock.
-          if ((prior?.version ?? null) !== snapshot.version) return null;
+          if ((prior?.version ?? null) !== (snapshot.receipt?.version ?? null) ||
+              (!prior && current.version !== snapshot.version)) return null;
           // Existing receipts are already encrypted. Refresh their verified state
           // without encrypting/transferring a replacement the conflict path discards.
           const newPurchase = active && !prior;
           // A writable CTE's table scan sees the statement's original snapshot.
           // Use the freshly verified state for this token and scan only OTHER
           // receipts, so refunds/restores and multiple purchases stay accurate.
+          // An inactive, unseen token cannot reserve an owner. Touch the profile
+          // in that case so its MVCC version invalidates older first-check results.
           const { rows } = await db.query(`WITH recorded AS (${newPurchase
             ? `INSERT INTO forum_purchases(token_hash,user_id,encrypted_token,active)
               VALUES($1,$2,$3,TRUE) ON CONFLICT(token_hash) DO NOTHING RETURNING 1`
@@ -323,7 +326,7 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
             ${newPurchase ? 'WHERE EXISTS(SELECT 1 FROM recorded)' : ''}
           ), changed AS (
             UPDATE forum_profiles SET plus_active=desired.owned FROM desired
-            WHERE user_id=$2 AND plus_active IS DISTINCT FROM desired.owned RETURNING 1
+            WHERE user_id=$2 ${!prior && !active ? '' : 'AND plus_active IS DISTINCT FROM desired.owned'} RETURNING 1
           ) SELECT desired.owned AS plus_active FROM desired LEFT JOIN changed ON TRUE`,
           newPurchase ? [digest,user.id,codec.seal(token),active] : [digest,user.id,active]);
           // A different account can race to insert a previously unseen token.

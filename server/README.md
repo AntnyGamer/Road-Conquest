@@ -75,7 +75,8 @@ and returns the same metadata after success. Both responses use `Cache-Control: 
 `npm run build:function` embeds the checked-out Git revision in the function bundle.
 Exported source archives can set `ROADCONQUEST_SERVER_REVISION` to the full 40-character
 commit hash at build time. A native `npm start` deployment can set that variable at runtime.
-An unknown revision is `null`, never an inferred claim about deployment freshness.
+An unrelated enclosing Git repository is ignored. An unknown revision is `null`,
+never an inferred claim about deployment freshness.
 
 After deploying the account function, fetch `/health/live` through the actual public
 account URL and compare `revision` with the intended source commit (`git rev-parse HEAD`).
@@ -93,6 +94,11 @@ checked again outside the transaction, up to three checks. Continued contention 
 a retryable 503 without overwriting the last committed entitlement. This adds one read
 per uncontended verification, avoids holding a scarce pool connection during remote
 timeouts, and requires no schema migration. Existing encrypted receipts stay unchanged.
+First checks also guard the profile's MVCC version: an inactive, unowned receipt has no
+receipt row to update, so that result touches the profile to invalidate older first-check
+responses without claiming the token. Ordinary rechecks of saved receipts continue to
+avoid rewriting an unchanged entitlement profile. Initial profile creation happens before
+the external request; malformed tokens are rejected before either database or Play work.
 
 ## Free Neon deployment
 
