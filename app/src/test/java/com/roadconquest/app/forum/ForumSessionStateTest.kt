@@ -4,6 +4,26 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ForumSessionStateTest {
+    @Test fun overlappingPurchaseCallbacksVerifyOnceButCompletionAllowsFreshRetries() {
+        val state = ForumSessionState()
+        state.switchTo("account-a")
+        assertTrue(state.claimPurchase("account-a", "receipt"))
+        repeat(10) { assertFalse(state.claimPurchase("account-a", "receipt")) }
+        assertTrue(state.claimPurchase("account-a", "other-receipt"))
+        state.finishPurchase("account-a", "receipt")
+        assertTrue(state.claimPurchase("account-a", "receipt"))
+
+        state.switchTo("account-b")
+        assertFalse(state.claimPurchase("account-a", "new-receipt"))
+        assertTrue(state.claimPurchase("account-b", "receipt"))
+        state.finishPurchase("account-a", "receipt")
+        assertFalse(state.claimPurchase("account-b", "receipt"))
+        state.finishPurchase("account-b", "receipt")
+        assertTrue(state.claimPurchase("account-b", "receipt"))
+        state.switchTo(null)
+        assertFalse(state.claimPurchase("account-b", "signed-out-receipt"))
+    }
+
     @Test fun savedComposerDraftIsRestoredOnlyToTheSameSession() {
         val firstOwner = ForumSessionState.draftOwner("first-account-token")
         assertNotNull(firstOwner)

@@ -72,6 +72,7 @@ class TripHistoryActivity : Activity() {
     private var replayProvider = ""
     private var replayMode: MapMode? = null
     private var replayStyleGeneration = 0
+    private var resumed = false
     private val retryReplayProvider = Runnable { refreshReplayProvider() }
     private val providerListener: () -> Unit = {
         handler.post { refreshReplayProvider() }
@@ -215,7 +216,7 @@ class TripHistoryActivity : Activity() {
             view.getMapAsync { ready ->
                 if (isDestroyed) return@getMapAsync
                 map = ready
-                loadReplayStyle()
+                refreshReplayProvider()
             }
         }
         seek = SeekBar(this).apply {
@@ -287,11 +288,11 @@ class TripHistoryActivity : Activity() {
 
     /** Reload only when a provider or style actually changes. Saved GPS never changes. */
     private fun refreshReplayProvider() {
-        if (isDestroyed || map == null) return
+        if (!resumed || isDestroyed || map == null) return
         val mode = Prefs.mapMode(this)
         if (mode != replayMode || BaseMapProviders.preferred(mode) != replayProvider) {
             loadReplayStyle()
-        }
+        } else scheduleReplayProviderRetry()
     }
 
     private fun loadReplayStyle() {
@@ -318,8 +319,12 @@ class TripHistoryActivity : Activity() {
         }
         // A provider cooldown can expire without another tile response or config
         // change. Retry once when it expires; never poll continuously.
+        scheduleReplayProviderRetry()
+    }
+
+    private fun scheduleReplayProviderRetry() {
         handler.removeCallbacks(retryReplayProvider)
-        if (provider != "openfreemap") {
+        if (resumed && replayProvider != "openfreemap") {
             BaseMapProviders.retryInMs()?.let { handler.postDelayed(retryReplayProvider, it) }
         }
     }
@@ -672,6 +677,7 @@ class TripHistoryActivity : Activity() {
     override fun onStart() { super.onStart(); ForegroundSession.app.onStart(); mapView?.onStart() }
     override fun onResume() {
         super.onResume()
+        resumed = true
         mapView?.onResume()
         refreshReplayProvider()
         val currentGeneration = TripHistoryRepository(applicationContext).currentHistoryGeneration()
@@ -692,7 +698,13 @@ class TripHistoryActivity : Activity() {
         vipBilling.refresh(includeOffer = false)
         refreshVipControls()
     }
-    override fun onPause() { pauseReplay(); mapView?.onPause(); super.onPause() }
+    override fun onPause() {
+        resumed = false
+        handler.removeCallbacks(retryReplayProvider)
+        pauseReplay()
+        mapView?.onPause()
+        super.onPause()
+    }
     override fun onStop() { ForegroundSession.app.onStop(isChangingConfigurations); mapView?.onStop(); super.onStop() }
     override fun onLowMemory() { super.onLowMemory(); mapView?.onLowMemory() }
     override fun onSaveInstanceState(out: Bundle) {

@@ -474,9 +474,10 @@ class ForumActivity : Activity() {
         if (feedback != null && restoreRequested) { message(feedback); restoreRequested = false }
     },{ token ->
         val session = sessionToken()
-        if (session != null) worker.execute {
+        if (session != null && sessionState.claimPurchase(session, token)) worker.execute {
             val result = runCatching { ForumClient.purchase(session,token) }
             runOnUiThread {
+                sessionState.finishPurchase(session, token)
                 if (!active() || sessionToken() != session) return@runOnUiThread
                 restoreRequested = false
                 result.fold(onSuccess = {
@@ -502,7 +503,7 @@ class ForumActivity : Activity() {
         }
         purchaseMessage = label(availability)
         content.addView(purchaseMessage)
-        checkout = button("Checking price…") {
+        checkout = button(if (page?.purchases == true) "Checking price…" else "Purchase unavailable") {
             page?.viewer?.let { billing().buy(this,it.billingAccountId) }
         }.apply { isEnabled = false }
         content.addView(checkout)

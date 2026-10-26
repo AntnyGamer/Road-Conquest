@@ -20,6 +20,15 @@ internal class ForumSessionState {
     private var initialized = false
     private var token: String? = null
     private var ownershipCheckedFor: String? = null
+    private val pendingPurchases = mutableSetOf<Pair<String, String>>()
+
+    /** Overlapping Play callbacks share one server check, never a cached ownership verdict. */
+    fun claimPurchase(currentToken: String, purchaseToken: String): Boolean =
+        token == currentToken && pendingPurchases.add(currentToken to purchaseToken)
+
+    fun finishPurchase(currentToken: String, purchaseToken: String) {
+        pendingPurchases.remove(currentToken to purchaseToken)
+    }
 
     /** True only for a real account transition, not the first Activity refresh. */
     fun switchTo(currentToken: String?): Boolean {

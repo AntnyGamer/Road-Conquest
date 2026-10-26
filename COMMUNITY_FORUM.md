@@ -81,6 +81,18 @@ Developer API permissions/working Pub/Sub notification delivery. Secrets belong 
 the server, never in the Android app or repository. The Android client deliberately
 does not issue payments that a disabled verifier cannot grant or safely revoke.
 
+Production inspection on October 26, 2026 confirmed that the active `roadconquest`
+function had moderation enabled but omitted all three billing-specific settings:
+`FORUM_PLAY_SERVICE_ACCOUNT_JSON`, `FORUM_RTDN_AUDIENCE`, and
+`FORUM_RTDN_SERVICE_ACCOUNT_EMAIL`. Its public feed consequently returned
+`purchases_available: false`. The existing `PLAY_SERVICE_ACCOUNT_JSON` is used for
+Play Integrity and is not automatically a purchase-verification credential.
+Configure an account with the required Play purchase permissions and an authenticated
+Pub/Sub subscription, then deploy the billing settings to the existing function.
+Verify both the feed's availability flag and a Console test notification before
+testing a license-tester purchase and refund. Neither a PR merge nor creating the
+Play product supplies those server settings.
+
 ## Optional notifications when a friend posts
 
 Settings offers an independent **Occasional posts from friends** switch, on by default unless previously disabled.
