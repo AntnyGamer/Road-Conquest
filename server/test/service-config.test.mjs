@@ -7,12 +7,19 @@ test('remote switches accept only known booleans and coalesce/cache KV reads', a
   const parsed = parseSwitches({ version: 1, providers: { 'geoapify-matching': false, openfreemap: 'false', host: 'evil' } });
   assert.equal(parsed['geoapify-matching'], false); assert.equal(parsed.openfreemap, true); assert.equal(parsed.host, undefined);
   assert.throws(() => parseSwitches({ version: 2, providers: {} }));
-  let reads = 0; let fail = false;
-  const env = { SERVICE_CONFIG: { get: async () => { reads++; if (fail) throw new Error(); return JSON.stringify({ version: 1, providers: { 'geoapify-matching': false } }); } } };
+  let reads = 0; let fail = false; let removed = false;
+  const env = { SERVICE_CONFIG: { get: async () => { reads++; if (fail) throw new Error();
+    return removed ? null : JSON.stringify({ version: 1, providers: { 'geoapify-matching': false } }); } } };
   await Promise.all(Array.from({ length: 100 }, () => serviceSwitches(env, 1000)));
   assert.equal(reads, 1); fail = true;
   assert.equal((await serviceSwitches(env, 62_000))['geoapify-matching'], false);
   assert.equal(reads, 2); assert.deepEqual(await serviceSwitches({}), DEFAULT_SWITCHES);
+  fail = false; removed = true;
+  assert.deepEqual(await serviceSwitches(env, 123_000), DEFAULT_SWITCHES,
+    'Removing a provider override must restore defaults, unlike transient KV failures');
+  assert.equal(reads, 3);
+  assert.deepEqual(await serviceSwitches(env, 124_000), DEFAULT_SWITCHES);
+  assert.equal(reads, 3, 'The restored defaults retain the existing cache lifetime');
 });
 test('disabled providers never reserve quota or fetch upstream, and health supports free HEAD monitoring', async () => {
   const gateway = createMapsGateway(() => { throw new Error('No upstream allowed'); });
