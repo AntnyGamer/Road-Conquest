@@ -56,6 +56,7 @@ class ForumActivity : Activity() {
     private val adapter = PostsAdapter()
     private var page: ForumClient.Page? = null
     private var loading = false
+    private var refreshGeneration = 0
     private var writing = false
     private var loadError: String? = null
     private var billing: ForumBilling? = null
@@ -154,7 +155,7 @@ class ForumActivity : Activity() {
     private fun active() = !isDestroyed && !isFinishing
 
     private fun refresh(loadMore: Boolean = false) {
-        if (loading || writing || !active()) return
+        if (!active()) return
         val token = sessionToken()
         if (sessionState.switchTo(token)) {
             // A new sign-in must never inherit another account's forum view,
@@ -176,15 +177,23 @@ class ForumActivity : Activity() {
             page = null
             posts.clear()
             adapter.notifyDataSetChanged()
-        }
+            // Invalidate callbacks from a request that began under the old
+            // account, even if it is still waiting for the network.
+            refreshGeneration++
+            loading = false
+            writing = false
+            loadError = null
+            updateControls()
+        } else if (loading || writing) return
         val next = if (loadMore) page?.next ?: return else null
+        val expectedGeneration = ++refreshGeneration
         loading = true
         loadError = null
         updateControls()
         worker.execute {
             val result = runCatching { ForumClient.posts(token,next) }
             runOnUiThread {
-                if (!active()) return@runOnUiThread
+                if (!active() || expectedGeneration != refreshGeneration) return@runOnUiThread
                 loading = false
                 if (sessionToken() != token) { refresh(); return@runOnUiThread }
                 result.fold(onSuccess = { received ->
