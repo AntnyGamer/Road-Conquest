@@ -33,6 +33,23 @@ test('forum penalties are deletion, seven days, then a capped forum ban', () => 
   assert.equal(moderationPenalty(3).violations,3);
 });
 
+test('manual billing delivery tests log only authenticated notifications for this app without querying purchases', async () => {
+  const logs = [], originalInfo = console.info;
+  console.info = message => logs.push(message);
+  const forum = createForum({ query() { throw Error('Test notifications must not query the database'); } },
+    { ...options, verifyWebhook: async authorization => authorization === 'google-verified',
+      verifyPurchase: async () => { throw Error('Test notifications must not query Play purchases'); } });
+  const notification = packageName => ({ message: { messageId: 'manual-test', data:
+    Buffer.from(JSON.stringify({ packageName, testNotification: { version: '1.0' } })).toString('base64') } });
+  try {
+    await assert.rejects(forum.webhook('fake', notification('com.roadconquest.app')), error => error.status === 401);
+    await assert.rejects(forum.webhook('google-verified', notification('wrong.app')), error => error.status === 400);
+    assert.deepEqual(logs, []);
+    assert.deepEqual(await forum.webhook('google-verified', notification('com.roadconquest.app')), { ok: true });
+    assert.deepEqual(logs, ['Forum Plus authenticated test notification received.']);
+  } finally { console.info = originalInfo; }
+});
+
 test('public paging, reactions, blocks, privacy and account deletion', { skip: !database }, async () => fixture(async (pool,[a,b,c,admin],forum) => {
   assert.deepEqual((await forum.list(null)).posts,[]);
   const first = await forum.post(a,body('Beautiful coastal drive'));

@@ -319,6 +319,12 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
       try { notification = JSON.parse(Buffer.from(encoded, 'base64')); } catch { throw new EvidenceError('Invalid purchase notification.', 400); }
       if (notification.packageName !== 'com.roadconquest.app') throw new EvidenceError('Wrong application.', 400);
       const item = notification.oneTimeProductNotification || notification.voidedPurchaseNotification;
+      if (!item && notification.testNotification) {
+        // Manual Console tests need an observable end-to-end delivery result,
+        // without logging identity tokens, purchase tokens, or payload contents.
+        console.info('Forum Plus authenticated test notification received.');
+        return { ok: true };
+      }
       if (!item || (notification.oneTimeProductNotification ? item.sku !== FORUM_PRODUCT : item.productType !== 2)) return { ok: true };
       if (typeof item.purchaseToken !== 'string' || !item.purchaseToken.length || item.purchaseToken.length > 4096) throw new EvidenceError('Invalid purchase notification.', 400);
       // Authenticate every delivery above, then share only an identical event
