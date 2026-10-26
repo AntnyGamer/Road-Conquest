@@ -85,6 +85,9 @@ export function createForumModerator(key, request = fetch) {
       }
       if (!response.ok || !response.body || !(response.headers.get('Content-Type') || '').toLowerCase().includes('image/gif')) {
         void response.body?.cancel().catch(() => {});
+        if (response.status === 408 || response.status === 429 || response.status >= 500) {
+          throw new EvidenceError('The GIF provider is temporarily unavailable. Please try again.', 503);
+        }
         throw new EvidenceError('The GIF link is unavailable. Choose another GIF.', 400);
       }
       const length = response.headers.get('Content-Length');

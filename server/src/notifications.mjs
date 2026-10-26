@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomInt, sign, createPrivateKey } from 'node:crypto';
-import { EvidenceError } from './scoring.mjs';
+import { boundedJson, EvidenceError } from './scoring.mjs';
 import { RATE_LIMIT_SQL } from './rate-limits.mjs';
 
 const PROJECT = 'roadconquest-9f0eb';
@@ -30,8 +30,8 @@ export function createFcmSender(raw, fetcher = fetch, now = Date.now) {
         void response.body?.cancel().catch(() => {});
         throw new Error('Notification authorization unavailable');
       }
-      const value = await response.json();
-      if (typeof value.access_token !== 'string' || !Number.isFinite(value.expires_in) || value.expires_in < 120) throw new Error('Invalid notification authorization');
+      const value = await boundedJson(response, 32768);
+      if (typeof value?.access_token !== 'string' || !value.access_token || !Number.isFinite(value.expires_in) || value.expires_in < 120) throw new Error('Invalid notification authorization');
       cached = { token: value.access_token, expires: now() + (Math.min(3600, value.expires_in) - 60) * 1000 };
       return cached.token;
     })().finally(() => { pending = null; });
@@ -53,8 +53,11 @@ export function createFcmSender(raw, fetcher = fetch, now = Date.now) {
       void response.body?.cancel().catch(() => {});
       return 'sent';
     }
-    const error = await response.json().catch(() => ({}));
-    return error.error?.details?.some(item => item.errorCode === 'UNREGISTERED') ? 'unregistered' : 'unavailable';
+    // FCM uses non-2xx JSON to report invalid registrations. Bound those bytes
+    // just like OAuth replies; malformed/oversized errors must never revoke a device.
+    const error = await boundedJson({ ok: true, body: response.body, headers: response.headers }, 32768).catch(() => null);
+    const details = error?.error?.details;
+    return Array.isArray(details) && details.some(item => item?.errorCode === 'UNREGISTERED') ? 'unregistered' : 'unavailable';
   };
 }
 

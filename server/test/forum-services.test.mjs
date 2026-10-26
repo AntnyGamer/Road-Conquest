@@ -103,6 +103,22 @@ test('a rejected cached Play credential is refreshed on retry, including acknowl
   }
 });
 
+test('null and empty Play OAuth replies stay retryable and never reach receipt verification', async () => {
+  for (const invalid of [null, { access_token: '', expires_in: 3600 }]) {
+    let auth = 0, checks = 0;
+    const verify = createForumPurchaseVerifier(credentials, async url => {
+      if (url === 'https://oauth2.googleapis.com/token') return reply(++auth === 1
+        ? invalid : { access_token: 'recovered', expires_in: 3600 });
+      checks++;
+      return reply({ purchaseState: 0, consumptionState: 0, acknowledgementState: 1, obfuscatedExternalAccountId: 'bound' });
+    });
+    await assert.rejects(verify('receipt', 'bound'), error => error.status === 503);
+    assert.equal(checks, 0);
+    assert.equal(await verify('receipt', 'bound'), true);
+    assert.equal(auth, 2);
+  }
+});
+
 test('a delayed old Play credential failure preserves a newer shared credential', async () => {
   let oauth=0,release,started;
   const pending=new Promise(resolve=>{release=resolve;});
@@ -150,6 +166,29 @@ test('interrupted GIF downloads and contradictory moderation results are retryab
     flagged:false,categories:{...categories,hate:true}
   }]}));
   await assert.rejects(inconsistent({text:'Hello'}),e=>e.status===503);
+});
+
+test('GIF provider timeouts, throttling and server errors are retryable without calling moderation', async () => {
+  for (const status of [408, 429, 500, 502, 503, 504]) {
+    let calls = 0, reads = 0, cancelled = 0;
+    const moderate = createForumModerator('test', async () => {
+      calls++;
+      return new Response(new ReadableStream({
+        pull() { reads++; throw Error('Provider error bodies are not needed'); },
+        cancel() { cancelled++; }
+      }, { highWaterMark: 0 }), { status });
+    });
+    await assert.rejects(moderate({ text: 'A GIF', gifUrl: 'https://media.giphy.com/a.gif' }),
+      error => error.status === 503 && /try again/i.test(error.message));
+    assert.equal(calls, 1);
+    assert.equal(reads, 0);
+    assert.equal(cancelled, 1);
+  }
+  for (const status of [301, 403, 404, 410]) {
+    const moderate = createForumModerator('test', async () => new Response(null, { status }));
+    await assert.rejects(moderate({ text: 'A GIF', gifUrl: 'https://media.giphy.com/a.gif' }),
+      error => error.status === 400 && /another GIF/.test(error.message));
+  }
 });
 
 test('account binding is stable and separated; encrypted purchase tokens detect tampering', () => {

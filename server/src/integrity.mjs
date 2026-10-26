@@ -30,7 +30,7 @@ export async function createIntegrityVerifier(config, request = fetch) {
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion: `${claims}.${signature}` })
       }), 32768);
-      if (typeof json.access_token !== "string" || !Number.isFinite(json.expires_in)) throw new EvidenceError("Integrity unavailable.", 503);
+      if (typeof json?.access_token !== "string" || !json.access_token || !Number.isFinite(json.expires_in)) throw new EvidenceError("Integrity unavailable.", 503);
       cached = { token: json.access_token, expires: Date.now() + json.expires_in * 1000 };
       return cached.token;
     })();

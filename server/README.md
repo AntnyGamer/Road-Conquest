@@ -101,6 +101,12 @@ avoid rewriting an unchanged entitlement profile. Initial profile creation happe
 the external request. The purchase handler rejects malformed tokens before its profile
 and receipt reads or any Play call; HTTP authentication and rate limits still apply.
 
+Notification OAuth and error replies use the shared 32 KiB JSON reader. Oversized or
+malformed delivery errors return unavailable rather than removing a device registration.
+Null or empty OAuth credentials are rejected before purchase, Integrity or push requests,
+and a later attempt can refresh authorization. GIF-provider timeouts, throttling and
+server errors return a retryable 503, while invalid links remain 400 responses.
+
 ## Free Neon deployment
 
 The same account API can run as a Neon Function beside its persistent PostgreSQL database.

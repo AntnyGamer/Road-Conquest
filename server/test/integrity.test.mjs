@@ -43,6 +43,23 @@ test("concurrent verification shares OAuth refreshes and verifies each bound Goo
   assert.equal(oauthCalls, 1);
 });
 
+test('null and empty Integrity OAuth replies do not cache credentials or send decode requests', async () => {
+  for (const invalid of [null, { access_token: '', expires_in: 3600 }]) {
+    let auth = 0, decodes = 0;
+    const verify = await createIntegrityVerifier(config, async url => {
+      if (url === 'https://oauth2.googleapis.com/token') return Response.json(++auth === 1
+        ? invalid : { access_token: 'recovered', expires_in: 3600 });
+      decodes++;
+      return Response.json({}, { status: 400 });
+    });
+    await assert.rejects(verify('test-only-integrity-token', 'hash'), error => error.status === 503);
+    assert.equal(decodes, 0);
+    await assert.rejects(verify('test-only-integrity-token', 'hash'), error => error.status === 403);
+    assert.equal(auth, 2);
+    assert.equal(decodes, 1);
+  }
+});
+
 test('rejected Integrity OAuth credentials refresh on retry without a delayed failure discarding the new token', async () => {
   let oauth = 0;
   const started = Promise.withResolvers(), delayed = Promise.withResolvers();
