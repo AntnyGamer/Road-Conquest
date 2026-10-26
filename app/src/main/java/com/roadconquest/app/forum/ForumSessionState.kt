@@ -8,10 +8,17 @@ import java.security.MessageDigest
  */
 internal class ForumSessionState {
     companion object {
+        private const val HEX_DIGITS = "0123456789abcdef"
         /** A saved draft belongs to a specific session without persisting its bearer token. */
         fun draftOwner(token: String?): String? = token?.let {
-            MessageDigest.getInstance("SHA-256").digest(it.toByteArray(Charsets.UTF_8))
-                .take(16).joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+            val digest = MessageDigest.getInstance("SHA-256").digest(it.toByteArray(Charsets.UTF_8))
+            val hex = CharArray(32)
+            for (index in 0 until 16) {
+                val byte = digest[index].toInt() and 0xff
+                hex[index * 2] = HEX_DIGITS[byte ushr 4]
+                hex[index * 2 + 1] = HEX_DIGITS[byte and 0x0f]
+            }
+            String(hex)
         }
 
         fun canRestoreDraft(savedOwner: String?, currentToken: String?): Boolean =

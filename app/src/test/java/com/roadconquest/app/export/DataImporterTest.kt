@@ -207,6 +207,60 @@ class DataImporterTest {
         }
     }
 
+    @Test @org.robolectric.annotation.LooperMode(org.robolectric.annotation.LooperMode.Mode.PAUSED)
+    fun failedRestoreDoesNotKeepLaterUnconfirmedValidationRunningAfterClose() {
+        val backup = DataImporter.prepare(context, ByteArrayInputStream(export()))
+        TrackingRepository(context).clearHistory() // Make the confirmed preview stale.
+        val controller = org.robolectric.Robolectric.buildActivity(
+            com.roadconquest.app.RestoreActivity::class.java
+        ).create().start().resume()
+        val activity = controller.get()
+        val worker = com.roadconquest.app.RestoreActivity::class.java
+            .getDeclaredField("worker").apply { isAccessible = true }
+            .get(activity) as java.util.concurrent.ExecutorService
+        val scanning = java.util.concurrent.CountDownLatch(1)
+        val cancelled = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        var destroyed = false
+        try {
+            com.roadconquest.app.RestoreActivity::class.java
+                .getDeclaredMethod("restore", DataImporter.Prepared::class.java)
+                .apply { isAccessible = true }.invoke(activity, backup)
+            worker.submit(Runnable {}).get(15, java.util.concurrent.TimeUnit.SECONDS)
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+
+            // Start another preview after the failed restore. It has not been
+            // confirmed and must remain cancellable when the screen closes.
+            val open: () -> java.io.InputStream = {
+                object : java.io.InputStream() {
+                    override fun read(): Int {
+                        scanning.countDown()
+                        try { release.await() }
+                        catch (_: InterruptedException) {
+                            cancelled.countDown()
+                            throw java.io.IOException("Preview cancelled")
+                        }
+                        return -1
+                    }
+                }
+            }
+            com.roadconquest.app.RestoreActivity::class.java
+                .getDeclaredMethod("validate", Function0::class.java)
+                .apply { isAccessible = true }.invoke(activity, open)
+            assertTrue(scanning.await(5, java.util.concurrent.TimeUnit.SECONDS))
+            controller.pause().stop().destroy()
+            destroyed = true
+            assertTrue("Closing an unconfirmed preview must interrupt its scan",
+                cancelled.await(5, java.util.concurrent.TimeUnit.SECONDS))
+        } finally {
+            release.countDown()
+            if (!destroyed) controller.pause().stop().destroy()
+            worker.shutdownNow()
+            worker.awaitTermination(15, java.util.concurrent.TimeUnit.SECONDS)
+            backup.close()
+        }
+    }
+
     @Test fun rejectsPreparedBackupAfterDeletionAndCannotResurrectOldProgress() {
         val bytes = export()
         DataImporter.prepare(context, ByteArrayInputStream(bytes)).use { backup ->

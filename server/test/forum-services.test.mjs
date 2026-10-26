@@ -21,6 +21,7 @@ test('GIF links reject redirects, untrusted hosts, credentials and oversized/inv
     'https://media.giphy.com:444/a.gif','https://media.giphy.com/a.html','https://127.0.0.1/a.gif',
     'https://media.giphy.com/a.gif#','https://media.giphy.com/a.gif#fragment']) assert.throws(()=>forumGifUrl(url));
   assert.equal(forumGifUrl('https://media.tenor.com/a.gif'),'https://media.tenor.com/a.gif');
+  assert.equal(forumGifUrl('HTTPS://MEDIA.GIPHY.COM/a.GIF'),'https://media.giphy.com/a.GIF');
   assert.throws(()=>forumGifUrl('https://media.giphy.com/'+ '\u2615'.repeat(200)+'.gif'),/GIF link/,
     'Canonical URL length must fit the stored/media response bound after percent encoding');
   assert.throws(()=>gifContactSheet(Buffer.alloc(2*1024*1024+1)),/2 MB/);

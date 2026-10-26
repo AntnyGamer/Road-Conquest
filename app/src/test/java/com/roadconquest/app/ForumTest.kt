@@ -316,9 +316,12 @@ class ForumTest {
     @Test fun gifMediaNeverAcceptsArbitraryHostsCredentialsOrNonHttpsUrls() {
         assertTrue(ForumGifLoader.allowed("https://media.giphy.com/media/example/giphy.gif"))
         assertTrue(ForumGifLoader.allowed("https://media.tenor.com/example.gif"))
+        assertTrue(ForumGifLoader.allowed("HTTPS://MEDIA.GIPHY.COM/media/example/giphy.GIF"))
+        assertTrue(ForumGifLoader.allowed("hTtPs://MeDiA.TeNoR.CoM/example.gif"))
         for(url in listOf("http://media.giphy.com/a.gif","https://user@media.giphy.com/a.gif",
             "https://media.giphy.com.evil.test/a.gif","https://media.giphy.com:444/a.gif","https://media.giphy.com/page",
-            "https://media.giphy.com/a.gif#","https://media.giphy.com/a.gif#fragment")) {
+            "https://media.giphy.com/a.gif#","https://media.giphy.com/a.gif#fragment",
+            "HTTPS://MEDIA.GIPHY.COM.EVIL.TEST/a.gif","HTTPS://USER@MEDIA.GIPHY.COM/a.gif")) {
             assertFalse(url,ForumGifLoader.allowed(url))
         }
     }

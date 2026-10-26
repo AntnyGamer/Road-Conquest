@@ -148,6 +148,7 @@ class RestoreActivity : Activity() {
             val result = runCatching { backup.use { DataImporter.restore(applicationContext, it) } }
             runOnUiThread {
                 if (isDestroyed || isFinishing) return@runOnUiThread
+                restoreStarted = false
                 setBusy(false)
                 result.fold({
                     android.widget.Toast.makeText(this, "Progress restored. Tracking is off.", android.widget.Toast.LENGTH_LONG).show()
