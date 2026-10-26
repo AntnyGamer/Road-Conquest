@@ -32,6 +32,7 @@ import com.roadconquest.app.account.AccountClient
 import com.roadconquest.app.account.AccountStore
 import com.roadconquest.app.forum.ForumBilling
 import com.roadconquest.app.forum.ForumClient
+import com.roadconquest.app.forum.ForumSessionState
 import com.roadconquest.app.forum.ForumGifLoader
 import com.roadconquest.app.util.Appearance
 import com.roadconquest.app.util.ForegroundSession
@@ -55,18 +56,20 @@ class ForumActivity : Activity() {
     private val adapter = PostsAdapter()
     private var page: ForumClient.Page? = null
     private var loading = false
+    private var refreshGeneration = 0
     private var writing = false
     private var loadError: String? = null
     private var billing: ForumBilling? = null
     private var purchaseDialog: Dialog? = null
     private var checkout: Button? = null
     private var purchaseMessage: TextView? = null
-    private var ownershipRequested = false
+    private val sessionState = ForumSessionState()
     private var restoreRequested = false
     private var foreground = false
     private var composer: Dialog? = null
     private var draftText = ""
     private var draftGif = ""
+    private var draftOwner: String? = null
     private var submissionId = UUID.randomUUID().toString()
     private var submittedContent = ""
     private var restoreComposer = false
@@ -100,11 +103,15 @@ class ForumActivity : Activity() {
             insets
         }
         ViewCompat.requestApplyInsets(root)
-        draftText = savedInstanceState?.getString("draft_text") ?: ""
-        draftGif = savedInstanceState?.getString("draft_gif") ?: ""
-        submissionId = savedInstanceState?.getString("submission_id") ?: submissionId
-        submittedContent = savedInstanceState?.getString("submitted_content") ?: ""
-        restoreComposer = savedInstanceState?.getBoolean("composer_open") ?: false
+        // Never restore another account's unsent text after rotation or process recreation.
+        val owner = savedInstanceState?.getString("draft_owner")
+        val sameAccount = ForumSessionState.canRestoreDraft(owner, sessionToken())
+        draftOwner = owner.takeIf { sameAccount }
+        draftText = if (sameAccount) savedInstanceState?.getString("draft_text").orEmpty() else ""
+        draftGif = if (sameAccount) savedInstanceState?.getString("draft_gif").orEmpty() else ""
+        submissionId = if (sameAccount) savedInstanceState?.getString("submission_id") ?: submissionId else submissionId
+        submittedContent = if (sameAccount) savedInstanceState?.getString("submitted_content").orEmpty() else ""
+        restoreComposer = sameAccount && savedInstanceState?.getBoolean("composer_open") == true
         list = findViewById(R.id.forumList)
         status = findViewById(R.id.forumStatus)
         emptyTitle = findViewById(R.id.forumEmptyTitle)
@@ -128,9 +135,12 @@ class ForumActivity : Activity() {
     override fun onPause() { foreground = false; gifs.setForeground(false); status.removeCallbacks(cooldownTick); super.onPause() }
     override fun onSaveInstanceState(out: Bundle) {
         saveDraft()
-        out.putString("draft_text",draftText); out.putString("draft_gif",draftGif)
-        out.putString("submission_id",submissionId); out.putString("submitted_content",submittedContent)
-        out.putBoolean("composer_open",composer?.isShowing == true)
+        if (ForumSessionState.canRestoreDraft(draftOwner, sessionToken())) {
+            out.putString("draft_owner", draftOwner)
+            out.putString("draft_text",draftText); out.putString("draft_gif",draftGif)
+            out.putString("submission_id",submissionId); out.putString("submitted_content",submittedContent)
+            out.putBoolean("composer_open",composer?.isShowing == true)
+        }
         super.onSaveInstanceState(out)
     }
     override fun onDestroy() {
@@ -145,16 +155,45 @@ class ForumActivity : Activity() {
     private fun active() = !isDestroyed && !isFinishing
 
     private fun refresh(loadMore: Boolean = false) {
-        if (loading || writing || !active()) return
-        val next = if (loadMore) page?.next ?: return else null
+        if (!active()) return
         val token = sessionToken()
+        if (sessionState.switchTo(token)) {
+            // A new sign-in must never inherit another account's forum view,
+            // unsent post, checkout, or pending ownership-check result.
+            composer?.setOnDismissListener(null)
+            composer?.dismiss()
+            composer = null
+            purchaseDialog?.dismiss()
+            purchaseDialog = null
+            billing?.close()
+            billing = null
+            restoreRequested = false
+            draftText = ""
+            draftGif = ""
+            draftOwner = null
+            restoreComposer = false
+            submittedContent = ""
+            submissionId = UUID.randomUUID().toString()
+            page = null
+            posts.clear()
+            adapter.notifyDataSetChanged()
+            // Invalidate callbacks from a request that began under the old
+            // account, even if it is still waiting for the network.
+            refreshGeneration++
+            loading = false
+            writing = false
+            loadError = null
+            updateControls()
+        } else if (loading || writing) return
+        val next = if (loadMore) page?.next ?: return else null
+        val expectedGeneration = ++refreshGeneration
         loading = true
         loadError = null
         updateControls()
         worker.execute {
             val result = runCatching { ForumClient.posts(token,next) }
             runOnUiThread {
-                if (!active()) return@runOnUiThread
+                if (!active() || expectedGeneration != refreshGeneration) return@runOnUiThread
                 loading = false
                 if (sessionToken() != token) { refresh(); return@runOnUiThread }
                 result.fold(onSuccess = { received ->
@@ -163,14 +202,12 @@ class ForumActivity : Activity() {
                         restoreComposer = false
                         showComposer()
                     }
-                    if (!ownershipRequested && received.purchases && received.viewer?.plus == false) {
-                        ownershipRequested = true
+                    if (sessionState.claimRestore(token, received.purchases, received.viewer?.plus)) {
                         billing().restore(silent = true)
                     }
                 }, onFailure = { error ->
                     if (error is AccountClient.ApiException && error.status == 401 && sessionToken() == token) {
                         AccountStore.clear(this)
-                        ownershipRequested = false
                         refresh()
                     } else {
                         showLoadError(error.message ?: "Could not load the community. Tap Refresh to retry.")
@@ -262,8 +299,8 @@ class ForumActivity : Activity() {
             val result = runCatching { work(token) }
             runOnUiThread {
                 if (!active()) return@runOnUiThread
-                writing = false
                 if (sessionToken() != token) { refresh(); return@runOnUiThread }
+                writing = false
                 result.fold(onSuccess = { message(success); refresh() },onFailure = {
                     message(it.message ?: "The action could not be completed. Please try again.")
                     updateControls()
@@ -336,6 +373,14 @@ class ForumActivity : Activity() {
 
     private fun showComposer() {
         if (composer?.isShowing == true || restricted(page?.viewer) || cooldownSeconds() > 0) return
+        val owner = ForumSessionState.draftOwner(sessionToken()) ?: return
+        if (draftOwner != owner) {
+            draftText = ""
+            draftGif = ""
+            submittedContent = ""
+            submissionId = UUID.randomUUID().toString()
+        }
+        draftOwner = owner
         val (dialog,content) = panel("Share a discovery")
         composer = dialog
         val text = EditText(this).apply {
@@ -385,10 +430,10 @@ class ForumActivity : Activity() {
                 val result = runCatching { ForumClient.post(token,submittedText,gifUrl,requestId) }
                 runOnUiThread {
                     if (!active()) return@runOnUiThread
+                    if (sessionToken() != token) { dialog.dismiss(); refresh(); return@runOnUiThread }
                     writing = false; updateControls()
                     text.isEnabled = true; gif.isEnabled = true
                     send.isEnabled = true
-                    if (sessionToken() != token) { dialog.dismiss(); refresh(); return@runOnUiThread }
                     result.fold(onSuccess = { response ->
                         dialog.dismiss(); composer = null; draftText = ""; draftGif = ""; submittedContent = ""
                         if (response.optBoolean("removed")) {
@@ -429,9 +474,10 @@ class ForumActivity : Activity() {
         if (feedback != null && restoreRequested) { message(feedback); restoreRequested = false }
     },{ token ->
         val session = sessionToken()
-        if (session != null) worker.execute {
+        if (session != null && sessionState.claimPurchase(session, token)) worker.execute {
             val result = runCatching { ForumClient.purchase(session,token) }
             runOnUiThread {
+                sessionState.finishPurchase(session, token)
                 if (!active() || sessionToken() != session) return@runOnUiThread
                 restoreRequested = false
                 result.fold(onSuccess = {
@@ -450,9 +496,14 @@ class ForumActivity : Activity() {
         val (dialog,content) = panel("A little extra personality.")
         purchaseDialog = dialog
         content.addView(label(getString(R.string.forum_plus_description)))
-        purchaseMessage = label(if (page?.purchases == true) "Checking Google Play price…" else "Forum Plus is currently unavailable.")
+        val availability = when {
+            page?.available != true -> "The community service is not available on this server yet."
+            page?.purchases != true -> "Forum Plus isn't enabled on the account server yet. The server also needs Google Play verification, refund notifications, and moderation configured."
+            else -> "Checking Google Play price…"
+        }
+        purchaseMessage = label(availability)
         content.addView(purchaseMessage)
-        checkout = button("Checking price…") {
+        checkout = button(if (page?.purchases == true) "Checking price…" else "Purchase unavailable") {
             page?.viewer?.let { billing().buy(this,it.billingAccountId) }
         }.apply { isEnabled = false }
         content.addView(checkout)
@@ -535,8 +586,12 @@ class ForumActivity : Activity() {
             view.findViewById<TextView>(R.id.postDate).text = date(post.createdAt)
             view.findViewById<TextView>(R.id.postBody).apply { text = post.text; visibility = if (post.text.isEmpty()) View.GONE else View.VISIBLE }
             val image = view.findViewById<ImageView>(R.id.postGif)
-            image.visibility = if (post.gifUrl != null) View.VISIBLE else View.GONE
-            if (post.gifUrl != null && post.gifHash != null) gifs.load(image,post.gifUrl,post.gifHash)
+            // A URL without its moderated digest cannot be displayed.
+            // Hide the image slot rather than leaving a blank GIF placeholder.
+            val gifUrl = post.gifUrl
+            val gifHash = post.gifHash
+            image.visibility = if (gifUrl != null && gifHash != null) View.VISIBLE else View.GONE
+            if (gifUrl != null && gifHash != null) gifs.load(image,gifUrl,gifHash)
             else gifs.clear(image)
             bindReaction(view,post,R.id.postLike,"like","👍")
             bindReaction(view,post,R.id.postLove,"love","♡")

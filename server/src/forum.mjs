@@ -292,21 +292,24 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
         if (!moderate && !prior.rowCount) throw new EvidenceError('New Forum Plus purchases are temporarily unavailable.', 503);
         // Serialize verification with refunds/restores so an older response cannot overwrite a refund.
         const active = await verifyPurchase(token, binding(user.id));
+        // Existing receipts are already encrypted. Refresh their verified state
+        // without encrypting/transferring a replacement the conflict path discards.
+        const newPurchase = active && !prior.rowCount;
         // A writable CTE's table scan sees the statement's original snapshot.
         // Use the freshly verified state for this token and scan only OTHER
         // receipts, so refunds/restores and multiple purchases stay accurate.
-        const { rows } = await db.query(`WITH recorded AS (${active
+        const { rows } = await db.query(`WITH recorded AS (${newPurchase
           ? `INSERT INTO forum_purchases(token_hash,user_id,encrypted_token,active)
             VALUES($1,$2,$3,TRUE) ON CONFLICT(token_hash) DO UPDATE SET active=TRUE,checked_at=CURRENT_TIMESTAMP`
-          : 'UPDATE forum_purchases SET active=FALSE,checked_at=CURRENT_TIMESTAMP WHERE token_hash=$1 AND user_id=$2'}
+          : 'UPDATE forum_purchases SET active=$3,checked_at=CURRENT_TIMESTAMP WHERE token_hash=$1 AND user_id=$2'}
         ), desired AS (
-          SELECT ${active ? '$4' : '$3'}::boolean OR EXISTS(SELECT 1 FROM forum_purchases
+          SELECT ${newPurchase ? '$4' : '$3'}::boolean OR EXISTS(SELECT 1 FROM forum_purchases
             WHERE user_id=$2 AND token_hash<>$1 AND active) AS owned
         ), changed AS (
           UPDATE forum_profiles SET plus_active=desired.owned FROM desired
           WHERE user_id=$2 AND plus_active IS DISTINCT FROM desired.owned RETURNING 1
         ) SELECT desired.owned AS plus_active FROM desired LEFT JOIN changed ON TRUE`,
-        active ? [digest,user.id,codec.seal(token),active] : [digest,user.id,active]);
+        newPurchase ? [digest,user.id,codec.seal(token),active] : [digest,user.id,active]);
         return { plus: rows[0].plus_active };
       });
     },
@@ -319,6 +322,12 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
       try { notification = JSON.parse(Buffer.from(encoded, 'base64')); } catch { throw new EvidenceError('Invalid purchase notification.', 400); }
       if (notification.packageName !== 'com.roadconquest.app') throw new EvidenceError('Wrong application.', 400);
       const item = notification.oneTimeProductNotification || notification.voidedPurchaseNotification;
+      if (!item && notification.testNotification) {
+        // Manual Console tests need an observable end-to-end delivery result,
+        // without logging identity tokens, purchase tokens, or payload contents.
+        console.info('Forum Plus authenticated test notification received.');
+        return { ok: true };
+      }
       if (!item || (notification.oneTimeProductNotification ? item.sku !== FORUM_PRODUCT : item.productType !== 2)) return { ok: true };
       if (typeof item.purchaseToken !== 'string' || !item.purchaseToken.length || item.purchaseToken.length > 4096) throw new EvidenceError('Invalid purchase notification.', 400);
       // Authenticate every delivery above, then share only an identical event

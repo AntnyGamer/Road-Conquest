@@ -8,7 +8,8 @@ export function parseSwitches(value) {
     if (value.length > 4096) throw new Error('Oversized configuration');
     value = JSON.parse(value);
   }
-  if (value?.version !== 1 || !value.providers || Array.isArray(value.providers)) throw new Error('Invalid configuration');
+  if (value?.version !== 1 || !value.providers || typeof value.providers !== 'object' ||
+      Array.isArray(value.providers)) throw new Error('Invalid configuration');
   return Object.fromEntries(Object.entries(DEFAULT_SWITCHES).map(([key, fallback]) =>
     [key, typeof value.providers[key] === 'boolean' ? value.providers[key] : fallback]));
 }
@@ -21,7 +22,9 @@ export async function serviceSwitches(env, now = Date.now()) {
   if (!state.pending) state.pending = (async () => {
     try {
       const raw = await env.SERVICE_CONFIG.get('providers-v1', { cacheTtl: 300 });
-      if (raw !== null) state.value = parseSwitches(raw);
+      // Deleting the remote override restores built-in provider defaults.
+      // A failed KV request still preserves the previously known switches.
+      state.value = raw === null ? DEFAULT_SWITCHES : parseSwitches(raw);
     } catch { /* Preserve last known values; hard Durable Object caps still apply. */ }
     return state.value;
   })().finally(() => { state.expires = now + 60_000; state.pending = null; });

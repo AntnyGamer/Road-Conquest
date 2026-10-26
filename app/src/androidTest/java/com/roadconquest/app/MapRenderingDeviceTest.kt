@@ -45,6 +45,40 @@ import java.util.concurrent.TimeUnit
 /** Real Android/MapLibre integration, including the projection and the actual recenter button. */
 @RunWith(AndroidJUnit4::class)
 class MapRenderingDeviceTest {
+    @Test fun hiddenTripReplayDefersProviderReloadUntilResumed() {
+        val app = InstrumentationRegistry.getInstrumentation().targetContext
+        val originalMode = Prefs.mapMode(app)
+        try {
+            Prefs.setMapMode(app, MapMode.STREETS)
+            ActivityScenario.launch(TripHistoryActivity::class.java).use { scenario ->
+                val ready = CountDownLatch(1)
+                scenario.onActivity { activity ->
+                    val view = TripHistoryActivity::class.java.getDeclaredField("mapView")
+                        .apply { isAccessible = true }.get(activity) as MapView
+                    view.getMapAsync { it.getStyle { ready.countDown() } }
+                }
+                assertTrue("Replay's bundled style must load", ready.await(30, TimeUnit.SECONDS))
+                scenario.moveToState(Lifecycle.State.CREATED)
+                scenario.onActivity { activity ->
+                    val generation = TripHistoryActivity::class.java.getDeclaredField("replayStyleGeneration")
+                        .apply { isAccessible = true }
+                    val before = generation.getInt(activity)
+                    Prefs.setMapMode(app, MapMode.NIGHT)
+                    // Exercise the same callback used by shared provider-health notifications.
+                    TripHistoryActivity::class.java.getDeclaredMethod("refreshReplayProvider")
+                        .apply { isAccessible = true }.invoke(activity)
+                    assertEquals("Hidden replay must not reload map resources", before, generation.getInt(activity))
+                }
+                scenario.moveToState(Lifecycle.State.RESUMED)
+                scenario.onActivity { activity ->
+                    val mode = TripHistoryActivity::class.java.getDeclaredField("replayMode")
+                        .apply { isAccessible = true }.get(activity)
+                    assertEquals("Returning applies the current appearance", MapMode.NIGHT, mode)
+                }
+            }
+        } finally { Prefs.setMapMode(app, originalMode) }
+    }
+
     @org.junit.Before fun skipFirstUseTour() {
         Prefs.setTourHandled(androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext, true)
     }

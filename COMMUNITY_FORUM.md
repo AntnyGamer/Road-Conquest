@@ -61,6 +61,41 @@ price; only a price-query failure clears it. Checkout still queries a fresh offe
 Successful price loading clears the checking message, and completed receipt verification clears
 the pending restore-feedback state.
 
+### If Forum Plus shows unavailable
+
+The Android product ID is exactly `forum_plus_lifetime`, of type **one-time (INAPP)**
+for package `com.roadconquest.app`. Play Console's separate **Purchase option ID** does
+not replace the product ID in app code. In Play Console → Monetize with Play → Products →
+One-time products, activate both the product and a permanent **Buy** purchase option,
+with an available price for the tester's country. A draft/inactive option is not
+returned to the app. Install a current Play-distributed testing build and use an
+eligible Play account. Billing 9 distinguishes “product not found” from “no eligible
+offer”; the purchase screen reports which one Play returned.
+
+If the screen instead says the **account server has not enabled purchases**, this is
+not fixed by adding the Play Console product. The backend must actually be deployed
+with `FORUM_ENABLED=1`, `FORUM_MODERATION_API_KEY`, a Play credential,
+`FORUM_RTDN_AUDIENCE`, and
+`FORUM_RTDN_SERVICE_ACCOUNT_EMAIL`, plus the forum database migration and Play
+Developer API permissions/working Pub/Sub notification delivery. Secrets belong on
+the server, never in the Android app or repository. The Android client deliberately
+does not issue payments that a disabled verifier cannot grant or safely revoke.
+
+Production inspection on October 26, 2026 confirmed that the active `roadconquest`
+function had moderation enabled but omitted all three billing-specific settings:
+`FORUM_PLAY_SERVICE_ACCOUNT_JSON`, `FORUM_RTDN_AUDIENCE`, and
+`FORUM_RTDN_SERVICE_ACCOUNT_EMAIL`. Its public feed consequently returned
+`purchases_available: false`. That deployed version did not select the existing
+`PLAY_SERVICE_ACCOUNT_JSON` for purchase verification. The current server reuses
+that credential when no dedicated `FORUM_PLAY_SERVICE_ACCOUNT_JSON` is supplied.
+An explicit dedicated credential always takes precedence. The selected account
+still needs the Play Developer API enabled and the Play billing permissions.
+Configure an account with the required Play purchase permissions and an authenticated
+Pub/Sub subscription, then deploy the billing settings to the existing function.
+Verify both the feed's availability flag and a Console test notification before
+testing a license-tester purchase and refund. Neither a PR merge nor creating the
+Play product supplies those server settings.
+
 ## Optional notifications when a friend posts
 
 Settings offers an independent **Occasional posts from friends** switch, on by default unless previously disabled.
@@ -94,7 +129,7 @@ runtime schema modifications disabled (`APPLY_SCHEMA_ON_STARTUP=0`). The migrati
 | `FORUM_ENABLED=1` | Enable community routes and forum modules |
 | `FORUM_MODERATION_API_KEY` | Server-only OpenAI moderation credential; without it posting stays unavailable |
 | `FORUM_MODERATOR_USER_IDS` | Comma-separated existing numeric account IDs allowed to review reports/appeals |
-| `FORUM_PLAY_SERVICE_ACCOUNT_JSON` | Server-only Play Developer API service account with purchase access |
+| `FORUM_PLAY_SERVICE_ACCOUNT_JSON` | Optional dedicated Play billing credential. If absent, reuse the server's existing `PLAY_SERVICE_ACCOUNT_JSON`, which must have purchase access |
 | `FORUM_RTDN_AUDIENCE` | Exact OIDC audience configured on the authenticated Pub/Sub push subscription |
 | `FORUM_RTDN_SERVICE_ACCOUNT_EMAIL` | Exact trusted push identity email |
 
@@ -104,8 +139,27 @@ Google Play notifications publisher on the topic and the Pub/Sub identity token 
 in Google's documentation. Both the purchase verifier and notification identity must be configured
 before the app offers checkout. A configuration value alone does not prove delivery: send a Console
 test notification, then test license-tester purchase, pending, restore and refund end to end.
+An authenticated test notification for this package writes only
+`Forum Plus authenticated test notification received.` to the server log, making
+end-to-end delivery observable without logging purchase tokens or message contents.
 Keep the feature off until terms/privacy disclosures and moderation/report handling are ready.
 There is no live payment or moderation test without credentials; service tests use mock providers.
+
+For the existing production project, a project owner can run
+`bash server/tools/setup-forum-pubsub.sh` in Google Cloud Shell. It creates the
+`roadconquest-forum-purchases` topic, a keyless `roadconquest-forum-push` identity,
+and an authenticated, wrapped push subscription directly to the existing Neon webhook.
+Google Play receives publisher access to that topic. The Pub/Sub service agent
+receives OIDC token creation on the unprivileged push identity only. No billing
+credential, project-wide administrator role, or service-account private key is created.
+Existing subscriptions on another topic are not overwritten.
+
+After the script succeeds, configure Play Console notifications for
+`projects/deep-pursuit-439200-d4/topics/roadconquest-forum-purchases`, including all
+one-time products and voided purchases. Set the backend audience to
+`https://br-withered-dew-b7u432kv-roadconquest.compute.c-13.us-east-1.aws.neon.tech/v1/forum/play-notifications`
+and its trusted email to
+`roadconquest-forum-push@deep-pursuit-439200-d4.iam.gserviceaccount.com`.
 
 Server tests use the existing isolated PostgreSQL CI service. For local SQL checks without a cloud
 database, optionally install PGlite outside the repo and set `FORUM_PGLITE_MODULE` to its entry module.

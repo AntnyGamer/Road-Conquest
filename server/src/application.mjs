@@ -118,7 +118,7 @@ const forum = process.env.FORUM_ENABLED === "1" ? await (async () => {
   return createForum(pool, { pepper: PEPPER, prepare: prepareDatabase,
       friendPosted: authorId => notifications.forumPost(authorId),
     moderate: createForumModerator(process.env.FORUM_MODERATION_API_KEY),
-    verifyPurchase: billing.createForumPurchaseVerifier(process.env.FORUM_PLAY_SERVICE_ACCOUNT_JSON),
+    verifyPurchase: billing.createForumPurchaseVerifier(process.env.FORUM_PLAY_SERVICE_ACCOUNT_JSON || process.env.PLAY_SERVICE_ACCOUNT_JSON),
     verifyWebhook: billing.createForumWebhookVerifier(process.env.FORUM_RTDN_AUDIENCE, process.env.FORUM_RTDN_SERVICE_ACCOUNT_EMAIL),
     adminIds: (process.env.FORUM_MODERATOR_USER_IDS || '').split(',').filter(x => /^[1-9][0-9]*$/.test(x))
   });

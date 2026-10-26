@@ -95,7 +95,10 @@ class TripHistoryRepository(context: Context) {
                     firstId = id
                     firstTime = time
                     count++
-                    if (cursor.getFloat(3) in 2.2f..100f && cursor.getFloat(4) in 0.01f..25f) hasDrivingSpeed = true
+                    // A lone brisk-walking (2.2–3 m/s) fix must not turn a 0.0-mile
+                    // walking group into a driving trip. Keep credible short
+                    // drives, including older fixes without computed distance.
+                    if (cursor.getFloat(3) in 4f..100f && cursor.getFloat(4) in 0.01f..25f) hasDrivingSpeed = true
                     if (meters.isFinite() && meters > 0.0) distance += meters
                 }
             }

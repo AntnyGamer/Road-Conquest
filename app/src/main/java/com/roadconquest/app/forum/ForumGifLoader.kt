@@ -64,6 +64,7 @@ class ForumGifLoader {
         (view.drawable as? AnimatedImageDrawable)?.stop()
         view.tag = null
         view.setImageDrawable(null)
+        view.contentDescription = null
     }
     fun load(view: ImageView, url: String, expectedHash: String) {
         val previous = view.tag as? Ticket
@@ -76,6 +77,7 @@ class ForumGifLoader {
         val expectedDigest = parseHash(expectedHash) ?: return
         if (closed) return
         val ticket = Ticket(url,expectedHash)
+        view.contentDescription = "Loading shared GIF"
         view.tag = ticket
         views.add(view)
         val work = Runnable {

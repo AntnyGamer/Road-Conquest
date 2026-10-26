@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { createForum, moderationPenalty } from '../src/forum.mjs';
+import { purchaseCodec } from '../src/forum-billing.mjs';
 import { EvidenceError } from '../src/scoring.mjs';
 import { forumDatabase } from './helpers/forum-database.mjs';
 
@@ -31,6 +32,23 @@ test('forum penalties are deletion, seven days, then a capped forum ban', () => 
   assert.equal(moderationPenalty(1,0).muted_until,'1970-01-08T00:00:00.000Z');
   assert.deepEqual(moderationPenalty(2,0),{ violations:3,banned:true,muted_until:null });
   assert.equal(moderationPenalty(3).violations,3);
+});
+
+test('manual billing delivery tests log only authenticated notifications for this app without querying purchases', async () => {
+  const logs = [], originalInfo = console.info;
+  console.info = message => logs.push(message);
+  const forum = createForum({ query() { throw Error('Test notifications must not query the database'); } },
+    { ...options, verifyWebhook: async authorization => authorization === 'google-verified',
+      verifyPurchase: async () => { throw Error('Test notifications must not query Play purchases'); } });
+  const notification = packageName => ({ message: { messageId: 'manual-test', data:
+    Buffer.from(JSON.stringify({ packageName, testNotification: { version: '1.0' } })).toString('base64') } });
+  try {
+    await assert.rejects(forum.webhook('fake', notification('com.roadconquest.app')), error => error.status === 401);
+    await assert.rejects(forum.webhook('google-verified', notification('wrong.app')), error => error.status === 400);
+    assert.deepEqual(logs, []);
+    assert.deepEqual(await forum.webhook('google-verified', notification('com.roadconquest.app')), { ok: true });
+    assert.deepEqual(logs, ['Forum Plus authenticated test notification received.']);
+  } finally { console.info = originalInfo; }
 });
 
 test('public paging, reactions, blocks, privacy and account deletion', { skip: !database }, async () => fixture(async (pool,[a,b,c,admin],forum) => {
@@ -212,6 +230,48 @@ test('purchase verification outages preserve existing paid access and receipt st
   assert.equal((await forum.list(a)).viewer.plus,true);
   assert.deepEqual((await pool.query('SELECT active,checked_at FROM forum_purchases')).rows[0],refreshed);
 }));
+
+test('repeat purchase checks retain encrypted receipts without resending them, including refund and restore',
+  { skip: !database }, async () => fixture(async (pool, [a]) => {
+    await pool.query('INSERT INTO forum_profiles(user_id) VALUES($1)', [a.id]);
+    let binaryBytes = 0, statements = 0, checks = 0, active = true;
+    const token = 'r'.repeat(4096);
+    const measured = {
+      query: pool.query.bind(pool),
+      async connect() {
+        const db = await pool.connect();
+        return { query: async (sql, parameters) => {
+          statements++;
+          for (const value of parameters || []) if (Buffer.isBuffer(value)) binaryBytes += value.length;
+          return db.query(sql, parameters);
+        }, release: () => db.release() };
+      }
+    };
+    const forum = createForum(measured, { ...options, verifyPurchase: async value => {
+      checks++;
+      assert.equal(value, token);
+      return active;
+    } });
+    assert.deepEqual(await forum.purchase(a, token), { plus: true });
+    const receipt = async () => (await pool.query('SELECT encrypted_token,active,checked_at FROM forum_purchases')).rows[0];
+    const original = await receipt();
+    assert.equal(purchaseCodec(options.pepper).open(original.encrypted_token), token);
+    assert.equal(binaryBytes, 4124, 'Only the first check sends the encrypted token and its nonce/tag');
+    assert.equal(statements, 5);
+    for (const state of [true, false, true]) {
+      active = state;
+      await pool.query("UPDATE forum_purchases SET checked_at='2000-01-01T00:00:00Z'");
+      binaryBytes = statements = 0;
+      assert.deepEqual(await forum.purchase(a, token), { plus: state });
+      const updated = await receipt();
+      assert.deepEqual(updated.encrypted_token, original.encrypted_token);
+      assert.equal(updated.active, state);
+      assert.ok(new Date(updated.checked_at).getTime() > Date.parse('2000-01-01T00:00:00Z'));
+      assert.equal(binaryBytes, 0, 'Stored receipts need no replacement ciphertext parameter');
+      assert.equal(statements, 5, 'No extra database round trip');
+    }
+    assert.equal(checks, 4, 'Every request still verifies the current state with Play');
+  }));
 
 test('existing profiles skip redundant insert and billing notifications still prune old IDs', { skip: !database }, async () => fixture(async (pool,[a],forum) => {
   const input=body('A first post');

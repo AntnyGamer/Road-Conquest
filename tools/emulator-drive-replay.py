@@ -329,11 +329,24 @@ def main():
     print(adb('shell', 'am', 'start', '-W', '-n', PACKAGE+'/.DefaultLauncher'), flush=True)
     time.sleep(8)
     ui = dump_ui(args.out, 'start-ui')
+    # New releases defer automatic tracking until the first-use guide is closed.
+    # Use its real Skip control; do not bypass app startup or alter the APK.
+    if tap_id(ui, 'tourSkipButton'):
+        deadline = time.monotonic() + 10
+        while True:
+            ui = dump_ui(args.out, 'after-tour-ui')
+            if not any(n.get('resource-id') == PACKAGE + ':id/tourSkipButton' for n in ui.iter('node')):
+                break
+            assert time.monotonic() < deadline, 'First-use guide did not close'
     tap_id(ui, 'centerCarButton')
     screenshot(args.out, 'start')
     locations = adb('shell', 'dumpsys', 'location')
     (args.out / 'location-initial.txt').write_text(locations)
     services = adb('shell', 'dumpsys', 'activity', 'services', PACKAGE)
+    deadline = time.monotonic() + 10
+    while '.TrackingService' not in services and time.monotonic() < deadline:
+        time.sleep(.25)
+        services = adb('shell', 'dumpsys', 'activity', 'services', PACKAGE)
     (args.out / 'services-initial.txt').write_text(services)
     print('Tracking service diagnostics:', services, flush=True)
     print('Initial UI:', [(n.get('text'), n.get('resource-id')) for n in ui.iter('node')

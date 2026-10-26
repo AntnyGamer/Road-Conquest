@@ -7,6 +7,12 @@ on:
       - tools/emulator-drive-replay.py
       - tools/fixtures/philadelphia-drive.json
   workflow_dispatch:
+    inputs:
+      release_version:
+        description: 'Published version without v (blank keeps the pinned Beta 20 control)'
+        required: false
+        type: string
+        default: ''
   workflow_run:
     workflows: [Android checks]
     types: [completed]
@@ -35,28 +41,29 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TESTED_COMMIT: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          REQUESTED_VERSION: ${{ inputs.release_version }}
         run: |
           set -euo pipefail
           if [ "$GITHUB_EVENT_NAME" = 'workflow_run' ]; then
             version=$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts)
-            target=$(gh release view "v$version" --json targetCommitish --jq '.targetCommitish')
-            if [ "$target" != "$TESTED_COMMIT" ]; then
-              echo '::notice::This source did not publish a new release; no repeated release drive is needed.'
-              echo 'enabled=false' >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
           else
             # Preserve the fixed Beta20 control for review-branch comparisons.
-            version='1.0-beta.20'
+            version="${REQUESTED_VERSION:-1.0-beta.20}"
           fi
           [[ "$version" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?(-beta(\.[0-9]+)?)?$ ]]
+          target=$(gh release view "v$version" --json targetCommitish --jq '.targetCommitish')
+          if [ "$GITHUB_EVENT_NAME" = 'workflow_run' ] && [ "$target" != "$TESTED_COMMIT" ]; then
+            echo '::notice::This source did not publish a new release; no repeated release drive is needed.'
+            echo 'enabled=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           folder="$RUNNER_TEMP/published-drive"
           mkdir -p "$folder"
           gh release download "v$version" --pattern "RoadConquest-$version.apk" --pattern "RoadConquest-$version-SHA256SUMS.txt" --dir "$folder"
           awk -v name="RoadConquest-$version.apk" '$2 == name { print }' "$folder/RoadConquest-$version-SHA256SUMS.txt" > "$folder/apk-checksum.txt"
           test -s "$folder/apk-checksum.txt"
           (cd "$folder" && sha256sum -c apk-checksum.txt)
-          if [ "$GITHUB_EVENT_NAME" != 'workflow_run' ]; then
+          if [ "$GITHUB_EVENT_NAME" != 'workflow_run' ] && [ "$version" = '1.0-beta.20' ]; then
             echo "77e8aec1810cc6c6559ca0439e12598648b4af4f496544a3fd01717dad22bf02  $folder/RoadConquest-$version.apk" | sha256sum -c -
           fi
           if [ ! -x "$ANDROID_HOME/build-tools/36.0.0/apksigner" ]; then
@@ -67,7 +74,8 @@ jobs:
           sha256sum "$folder/RoadConquest-$version.apk" | cut -d ' ' -f 1 > "$folder/sha256.txt"
           mv "$folder/RoadConquest-$version.apk" "$folder/published.apk"
           echo "$version" > "$folder/version.txt"
-          echo "$TESTED_COMMIT" > "$folder/tested-source.txt"
+          echo "$target" > "$folder/tested-source.txt"
+          echo "$TESTED_COMMIT" > "$folder/harness-source.txt"
           echo 'enabled=true' >> "$GITHUB_OUTPUT"
       - name: Save verified signed APK for the driving job
         if: steps.release.outputs.enabled == 'true'

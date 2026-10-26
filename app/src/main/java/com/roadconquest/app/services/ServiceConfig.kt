@@ -21,7 +21,10 @@ object ServiceConfig {
     internal fun parse(raw: String): Map<String, Boolean> {
         require(raw.length <= 4096)
         val root = JSONObject(raw)
-        require(root.optInt("version") == 1)
+        // optInt would silently accept a quoted "1" or truncate 1.5 to 1.
+        // The gateway requires the actual numeric schema version.
+        val version = root.opt("version") as? Number
+        require(version?.toDouble() == 1.0)
         val providers = root.getJSONObject("providers")
         return names.associateWith { providers.opt(it) as? Boolean ?: true }
     }

@@ -7,6 +7,8 @@ import org.json.JSONObject
 object ForumClient {
     const val PRODUCT_ID = "forum_plus_lifetime"
     const val RULES_VERSION = 1
+    // Feed parsing reuses these fixed reaction keys for every post/page.
+    private val reactionTypes = listOf("like", "love", "celebrate")
     data class Viewer(val username: String, val strikes: Int, val mutedUntil: String?, val banned: Boolean,
         val plus: Boolean, val billingAccountId: String, val moderator: Boolean, val nextPostAt: String? = null)
     data class Post(val id: String, val username: String, val text: String, val gifUrl: String?, val gifHash: String?,
@@ -39,7 +41,7 @@ object ForumClient {
             val counts = p.getJSONObject("reactions")
             Post(p.getString("id"),p.getString("username"),p.getString("text"),p.optional("gif_url"),p.optional("gif_hash"),
                 p.getString("created_at"),p.optBoolean("highlighted"),p.optBoolean("own"),
-                listOf("like","love","celebrate").associateWith { counts.optInt(it).coerceAtLeast(0) },p.optional("my_reaction"))
+                reactionTypes.associateWith { counts.optInt(it).coerceAtLeast(0) },p.optional("my_reaction"))
         }
         val viewer = body.optJSONObject("viewer")?.let { v ->
             Viewer(v.getString("username"),v.optInt("violations"),v.optional("muted_until"),v.optBoolean("banned"),

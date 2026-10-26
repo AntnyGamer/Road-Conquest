@@ -322,7 +322,7 @@ class AccountActivity : Activity() {
                 statusText.text = "Changing username…"
                 executor.execute {
                     val result = runCatching { AccountClient.changeUsername(session.token, name, currentPassword) }
-                    result.onSuccess { account ->
+                    val updated = result.getOrNull()?.let { account ->
                         AccountStore.updateIfToken(applicationContext, session.token) {
                             // Changing a username must not overwrite a newer privacy
                             // toggle from Settings while this request was in flight.
@@ -333,7 +333,11 @@ class AccountActivity : Activity() {
                         if (isDestroyed) return@runOnUiThread
                         setBusy(false)
                         render(AccountStore.load(this))
-                        statusText.text = result.fold({ "Username changed." }, { it.message ?: "Could not change username." })
+                        statusText.text = result.fold(
+                            { if (updated != null) "Username changed."
+                              else "Username changed on the previous account. Current sign-in is unchanged." },
+                            { it.message ?: "Could not change username." }
+                        )
                     }
                 }
             }
