@@ -112,19 +112,33 @@ object BaseMapProviders {
     fun addListener(listener: () -> Unit) { listeners.add(listener) }
     fun removeListener(listener: () -> Unit) { listeners.remove(listener) }
     private fun available(provider: String) = ServiceConfig.enabled(provider) && health.remaining(provider) == 0L
-    fun preferred(mode: MapMode): String = when {
-        available("openfreemap") && mode == MapMode.TERRAIN && !available("esri-imagery") -> "openfreemap-streets"
-        available("openfreemap") -> "openfreemap"
-        gatewayHost != null && available("geoapify-tiles") -> "geoapify-tiles"
-        else -> "local"
+    fun preferred(mode: MapMode): String {
+        // Read the same vector provider once per decision. Normal street/night/
+        // minimal modes previously repeated a synchronized health lookup.
+        val vectorAvailable = available("openfreemap")
+        return when {
+            vectorAvailable && mode == MapMode.TERRAIN && !available("esri-imagery") -> "openfreemap-streets"
+            vectorAvailable -> "openfreemap"
+            gatewayHost != null && available("geoapify-tiles") -> "geoapify-tiles"
+            else -> "local"
+        }
     }
     // No cooldown means there is nothing to retry. ServiceConfig listeners
     // independently handle remote provider enable/disable changes, so avoid
     // waking the map every 30 seconds while an intentionally disabled provider
     // remains unavailable.
-    fun retryInMs(): Long? = listOf("openfreemap", "geoapify-tiles", "esri-imagery")
-        .filter(ServiceConfig::enabled)
-        .map { health.remaining(it) }.filter { it > 0 }.minOrNull()
+    private val retryProviders = arrayOf("openfreemap", "geoapify-tiles", "esri-imagery")
+    fun retryInMs(): Long? {
+        // Same minimum positive cooldown without constructing filtered lists
+        // whenever the visible map checks provider recovery.
+        var earliest: Long? = null
+        for (provider in retryProviders) {
+            if (!ServiceConfig.enabled(provider)) continue
+            val remaining = health.remaining(provider)
+            if (remaining > 0L && (earliest == null || remaining < earliest)) earliest = remaining
+        }
+        return earliest
+    }
     fun style(context: Context, mode: MapMode, provider: String): String {
         if (provider.startsWith("openfreemap")) {
             val root = JSONObject(context.assets.open(
