@@ -8,7 +8,9 @@ rc_topic='roadconquest-forum-purchases'
 rc_subscription='roadconquest-forum-push'
 rc_push_name='roadconquest-forum-push'
 rc_push_email="${rc_push_name}@${rc_project}.iam.gserviceaccount.com"
-rc_endpoint='https://roadconquest-api.22abongiovanni.workers.dev/v1/forum/play-notifications'
+# Google-authenticated server traffic goes directly to the existing backend,
+# avoiding a client-ingress Worker request and browser-oriented edge filtering.
+rc_endpoint='https://br-withered-dew-b7u432kv-roadconquest.compute.c-13.us-east-1.aws.neon.tech/v1/forum/play-notifications'
 
 gcloud services enable pubsub.googleapis.com iam.googleapis.com --project="$rc_project" --quiet
 gcloud beta services identity create --service=pubsub.googleapis.com --project="$rc_project" --quiet

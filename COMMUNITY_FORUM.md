@@ -148,7 +148,7 @@ There is no live payment or moderation test without credentials; service tests u
 For the existing production project, a project owner can run
 `bash server/tools/setup-forum-pubsub.sh` in Google Cloud Shell. It creates the
 `roadconquest-forum-purchases` topic, a keyless `roadconquest-forum-push` identity,
-and an authenticated, wrapped push subscription to the public forum webhook.
+and an authenticated, wrapped push subscription directly to the existing Neon webhook.
 Google Play receives publisher access to that topic. The Pub/Sub service agent
 receives OIDC token creation on the unprivileged push identity only. No billing
 credential, project-wide administrator role, or service-account private key is created.
@@ -157,7 +157,7 @@ Existing subscriptions on another topic are not overwritten.
 After the script succeeds, configure Play Console notifications for
 `projects/deep-pursuit-439200-d4/topics/roadconquest-forum-purchases`, including all
 one-time products and voided purchases. Set the backend audience to
-`https://roadconquest-api.22abongiovanni.workers.dev/v1/forum/play-notifications`
+`https://br-withered-dew-b7u432kv-roadconquest.compute.c-13.us-east-1.aws.neon.tech/v1/forum/play-notifications`
 and its trusted email to
 `roadconquest-forum-push@deep-pursuit-439200-d4.iam.gserviceaccount.com`.
 
