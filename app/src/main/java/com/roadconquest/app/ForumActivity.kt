@@ -32,6 +32,7 @@ import com.roadconquest.app.account.AccountClient
 import com.roadconquest.app.account.AccountStore
 import com.roadconquest.app.forum.ForumBilling
 import com.roadconquest.app.forum.ForumClient
+import com.roadconquest.app.forum.ForumSessionState
 import com.roadconquest.app.forum.ForumGifLoader
 import com.roadconquest.app.util.Appearance
 import com.roadconquest.app.util.ForegroundSession
@@ -61,7 +62,7 @@ class ForumActivity : Activity() {
     private var purchaseDialog: Dialog? = null
     private var checkout: Button? = null
     private var purchaseMessage: TextView? = null
-    private var ownershipRequested = false
+    private val sessionState = ForumSessionState()
     private var restoreRequested = false
     private var foreground = false
     private var composer: Dialog? = null
@@ -146,8 +147,27 @@ class ForumActivity : Activity() {
 
     private fun refresh(loadMore: Boolean = false) {
         if (loading || writing || !active()) return
-        val next = if (loadMore) page?.next ?: return else null
         val token = sessionToken()
+        if (sessionState.switchTo(token)) {
+            // A new sign-in must never inherit another account's forum view,
+            // unsent post, checkout, or pending ownership-check result.
+            composer?.setOnDismissListener(null)
+            composer?.dismiss()
+            composer = null
+            purchaseDialog?.dismiss()
+            purchaseDialog = null
+            billing?.close()
+            billing = null
+            restoreRequested = false
+            draftText = ""
+            draftGif = ""
+            submittedContent = ""
+            submissionId = UUID.randomUUID().toString()
+            page = null
+            posts.clear()
+            adapter.notifyDataSetChanged()
+        }
+        val next = if (loadMore) page?.next ?: return else null
         loading = true
         loadError = null
         updateControls()
@@ -163,14 +183,12 @@ class ForumActivity : Activity() {
                         restoreComposer = false
                         showComposer()
                     }
-                    if (!ownershipRequested && received.purchases && received.viewer?.plus == false) {
-                        ownershipRequested = true
+                    if (sessionState.claimRestore(token, received.purchases, received.viewer?.plus)) {
                         billing().restore(silent = true)
                     }
                 }, onFailure = { error ->
                     if (error is AccountClient.ApiException && error.status == 401 && sessionToken() == token) {
                         AccountStore.clear(this)
-                        ownershipRequested = false
                         refresh()
                     } else {
                         showLoadError(error.message ?: "Could not load the community. Tap Refresh to retry.")
