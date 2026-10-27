@@ -119,7 +119,7 @@ class RoadCacheDeviceTest {
                 lateinit var mapTask: ActivityManager.AppTask
                 scenario.onActivity { activity ->
                     mapTask = activity.getSystemService(ActivityManager::class.java).appTasks
-                        .single { it.taskInfo.taskId == activity.taskId }
+                        .single { it.taskInfo?.taskId == activity.taskId }
                     assertTrue("The map task must move to the background", activity.moveTaskToBack(true))
                 }
                 awaitState(Lifecycle.State.CREATED)
