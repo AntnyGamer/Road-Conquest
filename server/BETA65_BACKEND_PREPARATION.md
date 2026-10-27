@@ -1,19 +1,41 @@
-# Beta 65 backend preparation (no deployment performed)
+# Beta 65 backend preparation and signing activation
 
 Target: Neon project `young-forest-18948389`, production branch
 `br-withered-dew-b7u432kv`, existing function `roadconquest`, runtime `nodejs24`.
 Android: `com.roadconquest.app`, `1.0-beta.65`, versionCode **91**.
-This is a preparation/runbook document. Production deployment, secret changes,
-merging, tags, GitHub releases and Play uploads require the owner's later instruction.
+The owner subsequently authorized enabling production backup signing. That activation
+is recorded below. Merging, tags, GitHub releases and Play uploads remain unauthorized.
 
 ## Observed deployment state, October 27, 2026
 
-Read-only Neon metadata identifies production deployment 32 (October 26), with the
+Initial read-only Neon metadata identified production deployment 32 (October 26), with the
 existing account, billing, notification, Integrity and rate-limit environment names.
-Neither `BACKUP_SIGNING_PRIVATE_KEY` nor `BACKUP_VERIFICATION_KEYS_JSON` is present.
-No secret values were retrieved. The actual public Android API's `/health/live`
-returns `200 {"ok":true}` without a revision, and `/v1/backups` returns 404. Thus the
-protected-backup service is **not deployed** through the public ingress.
+Neither backup signing environment name was present. No existing secret values
+were retrieved. Initially the public API returned `200 {"ok":true}` without a revision
+and 404 for `/v1/backups`.
+
+After the owner's explicit request to make signing work, **deployment 33** activated
+on October 27 at **23:33:05 UTC**, using backend source
+`07a18fe1d782cd3203341f00598836e884c613f3`. A dedicated P-256 key was installed and
+`PLAY_VERSION_CODES` was configured with the documented supported codes 71 through 91.
+Other account, billing, notification, ingress and database environment settings carried
+over. No schema migration, manual database mutation, merge, tag, GitHub release or
+Play upload was performed. The live signing probe used normal API rate-limit/expiry
+housekeeping, rather than modifying account or purchase records for a test.
+
+Through `https://roadconquest-api.22abongiovanni.workers.dev`:
+- `/health/live` and database `/health` return 200 with the deployed source revision.
+- `/v1/backups` returns `available:true`, Cloud project `792616069211`, and public key
+  ID `2PVDvKQF-r8EmnyfdBd6RnkXWD5onNHCP1PPoFKfGg0`.
+- A signing request with deliberately invalid attestation returns 403; an unauthenticated
+  account request returns 401. Competitive uploads remain disabled.
+
+The public key is retained in [backup-verification-key-20261027.json](backup-verification-key-20261027.json)
+for future rotation. A local recovery copy of the private key was protected with a
+user-only Windows ACL and DPAPI CurrentUser encryption; its plaintext file was removed.
+DPAPI recovery requires the same Windows account/machine. No private material is in Git
+or the deployment ZIP. A real licensed Play-installed export/restore is still required
+to establish end-to-end acceptance of the actual app/device/certificate verdict.
 
 The existing `forum-billing-check-20261026` staging branch
 (`br-late-waterfall-b7mbuwsk`) has a disabled database endpoint; its function URL
@@ -45,7 +67,8 @@ limited to metadata and `information_schema` definitions, without reading user r
    secret input. Do not put literal backslash-n escapes in its place. Do not reuse
    an APK signing key, Google service-account key, password pepper, ingress HMAC key,
    or verified-evidence encryption key. Only synthetic test keys were generated
-   during this preparation; no production key was generated or installed.
+   during the initial preparation. The later authorized activation used a separate
+   production key, as recorded above.
 
 ## Preserve the existing environment and accounts
 
@@ -110,7 +133,8 @@ and existing slug; do not rely on a default branch or an old linked context.
 
 Reference: [Neon deployment](https://neon.com/docs/compute/functions/deploy) and
 [environment-variable semantics](https://neon.com/docs/compute/functions/environment-variables).
-No deployment command was executed during this review.
+The initial preparation performed no deployment. The later owner-authorized activation
+is recorded above; do not redeploy merely because this runbook contains deployment guidance.
 
 ## Verification and rotation
 
@@ -144,7 +168,8 @@ specific and excluded from exports and Android backup.
 
 ## Remaining owner-controlled release checks
 
-- Approve and perform backend/key/version configuration and verify the public revision.
+- Backend/key/version configuration and public revision checks are complete for deployment 33;
+  repeat the checks after any later authorized configuration or deployment change.
 - Complete real Play-installed backup transfer/restore and physical driving checks.
 - Complete actual Forum Plus checkout, duplicate callbacks, restore, pending payment,
   refund and authenticated RTDN delivery checks. Mocked provider tests are not a real
