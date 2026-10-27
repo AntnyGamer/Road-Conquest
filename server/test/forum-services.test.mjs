@@ -76,6 +76,45 @@ test('GIF preview preserves every pixel across transparent partial frames and bo
   assert.deepEqual(preview.data, expected);
 });
 
+test('GIF preview restores consecutive and separated snapshots and clears full-width rectangles', () => {
+  const bytes = Buffer.alloc(4096);
+  const gif = new GifWriter(bytes, 4, 4, { palette: [0, 0xb52c19, 0x2168d1, 0x43a65e] });
+  gif.addFrame(0, 0, 4, 4, new Uint8Array(16).fill(1), { disposal: 1 });
+  gif.addFrame(1, 1, 2, 2, new Uint8Array(4).fill(2), { disposal: 3 });
+  gif.addFrame(0, 1, 4, 2, new Uint8Array(8).fill(3), { disposal: 3 });
+  gif.addFrame(0, 1, 4, 2, new Uint8Array(8).fill(2), { disposal: 2 });
+  gif.addFrame(1, 0, 2, 1, new Uint8Array(2).fill(3), { disposal: 1 });
+  gif.addFrame(0, 0, 1, 1, new Uint8Array([2]), { disposal: 3 });
+  gif.addFrame(3, 3, 1, 1, new Uint8Array([3]), { disposal: 1 });
+  const preview = PNG.sync.read(gifContactSheet(bytes.subarray(0, gif.end())));
+  const colors = [[255, 255, 255], [181, 44, 25], [33, 104, 209], [67, 166, 94]];
+  // Hand-composited source canvases. Snapshot disposal restores the state
+  // BEFORE its frame, even after an earlier snapshot or a full-width clear.
+  const frames = [
+    [1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1],
+    [1,1,1,1, 1,2,2,1, 1,2,2,1, 1,1,1,1],
+    [1,1,1,1, 3,3,3,3, 3,3,3,3, 1,1,1,1],
+    [1,1,1,1, 2,2,2,2, 2,2,2,2, 1,1,1,1],
+    [1,3,3,1, 0,0,0,0, 0,0,0,0, 1,1,1,1],
+    [2,3,3,1, 0,0,0,0, 0,0,0,0, 1,1,1,1],
+    [1,3,3,1, 0,0,0,0, 0,0,0,0, 1,1,1,3]
+  ];
+  assert.equal(preview.width, 384);
+  assert.equal(preview.height, 384);
+  const expected = Buffer.alloc(384 * 384 * 4, 255);
+  frames.forEach((canvas, frame) => canvas.forEach((color, cell) => {
+    const left = frame % 3 * 128 + cell % 4 * 32;
+    const top = Math.floor(frame / 3) * 128 + Math.floor(cell / 4) * 32;
+    for (let y = top; y < top + 32; y++) for (let x = left; x < left + 32; x++) {
+      const offset = (y * 384 + x) * 4;
+      expected[offset] = colors[color][0];
+      expected[offset + 1] = colors[color][1];
+      expected[offset + 2] = colors[color][2];
+    }
+  }));
+  assert.deepEqual(preview.data, expected);
+});
+
 test('moderation outages and incomplete responses fail closed; distress and ordinary road discussion alone do not strike', async () => {
   assert.equal(createForumModerator(null),null);
   for(const response of [new Response('outage',{status:503}),reply({}),reply({model:'test',results:[{flagged:false,categories:{}}]})]) {

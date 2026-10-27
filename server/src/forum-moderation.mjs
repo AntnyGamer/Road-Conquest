@@ -43,7 +43,9 @@ export function gifContactSheet(bytes) {
   try {
     for (let index = 0; index < frames; index++) {
       if (previous?.disposal === 2) {
-        for (let y = previous.y; y < previous.y + previous.height; y++) {
+        if (previous.x === 0 && previous.width === width) {
+          pixels.fill(0, previous.y * width * 4, (previous.y + previous.height) * width * 4);
+        } else for (let y = previous.y; y < previous.y + previous.height; y++) {
           pixels.fill(0, (y * width + previous.x) * 4, (y * width + previous.x + previous.width) * 4);
         }
       } else if (previous?.disposal === 3 && restore) restore.copy(pixels);
@@ -51,7 +53,12 @@ export function gifContactSheet(bytes) {
       if (frame.x < 0 || frame.y < 0 || frame.x + frame.width > width || frame.y + frame.height > height) {
         throw new Error('Frame outside image');
       }
-      restore = frame.disposal === 3 ? Buffer.from(pixels) : null;
+      if (frame.disposal === 3) {
+        // One private snapshot suffices: restore the prior frame above before
+        // replacing it. Every byte is copied before this buffer can be read.
+        restore ??= Buffer.allocUnsafe(pixels.length);
+        pixels.copy(restore);
+      }
       gif.decodeAndBlitFrameRGBA(index, pixels);
       const left = index % columns * thumb + Math.floor((thumb - w) / 2);
       const top = Math.floor(index / columns) * thumb + Math.floor((thumb - h) / 2);
@@ -114,7 +121,7 @@ export function createForumModerator(key, request = fetch) {
       }
       const bytes = chunks.length === 1
         ? Buffer.from(chunks[0].buffer, chunks[0].byteOffset, chunks[0].byteLength)
-        : Buffer.concat(chunks);
+        : Buffer.concat(chunks, size);
       const preview = gifContactSheet(bytes);
       gifHash = createHash('sha256').update(bytes).digest('hex');
       input.push({ type: 'image_url', image_url: { url: 'data:image/png;base64,' + preview.toString('base64') } });

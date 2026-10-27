@@ -238,7 +238,7 @@ async function readJson(req) {
     // Preserve its byte range; multi-chunk UTF-8 still decodes only after joining.
     const bytes = chunks.length === 1
       ? Buffer.from(chunks[0].buffer, chunks[0].byteOffset, chunks[0].byteLength)
-      : Buffer.concat(chunks);
+      : Buffer.concat(chunks, size);
     if (!isUtf8(bytes)) throw new Error("Invalid UTF-8");
     const body = JSON.parse(bytes.toString("utf8"));
     if (!body || Array.isArray(body) || typeof body !== "object") throw new Error("JSON object required");

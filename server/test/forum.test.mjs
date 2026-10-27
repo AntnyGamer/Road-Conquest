@@ -220,6 +220,40 @@ test('manual removal strikes once, reports alone never strike, Plus grants requi
   assert.equal((await pool.query('SELECT * FROM forum_purchases')).rowCount,0);
 }));
 
+test('moderator removal records the strike, erasure and reviewed reports in one statement', { skip: !database }, async () =>
+  fixture(async (pool, [author, reporter, other, admin], forum) => {
+    const post = await forum.post(author, body('Reported content'));
+    await forum.report(reporter, post.id, 'spam');
+    await forum.report(other, post.id, 'other');
+    const statements = [];
+    const measured = createForum({ connect: async () => {
+      const db = await pool.connect();
+      return { query(sql, ...args) { statements.push(sql); return db.query(sql, ...args); }, release() { db.release(); } };
+    } }, { ...options, adminIds: [admin.id] });
+    const snapshot = async () => ({
+      profile: (await pool.query('SELECT violations,muted_until,banned,xmin::text AS version FROM forum_profiles WHERE user_id=$1', [author.id])).rows[0],
+      post: (await pool.query('SELECT state,body,gif_url,gif_hash FROM forum_posts WHERE id=$1', [post.id])).rows[0],
+      reports: (await pool.query('SELECT reporter_id,reviewed FROM forum_reports WHERE post_id=$1 ORDER BY reporter_id', [post.id])).rows
+    });
+    const before = await snapshot();
+    await pool.query('ALTER TABLE forum_reports ADD CONSTRAINT test_review_failure CHECK (NOT reviewed) NOT VALID');
+    try {
+      await assert.rejects(measured.review(admin, post.id, true), error => error.code === '23514');
+      assert.deepEqual(await snapshot(), before, 'A report update failure must roll back the strike and erasure too');
+    } finally { await pool.query('ALTER TABLE forum_reports DROP CONSTRAINT test_review_failure'); }
+    statements.length = 0;
+    assert.deepEqual(await measured.review(admin, post.id, true), { ok: true });
+    assert.equal(statements.length, 6, 'Keep the account/post locks, then make all three writes in one round trip');
+    const removed = await snapshot();
+    assert.equal(removed.profile.violations, 1);
+    assert.equal(removed.profile.banned, false);
+    assert.equal(removed.profile.muted_until, null);
+    assert.deepEqual(removed.post, { state: 'removed', body: '', gif_url: null, gif_hash: null });
+    assert.ok(removed.reports.length === 2 && removed.reports.every(row => row.reviewed));
+    await measured.review(admin, post.id, true);
+    assert.deepEqual(await snapshot(), removed, 'Repeated removals cannot strike again or rewrite the profile');
+  }));
+
 test('purchase verification outages preserve existing paid access and receipt state', { skip: !database }, async () => fixture(async(pool,[a])=>{
   let outage=false;
   const forum=createForum(pool,{...options,verifyPurchase:async()=>{

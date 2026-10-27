@@ -104,7 +104,7 @@ export async function boundedJson(response, limit = 1024 * 1024) {
   try {
     const bytes = chunks.length === 1
       ? Buffer.from(chunks[0].buffer, chunks[0].byteOffset, chunks[0].byteLength)
-      : Buffer.concat(chunks);
+      : Buffer.concat(chunks, size);
     if (!isUtf8(bytes)) throw new Error("Invalid UTF-8");
     return JSON.parse(bytes.toString("utf8"));
   }

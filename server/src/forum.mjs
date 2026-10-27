@@ -84,12 +84,6 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
     } catch (error) { await db.query('ROLLBACK').catch(() => {}); throw error; }
     finally { db.release(); }
   }
-  async function strike(db, userId, row) {
-    const penalty = moderationPenalty(row.violations);
-    await db.query('UPDATE forum_profiles SET violations=$2,muted_until=$3,banned=$4 WHERE user_id=$1',
-      [userId, penalty.violations, penalty.muted_until, penalty.banned]);
-    return penalty;
-  }
   function postResult(row, current) {
     return { id: row.id, removed: row.state === 'removed', deleted: row.state === 'deleted',
       violations: current.violations, banned: current.banned, muted_until: current.muted_until,
@@ -279,10 +273,17 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
         const current = await profile(db,found.rows[0].user_id,true,'violations');
         const { rows } = await db.query('SELECT user_id,state FROM forum_posts WHERE id=$1 FOR UPDATE', [postId]);
         if (remove && rows[0].state === 'visible') {
-          await strike(db, rows[0].user_id, current);
-          await db.query("UPDATE forum_posts SET state='removed',body='',gif_url=NULL,gif_hash=NULL WHERE id=$1", [postId]);
-        }
-        await db.query('UPDATE forum_reports SET reviewed=TRUE WHERE post_id=$1 AND NOT reviewed', [postId]);
+          const penalty = moderationPenalty(current.violations);
+          // Both profile and post are already locked in the original order.
+          // Keep the strike, content erasure and report review atomic while
+          // avoiding two extra round trips with these locks held.
+          await db.query(`WITH penalized AS (
+            UPDATE forum_profiles SET violations=$3,muted_until=$4,banned=$5 WHERE user_id=$2
+          ), removed AS (
+            UPDATE forum_posts SET state='removed',body='',gif_url=NULL,gif_hash=NULL WHERE id=$1
+          ) UPDATE forum_reports SET reviewed=TRUE WHERE post_id=$1 AND NOT reviewed`,
+          [postId, rows[0].user_id, penalty.violations, penalty.muted_until, penalty.banned]);
+        } else await db.query('UPDATE forum_reports SET reviewed=TRUE WHERE post_id=$1 AND NOT reviewed', [postId]);
         return { ok: true };
       });
     },
