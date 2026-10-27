@@ -112,7 +112,7 @@ class BackupProtectionTest {
         } finally { file.delete(); changed.delete() }
     }
 
-    @Test fun signedBackupsRestoreLegacyRoadsWithoutGroupIdsOrWeeklyCredit() {
+    @Test fun signedBackupsNormalizeLegacyRoadGroupsWithoutWeeklyCredit() {
         val db = TrackingRepository(context).readableDatabase()
         repeat(2) { index -> db.execSQL(
             """INSERT INTO roads(segment_id,name,geometry_json,first_unlocked_at,last_driven_at,
@@ -120,6 +120,10 @@ class BackupProtectionTest {
                 VALUES (?,?,'[[-74,40],[-73.9,40]]',1000000,1005000,40,40,-74,-73.9)""",
             arrayOf("legacy-$index", "Legacy road $index")
         ) }
+        db.rawQuery("SELECT COUNT(*) FROM roads WHERE road_group_id = ''", null).use {
+            assertTrue(it.moveToFirst())
+            assertEquals(2L, it.getLong(0))
+        }
         val file = raw()
         try {
             BackupProtection.attach(file, sign(file))
@@ -135,7 +139,8 @@ class BackupProtectionTest {
                 repeat(2) { index ->
                     assertTrue(cursor.moveToNext())
                     assertEquals("legacy-$index", cursor.getString(0))
-                    assertEquals("", cursor.getString(1))
+                    // Export gives an ungrouped legacy road its segment ID as a fallback.
+                    assertEquals("legacy-$index", cursor.getString(1))
                     assertEquals(0, cursor.getInt(2))
                 }
                 assertFalse(cursor.moveToNext())
