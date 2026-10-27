@@ -414,14 +414,15 @@ class TrackingRepository(context: Context) {
         val maximum = (points.size - 1) * 4
         val skipped = ArrayList<TrackPoint>()
         dbHelper.readableDatabase.rawQuery(
-            "SELECT id,latitude,longitude,accuracy_m,speed_mps,bearing_deg,timestamp_ms " +
+            "SELECT id,latitude,longitude,accuracy_m,speed_mps,bearing_deg,timestamp_ms,weekly_eligible " +
                 "FROM skipped_driving_fixes WHERE timestamp_ms > ? AND timestamp_ms < ? " +
                 "ORDER BY timestamp_ms,id LIMIT ?",
             arrayOf(points.first().timestampMillis.toString(), points.last().timestampMillis.toString(), (maximum + 1).toString())
         ).use { cursor ->
             while (cursor.moveToNext()) skipped += TrackPoint(
                 -cursor.getLong(0), cursor.getDouble(1), cursor.getDouble(2), cursor.getFloat(3),
-                cursor.getFloat(4), cursor.getFloat(5), cursor.getLong(6), matched = true)
+                cursor.getFloat(4), cursor.getFloat(5), cursor.getLong(6), matched = true,
+                weeklyEligible = cursor.getInt(7) == 1)
         }
         val retainedTimes = points.mapTo(HashSet()) { it.timestampMillis }
         if (skipped.isEmpty() || skipped.size > maximum ||
@@ -820,14 +821,9 @@ class TrackingRepository(context: Context) {
             val db = dbHelper.writableDatabase
             db.beginTransaction()
             try {
-                // A delayed match over imported fixes remains historical, even if
-                // forged timestamps put it in the current challenge week.
-                val eligible = ids.chunked(400).all { chunk ->
-                    db.rawQuery("SELECT 1 FROM track_points WHERE weekly_eligible=0 AND id IN (" +
-                        chunk.joinToString(",") { "?" } + ") LIMIT 1",
-                        Array(chunk.size) { chunk[it].toString() }).use { !it.moveToFirst() }
-                }
-                upsertRoads(roads, eligible)
+                // Validation carries each road's supporting-fix provenance,
+                // including read-only context. Mixed batches keep live credit.
+                upsertRoads(roads)
                 markMatched(ids)
                 db.setTransactionSuccessful()
             } finally {
@@ -884,7 +880,7 @@ class TrackingRepository(context: Context) {
     }
 
     @Synchronized
-    fun upsertRoads(roads: List<MatchedRoad>, weeklyEligible: Boolean = true) {
+    fun upsertRoads(roads: List<MatchedRoad>) {
         synchronized(dbHelper.historyLock) {
             if (historyGeneration != dbHelper.historyGeneration) return
             if (roads.isEmpty()) return
@@ -900,7 +896,7 @@ class TrackingRepository(context: Context) {
                         geometryJson = road.coordinatesJson,
                         firstTimestamp = road.firstTimestamp,
                         lastTimestamp = road.lastTimestamp,
-                        weeklyEligible = weeklyEligible
+                        weeklyEligible = road.weeklyEligible
                     )
                 }
                 db.setTransactionSuccessful()
@@ -1692,7 +1688,8 @@ class TrackingRepository(context: Context) {
         speedMps = getFloat(4),
         bearingDegrees = getFloat(5),
         timestampMillis = getLong(6),
-        matched = getInt(7) != 0
+        matched = getInt(7) != 0,
+        weeklyEligible = getInt(8) == 1
     )
 
     private fun android.database.Cursor.toRoadRecord() = RoadRecord(
@@ -2067,7 +2064,8 @@ class TrackingRepository(context: Context) {
             "speed_mps",
             "bearing_deg",
             "timestamp_ms",
-            "matched"
+            "matched",
+            "weekly_eligible"
         )
 
         // Two immutable statement shapes replace rebuilding this CTE and column list on

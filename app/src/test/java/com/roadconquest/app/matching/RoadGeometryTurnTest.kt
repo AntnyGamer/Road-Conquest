@@ -128,6 +128,22 @@ class RoadGeometryTurnTest {
         assertEquals(p2.toString(), coordinates.getJSONArray(1).toString())
     }
 
+    @Test fun splitBridgeKeepsTheProvenanceOfBothEndpoints() {
+        val coordinates = listOf(coord(-74.0, 40.00030), coord(-74.0, 40.00020),
+            coord(-74.0, 40.00010), coord(-74.0, 40.0))
+        val recorded = points(*coordinates.toTypedArray()).mapIndexed { index, point ->
+            point.copy(weeklyEligible = index >= 2)
+        }
+        val result = requireNotNull(RoadGeometryValidator().parse(response(listOf(
+            trace(0, 0, coordinates[0]), trace(0, 1, coordinates[1]),
+            trace(1, 0, coordinates[2]), trace(1, 1, coordinates[3])
+        ), matching(leg("Main Road", coordinates[0], coordinates[1])),
+            matching(leg("Main Road", coordinates[2], coordinates[3]))), recorded))
+        val ordered = result.roads.sortedBy { it.firstTimestamp }
+        assertEquals(listOf(false, false, true), ordered.map { it.weeklyEligible })
+        assertEquals(setOf(1L, 2L, 3L, 4L), result.matchedPointConfidences.keys)
+    }
+
     @Test fun shortNamedRoadTurnSeamUsesConfirmedEndpointsWithoutRoadCredit() {
         // Translated, synthetic geometry with the same short turn/seam shape as the
         // exported Flanders/Colonial drive. Never embed the user's private track in tests.

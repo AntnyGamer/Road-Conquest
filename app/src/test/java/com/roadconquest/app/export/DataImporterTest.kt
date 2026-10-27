@@ -77,7 +77,7 @@ class DataImporterTest {
         assertEquals(listOf(0L, 0L, 0L, 0L), WeeklyChallenges.status(context, now).challenges.map { it.progress })
         assertEquals(before, restoredProgression.snapshot().balance)
         restoredTracker.completeMatch(listOf(MatchedRoad("Delayed import", "[[-74,40],[-74.002,40]]",
-            time, time, 1.0)), listOf(first))
+            time, time, 1.0, weeklyEligible = false)), listOf(first))
         val candidate = restoredProgression.pendingPlaceCandidates().single()
         assertFalse(candidate.weeklyEligible)
         restoredProgression.resolveCandidate(candidate, listOf(PlaceDiscovery(PlaceKind.TOWN, "delayed",
