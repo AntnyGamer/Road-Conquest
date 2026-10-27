@@ -26,6 +26,8 @@ import java.util.concurrent.Executors
 object OptionalNotifications {
     private const val PREFS = "roadconquest_notifications"
     private const val REGISTER_REFRESH_MS = 6 * 60 * 60_000L
+    internal fun registrationCacheKey(binding: String, friendRequests: Boolean, friendPosts: Boolean) =
+        "$binding:${if (friendRequests) 1 else 0}${if (friendPosts) 1 else 0}"
     internal fun needsDeviceRegistration(
         cachedIdHash: String?, cachedBinding: String?, cachedAt: Long,
         idHash: String, binding: String, now: Long
@@ -166,21 +168,24 @@ object OptionalNotifications {
             val settings = prefs(app)
             val idHash = sessionDigest(token)
             val now = System.currentTimeMillis()
+            val requests = friendsEnabled(app)
+            val posts = friendPostsEnabled(app)
+            // A late success can race with invalidation after a settings change.
+            // Tag the receipt with its exact choices so it cannot mask newer ones.
+            val registrationKey = registrationCacheKey(binding, requests, posts)
             if (!needsDeviceRegistration(
                     settings.getString("registered_id_hash", null),
                     settings.getString("registered_binding", null),
                     settings.getLong("registered_at", 0L),
-                    idHash, binding, now
+                    idHash, registrationKey, now
                 )) return@execute
-            val requests = friendsEnabled(app)
-            val posts = friendPostsEnabled(app)
             runCatching { AccountClient.registerNotificationDevice(session.token, token, binding, requests, posts) }
                 .onSuccess {
                     if (AccountStore.load(app)?.token == session.token &&
                         friendsEnabled(app) == requests && friendPostsEnabled(app) == posts && permission(app) &&
                         settings.getString("binding", null) == binding) {
                         settings.edit().putString("registered_id_hash", idHash)
-                            .putString("registered_binding", binding)
+                            .putString("registered_binding", registrationKey)
                             .putLong("registered_at", System.currentTimeMillis()).apply()
                     }
                 }
