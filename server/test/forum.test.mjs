@@ -483,6 +483,47 @@ test('existing profiles skip redundant insert and billing notifications still pr
   } finally { pool.query=query; }
 }));
 
+test('committed post retries read their receipt and current profile in one statement', { skip: !database }, async () =>
+  fixture(async (pool, [a, b], forum) => {
+    const input = body('A saved discovery');
+    const first = await forum.post(a, input);
+    const query = pool.query.bind(pool);
+    let reads = 0;
+    const measured = createForum({ query: (...args) => { reads++; return query(...args); },
+      connect() { throw Error('Committed retries must not start another post transaction'); }
+    }, { ...options, moderate: null });
+    for (const [state, violations, banned, muted] of [
+      ['visible', 0, false, false], ['removed', 2, false, true], ['deleted', 3, true, false]
+    ]) {
+      await query('UPDATE forum_posts SET state=$2 WHERE id=$1', [first.id, state]);
+      await query(`UPDATE forum_profiles SET violations=$2,banned=$3,
+        muted_until=CASE WHEN $4 THEN CURRENT_TIMESTAMP + INTERVAL '1 day' ELSE NULL END
+        WHERE user_id=$1`, [a.id, violations, banned, muted]);
+      const current = (await query(`SELECT violations,banned,muted_until,
+        last_post_at + INTERVAL '10 minutes' AS next_post_at FROM forum_profiles WHERE user_id=$1`, [a.id])).rows[0];
+      reads = 0;
+      assert.deepEqual(await measured.post(a, input), { ...first, ...current,
+        removed: state === 'removed', deleted: state === 'deleted',
+        message: state === 'removed' ? 'This post was removed for violating the community rules.' : null });
+      assert.equal(reads, 1, 'Return the existing post and fresh penalties/cooldown in one database round trip');
+    }
+    reads = 0;
+    await assert.rejects(measured.post(a, { ...input, text: 'Changed content' }), error => error.status === 409);
+    assert.equal(reads, 1, 'A conflicting submission ID is still rejected immediately');
+    reads = 0;
+    await assert.rejects(measured.post(b, input), error => error.status === 503);
+    assert.equal(reads, 1, 'Another account cannot inherit this receipt when posting is unavailable');
+    await query('DELETE FROM forum_profiles WHERE user_id=$1', [a.id]);
+    reads = 0;
+    const recovered = await measured.post(a, input);
+    assert.equal(recovered.id, first.id);
+    assert.equal(recovered.deleted, true);
+    assert.equal(recovered.violations, 0);
+    assert.equal(recovered.banned, false);
+    assert.equal(reads, 3, 'An absent profile retains the existing read/create recovery path');
+    assert.equal(Number((await query('SELECT COUNT(*) FROM forum_posts')).rows[0].count), 1);
+  }));
+
 test('first participation returns inserted profile projections without a second read', { skip: !database }, async () =>
   fixture(async (pool, [a, b, c], forum) => {
     const query = pool.query.bind(pool);

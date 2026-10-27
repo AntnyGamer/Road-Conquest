@@ -96,8 +96,12 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
       next_post_at: current.next_post_at,
       message: row.state === 'removed' ? 'This post was removed for violating the community rules.' : null };
   }
-  async function existing(db, userId, input) {
-    const { rows } = await db.query('SELECT id,state,content_hash FROM forum_posts WHERE user_id=$1 AND request_id=$2', [userId, input.requestId]);
+  async function existing(db, userId, input, withProfile = false) {
+    const { rows } = await db.query(withProfile ? `SELECT p.id,p.state,p.content_hash,
+      f.violations,f.banned,f.muted_until,f.last_post_at + INTERVAL '10 minutes' AS next_post_at
+      FROM forum_posts p LEFT JOIN forum_profiles f ON f.user_id=p.user_id
+      WHERE p.user_id=$1 AND p.request_id=$2`
+      : 'SELECT id,state,content_hash FROM forum_posts WHERE user_id=$1 AND request_id=$2', [userId, input.requestId]);
     if (rows[0] && rows[0].content_hash !== input.contentHash) throw new EvidenceError('This submission ID was already used for another post.', 409);
     return rows[0];
   }
@@ -155,8 +159,10 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
       const accountPrefix = user.id + ':';
       const key = accountPrefix + input.requestId + ':' + input.contentHash;
       if (pendingPosts.has(key)) return pendingPosts.get(key);
-      const prior = await existing(pool, user.id, input);
-      if (prior) return postResult(prior, await profile(pool, user.id));
+      // Committed retries need the receipt and current penalties, not a new
+      // moderation call. Read both together, preserving native timestamp types.
+      const prior = await existing(pool, user.id, input, true);
+      if (prior) return postResult(prior, prior.violations != null ? prior : await profile(pool, user.id));
       if (!moderate) throw new EvidenceError('Community posting is temporarily unavailable.', 503);
       const state = await profile(pool, user.id);
       // The first lookup can precede another instance's commit while this profile
