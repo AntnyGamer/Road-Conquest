@@ -16,6 +16,7 @@ import {
 } from "./security.mjs";
 import { competitionConfig, createCompetition } from "./competition.mjs";
 import { createBackups } from "./backups.mjs";
+import { createIntegrityVerifier } from "./integrity.mjs";
 import { createFriends } from "./friends.mjs";
 import { createNotifications, createFcmSender } from "./notifications.mjs";
 import { createRequestMaintenance } from "./maintenance.mjs";
@@ -103,8 +104,12 @@ const prepareDatabase = createRequestMaintenance(pool, { initialize: async () =>
     }
   }
 } });
-const competition = await createCompetition(pool, competitionConfig(process.env));
-const backups = await createBackups(process.env);
+const competitionSettings = competitionConfig(process.env);
+// Both features use the same app policy and OAuth scope. Share credential
+// refreshes/signing keys, while still verifying every request's bound verdict.
+const verifyIntegrity = competitionSettings ? await createIntegrityVerifier(competitionSettings) : undefined;
+const competition = await createCompetition(pool, competitionSettings, { verify: verifyIntegrity });
+const backups = await createBackups(process.env, { verify: verifyIntegrity });
 const notifications = createNotifications(pool, { pepper: PEPPER, sender: createFcmSender(process.env.FCM_SERVICE_ACCOUNT_JSON),
   deliveryLimit: target => ["push-delivery", opaqueRateKey("push-delivery", String(target)), 5 * 60 * 1000, 3] });
 const friends = createFriends(pool, async target => {

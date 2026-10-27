@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { generateKeyPairSync } from "node:crypto";
+import { createHash, generateKeyPairSync, randomUUID } from "node:crypto";
 import { createIntegrityVerifier } from "../src/integrity.mjs";
+import { createFetchHandler } from "../src/fetch-adapter.mjs";
+import { backupMessage } from "../src/backups.mjs";
 
 const privateKey = generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey
   .export({ type: "pkcs8", format: "pem" });
@@ -9,6 +11,81 @@ const config = {
   credentialsJson: JSON.stringify({ type: "service_account", client_email: "verifier@example.iam.gserviceaccount.com", private_key: privateKey }),
   packageName: "com.roadconquest.app", versions: ["71"], certificates: ["A".repeat(43)]
 };
+
+test('scoring and backup signing share OAuth credentials but independently verify every bound request', async () => {
+  const environment = {
+    DATABASE_URL: 'postgresql://unused@127.0.0.1:1/unavailable', PASSWORD_PEPPER: 'shared-integrity-test-pepper-'.repeat(2),
+    NODE_ENV: 'production', REQUIRE_HTTPS: '1', TRUST_PROXY: '1', APPLY_SCHEMA_ON_STARTUP: '0',
+    LEADERBOARDS_ENABLED: '1', FORUM_ENABLED: '0', FCM_SERVICE_ACCOUNT_JSON: '',
+    PLAY_SERVICE_ACCOUNT_JSON: config.credentialsJson, PLAY_CERTIFICATES: config.certificates.join(','),
+    PLAY_VERSION_CODES: '71', PLAY_CLOUD_PROJECT_NUMBER: '123456789',
+    VERIFIED_EVIDENCE_KEY: Buffer.alloc(32, 3).toString('base64url'), BACKUP_VERIFICATION_KEYS_JSON: '[]',
+    BACKUP_SIGNING_PRIVATE_KEY: generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).privateKey
+      .export({ type: 'pkcs8', format: 'pem' })
+  };
+  const previous = Object.fromEntries(Object.keys(environment).map(key => [key, process.env[key]]));
+  const fetcher = globalThis.fetch;
+  const hash = createHash('sha256').update('signed backup').digest('base64url');
+  const requestHash = createHash('sha256').update(backupMessage(hash)).digest('base64url');
+  let oauth = 0, pool;
+  const decoded = [];
+  try {
+    Object.assign(process.env, environment);
+    globalThis.fetch = async (url, init) => {
+      if (url === 'https://oauth2.googleapis.com/token') {
+        oauth++;
+        return Response.json({ access_token: 'shared-access', expires_in: 3600 });
+      }
+      assert.equal(url, 'https://playintegrity.googleapis.com/v1/com.roadconquest.app:decodeIntegrityToken');
+      assert.equal(init.headers.Authorization, 'Bearer shared-access');
+      const token = JSON.parse(init.body).integrity_token;
+      decoded.push(token);
+      return Response.json({ tokenPayloadExternal: {
+        requestDetails: { requestHash: token.startsWith('backup-') ? requestHash : 'wrong-bound-hash',
+          requestPackageName: config.packageName, timestampMillis: String(Date.now()) },
+        appIntegrity: { appRecognitionVerdict: 'PLAY_RECOGNIZED', packageName: config.packageName,
+          versionCode: '71', certificateSha256Digest: config.certificates },
+        accountDetails: { appLicensingVerdict: 'LICENSED' },
+        deviceIntegrity: { deviceRecognitionVerdict: ['MEETS_DEVICE_INTEGRITY', 'MEETS_STRONG_INTEGRITY'] }
+      } });
+    };
+    const application = await import('../src/application.mjs?shared-integrity-test');
+    pool = application.pool;
+    pool.query = async sql => ({ rows: sql.includes('LEFT JOIN cell_receipts')
+      ? [{ leaderboard_eligible: true, active: true }]
+      : [{ allowed: true, id: '1' }], rowCount: 1 });
+    pool.connect = () => { throw Error('A mismatched attestation must not start a score transaction'); };
+    const api = createFetchHandler(application.serve, { rateLimitIpSignatureKey: '' });
+    const call = (path, body) => api(new Request('https://integrity.example' + path, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + 'T'.repeat(43) },
+      body: JSON.stringify(body)
+    }));
+    const now = Date.now();
+    const evidence = JSON.stringify({ run: randomUUID(), nonce: 'N'.repeat(43), sequence: 0,
+      fixes: [0, 1].map(index => ({ lat: 40 + index * 0.0003, lon: -74, accuracy: 3, speed: 8,
+        mock: false, time: now - 4000 + index * 3000, elapsed: 10000 + index * 3000 })) });
+    const [backup, score] = await Promise.all([
+      call('/v1/backups/sign', { hash, integrity_token: 'backup-integrity-token-example' }),
+      call('/v1/verified/batch', { evidence, integrity_token: 'score-integrity-token-example' })
+    ]);
+    assert.equal(backup.status, 200);
+    assert.equal((await backup.json()).kind, 'server-p256');
+    assert.equal(score.status, 403, 'The scoring request must check its own attested fingerprint');
+    const changed = await call('/v1/backups/sign', {
+      hash: createHash('sha256').update('changed backup').digest('base64url'),
+      integrity_token: 'backup-integrity-token-example'
+    });
+    assert.equal(changed.status, 403, 'A prior valid backup verdict must not be reused for changed contents');
+    assert.equal(oauth, 1, 'Both features and the retry use one credential refresh');
+    assert.deepEqual(decoded.sort(), ['backup-integrity-token-example', 'backup-integrity-token-example', 'score-integrity-token-example']);
+  } finally {
+    globalThis.fetch = fetcher;
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+    if (pool) await pool.end();
+  }
+});
 
 test("invalid Google tokens are permanent failures while credential, quota and server outages remain retryable", async () => {
   for (const [upstream, expected] of [[400, 403], [401, 503], [403, 503], [429, 503], [500, 503]]) {

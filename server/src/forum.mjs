@@ -54,9 +54,12 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
     const values = [userId, ...parameters];
     let { rows } = await db.query(query, values);
     if (rows[0]) return rows[0];
-    // Missing profiles are uncommon. Insert only on first participation, then
-    // re-read so competing instances still acquire the requested row lock.
-    await db.query('INSERT INTO forum_profiles(user_id) SELECT id FROM users WHERE id=$1 ON CONFLICT DO NOTHING', [userId]);
+    // Our inserted row is already locked in a transaction. Return its exact
+    // projection without another round trip. A competing insert still needs
+    // the fresh read below, including FOR UPDATE when the caller requested it.
+    ({ rows } = await db.query(`INSERT INTO forum_profiles(user_id)
+      SELECT id FROM users WHERE id=$1 ON CONFLICT DO NOTHING RETURNING ${columns}`, values));
+    if (rows[0]) return rows[0];
     ({ rows } = await db.query(query, values));
     if (!rows[0]) throw new EvidenceError('Authentication required.', 401);
     return rows[0];

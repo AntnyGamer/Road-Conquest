@@ -483,6 +483,48 @@ test('existing profiles skip redundant insert and billing notifications still pr
   } finally { pool.query=query; }
 }));
 
+test('first participation returns inserted profile projections without a second read', { skip: !database }, async () =>
+  fixture(async (pool, [a, b, c], forum) => {
+    const query = pool.query.bind(pool);
+    const profileQueries = [];
+    const measured = createForum({ query: async (sql, ...args) => {
+      if (sql.includes('FROM forum_profiles') || sql.includes('INSERT INTO forum_profiles')) profileQueries.push(sql);
+      return query(sql, ...args);
+    }, connect: pool.connect.bind(pool) }, options);
+    const post = await measured.post(a, body());
+    assert.equal(post.violations, 0);
+    assert.equal(post.banned, false);
+    assert.equal(profileQueries.length, 2, 'Read missing profile, then return the inserted defaults');
+    profileQueries.length = 0;
+    assert.deepEqual(await measured.purchase(b, 'new-profile-receipt'), { plus: true });
+    assert.equal(profileQueries.length, 2, 'Purchase projections include the inserted MVCC version and receipt lookup');
+    await forum.react(c, post.id, 'love');
+    assert.equal((await forum.list(c)).posts[0].my_reaction, 'love', 'A newly inserted locked profile can authorize a reaction');
+    let verifications = 0;
+    const deleted = createForum(pool, { ...options, verifyPurchase: async () => { verifications++; return true; } });
+    await query('DELETE FROM users WHERE id=$1', [b.id]);
+    await assert.rejects(deleted.purchase(b, 'deleted-account-receipt'), error => error.status === 401);
+    assert.equal(verifications, 0, 'An account deletion must not create a phantom profile or call Google');
+  }));
+
+test('a competing profile insertion is reread before enforcing participation', { skip: !database }, async () =>
+  fixture(async (pool, [a]) => {
+    const query = pool.query.bind(pool);
+    let raced = false, moderated = false;
+    const forum = createForum({ query: async (sql, ...args) => {
+      const result = await query(sql, ...args);
+      if (!raced && sql.includes('FROM forum_profiles') && !result.rowCount) {
+        raced = true;
+        await query('INSERT INTO forum_profiles(user_id,banned) VALUES($1,TRUE)', [a.id]);
+      }
+      return result;
+    }, connect: pool.connect.bind(pool) }, { ...options, moderate: async () => { moderated = true; return { flagged: false }; } });
+    await assert.rejects(forum.post(a, body()), error => error.status === 403);
+    assert.equal(raced, true);
+    assert.equal(moderated, false, 'The winning profile ban is enforced before moderation work');
+    assert.equal((await query('SELECT banned FROM forum_profiles WHERE user_id=$1', [a.id])).rows[0].banned, true);
+  }));
+
 test('moderation report batches fit the Android response bound and advance after review', { skip: !database }, async () => fixture(async(pool,[a,b,c,admin])=>{
   const forum=createForum(pool,{...options,adminIds:[admin.id],moderate:async()=>({flagged:false,gifHash:'a'.repeat(64)})});
   await forum.purchase(a,'receipt');
