@@ -55,13 +55,18 @@ export function gifContactSheet(bytes) {
       gif.decodeAndBlitFrameRGBA(index, pixels);
       const left = index % columns * thumb + Math.floor((thumb - w) / 2);
       const top = Math.floor(index / columns) * thumb + Math.floor((thumb - h) / 2);
-      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-        const source = (Math.floor(y / scale) * width + Math.floor(x / scale)) * 4;
-        const target = ((top + y) * sheet.width + left + x) * 4;
-        const alpha = pixels[source + 3] / 255;
-        const white = 255 * (1 - alpha);
-        for (let channel = 0; channel < 3; channel++) {
-          sheet.data[target + channel] = Math.round(pixels[source + channel] * alpha + white);
+      for (let y = 0; y < h; y++) {
+        const sourceRow = Math.floor(y / scale) * width;
+        let target = ((top + y) * sheet.width + left) * 4;
+        for (let x = 0; x < w; x++, target += 4) {
+          const source = (sourceRow + Math.floor(x / scale)) * 4;
+          // GIF pixels are opaque or transparent. The decoder writes alpha 255;
+          // transparent samples retain the sheet's original opaque white.
+          if (pixels[source + 3]) {
+            sheet.data[target] = pixels[source];
+            sheet.data[target + 1] = pixels[source + 1];
+            sheet.data[target + 2] = pixels[source + 2];
+          }
         }
       }
       previous = frame;

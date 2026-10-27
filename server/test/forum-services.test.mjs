@@ -51,6 +51,31 @@ test('every GIF frame enters the moderation contact sheet and the moderated byte
   assert.match(verdict.gifHash,/^[a-f0-9]{64}$/); assert.equal(calls,2);
 });
 
+test('GIF preview preserves every pixel across transparent partial frames and both disposal modes', () => {
+  const bytes = Buffer.alloc(4096);
+  const gif = new GifWriter(bytes, 2, 1, { palette: [0, 0xb52c19, 0x2168d1, 0x43a65e] });
+  gif.addFrame(0, 0, 2, 1, new Uint8Array([0, 1]), { transparent: 0, disposal: 1 });
+  gif.addFrame(0, 0, 1, 1, new Uint8Array([2]), { disposal: 3 });
+  gif.addFrame(1, 0, 1, 1, new Uint8Array([3]), { disposal: 2 });
+  gif.addFrame(0, 0, 1, 1, new Uint8Array([1]), { disposal: 1 });
+  gif.addFrame(0, 0, 2, 1, new Uint8Array([0, 2]), { transparent: 0 });
+  const preview = PNG.sync.read(gifContactSheet(bytes.subarray(0, gif.end())));
+  const white = [255, 255, 255], red = [181, 44, 25], blue = [33, 104, 209], green = [67, 166, 94];
+  // Hand-composited canvases: restore frame 1's prior state, then clear frame 2's rectangle.
+  const frames = [[white, red], [blue, red], [white, green], [red, white], [red, blue]];
+  assert.equal(preview.width, 384);
+  assert.equal(preview.height, 256);
+  const expected = Buffer.alloc(384 * 256 * 4, 255);
+  frames.forEach((colors, frame) => colors.forEach((color, half) => {
+    const left = frame % 3 * 128 + half * 64, top = Math.floor(frame / 3) * 128 + 32;
+    for (let y = top; y < top + 64; y++) for (let x = left; x < left + 64; x++) {
+      const offset = (y * 384 + x) * 4;
+      expected[offset] = color[0]; expected[offset + 1] = color[1]; expected[offset + 2] = color[2];
+    }
+  }));
+  assert.deepEqual(preview.data, expected);
+});
+
 test('moderation outages and incomplete responses fail closed; distress and ordinary road discussion alone do not strike', async () => {
   assert.equal(createForumModerator(null),null);
   for(const response of [new Response('outage',{status:503}),reply({}),reply({model:'test',results:[{flagged:false,categories:{}}]})]) {
