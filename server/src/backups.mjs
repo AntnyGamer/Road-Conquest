@@ -17,6 +17,7 @@ export async function createBackups(env, dependencies = {}) {
   let privateKey;
   let current;
   const keys = new Map();
+  const pendingSignatures = new Map();
   // Retain old PUBLIC keys so key rotation does not make existing backups unusable.
   const oldKeys = JSON.parse(env.BACKUP_VERIFICATION_KEYS_JSON || "[]");
   if (!Array.isArray(oldKeys) || oldKeys.length > 7) throw new Error("Invalid backup verification keys");
@@ -46,9 +47,21 @@ export async function createBackups(env, dependencies = {}) {
         throw new EvidenceError("Backup fingerprint and app verification are required.", 400);
       }
       const message = backupMessage(body.hash);
-      await verify(body.integrity_token, createHash("sha256").update(message).digest("base64url"));
-      return { version: 1, kind: "server-p256", key_id: current.id,
-        signature: sign("sha256", message, privateKey).toString("base64url") };
+      const requestHash = createHash("sha256").update(message).digest("base64url");
+      // Identical concurrent exports need one bound verdict, not competing
+      // decodes of a replay-protected token. Never retain completed verdicts.
+      // The HTTP boundary still reserves its normal budget for every request.
+      const key = createHash("sha256").update(JSON.stringify([requestHash, body.integrity_token])).digest("hex");
+      if (pendingSignatures.has(key)) return pendingSignatures.get(key);
+      const task = (async () => {
+        await verify(body.integrity_token, requestHash);
+        return { version: 1, kind: "server-p256", key_id: current.id,
+          signature: sign("sha256", message, privateKey).toString("base64url") };
+      })();
+      // Keep ordinary verification at capacity without evicting active work.
+      if (pendingSignatures.size >= 32) return task;
+      pendingSignatures.set(key, task);
+      try { return await task; } finally { pendingSignatures.delete(key); }
     }
   };
 }

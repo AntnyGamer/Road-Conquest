@@ -151,7 +151,9 @@ export class MapBudget {
       remember(this.permitCache, attemptId, { day, bucket, cost: costUnits, slot, state: 'reserved' }, 64);
       if (health) {
         this.sql.exec('UPDATE map_health SET probe_id = ?, probe_until = ? WHERE key = ?', attemptId, now + 35_000, healthKey);
-        this.healthCache.delete(healthKey);
+        // This transaction is the sole writer. Dispatch can reuse the exact
+        // probe we just stored; failed commits clear all cached metadata.
+        this.healthCache.set(healthKey, { ...health, probe_id: attemptId, probe_until: now + 35_000 });
       }
     }
     return json({ allowed: true, ...(attemptId ? { managed: true, probe: Boolean(health) } : {}), waitMs: Math.max(0, slot - now) });
@@ -171,9 +173,14 @@ export class MapBudget {
   clearProbe(sql, healthKey, attemptId) {
     // This object is the sole writer. A cached absent/different probe proves
     // the conditional write is a no-op. Cache misses retain the original SQL.
-    if (this.healthCache.has(healthKey) && this.healthCache.get(healthKey)?.probe_id !== attemptId) return;
+    const known = this.healthCache.has(healthKey), health = this.healthCache.get(healthKey);
+    if (known && health?.probe_id !== attemptId) return;
     this.sql.exec(sql, healthKey, attemptId);
-    this.healthCache.delete(healthKey);
+    // With a known matching probe, both possible mutations have known results.
+    // Unknown/evicted rows still use SQL and reload on their next access.
+    if (known) this.healthCache.set(healthKey, sql.startsWith('DELETE') ? undefined
+      : { ...health, probe_id: null, probe_until: 0 });
+    else this.healthCache.delete(healthKey);
   }
   finish(action, { attemptId, healthKey, status, retryAfterMs = 0 }) {
     if (!validId(attemptId)) return json({ error: 'Invalid attempt' }, 400);

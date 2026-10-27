@@ -151,3 +151,32 @@ including two independent feature matches. Wrapped errors of 0.000002 degrees,
 larger longitude errors and changed latitudes remain rejected. The eight local
 parser regression methods and the existing 3,200-case turn corpus pass. These
 remain synthetic parser checks; no physical-drive accuracy rate is claimed.
+
+## Junction steps containing several collapsed edges
+
+The PR #122 follow-up reproduces another representation of the repeated-junction
+case: a provider step can contain three or more identical junction coordinates.
+The existing projector handled a single vertex or one collapsed edge, but skipped
+every edge of the longer collapsed step and lost its waypoint. A three-fix
+approach/junction/exit fixture therefore saved neither driven road.
+
+Only when the original projection has no result and **every** edge in that
+provider step is degenerate, locate the waypoint at the step's first vertex using
+the unchanged strict 3-metre position check. Existing nonzero-edge projections
+and single-edge decisions remain the same. The shared validator still enforces
+its existing joins, snap, confidence, detour and speed limits. Collapsed geometry
+still supplies no road length or junction road credit.
+
+`GeoapifyJunctionCoverageTest` compares complete approach/exit coverage against the
+canonical single-vertex representation across 2–8 repeated coordinates, four
+latitudes, three/five fixes and exact/sub-metre junction offsets. It also checks
+rejected offsets retain independently verified sides, equivalent date-line
+representations, and rejection of a real nonzero loop. A seeded 200-turn corpus
+varies approach heading, left/right turn angle and both arm lengths; each is
+compared with three repeated-coordinate representations, including timestamps,
+point confidence, road identity, counting eligibility and complete geometry.
+
+This change retains captured fixes, provider geometry, GPS sampling, retry
+scheduling, cache lifetime and provider precedence. It recovers missing sections
+without imposing an additional rejection on an existing valid projection.
+These are synthetic regressions rather than physical-drive measurements.

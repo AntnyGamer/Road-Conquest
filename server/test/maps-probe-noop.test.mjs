@@ -35,11 +35,15 @@ test('probe clearing keeps cold-cache writes and protects a different active rec
   const sql = 'DELETE FROM map_health WHERE key = ? AND probe_id = ?';
   budget.clearProbe(sql, 'health', 'cold');
   assert.deepEqual(queries, [[sql, 'health', 'cold']]);
+  assert.equal(budget.healthCache.has('health'), false, 'An unknown SQL result must still reload');
   budget.healthCache.set('health', { probe_id: 'current' });
   budget.clearProbe(sql, 'health', 'old');
   assert.equal(queries.length, 1);
   assert.equal(budget.healthCache.get('health').probe_id, 'current');
   budget.clearProbe(sql, 'health', 'current');
   assert.deepEqual(queries[1], [sql, 'health', 'current']);
-  assert.equal(budget.healthCache.has('health'), false);
+  assert.equal(budget.healthCache.has('health'), true);
+  assert.equal(budget.healthCache.get('health'), undefined, 'A known deleted probe remains a known absence');
+  budget.clearProbe(sql, 'health', 'current');
+  assert.equal(queries.length, 2, 'Repeated clears of the known absence do no SQL work');
 });

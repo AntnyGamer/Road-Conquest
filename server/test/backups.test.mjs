@@ -55,3 +55,58 @@ test("verification keys survive signing-key rotation and signing can be disabled
   const wrong = generateKeyPairSync("ec", { namedCurve: "secp384r1" });
   await assert.rejects(createBackups({ ...env, BACKUP_SIGNING_PRIVATE_KEY: wrong.privateKey.export({ type: "pkcs8", format: "pem" }) }), /P-256/u);
 });
+
+test("overlapping identical backup exports share one verification and return valid bound signatures", async () => {
+  let calls = 0, release;
+  const pending = new Promise(resolve => { release = resolve; });
+  const service = await createBackups(env, { verify: async (token, requestHash) => {
+    calls++;
+    assert.equal(token, body.integrity_token);
+    assert.equal(requestHash, createHash("sha256").update(backupMessage(hash)).digest("base64url"));
+    await pending;
+  } });
+  const requests = Array.from({ length: 6 }, () => service.sign({ ...body }));
+  assert.equal(calls, 1);
+  release();
+  const signatures = await Promise.all(requests);
+  for (const seal of signatures) {
+    assert.equal(verify("sha256", backupMessage(hash), publicKey, Buffer.from(seal.signature, "base64url")), true);
+    assert.equal(verify("sha256", backupMessage(createHash("sha256").update("edited").digest("base64url")),
+      publicKey, Buffer.from(seal.signature, "base64url")), false);
+  }
+  await service.sign(body);
+  assert.equal(calls, 2, "A completed operation must verify again");
+});
+
+test("backup deduplication isolates fingerprints, tokens and instances and clears failures", async () => {
+  let calls = 0, release, failed = true;
+  const pending = new Promise(resolve => { release = resolve; });
+  const verifier = async () => { calls++; await pending; if (failed) throw Error("verification failed"); };
+  const first = await createBackups(env, { verify: verifier });
+  const second = await createBackups(env, { verify: verifier });
+  const requests = [first.sign(body), first.sign({ ...body }),
+    first.sign({ ...body, hash: createHash("sha256").update("different").digest("base64url") }),
+    first.sign({ ...body, integrity_token: body.integrity_token + "2" }), second.sign(body)];
+  assert.equal(calls, 4);
+  const settled = Promise.allSettled(requests);
+  release();
+  assert.ok((await settled).every(result => result.status === "rejected"));
+  failed = false;
+  await first.sign(body);
+  assert.equal(calls, 5, "Failed shared work must not poison an ordinary retry");
+});
+
+test("backup pending capacity preserves active sharing and ordinary overflow verification", async () => {
+  let calls = 0, release;
+  const pending = new Promise(resolve => { release = resolve; });
+  const service = await createBackups(env, { verify: async () => { calls++; await pending; } });
+  const inputs = Array.from({ length: 33 }, (_, i) => ({ ...body,
+    hash: createHash("sha256").update("backup " + i).digest("base64url") }));
+  const requests = inputs.map(input => service.sign(input));
+  requests.push(service.sign(inputs[0]), service.sign(inputs[32]));
+  assert.equal(calls, 34, "Tracked work shares; overflow follows ordinary verification");
+  release();
+  assert.equal((await Promise.all(requests)).length, 35);
+  await service.sign(inputs[0]);
+  assert.equal(calls, 35);
+});

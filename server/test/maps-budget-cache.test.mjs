@@ -291,3 +291,48 @@ test('cached bookkeeping matches cold durable reads through mixed requests and r
   }
   assert.deepEqual(snapshot(warm), snapshot(cold));
 });
+
+test('known recovery writes retain probe metadata through dispatch, cancellation and success', async t => {
+  const s = store(); t.after(() => s.db.close());
+  const healthReads = () => s.queries.filter(q => q.startsWith('SELECT') && q.includes('FROM map_health')).length;
+  const failed = args(1), cancelled = args(2), recovered = args(3), next = args(4);
+  await s.call('reserve', failed); await s.call('dispatch', failed);
+  await s.call('failure', { ...failed, status: 503 });
+  s.advance(2000);
+  await s.call('reserve', cancelled);
+  const reads = healthReads();
+  await s.call('cancel', cancelled);
+  await s.call('reserve', recovered);
+  await s.call('dispatch', recovered);
+  await s.call('success', recovered);
+  s.advance(1500);
+  await s.call('reserve', next); await s.call('dispatch', next);
+  assert.equal(healthReads(), reads, 'known probe updates and clears need no immediate SQL reread');
+  assert.equal(s.db.prepare('SELECT COUNT(*) n FROM map_health').get().n, 0);
+  assert.equal(s.db.prepare("SELECT used FROM usage WHERE bucket='units:all'").get().used, 12);
+  assert.equal(s.db.prepare("SELECT used FROM usage WHERE bucket='attempts:all'").get().used, 4);
+});
+
+test('rolled-back recovery writes reload the durable probe before retrying', async t => {
+  const s = store(); t.after(() => s.db.close());
+  const failed = args(1), recovered = args(2);
+  await s.call('reserve', failed); await s.call('dispatch', failed);
+  await s.call('failure', { ...failed, status: 503 }); s.advance(2000);
+  const before = snapshot(s);
+  s.fail(true);
+  await assert.rejects(s.call('reserve', recovered), /injected commit failure/);
+  assert.deepEqual(snapshot(s), before);
+  s.fail(false);
+  assert.equal((await s.call('reserve', recovered)).status, 200);
+  assert.equal((await s.call('dispatch', recovered)).status, 200);
+  const dispatched = snapshot(s);
+  s.fail(true);
+  await assert.rejects(s.call('success', recovered), /injected commit failure/);
+  assert.deepEqual(snapshot(s), dispatched);
+  s.fail(false);
+  assert.equal((await s.call('success', recovered)).status, 200);
+  assert.equal(s.db.prepare('SELECT COUNT(*) n FROM map_health').get().n, 0);
+  s.restart();
+  s.advance(1500);
+  assert.equal((await s.call('reserve', args(3))).status, 200);
+});

@@ -326,6 +326,7 @@ class GeoapifyMatcher(
             return start.toDouble().takeIf { meters(point, line.getJSONArray(start)) < 3.0 }
         }
         var best: Double? = null; var distance = 3.0
+        var collapsed = true
         val longitude = point.getDouble(0)
         val latitude = point.getDouble(1)
         val scale = cos(Math.toRadians(latitude))
@@ -343,12 +344,18 @@ class GeoapifyMatcher(
                 if (end == start + 1) return start.toDouble().takeIf { meters(point, a) < 3.0 }
                 continue
             }
+            collapsed = false
             val fromA = shortLongitudeDelta(longitude - a.getDouble(0)) * scale
             val t = ((fromA * dx + (latitude - a.getDouble(1)) * dy) / length).coerceIn(0.0, 1.0)
             val error = meters(point, at(line, i + t))
             if (error < distance) { distance = error; best = i + t }
         }
-        return best
+        // Providers can repeat the same junction more than twice in one step.
+        // Recover its position only when EVERY edge is degenerate. A genuine
+        // loop or an off-route projection must retain the original result.
+        return best ?: if (collapsed) start.toDouble().takeIf {
+            meters(point, line.getJSONArray(start)) < 3.0
+        } else null
     }
     private fun at(line: JSONArray, position: Double): JSONArray {
         val index = floor(position).toInt().coerceAtMost(line.length() - 2)
