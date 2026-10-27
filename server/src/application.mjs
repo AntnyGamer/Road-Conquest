@@ -1,4 +1,5 @@
 import { createHmac, randomBytes } from "node:crypto";
+import { isUtf8 } from "node:buffer";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
@@ -209,7 +210,7 @@ function send(res, status, body, head = false) {
 
 async function readJson(req) {
   const contentType = req.headers["content-type"];
-  if (typeof contentType !== "string" || !contentType.toLowerCase().startsWith("application/json")) {
+  if (typeof contentType !== "string" || contentType.split(";", 1)[0].trim().toLowerCase() !== "application/json") {
     throw Object.assign(new Error("application/json required"), { status: 415 });
   }
   // A valid announced length can reject an oversized body before consuming its
@@ -233,6 +234,7 @@ async function readJson(req) {
     const bytes = chunks.length === 1
       ? Buffer.from(chunks[0].buffer, chunks[0].byteOffset, chunks[0].byteLength)
       : Buffer.concat(chunks);
+    if (!isUtf8(bytes)) throw new Error("Invalid UTF-8");
     const body = JSON.parse(bytes.toString("utf8"));
     if (!body || Array.isArray(body) || typeof body !== "object") throw new Error("JSON object required");
     return body;

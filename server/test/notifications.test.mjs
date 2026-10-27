@@ -126,12 +126,15 @@ test('malformed push errors are unavailable and never treated as invalid registr
       auth++;
       return Response.json({ access_token: 'test-access', expires_in: 3600 });
     }
-    return Response.json(error, { status: 503 });
+    return error instanceof Uint8Array ? new Response(error, { status: 503 }) : Response.json(error, { status: 503 });
   });
   for (const body of [null, {}, { error: { details: {} } }, { error: { details: [null, 1, {}] } }]) {
     error = body;
     assert.equal(await sender('test', randomUUID()), 'unavailable');
   }
+  error = Buffer.concat([Buffer.from('{"error":{"message":"'), Buffer.from([0xc3, 0x28]),
+    Buffer.from('","details":[{"errorCode":"UNREGISTERED"}]}}')]);
+  assert.equal(await sender('test', randomUUID()), 'unavailable', 'Corrupt UTF-8 must not revoke a device');
   error = { error: { details: [null, { errorCode: 'UNREGISTERED' }] } };
   assert.equal(await sender('test', randomUUID()), 'unregistered');
   assert.equal(auth, 1, 'Malformed delivery errors do not discard a valid OAuth credential');

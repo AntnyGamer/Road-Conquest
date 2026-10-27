@@ -78,6 +78,21 @@ test("upstream failures and oversized verification responses fail closed", async
   await assert.rejects(boundedJson(new Response("not JSON")));
 });
 
+test("malformed UTF-8 verification JSON stays retryable instead of silently replacing data", async () => {
+  for (const invalid of [[0xc3, 0x28], [0x80], [0xc0, 0xaf], [0xed, 0xa0, 0x80], [0xf0, 0x9f]]) {
+    const prefix = Buffer.from('{"value":"');
+    const bytes = Buffer.concat([prefix, Buffer.from(invalid), Buffer.from('"}')]);
+    assert.doesNotThrow(() => JSON.parse(bytes.toString('utf8')), 'Replacement decoding would silently accept this JSON');
+    for (const chunks of [[bytes], [bytes.subarray(0, prefix.length + 1), bytes.subarray(prefix.length + 1)]]) {
+      const response = new Response(new ReadableStream({ start(controller) {
+        for (const chunk of chunks) controller.enqueue(chunk);
+        controller.close();
+      } }));
+      await assert.rejects(boundedJson(response), error => error.status === 503 && /Invalid verification response/.test(error.message));
+    }
+  }
+});
+
 test("bounded verification JSON avoids a one-chunk copy and preserves sliced/split UTF-8", async () => {
   const data = { value: '道路 🚗', verified: true };
   const text = JSON.stringify(data);
