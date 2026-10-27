@@ -17,7 +17,11 @@ and 404 for `/v1/backups`.
 After the owner's explicit request to make signing work, **deployment 33** activated
 on October 27 at **23:33:05 UTC**, using backend source
 `07a18fe1d782cd3203341f00598836e884c613f3`. A dedicated P-256 key was installed and
-`PLAY_VERSION_CODES` was configured with the documented supported codes 71 through 91.
+`PLAY_VERSION_CODES` initially included the documented supported codes 71 through 91.
+At the owner's subsequent direction, configuration-only deployment **35** completed
+at **23:55:12 UTC**, with the final allowlist **`90,91` only**. It retains the same
+reviewed backend bundle and signing key. Codes below 90 are no longer accepted for
+backup signing or verified competition evidence.
 Other account, billing, notification, ingress and database environment settings carried
 over. No schema migration, manual database mutation, merge, tag, GitHub release or
 Play upload was performed. The live signing probe used normal API rate-limit/expiry
@@ -95,7 +99,7 @@ project. Forum Plus also needs Android Publisher access, and the existing RTDN
 audience/email must remain configured. Using the same approved account is supported;
 OAuth tokens retain distinct Integrity/Publisher scopes.
 
-Ensure `PLAY_VERSION_CODES` includes **91 while retaining all supported older codes**.
+Set `PLAY_VERSION_CODES=90,91`, the owner's supported version policy for this release.
 `PLAY_CERTIFICATES` must contain the base64url SHA-256 **Play app-signing** certificate,
 not the upload/debug certificate. Preserve the linked numeric
 `PLAY_CLOUD_PROJECT_NUMBER`. Strong/device integrity, `PLAY_RECOGNIZED`, `LICENSED`,
@@ -168,7 +172,7 @@ specific and excluded from exports and Android backup.
 
 ## Remaining owner-controlled release checks
 
-- Backend/key/version configuration and public revision checks are complete for deployment 33;
+- Backend/key/version configuration and public revision checks are complete for deployment 35;
   repeat the checks after any later authorized configuration or deployment change.
 - Complete real Play-installed backup transfer/restore and physical driving checks.
 - Complete actual Forum Plus checkout, duplicate callbacks, restore, pending payment,
