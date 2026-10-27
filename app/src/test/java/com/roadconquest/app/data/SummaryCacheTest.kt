@@ -1,6 +1,9 @@
 package com.roadconquest.app.data
 
 import android.content.Context
+import android.database.sqlite.SQLiteCursor
+import android.database.sqlite.SQLiteDatabase
+import android.database.sqlite.SQLiteException
 import android.location.Location
 import org.junit.Assert.*
 import org.junit.Before
@@ -35,6 +38,95 @@ class SummaryCacheTest {
         accuracy = 5f
         speed = 10f
         time = timestamp
+    }
+
+    private fun lastPointQueries(block: () -> Unit): Int {
+        val db = database.writableDatabase
+        val factory = SQLiteDatabase::class.java.getDeclaredField("mCursorFactory").apply { isAccessible = true }
+        val original = factory.get(db)
+        var count = 0
+        factory.set(db, SQLiteDatabase.CursorFactory { _, driver, editTable, query ->
+            val sql = query.toString()
+            if (sql.contains("FROM track_points") && sql.contains("ORDER BY id DESC")) count++
+            SQLiteCursor(driver, editTable, query)
+        })
+        try { block() } finally { factory.set(db, original) }
+        return count
+    }
+
+    private fun anchorIds(repository: TrackingRepository): List<Long> {
+        val field = TrackingRepository::class.java.getDeclaredField("skippedFixAnchors").apply { isAccessible = true }
+        return (field.get(repository) as Map<*, *>).values.map { it as Long }
+    }
+
+    @Test fun compressedFixesReuseCommittedAnchorsAcrossRepositoriesWithoutReadingLatestPoint() {
+        val other = TrackingRepository(context)
+        val expected = ArrayList<Long>()
+        assertEquals(0, lastPointQueries {
+            repeat(20) { i ->
+                val time = 1000L + i * 15_000L
+                val id = other.insertLocation(fix(40.0 + i * .0001, time))
+                for (offset in listOf(1L, 3000L, 12_000L)) {
+                    repository.recordSkippedDrivingFix(fix(40.0 + i * .0001, time + offset))
+                    expected += id
+                }
+                for (offset in listOf(-1L, 0L, 12_001L)) {
+                    repository.recordSkippedDrivingFix(fix(40.0 + i * .0001, time + offset))
+                }
+            }
+        })
+        assertEquals(expected, anchorIds(repository))
+        assertEquals(expected.last(), requireNotNull(database.lastTrackPointCache).id)
+        val summary = repository.getSummary()
+        assertEquals(TrackingRepository.summaryOf(database.readableDatabase)
+            .copy(historyGeneration = summary.historyGeneration), summary)
+    }
+
+    @Test fun coldAndExternallyMutableHistoryStillReadsTheActualLatestAnchor() {
+        val original = repository.insertLocation(fix(40.0, 1000L))
+        database.lastTrackPointCache = null
+        assertEquals(1, lastPointQueries { repository.recordSkippedDrivingFix(fix(40.0, 4000L)) })
+        assertEquals(listOf(original), anchorIds(repository))
+        val raw = repository.readableDatabase()
+        raw.execSQL("INSERT INTO track_points(latitude,longitude,accuracy_m,speed_mps,bearing_deg,timestamp_ms) " +
+            "VALUES(40,-74,5,10,0,20000)")
+        val latest = raw.rawQuery("SELECT MAX(id) FROM track_points", null).use { it.moveToFirst(); it.getLong(0) }
+        assertEquals(1, lastPointQueries { repository.recordSkippedDrivingFix(fix(40.0, 23_000L)) })
+        assertEquals(listOf(original, latest), anchorIds(repository))
+        assertNull(database.lastTrackPointCache)
+    }
+
+    @Test fun rolledBackInsertsAndHistoryResetCannotSupplyStaleAnchors() {
+        val original = repository.insertLocation(fix(40.0, 1000L))
+        val cached = requireNotNull(database.lastTrackPointCache)
+        val db = database.writableDatabase
+        db.execSQL("CREATE TRIGGER fail_cached_insert BEFORE INSERT ON track_points " +
+            "WHEN NEW.timestamp_ms=7000 BEGIN SELECT RAISE(ABORT,'injected failure'); END")
+        try {
+            for (cold in listOf(false, true)) {
+                if (cold) database.lastTrackPointCache = null
+                assertThrows(SQLiteException::class.java) {
+                    repository.insertLocations(listOf(fix(40.0001, 4000L), fix(40.0002, 7000L)))
+                }
+                assertEquals(cached, database.lastTrackPointCache)
+                if (!cold) assertSame(cached, database.lastTrackPointCache)
+            }
+        } finally { db.execSQL("DROP TRIGGER fail_cached_insert") }
+        assertEquals(0, lastPointQueries { repository.recordSkippedDrivingFix(fix(40.0, 4000L)) })
+        assertEquals(listOf(original), anchorIds(repository))
+        assertEquals(1L, repository.getSummary().trackPointCount)
+
+        repository.clearHistory()
+        val current = TrackingRepository(context)
+        assertEquals(0, lastPointQueries {
+            repository.recordSkippedDrivingFix(fix(40.0, 5000L)) // Old generation is ignored.
+            current.recordSkippedDrivingFix(fix(40.0, 5000L)) // Empty history provides no anchor.
+        })
+        assertTrue(anchorIds(current).isEmpty())
+        val next = current.insertLocation(fix(40.001, 10_000L))
+        assertTrue(next > original)
+        assertEquals(0, lastPointQueries { current.recordSkippedDrivingFix(fix(40.001, 13_000L)) })
+        assertEquals(listOf(next), anchorIds(current))
     }
 
     @Test fun cachedSummaryStaysExactAcrossTrackAndRoadWrites() {

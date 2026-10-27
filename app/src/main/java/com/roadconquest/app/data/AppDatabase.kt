@@ -27,6 +27,7 @@ class AppDatabase private constructor(context: Context) :
     )
     internal data class LastTrackPointCache(
         val present: Boolean,
+        val id: Long = 0L,
         val latitude: Double = 0.0,
         val longitude: Double = 0.0,
         val timestamp: Long = 0L

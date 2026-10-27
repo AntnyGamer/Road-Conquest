@@ -178,10 +178,17 @@ class TrackingRepository(context: Context) {
     fun recordSkippedDrivingFix(location: Location) {
         synchronized(dbHelper.historyLock) {
             if (historyGeneration != dbHelper.historyGeneration) return
-            val values = drivingValues(location, location.time.takeIf { it > 0L } ?: System.currentTimeMillis())
+            val timestamp = location.time.takeIf { it > 0L } ?: System.currentTimeMillis()
+            val values = drivingValues(location, timestamp)
             val db = dbHelper.writableDatabase
-            val anchorId = db.rawQuery("SELECT id,timestamp_ms FROM track_points ORDER BY id DESC LIMIT 1", null).use {
-                if (it.moveToFirst() && requireNotNull(values.getAsLong("timestamp_ms")) - it.getLong(1) in 1..12_000L)
+            // The shared last-point snapshot is updated only after committed
+            // inserts, under this same history lock. Cold/raw access still reads
+            // SQLite; reset/import invalidates the snapshot and generation.
+            val cached = dbHelper.lastTrackPointCache.takeIf { dbHelper.summaryCachingEnabled }
+            val anchorId = if (cached != null) {
+                cached.id.takeIf { cached.present && timestamp - cached.timestamp in 1..12_000L }
+            } else db.rawQuery("SELECT id,timestamp_ms FROM track_points ORDER BY id DESC LIMIT 1", null).use {
+                if (it.moveToFirst() && timestamp - it.getLong(1) in 1..12_000L)
                     it.getLong(0) else null
             }
             val id = db.insertOrThrow("skipped_driving_fixes", null, values)
@@ -255,6 +262,7 @@ class TrackingRepository(context: Context) {
             dbHelper.lastTrackPointCache?.let { cached ->
                 return LastPoint(
                     present = cached.present,
+                    id = cached.id,
                     latitude = cached.latitude,
                     longitude = cached.longitude,
                     timestamp = cached.timestamp
@@ -263,7 +271,7 @@ class TrackingRepository(context: Context) {
         }
         val previous = LastPoint()
         db.query(
-            "track_points", arrayOf("latitude", "longitude", "timestamp_ms"),
+            "track_points", arrayOf("latitude", "longitude", "timestamp_ms", "id"),
             null, null, null, null, "id DESC", "1"
         ).use { cursor ->
             if (cursor.moveToFirst()) {
@@ -271,6 +279,7 @@ class TrackingRepository(context: Context) {
                 previous.latitude = cursor.getDouble(0)
                 previous.longitude = cursor.getDouble(1)
                 previous.timestamp = cursor.getLong(2)
+                previous.id = cursor.getLong(3)
             }
         }
         if (dbHelper.summaryCachingEnabled) cacheLastPoint(previous)
@@ -281,6 +290,7 @@ class TrackingRepository(context: Context) {
         if (!dbHelper.summaryCachingEnabled) return
         dbHelper.lastTrackPointCache = AppDatabase.LastTrackPointCache(
             present = point.present,
+            id = point.id,
             latitude = point.latitude,
             longitude = point.longitude,
             timestamp = point.timestamp
@@ -338,6 +348,7 @@ class TrackingRepository(context: Context) {
         }
         val id = db.insertOrThrow("track_points", null, values)
         previous.present = true
+        previous.id = id
         previous.latitude = location.latitude
         previous.longitude = location.longitude
         previous.timestamp = timestamp
@@ -365,6 +376,7 @@ class TrackingRepository(context: Context) {
 
     private class LastPoint(
         var present: Boolean = false,
+        var id: Long = 0L,
         var latitude: Double = 0.0,
         var longitude: Double = 0.0,
         var timestamp: Long = 0L
