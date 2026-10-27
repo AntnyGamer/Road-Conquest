@@ -420,6 +420,11 @@ do not guarantee unlimited free service.
 
 ## Protected local backups
 
+Beta 65's exact target, secure key generation, offline configuration preflight,
+environment preservation, artifact packaging, rotation and release gates are in
+[the backend preparation runbook](BETA65_BACKEND_PREPARATION.md). The preparation
+tools do not deploy or modify Neon.
+
 Portable backup exports are authenticated with server-held P-256 signatures. Configure
 `BACKUP_SIGNING_PRIVATE_KEY` with a dedicated PKCS#8 PEM private key in the function's secret
 configuration, alongside the existing production `PLAY_SERVICE_ACCOUNT_JSON` (or file),

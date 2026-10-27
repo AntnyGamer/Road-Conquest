@@ -121,7 +121,8 @@ test("concurrent verification shares OAuth refreshes and verifies each bound Goo
 });
 
 test('null and empty Integrity OAuth replies do not cache credentials or send decode requests', async () => {
-  for (const invalid of [null, { access_token: '', expires_in: 3600 }]) {
+  for (const invalid of [null, { access_token: '', expires_in: 3600 },
+    ...[-1, 0, 119].map(expires_in => ({ access_token: 'expired', expires_in }))]) {
     let auth = 0, decodes = 0;
     const verify = await createIntegrityVerifier(config, async url => {
       if (url === 'https://oauth2.googleapis.com/token') return Response.json(++auth === 1
@@ -134,6 +135,48 @@ test('null and empty Integrity OAuth replies do not cache credentials or send de
     await assert.rejects(verify('test-only-integrity-token', 'hash'), error => error.status === 403);
     assert.equal(auth, 2);
     assert.equal(decodes, 1);
+  }
+});
+
+test('Integrity OAuth lifetimes never keep credentials for more than one hour', async () => {
+  const originalNow = Date.now;
+  let time = originalNow(), oauth = 0;
+  Date.now = () => time;
+  try {
+    const verify = await createIntegrityVerifier(config, async url => {
+      if (url === 'https://oauth2.googleapis.com/token') {
+        oauth++;
+        return Response.json({ access_token: 'access-' + oauth, expires_in: Number.MAX_VALUE });
+      }
+      return Response.json({}, { status: 400 });
+    });
+    await assert.rejects(verify('test-only-integrity-token', 'hash'), e => e.status === 403);
+    time += 3600_000;
+    await assert.rejects(verify('test-only-integrity-token', 'hash'), e => e.status === 403);
+    assert.equal(oauth, 2);
+  } finally { Date.now = originalNow; }
+});
+
+test('Integrity network failures, interrupted bodies and malformed decode replies remain retryable', async () => {
+  for (const stage of ['oauth', 'decode', 'body', 'null', 'missing', 'array']) {
+    let fail = true, decodes = 0;
+    const verify = await createIntegrityVerifier(config, async url => {
+      if (url === 'https://oauth2.googleapis.com/token') {
+        if (fail && stage === 'oauth') throw new TypeError('connection reset');
+        return Response.json({ access_token: 'access', expires_in: 3600 });
+      }
+      decodes++;
+      if (!fail) return Response.json({}, { status: 400 });
+      if (stage === 'decode') throw new DOMException('timed out', 'TimeoutError');
+      if (stage === 'body') return new Response(new ReadableStream({
+        start(controller) { controller.error(new TypeError('body interrupted')); }
+      }));
+      return Response.json(stage === 'null' ? null : stage === 'array' ? [] : {});
+    });
+    await assert.rejects(verify('test-only-integrity-token', 'hash'), e => e.status === 503, stage);
+    fail = false;
+    await assert.rejects(verify('test-only-integrity-token', 'hash'), e => e.status === 403, stage);
+    assert.equal(decodes, stage === 'oauth' ? 1 : 2);
   }
 });
 

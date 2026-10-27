@@ -90,8 +90,9 @@ object AccountClient {
 
     fun backupKeys(): JSONObject = request("/v1/backups", "GET", null, null)
 
+    // A cold signer can make two sequential Google requests with 8-second limits.
     fun signBackup(hash: String, integrityToken: String): JSONObject = request("/v1/backups/sign", "POST",
-        JSONObject().put("hash", hash).put("integrity_token", integrityToken), null)
+        JSONObject().put("hash", hash).put("integrity_token", integrityToken), null, readTimeoutMs = 30_000)
 
     fun leaderboard(token: String? = null): JSONObject {
         val includeMine = !token.isNullOrBlank()

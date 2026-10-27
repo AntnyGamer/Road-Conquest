@@ -16,7 +16,10 @@ async function fixture(work) {
   try {
     await pool.query(await readFile(new URL('../schema.sql',import.meta.url),'utf8'));
     await pool.query(await readFile(new URL('../forum-schema.sql',import.meta.url),'utf8'));
-    await pool.query('TRUNCATE users CASCADE');
+    // Billing delivery IDs intentionally outlive account deletion. Reset them
+    // explicitly so rerunning this suite cannot skip verification or hang an
+    // overlap test waiting for a callback from an already-processed test event.
+    await pool.query('TRUNCATE users, forum_billing_events CASCADE');
     const users = (await pool.query(`INSERT INTO users(username_display,username_key,password_salt,password_hash)
       SELECT 'Forum_'||g,'forum_'||g,$1,$2 FROM generate_series(0,3) g ORDER BY g RETURNING id,username_display`,
       [Buffer.alloc(16),Buffer.alloc(64)])).rows;
