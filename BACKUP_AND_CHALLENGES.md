@@ -6,8 +6,8 @@ literal apostrophes; legacy format 9 could not distinguish an apostrophe before 
 from its spreadsheet-protection prefix. Format 11 preserves the first-unlock timestamps for new mile tiles. Format 12 also preserves compressed driving fixes. Older formats retain explored tiles but may have no reliable historical tile-unlock dates or compressed fixes.
 
 Portable exports require internet and a licensed official Google Play installation that passes
-app/device verification. The server signs the exact ZIP fingerprint; the backup and GPS history
-stay on the phone. Restore checks the signature before parsing, rejecting altered, repacked or
+app/device verification. The server signs the exact ZIP fingerprint; backup contents and GPS history
+are not sent to the signing service. Restore checks the signature before parsing, rejecting altered, repacked or
 unsigned files, including older unsigned exports. Trusted verification keys are fetched over HTTPS
 and saved privately; a new installation or signing key needs internet once. The signing service
 must be configured before releasing this feature; see [server setup](server/README.md#protected-local-backups).
