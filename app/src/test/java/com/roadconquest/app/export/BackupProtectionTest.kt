@@ -112,6 +112,37 @@ class BackupProtectionTest {
         } finally { file.delete(); changed.delete() }
     }
 
+    @Test fun signedBackupsRestoreLegacyRoadsWithoutGroupIdsOrWeeklyCredit() {
+        val db = TrackingRepository(context).readableDatabase()
+        repeat(2) { index -> db.execSQL(
+            """INSERT INTO roads(segment_id,name,geometry_json,first_unlocked_at,last_driven_at,
+                min_lat,max_lat,min_lon,max_lon)
+                VALUES (?,?,'[[-74,40],[-73.9,40]]',1000000,1005000,40,40,-74,-73.9)""",
+            arrayOf("legacy-$index", "Legacy road $index")
+        ) }
+        val file = raw()
+        try {
+            BackupProtection.attach(file, sign(file))
+            file.inputStream().use { input -> DataImporter.prepare(context, input).use { prepared ->
+                assertEquals(2L, prepared.summary.roadsUnlockedCount)
+                DataImporter.restore(context, prepared)
+            } }
+            val restored = TrackingRepository(context)
+            assertEquals(2L, restored.getSummary().roadsUnlockedCount)
+            restored.readableDatabase().rawQuery(
+                "SELECT segment_id,road_group_id,weekly_eligible FROM roads ORDER BY segment_id", null
+            ).use { cursor ->
+                repeat(2) { index ->
+                    assertTrue(cursor.moveToNext())
+                    assertEquals("legacy-$index", cursor.getString(0))
+                    assertEquals("", cursor.getString(1))
+                    assertEquals(0, cursor.getInt(2))
+                }
+                assertFalse(cursor.moveToNext())
+            }
+        } finally { file.delete() }
+    }
+
     @Test fun recoverySealIsOfflineInstallationBoundAndDetectsByteChanges() {
         val file = raw()
         try {

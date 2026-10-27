@@ -328,7 +328,9 @@ object DataImporter {
                 }
             }
             "roads" -> {
-                nonempty("segment_id"); nonempty("road_group_id")
+                nonempty("segment_id")
+                // Legacy roads use an empty group and count by segment ID.
+                // Preserve that supported database value on backup round trips.
                 require(v.getAsLong("last_driven_at") >= v.getAsLong("first_unlocked_at") && v.getAsLong("drive_count") in 1..Int.MAX_VALUE.toLong())
                 val geometry = JSONArray(v.getAsString("geometry_json"))
                 require(geometry.length() in 2..MAX_ROAD_VERTICES) { "Invalid road geometry" }
