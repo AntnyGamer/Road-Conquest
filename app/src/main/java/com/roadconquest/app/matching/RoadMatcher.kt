@@ -42,7 +42,7 @@ class FallbackRoadMatcher(private val providers: List<RoadMatcher>) : RoadMatche
             // Keep provider precedence even for a cached valid NoMatch/partial.
             // Never shop the backup cache for an easier answer to that trace.
             val offset = providerOffset(points, pendingIds, provider.maxPoints)
-            val result = provider.cachedMatch(points.drop(offset).take(provider.maxPoints)) ?: continue
+            val result = provider.cachedMatch(copyMatchingWindow(points, offset, provider.maxPoints)) ?: continue
             unavailable = false
             lastUsedProviderPointLimit = provider.maxPoints
             lastUsedProviderPointOffset = offset
@@ -111,13 +111,27 @@ class FallbackRoadMatcher(private val providers: List<RoadMatcher>) : RoadMatche
 }
 
 internal fun RoadMatcher.lastSubmittedPoints(points: List<TrackPoint>): List<TrackPoint> =
-    points.drop(lastUsedProviderPointOffset).take(lastUsedProviderPointLimit)
+    copyMatchingWindow(points, lastUsedProviderPointOffset, lastUsedProviderPointLimit)
+
+private fun copyMatchingWindow(points: List<TrackPoint>, offset: Int, limit: Int): List<TrackPoint> {
+    require(offset >= 0 && limit >= 0)
+    val start = minOf(offset, points.size)
+    val end = start + minOf(limit, points.size - start)
+    // Copy only the provider's window, retaining an independent snapshot even
+    // when the caller owns a mutable queue. Do not copy the entire tail first.
+    return points.subList(start, end).toList()
+}
 
 internal fun MatchResult.completelyCoversPending(points: List<TrackPoint>, pendingIds: Set<Long>? = null): Boolean {
     // Deferred unmatched fixes can be read-only context. Require the same
     // accepted confidence for every eligible fix in the actual provider window;
     // unresolved context neither blocks that proof nor becomes completed work.
-    val pending = points.filter { !it.matched && (pendingIds == null || it.id in pendingIds) }
-    return pending.isNotEmpty() && roads.any { it.confidence >= RoadGeometryValidator.MIN_ACCEPTABLE_CONFIDENCE } &&
-        pending.all { (matchedPointConfidences[it.id] ?: 0.0) >= RoadGeometryValidator.MIN_ACCEPTABLE_CONFIDENCE }
+    if (roads.none { it.confidence >= RoadGeometryValidator.MIN_ACCEPTABLE_CONFIDENCE }) return false
+    var hasPending = false
+    for (point in points) {
+        if (point.matched || (pendingIds != null && point.id !in pendingIds)) continue
+        hasPending = true
+        if (!((matchedPointConfidences[point.id] ?: 0.0) >= RoadGeometryValidator.MIN_ACCEPTABLE_CONFIDENCE)) return false
+    }
+    return hasPending
 }
