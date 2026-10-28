@@ -5,12 +5,18 @@ reads or HMAC operations helps hosting headroom, but cannot multiply provider
 credits. Ordinary personal driving keeps GPS/history on the phone and uses the
 maps gateway; optional verified competition has separate limits.
 
+**October 28 update:** The gateway now uses 90% of the providers' published free daily
+allowances instead of 80%, preserving 300 Geoapify credits and 500 LocationIQ
+requests as provider-level reserves. This increases admitted work but reduces
+the previous margin for other uses of the same provider accounts. The historical
+October 19 estimates below remain labeled with their original assumptions.
+
 ## Limits most likely to matter
 
 | Resource | Published free allowance | Current application guard / effect |
 |---|---|---|
-| Geoapify | 3,000 credits/day; matching costs one credit per 100 waypoints; raster tiles cost 0.25 credit each | Shared 2,400-credit hard cap; 600 credits/client IP; live batches contain at most 100 total fixes |
-| LocationIQ | 5,000 requests/day, 60/minute and 2/second; routing accepts at most 25 coordinate pairs/request | 4,000/day, 1,000/client IP, 1,050-ms shared spacing; 25-fix backup batches |
+| Geoapify | 3,000 credits/day; matching costs one credit per 100 waypoints; raster tiles cost 0.25 credit each | Shared 2,700-credit hard cap; 600 credits/client IP; live batches contain at most 100 total fixes |
+| LocationIQ | 5,000 requests/day, 60/minute and 2/second; routing accepts at most 25 coordinate pairs/request | 4,500/day, 1,000/client IP, 1,050-ms shared spacing; 25-fix backup batches |
 | Cloudflare Durable Objects | 100,000 requests, 100,000 SQLite rows written and five million rows read/day | Healthy matching needs two internal calls; compact-counter hard-cap fixture uses 12,800 calls for 6,400 matches, with 52,038 writes including next-day cleanup/two new matches |
 | Google Play Integrity, if verified competition is enabled | Default 10,000 server token decryptions/day, separately from its token/preparation bucket | At 40 new verified submissions/hour, this alone is about 250 verified hours/day before other use; normal Android builds currently hide/disable competition |
 
@@ -96,7 +102,7 @@ include `--fixes-per-hour`, `--hours-per-user`, `--local-share`, `--tile-misses`
 The default retains the existing reference model: 900 retained fixes/hour,
 75-minute fragments, three context slots, startup/final partial requests,
 10.4 primary credits/online hour and 69.6 backup calls/online hour. It plans with
-80% of the application's hard caps, leaving further operational headroom.
+80% of the historical October 19 hard caps (2,400 Geoapify credits and 4,000 LocationIQ calls). The new 2,700/4,500 caps give approximately 259.4 no-reuse matching hours/day at the same 80% planning fraction, assuming the fallback can fully use its separate allowance. Run the calculator for current scenarios; neither figure represents verified production capacity.
 
 | Whole paid work avoided locally | Matching hours/day | Drivers/day at 1 h each | Drivers/day at 2.5 h each |
 |---|---:|---:|---:|
