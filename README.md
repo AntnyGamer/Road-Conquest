@@ -1,4 +1,4 @@
-# Road Conquest 1.0 Beta 64
+# Road Conquest 1.0 Beta 65
 
 Road Conquest remembers the roads you drive and the places you visit, revealing them through a
 cloud-textured fog map.
@@ -6,6 +6,8 @@ cloud-textured fog map.
 [Download the Android app](https://github.com/AntnyGamer/RoadConquest-Beta/releases) ·
 [Source and issues](https://github.com/AntnyGamer/RoadConquest-Beta) ·
 [GNU AGPL v3 license](LICENSE)
+
+Beta 65 prepares protected ZIP backups, preserves new weekly credit while excluding restored drives, repairs additional missing junction turns and polygon containment, and strengthens Forum Plus/server efficiency. Portable backup exports need the newly configured backend signing service before this build is distributed. See [release notes](RELEASE_NOTES.md) for prerequisites and verification scope.
 
 Beta 64 restores map-provider failover in trip replay, redraws the Streets/Minimal/Night icons, isolates forum drafts and pending actions across account changes, and improves Forum Plus purchase handling and setup diagnostics. Repeat receipt checks avoid unused encryption/database transfer. See [release notes](RELEASE_NOTES.md) for the complete changes and verification scope.
 
@@ -54,12 +56,12 @@ Grant Precise location. For automatic background tracking, choose Allow all the 
 location settings and allow background battery use. Settings includes shortcuts to the relevant
 Android screens. Allow notifications to see the tracking notification and its Stop tracking control.
 
-The new release builds **Beta 64** with Android application ID
+The new release builds **Beta 65** with Android application ID
 `com.roadconquest.app` and internal version code **90**. Beta 63 used code 89,
 Beta 62 used code 88, Beta 61 used code 87 and Beta 60 used code 86.
 Google Play permanently reserves uploaded version codes, including drafts and
-testing tracks. Before uploading a **signed Beta 64 release bundle**, confirm
-that code 90 is still available in Play Console. The unsigned CI bundle cannot be uploaded.
+testing tracks. Before uploading a **signed Beta 65 release bundle**, confirm
+that code 91 is still available in Play Console. The unsigned CI bundle cannot be uploaded.
 Do not confuse a locally tested development build with an already-published signed release.
 The app shows its exact version in Settings → About. Treat the application ID as permanent once
 the Google Play listing is created; changing it later would create a different app.
@@ -288,6 +290,13 @@ coordinate batches through the Road Conquest gateway to Geoapify. Town/state/cou
 Android's system geocoder only while Road Conquest is foregrounded; the geocoder implementation and
 network behavior are supplied by the device. Pending data remains saved for retry after network or
 matching failures. User-selected ZIP exports contain precise history, road geometry and progression data.
+Protected exports require internet and production Play app verification; only a SHA-256 fingerprint
+and attestation are sent for signing. Restore rejects changed or unsigned files. Verification keys
+are fetched over HTTPS once per installation/key and saved for later offline checks. The private
+pre-restore recovery copy works offline on the same installation. Imported history, including delayed
+matching and town discovery, cannot earn new weekly challenge credit or change verified rankings.
+Restored local history and previously earned local rewards remain visible. See the account server
+README for signing-key setup required before releasing this change.
 
 When enabled and available, verified scoring sends precise live GPS batches with Play Integrity
 evidence for independent server matching. The server retains scores, short-lived receipt hashes,

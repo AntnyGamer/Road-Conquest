@@ -109,7 +109,7 @@ export class MapBudget {
     }
     const used = key => counters.get(key) || 0;
     // Known global balances can prove rejection without loading a new/evicted
-    // client's counters. Refunds invalidate units:all, forcing a fresh read.
+    // client's counters. Known refunds update this same authoritative balance.
     const globalExhausted = counters.has('all') && counters.has('units:all') &&
       used('all') * 4 + used('units:all') + costUnits > limit;
     if (missing.length && !globalExhausted) {
@@ -151,7 +151,9 @@ export class MapBudget {
       remember(this.permitCache, attemptId, { day, bucket, cost: costUnits, slot, state: 'reserved' }, 64);
       if (health) {
         this.sql.exec('UPDATE map_health SET probe_id = ?, probe_until = ? WHERE key = ?', attemptId, now + 35_000, healthKey);
-        this.healthCache.delete(healthKey);
+        // This transaction is the sole writer. Dispatch can reuse the exact
+        // probe we just stored; failed commits clear all cached metadata.
+        this.healthCache.set(healthKey, { ...health, probe_id: attemptId, probe_until: now + 35_000 });
       }
     }
     return json({ allowed: true, ...(attemptId ? { managed: true, probe: Boolean(health) } : {}), waitMs: Math.max(0, slot - now) });
@@ -171,9 +173,14 @@ export class MapBudget {
   clearProbe(sql, healthKey, attemptId) {
     // This object is the sole writer. A cached absent/different probe proves
     // the conditional write is a no-op. Cache misses retain the original SQL.
-    if (this.healthCache.has(healthKey) && this.healthCache.get(healthKey)?.probe_id !== attemptId) return;
+    const known = this.healthCache.has(healthKey), health = this.healthCache.get(healthKey);
+    if (known && health?.probe_id !== attemptId) return;
     this.sql.exec(sql, healthKey, attemptId);
-    this.healthCache.delete(healthKey);
+    // With a known matching probe, both possible mutations have known results.
+    // Unknown/evicted rows still use SQL and reload on their next access.
+    if (known) this.healthCache.set(healthKey, sql.startsWith('DELETE') ? undefined
+      : { ...health, probe_id: null, probe_until: 0 });
+    else this.healthCache.delete(healthKey);
   }
   finish(action, { attemptId, healthKey, status, retryAfterMs = 0 }) {
     if (!validId(attemptId)) return json({ error: 'Invalid attempt' }, 400);
@@ -186,10 +193,16 @@ export class MapBudget {
         this.sql.exec('UPDATE usage SET used = MAX(0,used - ?) WHERE day = ? AND bucket IN (?,?)',
           permit.cost, permit.day, 'units:all', 'units:' + permit.bucket);
         permit.state = 'cancelled';
-        // A refund can concern an evicted client or a prior-day reservation.
-        // Reload these exact counters rather than inferring missing balances.
-        this.counterCache.delete('units:all');
-        this.counterCache.delete('units:' + permit.bucket);
+        // This object's synchronous transaction is the sole writer. Apply the
+        // exact refund to known balances for this cached day; absent/evicted
+        // balances stay absent and still reload from SQL. An older day's refund
+        // cannot change the cached current day's counters.
+        if (permit.day === this.lastPrunedDay) {
+          for (const key of ['units:all', 'units:' + permit.bucket]) {
+            if (this.counterCache.has(key)) remember(this.counterCache, key,
+              Math.max(0, this.counterCache.get(key) - permit.cost), 512);
+          }
+        }
       }
       if (validKey(healthKey)) {
         this.clearProbe('UPDATE map_health SET probe_id = NULL, probe_until = 0 WHERE key = ? AND probe_id = ?', healthKey, attemptId);

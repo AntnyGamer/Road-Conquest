@@ -128,14 +128,17 @@ class TripHistoryRepository(context: Context) {
         val started = trip.startedAt.toString()
         val ended = trip.endedAt.toString()
         val args = arrayOf(
-            started, ended, started, ended, started, ended,
+            started, started, ended, started, started, ended, started, ended,
             trip.firstId.toString(), trip.lastId.toString()
         )
         val counts = db.rawQuery(
             """SELECT
-                (SELECT COUNT(DISTINCT CASE WHEN road_group_id = '' THEN segment_id ELSE road_group_id END)
-                   FROM roads WHERE first_unlocked_at BETWEEN ? AND ?
-                   AND road_group_id NOT LIKE 'x2|%'),
+                (SELECT COUNT(DISTINCT CASE WHEN r.road_group_id = '' THEN r.segment_id ELSE r.road_group_id END)
+                   FROM roads r WHERE r.last_driven_at >= ? AND r.first_unlocked_at BETWEEN ? AND ?
+                   AND r.road_group_id NOT LIKE 'x2|%'
+                   AND (r.road_group_id = '' OR NOT EXISTS (
+                     SELECT 1 FROM roads old WHERE old.road_group_id = r.road_group_id
+                       AND old.first_unlocked_at < ?))),
                 (SELECT COUNT(*) FROM visited_places v
                    WHERE kind = 'TOWN' AND first_visited_at BETWEEN ? AND ?
                    AND EXISTS (SELECT 1 FROM progression_rewards r

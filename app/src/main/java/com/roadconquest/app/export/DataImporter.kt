@@ -31,7 +31,7 @@ import java.util.zip.ZipFile
 
 /** Imports only data into our own schema. Never executes SQL or opens a database from a ZIP. */
 object DataImporter {
-    private const val MAX_BYTES = 512L * 1024 * 1024
+    internal const val MAX_BYTES = 512L * 1024 * 1024
     // Provider responses can contain more than 50,000 valid vertices. Keep their
     // backed-up geometry bounded without rejecting an ordinary saved road.
     private const val MAX_ROAD_GEOMETRY_CHARS = 8_000_000
@@ -60,12 +60,18 @@ object DataImporter {
     fun clearTemporaryFiles(context: Context) {
         if (temporaryFilesInitialized) return
         temporaryFilesInitialized = true
+        BackupProtection.clearTemporaryFiles(context)
+        File(context.applicationContext.filesDir, "before-restore.tmp.zip").delete()
         context.cacheDir.listFiles().orEmpty().filter { it.name.startsWith(PREFIX) }.forEach {
             if (it.name.endsWith(".db")) SQLiteDatabase.deleteDatabase(it) else it.delete()
         }
     }
 
-    fun prepare(context: Context, input: InputStream): Prepared {
+    fun prepare(context: Context, input: InputStream): Prepared =
+        prepare(context, input) { BackupProtection.verify(context, it) }
+
+    /** Explicit trust boundary allows structural-format fixtures to exercise parsing independently. */
+    internal fun prepare(context: Context, input: InputStream, authenticate: (File) -> Unit): Prepared {
         clearTemporaryFiles(context)
         val helper = AppDatabase.get(context)
         val generation = synchronized(helper.historyLock) { helper.historyGeneration }
@@ -85,6 +91,7 @@ object DataImporter {
                     output.write(buffer, 0, read)
                 }
             }
+            authenticate(zipPath)
             ZipFile(zipPath).use { zip ->
                 // A valid backup has only the supported tables and metadata.
                 // Check ZipFile's entry count before allocating an application
@@ -159,12 +166,16 @@ object DataImporter {
                             require(header == spec.map { it.first }) { "Invalid $table columns" }
                             var rows = 0L
                             val row = ContentValues()
+                            val importedHistory = table in WEEKLY_HISTORY_TABLES
                             while (true) {
                                 val fields = csv.next() ?: break
                                 require(fields.size == spec.size && ++rows <= 10_000_000) { "Invalid $table row" }
                                 // SQLite consumes each row synchronously. Clear derived
                                 // fields too before reusing the buffer for the next row.
                                 row.clear()
+                                // Provenance is set locally, never read from the ZIP. Restored
+                                // evidence may rebuild history but cannot mint weekly credit.
+                                if (importedHistory) row.put("weekly_eligible", 0)
                                 spec.forEachIndexed { index, (_, destination, type) ->
                                     val field = CsvUtil.unescape(fields[index], schema)
                                     when (type) {
@@ -230,6 +241,7 @@ object DataImporter {
             }
             try {
                 temporaryBackup.outputStream().use { DataExporter.writeZip(app, TrackingRepository(app), it) }
+                BackupProtection.sealRecovery(app, temporaryBackup)
                 java.io.FileOutputStream(temporaryBackup, true).use { it.fd.sync() }
                 // Both paths are in filesDir. Require an atomic replacement so
                 // the old recovery copy survives any failed move. File.renameTo
@@ -297,6 +309,7 @@ object DataImporter {
     }
 
     private fun count(db: SQLiteDatabase, table: String) = db.rawQuery("SELECT COUNT(*) FROM $table", null).use { it.moveToFirst(); it.getLong(0) }
+    private val WEEKLY_HISTORY_TABLES = setOf("track_points", "skipped_driving_fixes", "roads", "visited_places", "place_candidates")
     private fun sum(db: SQLiteDatabase, table: String, column: String) = db.rawQuery("SELECT COALESCE(SUM($column),0) FROM $table", null).use { it.moveToFirst(); it.getLong(0) }
 
     private fun validateRow(table: String, v: ContentValues) {

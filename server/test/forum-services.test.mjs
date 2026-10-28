@@ -21,6 +21,7 @@ test('GIF links reject redirects, untrusted hosts, credentials and oversized/inv
     'https://media.giphy.com:444/a.gif','https://media.giphy.com/a.html','https://127.0.0.1/a.gif',
     'https://media.giphy.com/a.gif#','https://media.giphy.com/a.gif#fragment']) assert.throws(()=>forumGifUrl(url));
   assert.equal(forumGifUrl('https://media.tenor.com/a.gif'),'https://media.tenor.com/a.gif');
+  assert.equal(forumGifUrl('HTTPS://MEDIA.GIPHY.COM/a.GIF'),'https://media.giphy.com/a.GIF');
   assert.throws(()=>forumGifUrl('https://media.giphy.com/'+ '\u2615'.repeat(200)+'.gif'),/GIF link/,
     'Canonical URL length must fit the stored/media response bound after percent encoding');
   assert.throws(()=>gifContactSheet(Buffer.alloc(2*1024*1024+1)),/2 MB/);
@@ -48,6 +49,70 @@ test('every GIF frame enters the moderation contact sheet and the moderated byte
   const verdict=await moderate({text:'A GIF',gifUrl:'https://media.giphy.com/a.gif'});
   assert.equal(verdict.flagged,true); assert.deepEqual(verdict.categories,['hate']);
   assert.match(verdict.gifHash,/^[a-f0-9]{64}$/); assert.equal(calls,2);
+});
+
+test('GIF preview preserves every pixel across transparent partial frames and both disposal modes', () => {
+  const bytes = Buffer.alloc(4096);
+  const gif = new GifWriter(bytes, 2, 1, { palette: [0, 0xb52c19, 0x2168d1, 0x43a65e] });
+  gif.addFrame(0, 0, 2, 1, new Uint8Array([0, 1]), { transparent: 0, disposal: 1 });
+  gif.addFrame(0, 0, 1, 1, new Uint8Array([2]), { disposal: 3 });
+  gif.addFrame(1, 0, 1, 1, new Uint8Array([3]), { disposal: 2 });
+  gif.addFrame(0, 0, 1, 1, new Uint8Array([1]), { disposal: 1 });
+  gif.addFrame(0, 0, 2, 1, new Uint8Array([0, 2]), { transparent: 0 });
+  const preview = PNG.sync.read(gifContactSheet(bytes.subarray(0, gif.end())));
+  const white = [255, 255, 255], red = [181, 44, 25], blue = [33, 104, 209], green = [67, 166, 94];
+  // Hand-composited canvases: restore frame 1's prior state, then clear frame 2's rectangle.
+  const frames = [[white, red], [blue, red], [white, green], [red, white], [red, blue]];
+  assert.equal(preview.width, 384);
+  assert.equal(preview.height, 256);
+  const expected = Buffer.alloc(384 * 256 * 4, 255);
+  frames.forEach((colors, frame) => colors.forEach((color, half) => {
+    const left = frame % 3 * 128 + half * 64, top = Math.floor(frame / 3) * 128 + 32;
+    for (let y = top; y < top + 64; y++) for (let x = left; x < left + 64; x++) {
+      const offset = (y * 384 + x) * 4;
+      expected[offset] = color[0]; expected[offset + 1] = color[1]; expected[offset + 2] = color[2];
+    }
+  }));
+  assert.deepEqual(preview.data, expected);
+});
+
+test('GIF preview restores consecutive and separated snapshots and clears full-width rectangles', () => {
+  const bytes = Buffer.alloc(4096);
+  const gif = new GifWriter(bytes, 4, 4, { palette: [0, 0xb52c19, 0x2168d1, 0x43a65e] });
+  gif.addFrame(0, 0, 4, 4, new Uint8Array(16).fill(1), { disposal: 1 });
+  gif.addFrame(1, 1, 2, 2, new Uint8Array(4).fill(2), { disposal: 3 });
+  gif.addFrame(0, 1, 4, 2, new Uint8Array(8).fill(3), { disposal: 3 });
+  gif.addFrame(0, 1, 4, 2, new Uint8Array(8).fill(2), { disposal: 2 });
+  gif.addFrame(1, 0, 2, 1, new Uint8Array(2).fill(3), { disposal: 1 });
+  gif.addFrame(0, 0, 1, 1, new Uint8Array([2]), { disposal: 3 });
+  gif.addFrame(3, 3, 1, 1, new Uint8Array([3]), { disposal: 1 });
+  const preview = PNG.sync.read(gifContactSheet(bytes.subarray(0, gif.end())));
+  const colors = [[255, 255, 255], [181, 44, 25], [33, 104, 209], [67, 166, 94]];
+  // Hand-composited source canvases. Snapshot disposal restores the state
+  // BEFORE its frame, even after an earlier snapshot or a full-width clear.
+  const frames = [
+    [1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1],
+    [1,1,1,1, 1,2,2,1, 1,2,2,1, 1,1,1,1],
+    [1,1,1,1, 3,3,3,3, 3,3,3,3, 1,1,1,1],
+    [1,1,1,1, 2,2,2,2, 2,2,2,2, 1,1,1,1],
+    [1,3,3,1, 0,0,0,0, 0,0,0,0, 1,1,1,1],
+    [2,3,3,1, 0,0,0,0, 0,0,0,0, 1,1,1,1],
+    [1,3,3,1, 0,0,0,0, 0,0,0,0, 1,1,1,3]
+  ];
+  assert.equal(preview.width, 384);
+  assert.equal(preview.height, 384);
+  const expected = Buffer.alloc(384 * 384 * 4, 255);
+  frames.forEach((canvas, frame) => canvas.forEach((color, cell) => {
+    const left = frame % 3 * 128 + cell % 4 * 32;
+    const top = Math.floor(frame / 3) * 128 + Math.floor(cell / 4) * 32;
+    for (let y = top; y < top + 32; y++) for (let x = left; x < left + 32; x++) {
+      const offset = (y * 384 + x) * 4;
+      expected[offset] = colors[color][0];
+      expected[offset + 1] = colors[color][1];
+      expected[offset + 2] = colors[color][2];
+    }
+  }));
+  assert.deepEqual(preview.data, expected);
 });
 
 test('moderation outages and incomplete responses fail closed; distress and ordinary road discussion alone do not strike', async () => {
@@ -103,6 +168,22 @@ test('a rejected cached Play credential is refreshed on retry, including acknowl
   }
 });
 
+test('null and empty Play OAuth replies stay retryable and never reach receipt verification', async () => {
+  for (const invalid of [null, { access_token: '', expires_in: 3600 }]) {
+    let auth = 0, checks = 0;
+    const verify = createForumPurchaseVerifier(credentials, async url => {
+      if (url === 'https://oauth2.googleapis.com/token') return reply(++auth === 1
+        ? invalid : { access_token: 'recovered', expires_in: 3600 });
+      checks++;
+      return reply({ purchaseState: 0, consumptionState: 0, acknowledgementState: 1, obfuscatedExternalAccountId: 'bound' });
+    });
+    await assert.rejects(verify('receipt', 'bound'), error => error.status === 503);
+    assert.equal(checks, 0);
+    assert.equal(await verify('receipt', 'bound'), true);
+    assert.equal(auth, 2);
+  }
+});
+
 test('a delayed old Play credential failure preserves a newer shared credential', async () => {
   let oauth=0,release,started;
   const pending=new Promise(resolve=>{release=resolve;});
@@ -150,6 +231,29 @@ test('interrupted GIF downloads and contradictory moderation results are retryab
     flagged:false,categories:{...categories,hate:true}
   }]}));
   await assert.rejects(inconsistent({text:'Hello'}),e=>e.status===503);
+});
+
+test('GIF provider timeouts, throttling and server errors are retryable without calling moderation', async () => {
+  for (const status of [408, 429, 500, 502, 503, 504]) {
+    let calls = 0, reads = 0, cancelled = 0;
+    const moderate = createForumModerator('test', async () => {
+      calls++;
+      return new Response(new ReadableStream({
+        pull() { reads++; throw Error('Provider error bodies are not needed'); },
+        cancel() { cancelled++; }
+      }, { highWaterMark: 0 }), { status });
+    });
+    await assert.rejects(moderate({ text: 'A GIF', gifUrl: 'https://media.giphy.com/a.gif' }),
+      error => error.status === 503 && /try again/i.test(error.message));
+    assert.equal(calls, 1);
+    assert.equal(reads, 0);
+    assert.equal(cancelled, 1);
+  }
+  for (const status of [301, 403, 404, 410]) {
+    const moderate = createForumModerator('test', async () => new Response(null, { status }));
+    await assert.rejects(moderate({ text: 'A GIF', gifUrl: 'https://media.giphy.com/a.gif' }),
+      error => error.status === 400 && /another GIF/.test(error.message));
+  }
 });
 
 test('account binding is stable and separated; encrypted purchase tokens detect tampering', () => {

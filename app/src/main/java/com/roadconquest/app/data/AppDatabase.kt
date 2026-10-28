@@ -27,6 +27,7 @@ class AppDatabase private constructor(context: Context) :
     )
     internal data class LastTrackPointCache(
         val present: Boolean,
+        val id: Long = 0L,
         val latitude: Double = 0.0,
         val longitude: Double = 0.0,
         val timestamp: Long = 0L
@@ -107,7 +108,8 @@ class AppDatabase private constructor(context: Context) :
                 timestamp_ms INTEGER NOT NULL,
                 matched INTEGER NOT NULL DEFAULT 0,
                 next_match_attempt_ms INTEGER NOT NULL DEFAULT 0,
-                distance_m REAL NOT NULL DEFAULT 0
+                distance_m REAL NOT NULL DEFAULT 0,
+                weekly_eligible INTEGER NOT NULL DEFAULT 1 CHECK(weekly_eligible IN (0,1))
             )
             """.trimIndent()
         )
@@ -130,7 +132,8 @@ class AppDatabase private constructor(context: Context) :
                 min_lat REAL NOT NULL,
                 max_lat REAL NOT NULL,
                 min_lon REAL NOT NULL,
-                max_lon REAL NOT NULL
+                max_lon REAL NOT NULL,
+                weekly_eligible INTEGER NOT NULL DEFAULT 1 CHECK(weekly_eligible IN (0,1))
             )
             """.trimIndent()
         )
@@ -167,6 +170,7 @@ class AppDatabase private constructor(context: Context) :
                 first_visited_at INTEGER NOT NULL,
                 latitude REAL NOT NULL,
                 longitude REAL NOT NULL,
+                weekly_eligible INTEGER NOT NULL DEFAULT 1 CHECK(weekly_eligible IN (0,1)),
                 PRIMARY KEY (kind, place_key)
             )""".trimIndent()
         )
@@ -180,6 +184,7 @@ class AppDatabase private constructor(context: Context) :
                 first_seen_at INTEGER NOT NULL,
                 attempts INTEGER NOT NULL DEFAULT 0,
                 next_attempt_ms INTEGER NOT NULL DEFAULT 0,
+                weekly_eligible INTEGER NOT NULL DEFAULT 1 CHECK(weekly_eligible IN (0,1)),
                 PRIMARY KEY (cell_x, cell_y)
             )""".trimIndent()
         )
@@ -219,7 +224,7 @@ class AppDatabase private constructor(context: Context) :
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        if (oldVersion !in 10..14 || newVersion !in 11..15 || newVersion <= oldVersion) {
+        if (oldVersion !in 10..15 || newVersion !in 11..16 || newVersion <= oldVersion) {
             error("Database upgrade $oldVersion -> $newVersion is unsupported")
         }
         if (oldVersion == 10) {
@@ -269,6 +274,12 @@ class AppDatabase private constructor(context: Context) :
             // Never changes the existing match queue, mileage or online request count.
             createDiscardedDrivingFixesTable(db)
         }
+        if (oldVersion < 16 && newVersion >= 16) {
+            for (table in listOf("track_points", "roads", "visited_places", "place_candidates")) {
+                db.execSQL("ALTER TABLE $table ADD COLUMN weekly_eligible INTEGER NOT NULL DEFAULT 1 CHECK(weekly_eligible IN (0,1))")
+            }
+            if (oldVersion >= 15) db.execSQL("ALTER TABLE skipped_driving_fixes ADD COLUMN weekly_eligible INTEGER NOT NULL DEFAULT 1 CHECK(weekly_eligible IN (0,1))")
+        }
         if (oldVersion < 13 && newVersion >= 13) {
             pruneHistoricalFogDrift(db)
             // Once-only correction for candidates collected by old versions from
@@ -301,7 +312,8 @@ class AppDatabase private constructor(context: Context) :
                 accuracy_m REAL NOT NULL,
                 speed_mps REAL NOT NULL,
                 bearing_deg REAL NOT NULL,
-                timestamp_ms INTEGER NOT NULL
+                timestamp_ms INTEGER NOT NULL,
+                weekly_eligible INTEGER NOT NULL DEFAULT 1 CHECK(weekly_eligible IN (0,1))
             )
         """.trimIndent())
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_skipped_driving_time ON skipped_driving_fixes(timestamp_ms)")
@@ -353,7 +365,7 @@ class AppDatabase private constructor(context: Context) :
 
     companion object {
         private const val DB_NAME = "roadconquest.db"
-        private const val DB_VERSION = 15
+        private const val DB_VERSION = 16
 
         @Volatile
         private var instance: AppDatabase? = null

@@ -32,6 +32,9 @@ class DataImporterTest {
     private fun fix(time: Long, lon: Double = -74.0) = Location("gps").apply {
         latitude = 40.0; longitude = lon; accuracy = 5f; this.time = time
     }
+    // CSV schema validation is tested independently from the signing trust boundary.
+    private fun prepareFixture(context: Context, input: java.io.InputStream) =
+        DataImporter.prepare(context, input) { }
     private fun export(): ByteArray = ByteArrayOutputStream().also {
         DataExporter.writeZip(context, TrackingRepository(context), it)
     }.toByteArray()
@@ -46,6 +49,75 @@ class DataImporterTest {
         } }
     }.toByteArray()
 
+    @Test fun restoredHistoryAndDelayedDiscoveriesCannotEarnWeeklyCreditButNewDrivingCan() {
+        val now = System.currentTimeMillis()
+        val week = WeeklyChallenges.weekStart(now)
+        val time = minOf(week + 1_000L, now)
+        val tracker = TrackingRepository(context)
+        val first = tracker.insertLocation(fix(time))
+        tracker.recordSkippedDrivingFix(fix(now - 500L, -73.95))
+        repeat(25) { i -> tracker.upsertRoads(listOf(MatchedRoad("Imported $i",
+            "[[-74,40],[${-73.999 + i * 0.001},40]]", time, time, 1.0))) }
+        val progression = ProgressionRepository(context)
+        progression.recordPlace(PlaceDiscovery(PlaceKind.TOWN, "start", "Start", visitedAt = time,
+            latitude = 40.0, longitude = -74.0))
+        progression.recordPlaceCandidate(fix(time, -73.9))
+        // An unclaimed previous-week completion must not earn rewards through the grace pass.
+        repeat(3) { i -> progression.recordPlace(PlaceDiscovery(PlaceKind.TOWN, "old$i", "Old $i",
+            visitedAt = week - 1_000, latitude = 40.0, longitude = -74.0)) }
+        val original = export()
+        prepareFixture(context, ByteArrayInputStream(original)).use { DataImporter.restore(context, it) }
+        val restoredTracker = TrackingRepository(context)
+        assertTrue(restoredTracker.recoverTrailingSkippedDrivingFix())
+        restoredTracker.readableDatabase().rawQuery("SELECT weekly_eligible FROM track_points ORDER BY id DESC LIMIT 1", null).use {
+            assertTrue(it.moveToFirst()); assertEquals(0, it.getInt(0))
+        }
+        val restoredProgression = ProgressionRepository(context)
+        val before = restoredProgression.snapshot().balance
+        assertEquals(listOf(0L, 0L, 0L, 0L), WeeklyChallenges.status(context, now).challenges.map { it.progress })
+        assertEquals(before, restoredProgression.snapshot().balance)
+        restoredTracker.completeMatch(listOf(MatchedRoad("Delayed import", "[[-74,40],[-74.002,40]]",
+            time, time, 1.0, weeklyEligible = false)), listOf(first))
+        val candidate = restoredProgression.pendingPlaceCandidates().single()
+        assertFalse(candidate.weeklyEligible)
+        restoredProgression.resolveCandidate(candidate, listOf(PlaceDiscovery(PlaceKind.TOWN, "delayed",
+            "Delayed town", visitedAt = time, latitude = 40.0, longitude = -73.9)))
+        assertEquals(listOf(0L, 0L, 0L, 0L), WeeklyChallenges.status(context, now).challenges.map { it.progress })
+        val liveId = restoredTracker.insertLocation(fix(now, -73.8))
+        restoredTracker.completeMatch(listOf(MatchedRoad("Fresh road", "[[-73.8,40],[-73.799,40]]",
+            now, now, 1.0)), listOf(liveId))
+        restoredProgression.recordPlaceCandidate(fix(now, -73.8))
+        val live = restoredProgression.pendingPlaceCandidates().single()
+        assertTrue(live.weeklyEligible)
+        restoredProgression.resolveCandidate(live, listOf(PlaceDiscovery(PlaceKind.TOWN, "fresh",
+            "Fresh town", visitedAt = now, latitude = 40.0, longitude = -73.8)))
+        val goals = WeeklyChallenges.status(context, now).challenges
+        assertEquals(listOf(1L, 1L, 1L, 1L), goals.map { it.progress })
+        assertEquals(listOf(false, false, true, false), goals.map { it.rewarded })
+        assertFalse(Prefs.isDriveVerificationEnabled(context))
+    }
+
+    @Test fun backfillingRestoredRawGpsCannotCreateWeeklyTownCredit() {
+        val now = System.currentTimeMillis()
+        val tracker = TrackingRepository(context)
+        val progression = ProgressionRepository(context)
+        assertTrue(progression.recordBaselineCandidate(fix(1_000)))
+        val baseline = progression.pendingPlaceCandidates().single()
+        progression.resolveCandidate(baseline, PlaceKind.entries.map {
+            PlaceDiscovery(it, "start-${it.name}", "Start ${it.name}", visitedAt = 1_000,
+                latitude = 40.0, longitude = -74.0)
+        })
+        tracker.insertLocation(fix(now - 1_000, -73.5))
+        prepareFixture(context, ByteArrayInputStream(export())).use { DataImporter.restore(context, it) }
+        val restored = ProgressionRepository(context)
+        assertEquals(1, restored.backfillPlaceCandidates())
+        val candidate = restored.pendingPlaceCandidates().single()
+        assertFalse(candidate.weeklyEligible)
+        restored.resolveCandidate(candidate, listOf(PlaceDiscovery(PlaceKind.TOWN, "backfill", "Backfilled town",
+            visitedAt = candidate.visitedAt, latitude = candidate.latitude, longitude = candidate.longitude)))
+        assertEquals(0L, WeeklyChallenges.status(context, now).challenges.last().progress)
+    }
+
     @Test fun restoresEveryTableAndKeepsRecoveryWithoutUploadingOrDuplicatingRewards() {
         val tracker = TrackingRepository(context)
         tracker.insertLocation(fix(1_000_000)); tracker.insertLocation(fix(1_005_000, -74.0001))
@@ -59,7 +131,7 @@ class DataImporterTest {
         progression.awardAchievement("roads_100", 350)
         val original = export()
         val stale = TrackingRepository(context)
-        DataImporter.prepare(context, ByteArrayInputStream(original)).use { backup ->
+        prepareFixture(context, ByteArrayInputStream(original)).use { backup ->
             tracker.insertLocation(fix(2_000_000))
             Prefs.setDriveVerificationEnabled(context, true)
             DataImporter.restore(context, backup)
@@ -76,7 +148,7 @@ class DataImporterTest {
                 ProgressionRepository(context).snapshot())).single { it.id == "roads_100" }.unlocked)
         // Re-importing the same reward ledger does not mint another copy of the points.
         val points = ProgressionRepository(context).snapshot().balance
-        DataImporter.prepare(context, ByteArrayInputStream(original)).use { DataImporter.restore(context, it) }
+        prepareFixture(context, ByteArrayInputStream(original)).use { DataImporter.restore(context, it) }
         assertEquals(points, ProgressionRepository(context).snapshot().balance)
     }
 
@@ -93,7 +165,7 @@ class DataImporterTest {
         ) })
         val bytes = export()
         val original = entries(bytes).filterKeys { it != "metadata.json" }
-        DataImporter.prepare(context, ByteArrayInputStream(bytes)).use { DataImporter.restore(context, it) }
+        prepareFixture(context, ByteArrayInputStream(bytes)).use { DataImporter.restore(context, it) }
         assertEquals(original, entries(export()).filterKeys { it != "metadata.json" })
         assertEquals(500L, TrackingRepository(context).getSummary().trackPointCount)
     }
@@ -116,7 +188,7 @@ class DataImporterTest {
             listOf(MatchedRoad("Detailed Road", geometry, 1_000_000L, 1_005_000L, 0.99))
         )
         val original = export()
-        DataImporter.prepare(context, ByteArrayInputStream(original)).use {
+        prepareFixture(context, ByteArrayInputStream(original)).use {
             DataImporter.restore(context, it)
         }
         assertEquals(1L, TrackingRepository(context).getSummary().roadSegmentCount)
@@ -130,7 +202,7 @@ class DataImporterTest {
             "roadconquest_export_history", Context.MODE_PRIVATE
         )
         exportPrefs.edit().putLong("last_completed_at", 123456789L).commit()
-        DataImporter.prepare(context, ByteArrayInputStream(backup)).use {
+        prepareFixture(context, ByteArrayInputStream(backup)).use {
             DataImporter.restore(context, it)
         }
         assertEquals(0L, exportPrefs.getLong("last_completed_at", 0L))
@@ -153,11 +225,11 @@ class DataImporterTest {
             source + ("progression_counters.csv" to "counter_key,value\nlowest_battery_percent,4294967296\n")
         )
         invalid.forEach { candidate ->
-            assertTrue(runCatching { DataImporter.prepare(context, ByteArrayInputStream(repack(candidate))).use { } }.isFailure)
+            assertTrue(runCatching { prepareFixture(context, ByteArrayInputStream(repack(candidate))).use { } }.isFailure)
             assertEquals(1L, TrackingRepository(context).getSummary().trackPointCount)
             assertFalse(DataImporter.previousBackup(context).exists())
         }
-        assertTrue(runCatching { DataImporter.prepare(context, ByteArrayInputStream(original.copyOf(original.size / 2))).use { } }.isFailure)
+        assertTrue(runCatching { prepareFixture(context, ByteArrayInputStream(original.copyOf(original.size / 2))).use { } }.isFailure)
     }
 
     @Test fun rejectsArchivesWithExcessEntriesBeforeMaterializingTheirContents() {
@@ -165,7 +237,7 @@ class DataImporterTest {
         val extras = (0 until 256).associate { "unexpected-$it.txt" to "" }
         val oversized = repack(original + extras)
         assertTrue(runCatching {
-            DataImporter.prepare(context, ByteArrayInputStream(oversized)).use { }
+            prepareFixture(context, ByteArrayInputStream(oversized)).use { }
         }.isFailure)
         assertEquals(0L, TrackingRepository(context).getSummary().trackPointCount)
     }
@@ -176,7 +248,7 @@ class DataImporterTest {
         val original = export()
         tracker.insertLocation(fix(1_005_000, -74.0001))
         assertEquals(2L, tracker.getSummary().trackPointCount)
-        val backup = DataImporter.prepare(context, ByteArrayInputStream(original))
+        val backup = prepareFixture(context, ByteArrayInputStream(original))
         val controller = org.robolectric.Robolectric.buildActivity(
             com.roadconquest.app.RestoreActivity::class.java
         ).create().start().resume()
@@ -207,9 +279,63 @@ class DataImporterTest {
         }
     }
 
+    @Test @org.robolectric.annotation.LooperMode(org.robolectric.annotation.LooperMode.Mode.PAUSED)
+    fun failedRestoreDoesNotKeepLaterUnconfirmedValidationRunningAfterClose() {
+        val backup = prepareFixture(context, ByteArrayInputStream(export()))
+        TrackingRepository(context).clearHistory() // Make the confirmed preview stale.
+        val controller = org.robolectric.Robolectric.buildActivity(
+            com.roadconquest.app.RestoreActivity::class.java
+        ).create().start().resume()
+        val activity = controller.get()
+        val worker = com.roadconquest.app.RestoreActivity::class.java
+            .getDeclaredField("worker").apply { isAccessible = true }
+            .get(activity) as java.util.concurrent.ExecutorService
+        val scanning = java.util.concurrent.CountDownLatch(1)
+        val cancelled = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        var destroyed = false
+        try {
+            com.roadconquest.app.RestoreActivity::class.java
+                .getDeclaredMethod("restore", DataImporter.Prepared::class.java)
+                .apply { isAccessible = true }.invoke(activity, backup)
+            worker.submit(Runnable {}).get(15, java.util.concurrent.TimeUnit.SECONDS)
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+
+            // Start another preview after the failed restore. It has not been
+            // confirmed and must remain cancellable when the screen closes.
+            val open: () -> java.io.InputStream = {
+                object : java.io.InputStream() {
+                    override fun read(): Int {
+                        scanning.countDown()
+                        try { release.await() }
+                        catch (_: InterruptedException) {
+                            cancelled.countDown()
+                            throw java.io.IOException("Preview cancelled")
+                        }
+                        return -1
+                    }
+                }
+            }
+            com.roadconquest.app.RestoreActivity::class.java
+                .getDeclaredMethod("validate", Function0::class.java)
+                .apply { isAccessible = true }.invoke(activity, open)
+            assertTrue(scanning.await(5, java.util.concurrent.TimeUnit.SECONDS))
+            controller.pause().stop().destroy()
+            destroyed = true
+            assertTrue("Closing an unconfirmed preview must interrupt its scan",
+                cancelled.await(5, java.util.concurrent.TimeUnit.SECONDS))
+        } finally {
+            release.countDown()
+            if (!destroyed) controller.pause().stop().destroy()
+            worker.shutdownNow()
+            worker.awaitTermination(15, java.util.concurrent.TimeUnit.SECONDS)
+            backup.close()
+        }
+    }
+
     @Test fun rejectsPreparedBackupAfterDeletionAndCannotResurrectOldProgress() {
         val bytes = export()
-        DataImporter.prepare(context, ByteArrayInputStream(bytes)).use { backup ->
+        prepareFixture(context, ByteArrayInputStream(bytes)).use { backup ->
             TrackingRepository(context).clearHistory()
             Prefs.setManualOnly(context, false)
             Prefs.setTrackingPaused(context, true)
@@ -240,7 +366,7 @@ class DataImporterTest {
         val marker = java.io.File(target, "existing-recovery")
         marker.writeText("preserve")
         try {
-            DataImporter.prepare(context, ByteArrayInputStream(original)).use { backup ->
+            prepareFixture(context, ByteArrayInputStream(original)).use { backup ->
                 assertTrue(runCatching { DataImporter.restore(context, backup) }.isFailure)
             }
             assertEquals(before, entries(export()).filterKeys { it != "metadata.json" })
@@ -258,7 +384,7 @@ class DataImporterTest {
         AppDatabase.get(context).writableDatabase.execSQL(
             "UPDATE sqlite_sequence SET seq = ? WHERE name = 'track_points'", arrayOf(Long.MAX_VALUE)
         )
-        DataImporter.prepare(context, ByteArrayInputStream(bytes)).use { DataImporter.restore(context, it) }
+        prepareFixture(context, ByteArrayInputStream(bytes)).use { DataImporter.restore(context, it) }
         val fresh = TrackingRepository(context)
         assertEquals(originalId + 1, fresh.insertLocation(fix(1_005_000, -74.0001)))
         assertEquals(2L, fresh.getSummary().trackPointCount)
@@ -273,7 +399,7 @@ class DataImporterTest {
         // first-unlock times were introduced in format 11.
         values["explored_grid.csv"] = values.getValue("explored_grid.csv")
             .trimEnd('\n').lineSequence().joinToString("\n") { it.substringBeforeLast(',') } + "\n"
-        DataImporter.prepare(context, ByteArrayInputStream(repack(values))).use { DataImporter.restore(context, it) }
+        prepareFixture(context, ByteArrayInputStream(repack(values))).use { DataImporter.restore(context, it) }
         assertEquals(values.getValue("place_candidates.csv"), entries(export()).getValue("place_candidates.csv"))
     }
 
@@ -286,7 +412,7 @@ class DataImporterTest {
             .put("schema_version", 10).toString()
         values["explored_grid.csv"] = values.getValue("explored_grid.csv")
             .trimEnd('\n').lineSequence().joinToString("\n") { it.substringBeforeLast(',') } + "\n"
-        DataImporter.prepare(context, ByteArrayInputStream(repack(values))).use {
+        prepareFixture(context, ByteArrayInputStream(repack(values))).use {
             DataImporter.restore(context, it)
         }
         val db = AppDatabase.get(context).readableDatabase
@@ -300,7 +426,7 @@ class DataImporterTest {
         TrackingRepository(context).recordExploredGridCell(fix(1_000_000L))
         val bytes = export()
         TrackingRepository(context).clearHistory()
-        DataImporter.prepare(context, ByteArrayInputStream(bytes)).use {
+        prepareFixture(context, ByteArrayInputStream(bytes)).use {
             DataImporter.restore(context, it)
         }
         val db = AppDatabase.get(context).readableDatabase
@@ -312,7 +438,7 @@ class DataImporterTest {
 
     @Test fun restoreWaitingForAnExportDoesNotDeadlockOrdinaryHistoryReaders() {
         TrackingRepository(context).insertLocation(fix(1_000_000))
-        DataImporter.prepare(context, ByteArrayInputStream(export())).use { backup ->
+        prepareFixture(context, ByteArrayInputStream(export())).use { backup ->
             val reader = TrackingRepository(context)
             val writing = java.util.concurrent.CountDownLatch(1)
             val finishExport = java.util.concurrent.CountDownLatch(1)

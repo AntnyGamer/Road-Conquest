@@ -176,6 +176,25 @@ class OptionalServicesTest {
         assertTrue(OptionalNotifications.friendsEnabled(app))
     }
 
+    @Test fun lateRegistrationOfOldChoicesCannotHideANewerNotificationChoice() {
+        val now = 1_800_000_000_000L
+        val binding = "same-login-binding"
+        val id = "same-installation-hash"
+        val choices = listOf(false to true, true to false, true to true)
+        for (old in choices) for (current in choices) {
+            // Simulate the old HTTP response updating the cache AFTER the UI
+            // invalidated it. A fresh timestamp must not hide changed choices.
+            val saved = OptionalNotifications.registrationCacheKey(binding, old.first, old.second)
+            val desired = OptionalNotifications.registrationCacheKey(binding, current.first, current.second)
+            assertEquals(old != current, OptionalNotifications.needsDeviceRegistration(
+                id, saved, now, id, desired, now
+            ))
+        }
+        // Existing caches without consent bits refresh once on upgrade.
+        assertTrue(OptionalNotifications.needsDeviceRegistration(id, binding, now, id,
+            OptionalNotifications.registrationCacheKey(binding, true, true), now))
+    }
+
     @Test fun queuedMessagesCannotDisplayAfterConsentOrAccountIsCleared() {
         val app = RuntimeEnvironment.getApplication()
         val prefs = app.getSharedPreferences("roadconquest_notifications", 0)

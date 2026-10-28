@@ -895,12 +895,16 @@ internal object PlaceGeometry {
         if (ring.length() < 3) return false
         var inside = false
         val last = ring.optJSONArray(ring.length() - 1) ?: return false
-        var x1 = relativeLongitude(last.optDouble(0, Double.NaN), longitude)
+        var previousLongitude = last.optDouble(0, Double.NaN)
+        var x1 = relativeLongitude(previousLongitude, longitude)
         var y1 = last.optDouble(1, Double.NaN)
         if (!x1.isFinite() || !y1.isFinite()) return false
         for (i in 0 until ring.length()) {
             val current = ring.optJSONArray(i) ?: return false
-            val x2 = relativeLongitude(current.optDouble(0, Double.NaN), longitude)
+            val currentLongitude = current.optDouble(0, Double.NaN)
+            // Unwrap adjacent vertices together. Wrapping each vertex around the
+            // query point can turn a small polygon into its opposite-world image.
+            val x2 = x1 + relativeLongitude(currentLongitude, previousLongitude)
             val y2 = current.optDouble(1, Double.NaN)
             if (!x2.isFinite() || !y2.isFinite()) return false
             // Exact boundary points count as contained to avoid disappearing towns
@@ -920,6 +924,7 @@ internal object PlaceGeometry {
             // or date-line modulo is needed for its longitude and latitude.
             x1 = x2
             y1 = y2
+            previousLongitude = currentLongitude
         }
         return inside
     }

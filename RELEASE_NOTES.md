@@ -1,3 +1,19 @@
+# Road Conquest 1.0 Beta 65
+
+## What's new since Beta 64
+
+- **Protected progress backups:** New portable exports are signed against the exact ZIP contents after official Google Play app/device verification. Tampered, repacked and unsigned imported archives are rejected before restoring data. Private same-installation recovery copies use a separate local key.
+- **Import and weekly-goal accuracy:** Restored GPS, roads and places remain excluded from new weekly challenge credit, including when later matched or discovered. New live driving retains eligible progress when matched alongside restored history.
+- **Missing turns and place boundaries:** Recover valid zero-length Geoapify junction waypoints without inflating driving credit, and correct longitude-unwrapping so polygons cannot incorrectly contain points on the other side of the world.
+- **Forum Plus and account reliability:** Shorter receipt transactions keep fresh Google verification, rollback and account isolation. Malformed account/provider replies are rejected; GIF provider failures remain retryable.
+- **Performance and correctness:** Fewer repeated map recovery reads, GPS queries, temporary matching and fog calculations; fix first-discovery road counting, registration-cache notification choices and native device-test focus timing.
+- **Dependencies:** Firebase BoM 35.1.0 and OkHttp/MockWebServer 5.5.1.
+- **Compatibility:** Android 12+, versionCode **91**, versionName **1.0-beta.65**. The application ID and release signing identity are unchanged. Google Play reserves uploaded version codes, so confirm 91 has not been used.
+
+**Required before distributing this build:** Deploy the tested account-function backend and configure a dedicated P-256 `BACKUP_SIGNING_PRIVATE_KEY` together with production Play Integrity credentials. Preserve previously trusted backup public keys on any future signing-key rotation. The Android application now rejects unsigned imports and portable backup export deliberately fails closed until the signer is ready. **Do not treat passing Android/GitHub checks as confirmation that the live Neon/Cloudflare backend has been deployed.** Verify `GET /health/live`, `GET /v1/backups` and an actual Play-installed export/restore before general distribution. Recheck Play Console's unused code 91 and separately upload the signed AAB; a GitHub Release does not publish to Play automatically. Real driving, physical-device backup transfer, and actual Play purchase/refund behavior remain unverified.
+
+---
+
 # Road Conquest 1.0 Beta 64
 
 ## What's new since Beta 63

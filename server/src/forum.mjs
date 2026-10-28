@@ -48,15 +48,19 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
 
   // Column lists are fixed internal SQL, never request input.
   async function profile(db, userId, lock = false, columns = `violations,muted_until,banned,plus_active,
-      last_post_at + INTERVAL '10 minutes' AS next_post_at`) {
+      last_post_at + INTERVAL '10 minutes' AS next_post_at`, parameters = []) {
     const query = `SELECT ${columns} FROM forum_profiles
       WHERE user_id=$1${lock ? ' FOR UPDATE' : ''}`;
-    let { rows } = await db.query(query, [userId]);
+    const values = [userId, ...parameters];
+    let { rows } = await db.query(query, values);
     if (rows[0]) return rows[0];
-    // Missing profiles are uncommon. Insert only on first participation, then
-    // re-read so competing instances still acquire the requested row lock.
-    await db.query('INSERT INTO forum_profiles(user_id) VALUES($1) ON CONFLICT DO NOTHING', [userId]);
-    ({ rows } = await db.query(query, [userId]));
+    // Our inserted row is already locked in a transaction. Return its exact
+    // projection without another round trip. A competing insert still needs
+    // the fresh read below, including FOR UPDATE when the caller requested it.
+    ({ rows } = await db.query(`INSERT INTO forum_profiles(user_id)
+      SELECT id FROM users WHERE id=$1 ON CONFLICT DO NOTHING RETURNING ${columns}`, values));
+    if (rows[0]) return rows[0];
+    ({ rows } = await db.query(query, values));
     if (!rows[0]) throw new EvidenceError('Authentication required.', 401);
     return rows[0];
   }
@@ -80,22 +84,25 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
     } catch (error) { await db.query('ROLLBACK').catch(() => {}); throw error; }
     finally { db.release(); }
   }
-  async function strike(db, userId, row) {
-    const penalty = moderationPenalty(row.violations);
-    await db.query('UPDATE forum_profiles SET violations=$2,muted_until=$3,banned=$4 WHERE user_id=$1',
-      [userId, penalty.violations, penalty.muted_until, penalty.banned]);
-    return penalty;
-  }
   function postResult(row, current) {
     return { id: row.id, removed: row.state === 'removed', deleted: row.state === 'deleted',
       violations: current.violations, banned: current.banned, muted_until: current.muted_until,
       next_post_at: current.next_post_at,
       message: row.state === 'removed' ? 'This post was removed for violating the community rules.' : null };
   }
-  async function existing(db, userId, input) {
-    const { rows } = await db.query('SELECT id,state,content_hash FROM forum_posts WHERE user_id=$1 AND request_id=$2', [userId, input.requestId]);
+  async function existing(db, userId, input, withProfile = false) {
+    const { rows } = await db.query(withProfile ? `SELECT p.id,p.state,p.content_hash,
+      f.violations,f.banned,f.muted_until,f.last_post_at + INTERVAL '10 minutes' AS next_post_at
+      FROM forum_posts p LEFT JOIN forum_profiles f ON f.user_id=p.user_id
+      WHERE p.user_id=$1 AND p.request_id=$2`
+      : 'SELECT id,state,content_hash FROM forum_posts WHERE user_id=$1 AND request_id=$2', [userId, input.requestId]);
     if (rows[0] && rows[0].content_hash !== input.contentHash) throw new EvidenceError('This submission ID was already used for another post.', 409);
     return rows[0];
+  }
+  function enforcePurchase(userId, current, prior) {
+    if (prior && String(prior.user_id) !== String(userId)) throw new EvidenceError('Purchase belongs to another account.', 403);
+    if (!prior && current.banned) throw new EvidenceError('New Forum Plus purchases are unavailable for banned accounts.', 403);
+    if (!prior && !moderate) throw new EvidenceError('New Forum Plus purchases are temporarily unavailable.', 503);
   }
 
   return {
@@ -146,8 +153,10 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
       const accountPrefix = user.id + ':';
       const key = accountPrefix + input.requestId + ':' + input.contentHash;
       if (pendingPosts.has(key)) return pendingPosts.get(key);
-      const prior = await existing(pool, user.id, input);
-      if (prior) return postResult(prior, await profile(pool, user.id));
+      // Committed retries need the receipt and current penalties, not a new
+      // moderation call. Read both together, preserving native timestamp types.
+      const prior = await existing(pool, user.id, input, true);
+      if (prior) return postResult(prior, prior.violations != null ? prior : await profile(pool, user.id));
       if (!moderate) throw new EvidenceError('Community posting is temporarily unavailable.', 503);
       const state = await profile(pool, user.id);
       // The first lookup can precede another instance's commit while this profile
@@ -264,10 +273,17 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
         const current = await profile(db,found.rows[0].user_id,true,'violations');
         const { rows } = await db.query('SELECT user_id,state FROM forum_posts WHERE id=$1 FOR UPDATE', [postId]);
         if (remove && rows[0].state === 'visible') {
-          await strike(db, rows[0].user_id, current);
-          await db.query("UPDATE forum_posts SET state='removed',body='',gif_url=NULL,gif_hash=NULL WHERE id=$1", [postId]);
-        }
-        await db.query('UPDATE forum_reports SET reviewed=TRUE WHERE post_id=$1 AND NOT reviewed', [postId]);
+          const penalty = moderationPenalty(current.violations);
+          // Both profile and post are already locked in the original order.
+          // Keep the strike, content erasure and report review atomic while
+          // avoiding two extra round trips with these locks held.
+          await db.query(`WITH penalized AS (
+            UPDATE forum_profiles SET violations=$3,muted_until=$4,banned=$5 WHERE user_id=$2
+          ), removed AS (
+            UPDATE forum_posts SET state='removed',body='',gif_url=NULL,gif_hash=NULL WHERE id=$1
+          ) UPDATE forum_reports SET reviewed=TRUE WHERE post_id=$1 AND NOT reviewed`,
+          [postId, rows[0].user_id, penalty.violations, penalty.muted_until, penalty.banned]);
+        } else await db.query('UPDATE forum_reports SET reviewed=TRUE WHERE post_id=$1 AND NOT reviewed', [postId]);
         return { ok: true };
       });
     },
@@ -282,36 +298,55 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
     },
     async purchase(user, token) {
       if (!verifyPurchase || !verifyWebhook) throw new EvidenceError('Forum Plus purchases are temporarily unavailable.', 503);
-      if (typeof token !== 'string' || !token.length || token.length > 4096) throw new EvidenceError('Invalid purchase token.', 400);
+      if (typeof token !== 'string' || !token.length || token.length > 4096 || /[\r\n]/.test(token)) throw new EvidenceError('Invalid purchase token.', 400);
       const digest = purchaseHash(token);
-      return transact(async db => {
-        const current = await profile(db,user.id,true,'banned');
-        const prior = await db.query('SELECT user_id FROM forum_purchases WHERE token_hash=$1 FOR UPDATE', [digest]);
-        if (prior.rowCount && String(prior.rows[0].user_id) !== String(user.id)) throw new EvidenceError('Purchase belongs to another account.', 403);
-        if (current.banned && !prior.rowCount) throw new EvidenceError('New Forum Plus purchases are unavailable for banned accounts.', 403);
-        if (!moderate && !prior.rowCount) throw new EvidenceError('New Forum Plus purchases are temporarily unavailable.', 503);
-        // Serialize verification with refunds/restores so an older response cannot overwrite a refund.
+      for (let attempt = 0; attempt < 3; attempt++) {
+        // Read only ownership and MVCC versions, never the encrypted token.
+        // Establish a profile before Google so even an inactive first check can
+        // invalidate older in-flight results without claiming an unverified token.
+        const snapshot = await profile(pool,user.id,false, `banned,xmin::text AS version,
+          (SELECT json_build_object('user_id',p.user_id::text,'version',p.xmin::text)
+           FROM forum_purchases p WHERE p.token_hash=$2) AS receipt`, [digest]);
+        enforcePurchase(user.id, snapshot, snapshot.receipt);
         const active = await verifyPurchase(token, binding(user.id));
-        // Existing receipts are already encrypted. Refresh their verified state
-        // without encrypting/transferring a replacement the conflict path discards.
-        const newPurchase = active && !prior.rowCount;
-        // A writable CTE's table scan sees the statement's original snapshot.
-        // Use the freshly verified state for this token and scan only OTHER
-        // receipts, so refunds/restores and multiple purchases stay accurate.
-        const { rows } = await db.query(`WITH recorded AS (${newPurchase
-          ? `INSERT INTO forum_purchases(token_hash,user_id,encrypted_token,active)
-            VALUES($1,$2,$3,TRUE) ON CONFLICT(token_hash) DO UPDATE SET active=TRUE,checked_at=CURRENT_TIMESTAMP`
-          : 'UPDATE forum_purchases SET active=$3,checked_at=CURRENT_TIMESTAMP WHERE token_hash=$1 AND user_id=$2'}
-        ), desired AS (
-          SELECT ${newPurchase ? '$4' : '$3'}::boolean OR EXISTS(SELECT 1 FROM forum_purchases
-            WHERE user_id=$2 AND token_hash<>$1 AND active) AS owned
-        ), changed AS (
-          UPDATE forum_profiles SET plus_active=desired.owned FROM desired
-          WHERE user_id=$2 AND plus_active IS DISTINCT FROM desired.owned RETURNING 1
-        ) SELECT desired.owned AS plus_active FROM desired LEFT JOIN changed ON TRUE`,
-        newPurchase ? [digest,user.id,codec.seal(token),active] : [digest,user.id,active]);
-        return { plus: rows[0].plus_active };
-      });
+        if (typeof active !== 'boolean') throw new EvidenceError('Purchase verification is temporarily unavailable.', 503);
+        const result = await transact(async db => {
+          const current = await profile(db,user.id,true,'banned,xmin::text AS version');
+          const { rows: [prior] } = await db.query('SELECT user_id,xmin::text AS version FROM forum_purchases WHERE token_hash=$1 FOR UPDATE', [digest]);
+          enforcePurchase(user.id, current, prior);
+          // Another instance may have committed a refund/restore while Google was
+          // responding. Discard that stale verdict and reverify OUTSIDE the lock.
+          if ((prior?.version ?? null) !== (snapshot.receipt?.version ?? null) ||
+              (!prior && current.version !== snapshot.version)) return null;
+          // Existing receipts are already encrypted. Refresh their verified state
+          // without encrypting/transferring a replacement the conflict path discards.
+          const newPurchase = active && !prior;
+          // A writable CTE's table scan sees the statement's original snapshot.
+          // Use the freshly verified state for this token and scan only OTHER
+          // receipts, so refunds/restores and multiple purchases stay accurate.
+          // An inactive, unseen token cannot reserve an owner. Touch the profile
+          // in that case so its MVCC version invalidates older first-check results.
+          const { rows } = await db.query(`WITH recorded AS (${newPurchase
+            ? `INSERT INTO forum_purchases(token_hash,user_id,encrypted_token,active)
+              VALUES($1,$2,$3,TRUE) ON CONFLICT(token_hash) DO NOTHING RETURNING 1`
+            : 'UPDATE forum_purchases SET active=$3,checked_at=CURRENT_TIMESTAMP WHERE token_hash=$1 AND user_id=$2'}
+          ), desired AS (
+            SELECT ${newPurchase ? '$4' : '$3'}::boolean OR EXISTS(SELECT 1 FROM forum_purchases
+              WHERE user_id=$2 AND token_hash<>$1 AND active) AS owned
+            ${newPurchase ? 'WHERE EXISTS(SELECT 1 FROM recorded)' : ''}
+          ), changed AS (
+            UPDATE forum_profiles SET plus_active=desired.owned FROM desired
+            WHERE user_id=$2 ${!prior && !active ? '' : 'AND plus_active IS DISTINCT FROM desired.owned'} RETURNING 1
+          ) SELECT desired.owned AS plus_active FROM desired LEFT JOIN changed ON TRUE`,
+          newPurchase ? [digest,user.id,codec.seal(token),active] : [digest,user.id,active]);
+          // A different account can race to insert a previously unseen token.
+          // Never grant access from a conflict without checking its owner again.
+          if (!rows.length) return null;
+          return { plus: rows[0].plus_active };
+        });
+        if (result) return result;
+      }
+      throw new EvidenceError('Purchase state changed during verification. Please try again.', 503);
     },
     async webhook(authorization, body) {
       if (!verifyWebhook || !await verifyWebhook(authorization)) throw new EvidenceError('Invalid notification identity.', 401);

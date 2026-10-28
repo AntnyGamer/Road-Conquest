@@ -36,7 +36,8 @@ data class PendingPlaceCandidate(
     val latitude: Double,
     val longitude: Double,
     val visitedAt: Long,
-    val attempts: Int
+    val attempts: Int,
+    val weeklyEligible: Boolean = true
 )
 
 data class StartingLocation(
@@ -189,7 +190,7 @@ class ProgressionRepository(context: Context) {
         db.beginTransaction()
         try {
             db.rawQuery(
-                """SELECT id, latitude, longitude, timestamp_ms FROM track_points
+                """SELECT id, latitude, longitude, timestamp_ms, weekly_eligible FROM track_points
                    WHERE id < ? AND timestamp_ms >= ? AND accuracy_m BETWEEN 0.01 AND 25
                    ORDER BY id DESC LIMIT ?""",
                 arrayOf(nextId.toString(), baselineTime.toString(), limit.toString())
@@ -198,7 +199,7 @@ class ProgressionRepository(context: Context) {
                     examined++
                     next = cursor.getLong(0)
                     if (insertPlaceCandidate(db, cursor.getDouble(1), cursor.getDouble(2),
-                            cursor.getLong(3))) inserted++
+                            cursor.getLong(3), cursor.getInt(4) == 1)) inserted++
                 }
             }
             // No eligible rows remain in the old history; stop scanning on later resumes.
@@ -222,7 +223,8 @@ class ProgressionRepository(context: Context) {
     }
 
     /** V2 keys cannot collide with old 2 km keys while pending old visits resolve. */
-    private fun insertPlaceCandidate(db: SQLiteDatabase, latitude: Double, longitude: Double, time: Long): Boolean {
+    private fun insertPlaceCandidate(db: SQLiteDatabase, latitude: Double, longitude: Double, time: Long,
+                                     weeklyEligible: Boolean = true): Boolean {
         if (!latitude.isFinite() || !longitude.isFinite() ||
             latitude !in -85.0..85.0 || longitude !in -180.0..180.0) return false
         val radius = 6_378_137.0
@@ -240,6 +242,7 @@ class ProgressionRepository(context: Context) {
             put("first_seen_at", time)
             put("attempts", 0)
             put("next_attempt_ms", 0)
+            put("weekly_eligible", if (weeklyEligible) 1 else 0)
         }
         if (db.insertWithOnConflict("place_candidates", null, values, SQLiteDatabase.CONFLICT_IGNORE) != -1L) {
             return true
@@ -308,7 +311,8 @@ class ProgressionRepository(context: Context) {
 
     private fun candidateFromCursor(cursor: android.database.Cursor) = PendingPlaceCandidate(
         cursor.getLong(0), cursor.getLong(1), cursor.getDouble(2),
-        cursor.getDouble(3), cursor.getLong(4), cursor.getInt(5)
+        cursor.getDouble(3), cursor.getLong(4), cursor.getInt(5),
+        cursor.getInt(cursor.getColumnIndexOrThrow("weekly_eligible")) == 1
     )
 
     fun pendingPlaceCandidates(
@@ -325,7 +329,7 @@ class ProgressionRepository(context: Context) {
             "place_candidates",
             arrayOf(
                 "cell_x", "cell_y", "latitude", "longitude",
-                "first_seen_at", "attempts", "next_attempt_ms"
+                "first_seen_at", "attempts", "next_attempt_ms", "weekly_eligible"
             ),
             "cell_x = ? AND cell_y = ?",
             arrayOf(BASELINE_CANDIDATE_X.toString(), BASELINE_CANDIDATE_Y.toString()),
@@ -347,7 +351,7 @@ class ProgressionRepository(context: Context) {
         val result = ArrayList<PendingPlaceCandidate>(limit)
         db.query(
             "place_candidates",
-            arrayOf("cell_x", "cell_y", "latitude", "longitude", "first_seen_at", "attempts"),
+            arrayOf("cell_x", "cell_y", "latitude", "longitude", "first_seen_at", "attempts", "weekly_eligible"),
             "next_attempt_ms <= ? AND NOT (cell_x = ? AND cell_y = ?)",
             arrayOf(
                 nowMillis.toString(),
@@ -402,11 +406,11 @@ class ProgressionRepository(context: Context) {
                     if (baseline) {
                         // The exact first live fix after install/reset defines the zero-point
                         // town/state/country. It is visible to overlays but earns no points.
-                        insertVisitedPlace(db, discovery)
+                        insertVisitedPlace(db, discovery, candidate.weeklyEligible)
                         putCounter(db, baselineKey(discovery), 1L)
                         continue
                     }
-                    val inserted = insertVisitedPlace(db, discovery)
+                    val inserted = insertVisitedPlace(db, discovery, candidate.weeklyEligible)
                     if (inserted) {
                         awardOnce(
                             db,
@@ -894,7 +898,7 @@ class ProgressionRepository(context: Context) {
         return text to ""
     }
 
-    private fun insertVisitedPlace(db: SQLiteDatabase, discovery: PlaceDiscovery): Boolean {
+    private fun insertVisitedPlace(db: SQLiteDatabase, discovery: PlaceDiscovery, weeklyEligible: Boolean = true): Boolean {
         val inserted = db.insertWithOnConflict(
             "visited_places", null,
             ContentValues().apply {
@@ -906,6 +910,7 @@ class ProgressionRepository(context: Context) {
                 put("first_visited_at", discovery.visitedAt)
                 put("latitude", discovery.latitude)
                 put("longitude", discovery.longitude)
+                put("weekly_eligible", if (weeklyEligible) 1 else 0)
             },
             SQLiteDatabase.CONFLICT_IGNORE
         ) != -1L
@@ -919,8 +924,9 @@ class ProgressionRepository(context: Context) {
                         put("first_visited_at", discovery.visitedAt)
                         put("latitude", discovery.latitude)
                         put("longitude", discovery.longitude)
+                        if (!weeklyEligible) put("weekly_eligible", 0)
                     },
-                    "kind = ? AND place_key = ? AND first_visited_at > ?",
+                    "kind = ? AND place_key = ? AND first_visited_at " + (if (weeklyEligible) "> ?" else ">= ?"),
                     arrayOf(discovery.kind.name, discovery.key, discovery.visitedAt.toString())
                 )
             }

@@ -44,7 +44,7 @@ export function createForumPurchaseVerifier(raw, request = fetch, now = Date.now
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion })
       }), 32768);
-      if (typeof reply.access_token !== 'string' || !Number.isFinite(reply.expires_in) || reply.expires_in < 120) {
+      if (typeof reply?.access_token !== 'string' || !reply.access_token || !Number.isFinite(reply.expires_in) || reply.expires_in < 120) {
         throw new EvidenceError('Purchase verification is temporarily unavailable.', 503);
       }
       cached = { token: reply.access_token, until: now() + (Math.min(reply.expires_in, 3600) - 60) * 1000 };

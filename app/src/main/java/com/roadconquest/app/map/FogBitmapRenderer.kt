@@ -347,14 +347,16 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
             var index = end + step
             var walked = 0.0
             while (index >= 0 && index + 1 < coordinates.size) {
-                walked += metersBetween(
+                val edgeDistance = metersBetween(
                     coordinates[previous], coordinates[previous + 1],
                     coordinates[index], coordinates[index + 1]
                 )
-                if (metersBetween(
+                walked += edgeDistance
+                val endpointDistance = if (previous == end) edgeDistance else metersBetween(
                     coordinates[end], coordinates[end + 1],
                     coordinates[index], coordinates[index + 1]
-                ) >= MIN_JUNCTION_DIRECTION_M) {
+                )
+                if (endpointDistance >= MIN_JUNCTION_DIRECTION_M) {
                     // Preserve the previous behavior when the immediate edge is already long.
                     if (index == end + step || walked <= MAX_JUNCTION_TANGENT_LOOKBACK_M) return index
                     return null

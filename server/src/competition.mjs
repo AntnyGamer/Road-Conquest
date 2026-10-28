@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { createIntegrityVerifier } from "./integrity.mjs";
+import { createIntegrityVerifier, playIntegrityConfig } from "./integrity.mjs";
 import { EvidenceError, evidenceHash, parseEvidence, requireFreshFixes } from "./scoring.mjs";
 
 import { GRID_ID, scoreCells } from "./cells.mjs";
@@ -7,18 +7,8 @@ import { createCheckpointCodec } from "./checkpoints.mjs";
 
 export function competitionConfig(env) {
   if (env.LEADERBOARDS_ENABLED !== "1") return null;
-  const config = {
-    dataset: GRID_ID, credentialsFile: env.PLAY_SERVICE_ACCOUNT_FILE, credentialsJson: env.PLAY_SERVICE_ACCOUNT_JSON,
-    packageName: "com.roadconquest.app", certificates: (env.PLAY_CERTIFICATES || "").split(",").filter(Boolean),
-    versions: (env.PLAY_VERSION_CODES || "").split(",").filter(Boolean),
-    cloudProject: env.PLAY_CLOUD_PROJECT_NUMBER,
-    checkpointKey: env.VERIFIED_EVIDENCE_KEY
-  };
-  if ((!config.credentialsFile && !config.credentialsJson) ||
-      !config.certificates.length || config.certificates.some(c => !/^[A-Za-z0-9_-]{43}$/u.test(c)) ||
-      !config.versions.length || config.versions.some(v => !/^[1-9][0-9]*$/u.test(v) || !Number.isSafeInteger(Number(v)) || Number(v) < 71) ||
-      !/^[1-9][0-9]{5,14}$/u.test(config.cloudProject || "") ||
-      typeof config.checkpointKey !== "string" || !/^[A-Za-z0-9_-]{43}$/u.test(config.checkpointKey) ||
+  const config = { ...playIntegrityConfig(env), dataset: GRID_ID, checkpointKey: env.VERIFIED_EVIDENCE_KEY };
+  if (typeof config.checkpointKey !== "string" || !/^[A-Za-z0-9_-]{43}$/u.test(config.checkpointKey) ||
       Buffer.from(config.checkpointKey, "base64url").length !== 32) {
     throw new Error("Leaderboards require checkpoint encryption and production Play Integrity configuration");
   }

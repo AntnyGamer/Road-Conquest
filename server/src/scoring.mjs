@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isUtf8 } from "node:buffer";
 
 export class EvidenceError extends Error {
   constructor(message, status = 422) { super(message); this.status = status; }
@@ -103,7 +104,8 @@ export async function boundedJson(response, limit = 1024 * 1024) {
   try {
     const bytes = chunks.length === 1
       ? Buffer.from(chunks[0].buffer, chunks[0].byteOffset, chunks[0].byteLength)
-      : Buffer.concat(chunks);
+      : Buffer.concat(chunks, size);
+    if (!isUtf8(bytes)) throw new Error("Invalid UTF-8");
     return JSON.parse(bytes.toString("utf8"));
   }
   catch { throw new EvidenceError("Invalid verification response.", 503); }

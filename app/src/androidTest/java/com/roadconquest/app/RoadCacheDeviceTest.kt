@@ -1,6 +1,7 @@
 package com.roadconquest.app
 
 import android.Manifest
+import android.app.ActivityManager
 import android.os.Build
 import android.os.SystemClock
 import androidx.lifecycle.Lifecycle
@@ -15,6 +16,8 @@ import com.roadconquest.app.map.MapRenderer
 import com.roadconquest.app.map.OverlayRoads
 import com.roadconquest.app.util.Prefs
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -102,11 +105,32 @@ class RoadCacheDeviceTest {
                 }
 
                 awaitRoadCount(1, "Initial road cache loads")
-                scenario.moveToState(Lifecycle.State.CREATED)
+                fun awaitState(expected: Lifecycle.State) {
+                    val deadline = SystemClock.elapsedRealtime() + 10_000L
+                    while (scenario.state != expected && SystemClock.elapsedRealtime() < deadline) {
+                        SystemClock.sleep(50)
+                    }
+                    assertEquals("The map must reach the requested lifecycle state", expected, scenario.state)
+                }
+                // ActivityScenario stops via a separate EmptyActivity. Its delayed
+                // cleanup can resume our map on Android 15 before the stop waiter
+                // observes it. Background the real task and bring that same task
+                // back, preserving the viewport and exercising actual onStop/onStart.
+                lateinit var mapTask: ActivityManager.AppTask
+                scenario.onActivity { activity ->
+                    mapTask = activity.getSystemService(ActivityManager::class.java).appTasks
+                        .single { it.taskInfo?.taskId == activity.taskId }
+                    assertTrue("The map task must move to the background", activity.moveTaskToBack(true))
+                }
+                awaitState(Lifecycle.State.CREATED)
+                assertFalse("The road receiver must be unregistered while stopped", MainActivity.trackingReceiverRegistered)
                 repository.upsertRoads(listOf(MatchedRoad(
                     "While stopped", "[[-122.4200,37.7751],[-122.4188,37.7751]]", 3L, 4L, 100.0
                 )))
-                scenario.moveToState(Lifecycle.State.RESUMED)
+                assertFalse("The road must change while the receiver remains stopped", MainActivity.trackingReceiverRegistered)
+                mapTask.moveToFront()
+                awaitState(Lifecycle.State.RESUMED)
+                assertTrue("Resume must register the road receiver again", MainActivity.trackingReceiverRegistered)
                 awaitRoadCount(2, "Resume reloads roads changed while receiver was stopped")
             }
         } finally {

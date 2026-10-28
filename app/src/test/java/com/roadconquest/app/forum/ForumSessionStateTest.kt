@@ -35,6 +35,15 @@ class ForumSessionStateTest {
         assertNull(ForumSessionState.draftOwner(null))
     }
 
+    @Test fun draftOwnerKeepsTheExistingSha256PrefixIncludingLeadingZeroes() {
+        for ((token, expected) in listOf(
+            "" to "e3b0c44298fc1c149afbf4c8996fb924",
+            "abc" to "ba7816bf8f01cfea414140de5dae2223",
+            "é🚗" to "bf607ab6ebd291b9bf406aec5147f136",
+            "session-29" to "001bc293ea681d91f09d9e0a179fc9ab"
+        )) assertEquals(expected, ForumSessionState.draftOwner(token))
+    }
+
     @Test fun aPurchaseCheckBelongsOnlyToItsOriginalAccount() {
         val state = ForumSessionState()
         assertFalse(state.switchTo("account-a"))

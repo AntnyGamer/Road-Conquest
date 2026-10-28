@@ -116,6 +116,84 @@ test('FCM uses scoped OAuth, private data-only payloads, shared refresh, validat
   assert.throws(() => createFcmSender(JSON.stringify({ ...account, project_id: 'other' })), /Invalid/);
 });
 
+test('malformed push errors are unavailable and never treated as invalid registrations', async () => {
+  const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const account = { project_id: 'roadconquest-9f0eb', client_email: 'errors@roadconquest-9f0eb.iam.gserviceaccount.com',
+    private_key: privateKey.export({ type: 'pkcs8', format: 'pem' }) };
+  let error, auth = 0;
+  const sender = createFcmSender(JSON.stringify(account), async url => {
+    if (url === 'https://oauth2.googleapis.com/token') {
+      auth++;
+      return Response.json({ access_token: 'test-access', expires_in: 3600 });
+    }
+    return error instanceof Uint8Array ? new Response(error, { status: 503 }) : Response.json(error, { status: 503 });
+  });
+  for (const body of [null, {}, { error: { details: {} } }, { error: { details: [null, 1, {}] } }]) {
+    error = body;
+    assert.equal(await sender('test', randomUUID()), 'unavailable');
+  }
+  error = Buffer.concat([Buffer.from('{"error":{"message":"'), Buffer.from([0xc3, 0x28]),
+    Buffer.from('","details":[{"errorCode":"UNREGISTERED"}]}}')]);
+  assert.equal(await sender('test', randomUUID()), 'unavailable', 'Corrupt UTF-8 must not revoke a device');
+  error = { error: { details: [null, { errorCode: 'UNREGISTERED' }] } };
+  assert.equal(await sender('test', randomUUID()), 'unregistered');
+  assert.equal(auth, 1, 'Malformed delivery errors do not discard a valid OAuth credential');
+});
+
+test('null and empty push OAuth replies do not cache credentials or send notifications', async () => {
+  const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const account = { project_id: 'roadconquest-9f0eb', client_email: 'oauth@roadconquest-9f0eb.iam.gserviceaccount.com',
+    private_key: privateKey.export({ type: 'pkcs8', format: 'pem' }) };
+  for (const invalid of [null, { access_token: '', expires_in: 3600 }]) {
+    let auth = 0, sends = 0;
+    const sender = createFcmSender(JSON.stringify(account), async url => {
+      if (url === 'https://oauth2.googleapis.com/token') return Response.json(++auth === 1
+        ? invalid : { access_token: 'recovered', expires_in: 3600 });
+      sends++;
+      return Response.json({ name: 'test-message' });
+    });
+    await assert.rejects(sender('test', randomUUID()), /Invalid notification authorization/);
+    assert.equal(sends, 0);
+    assert.equal(await sender('test', randomUUID()), 'sent');
+    assert.equal(auth, 2);
+  }
+});
+
+test('oversized push authorization is not cached and later authorization can recover', async () => {
+  const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const account = { project_id: 'roadconquest-9f0eb', client_email: 'bounded@roadconquest-9f0eb.iam.gserviceaccount.com',
+    private_key: privateKey.export({ type: 'pkcs8', format: 'pem' }) };
+  let auth = 0, sends = 0;
+  const sender = createFcmSender(JSON.stringify(account), async url => {
+    if (url === 'https://oauth2.googleapis.com/token') return Response.json({ access_token: 'access-' + (++auth),
+      expires_in: 3600, ...(auth === 1 ? { padding: 'x'.repeat(32768) } : {}) });
+    sends++;
+    return Response.json({ name: 'test-message' });
+  });
+  await assert.rejects(sender('test', randomUUID()), /too large/);
+  assert.equal(sends, 0);
+  assert.equal(await sender('test', randomUUID()), 'sent');
+  assert.equal(auth, 2);
+  assert.equal(sends, 1);
+});
+
+test('oversized push error bodies stop before reads and cannot revoke registrations', async () => {
+  const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const account = { project_id: 'roadconquest-9f0eb', client_email: 'bounded-errors@roadconquest-9f0eb.iam.gserviceaccount.com',
+    private_key: privateKey.export({ type: 'pkcs8', format: 'pem' }) };
+  let reads = 0, cancelled = 0;
+  const sender = createFcmSender(JSON.stringify(account), async url => {
+    if (url === 'https://oauth2.googleapis.com/token') return Response.json({ access_token: 'access', expires_in: 3600 });
+    return new Response(new ReadableStream({
+      pull() { reads++; throw Error('Announced oversize must be rejected before download'); },
+      cancel() { cancelled++; }
+    }, { highWaterMark: 0 }), { status: 404, headers: { 'Content-Length': '32769' } });
+  });
+  assert.equal(await sender('test', randomUUID()), 'unavailable');
+  assert.equal(reads, 0);
+  assert.equal(cancelled, 1);
+});
+
 test('notification tokens are encrypted, session-scoped, bounded, revoked and removed with accounts', { skip: !process.env.DATABASE_URL }, async () => {
   const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
   try {

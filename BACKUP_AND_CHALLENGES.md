@@ -1,24 +1,32 @@
 # Progress restore and weekly challenges
 
-Settings → **Import and restore progress** accepts current Road Conquest export ZIPs
-(formats 9, 10, and 11). Format 10 makes spreadsheet-safe text escaping reversible, including
+Settings → **Import and restore progress** accepts authenticated Road Conquest export ZIPs
+(formats 9 through 12). Format 10 makes spreadsheet-safe text escaping reversible, including
 literal apostrophes; legacy format 9 could not distinguish an apostrophe before a formula
-from its spreadsheet-protection prefix. Format 11 preserves the first-unlock timestamps for new mile tiles. Older imports retain explored tiles but have no reliable historical tile-unlock dates.
+from its spreadsheet-protection prefix. Format 11 preserves the first-unlock timestamps for new mile tiles. Format 12 also preserves compressed driving fixes. Older formats retain explored tiles but may have no reliable historical tile-unlock dates or compressed fixes.
+
+Portable exports require internet and a licensed official Google Play installation that passes
+app/device verification. The server signs the exact ZIP fingerprint; backup contents and GPS history
+are not sent to the signing service. Restore checks the signature before parsing, rejecting altered, repacked or
+unsigned files, including older unsigned exports. Trusted verification keys are fetched over HTTPS
+and saved privately; a new installation or signing key needs internet once. The signing service
+must be configured before releasing this feature; see [server setup](server/README.md#protected-local-backups).
 
 The importer validates archive entries, CRCs, exact CSV columns, UTF-8, coordinates,
 geometry, timestamps, unique keys, road references, row counts, mileage and the points
 ledger before showing a replacement confirmation. It parses quoted names and multiline
 fields, uses bounded streaming into a private staging database, rejects duplicate or
 unexpected/path-traversal entries, and caps compressed and expanded data at 512 MiB.
-Larger exports remain exportable but cannot yet be restored in-app.
+Export enforces the same expanded-data limit and includes the signature in its file-size cap.
 
 Before replacement, one private recovery ZIP is saved on the phone. **Restore progress
-from before last import** can recover it (the current state is backed up in turn).
-All ten history/progression tables change in one SQLite transaction; failed writes roll
+from before last import** can recover it offline on the same installation (the current state is
+backed up in turn). This private copy uses an installation-specific authentication key that is
+never exported. All eleven history/progression tables change in one SQLite transaction; failed writes roll
 back, and pre-restore asynchronous writers cannot repopulate the new history. Restoring
 stops tracking and disables verified-drive sharing. It does not import account credentials,
 VIP ownership, permissions or upload old GPS for leaderboard credit. Google Play restores
-VIP separately. Delete local data removes the private recovery backup too.
+VIP separately. Delete local data removes the private recovery backup and its authentication key.
 
 **Goals → Weekly challenges and friends** shows four stacking local goals in this branch:
 five newly unlocked roads (75 points), 25 newly unlocked roads (250 points),
@@ -26,6 +34,9 @@ one newly rewarded town (75 points), and three newly rewarded towns (300 points)
 A player can earn up to 700 weekly-goal points. The original 25-road and three-town
 goal IDs and payouts remain unchanged; only the two starter milestones are new.
 Old-road sections, excluded road groups and the zero-point starting town do not count.
+Restored roads, GPS fixes and place discoveries also remain ineligible, including discoveries
+resolved later by matching, backfill or geocoding. Fresh live driving remains eligible.
+Pre-upgrade imports cannot be excluded retrospectively because older versions did not record their origin.
 The reward ledger survives export/restore. Weeks reset Monday at 00:00 UTC worldwide.
 The previous week has a one-week grace period for late road matching or town resolution.
 Local challenges run during ordinary progress refreshes, with no extra GPS fixes or timer.

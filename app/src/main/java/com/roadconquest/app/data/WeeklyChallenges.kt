@@ -50,11 +50,14 @@ object WeeklyChallenges {
                           (SELECT COUNT(DISTINCT CASE WHEN r.road_group_id = '' THEN r.segment_id ELSE r.road_group_id END)
                             FROM roads r WHERE r.last_driven_at >= ? AND r.first_unlocked_at >= ?
                             AND r.first_unlocked_at < ? AND r.first_unlocked_at <= ?
+                            AND r.weekly_eligible=1
                             AND r.road_group_id NOT LIKE 'x2|%'
                             AND (r.road_group_id = '' OR NOT EXISTS (SELECT 1 FROM roads old
-                              WHERE old.road_group_id = r.road_group_id AND old.first_unlocked_at < ?))),
+                              WHERE old.road_group_id = r.road_group_id
+                                AND (old.first_unlocked_at < ? OR old.weekly_eligible=0)))),
                           (SELECT COUNT(*) FROM visited_places v WHERE kind = 'TOWN'
                             AND first_visited_at >= ? AND first_visited_at < ? AND first_visited_at <= ?
+                            AND v.weekly_eligible=1
                             AND EXISTS (SELECT 1 FROM progression_rewards r
                               WHERE r.reward_key = 'place:town:' || v.place_key))""",
                         arrayOf(week.toString(), week.toString(), weekEnd.toString(), now.toString(),

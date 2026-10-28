@@ -8,7 +8,9 @@ data class TrackPoint(
     val speedMps: Float,
     val bearingDegrees: Float,
     val timestampMillis: Long,
-    val matched: Boolean
+    val matched: Boolean,
+    /** Local provenance, never supplied by a matching provider or imported CSV. */
+    val weeklyEligible: Boolean = true
 )
 
 data class MatchedRoad(
@@ -20,7 +22,9 @@ data class MatchedRoad(
     /** Signed/official route reference returned by OSRM (for example I-295, US 322, A1). */
     val reference: String = "",
     /** False for connector geometry such as on/off ramps that should stay visible but not add a road. */
-    val countTowardsRoads: Boolean = true
+    val countTowardsRoads: Boolean = true,
+    /** Derived from the original GPS fixes supporting this geometry. */
+    val weeklyEligible: Boolean = true
 )
 
 data class RoadRecord(

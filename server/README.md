@@ -36,6 +36,9 @@ ROADCONQUEST_ACCOUNT_API_URL=https://accounts.example.com
 
 Use a TLS reverse proxy in production and set `REQUIRE_HTTPS=1`. If `TRUST_PROXY=1` is used,
 configure the proxy to replace, not merely append untrusted client forwarding headers.
+This requirement applies to the native Node HTTP server. The public Function adapter
+discards ordinary forwarding headers and accepts a distinct client IP only from the
+authenticated ingress described below. `TRUST_PROXY=1` alone does not authorize caller headers there.
 
 ## Required environment
 
@@ -61,6 +64,48 @@ npm start
 The CI job runs the security tests against an isolated PostgreSQL cluster using the
 Ubuntu runner's preinstalled binaries, avoiding container-registry download quotas. It includes a
 concurrent duplicate-signup constraint test.
+
+## Verify the deployed backend
+
+`GET /health/live` (and `HEAD /health/live`) checks the running process without
+opening a database connection. Its JSON contains `ok`, `api_version` (currently `1`)
+and `revision`, a public source commit hash. `GET /health` also checks the database
+and returns the same metadata after success. Both responses use `Cache-Control: no-store`.
+
+`npm run build:function` embeds the checked-out Git revision in the function bundle.
+Exported source archives can set `ROADCONQUEST_SERVER_REVISION` to the full 40-character
+commit hash at build time. A native `npm start` deployment can set that variable at runtime.
+An unrelated enclosing Git repository is ignored. An unknown revision is `null`,
+never an inferred claim about deployment freshness.
+
+After deploying the account function, fetch `/health/live` through the actual public
+account URL and compare `revision` with the intended source commit (`git rev-parse HEAD`).
+Publishing an Android release or attaching the account-function ZIP to GitHub does not
+deploy the backend. A mismatched or null revision needs investigation before claiming
+the backend includes a release's changes. This identifies code only: credentials,
+database grants, moderation availability and real Google Play purchases still need
+their own deployment checks. API version 1 remains compatible with the existing client.
+
+Forum Plus verification releases its preflight database connection before contacting
+Google. A short transaction then locks the profile and receipt, rechecks ownership and
+bans, and applies entitlement changes atomically. If the receipt's PostgreSQL MVCC version
+changed while verification was in flight, the old verdict is discarded and Play is
+checked again outside the transaction, up to three checks. Continued contention returns
+a retryable 503 without overwriting the last committed entitlement. This adds one read
+per uncontended verification, avoids holding a scarce pool connection during remote
+timeouts, and requires no schema migration. Existing encrypted receipts stay unchanged.
+First checks also guard the profile's MVCC version: an inactive, unowned receipt has no
+receipt row to update, so that result touches the profile to invalidate older first-check
+responses without claiming the token. Ordinary rechecks of saved receipts continue to
+avoid rewriting an unchanged entitlement profile. Initial profile creation happens before
+the external request. The purchase handler rejects malformed tokens before its profile
+and receipt reads or any Play call; HTTP authentication and rate limits still apply.
+
+Notification OAuth and error replies use the shared 32 KiB JSON reader. Oversized or
+malformed delivery errors return unavailable rather than removing a device registration.
+Null or empty OAuth credentials are rejected before purchase, Integrity or push requests,
+and a later attempt can refresh authorization. GIF-provider timeouts, throttling and
+server errors return a retryable 503, while invalid links remain 400 responses.
 
 ## Free Neon deployment
 
@@ -329,7 +374,7 @@ PLAY_SERVICE_ACCOUNT_JSON=<service-account JSON stored as a secret env var>
 # or PLAY_SERVICE_ACCOUNT_FILE=/run/secrets/play-integrity.json
 PLAY_CLOUD_PROJECT_NUMBER=<numeric linked Google Cloud project>
 PLAY_CERTIFICATES=<base64url SHA256 Play app-signing certificate without padding>
-PLAY_VERSION_CODES=71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90
+PLAY_VERSION_CODES=90,91
 ```
 
 Apply `schema.sql` as the database owner. Restricted API roles need
@@ -371,3 +416,48 @@ These are verified GPS-based visits, not proof of physical travel. External GNSS
 spoofing and sophisticated attacks remain possible. Do not advertise this as
 unfakeable. Monitor hosting and Integrity quotas; smaller backend requirements
 do not guarantee unlimited free service.
+
+
+## Protected local backups
+
+Beta 65's exact target, secure key generation, offline configuration preflight,
+environment preservation, artifact packaging, rotation and release gates are in
+[the backend preparation runbook](BETA65_BACKEND_PREPARATION.md). The preparation
+tools do not deploy or modify Neon.
+
+Portable backup exports are authenticated with server-held P-256 signatures. Configure
+`BACKUP_SIGNING_PRIVATE_KEY` with a dedicated PKCS#8 PEM private key in the function's secret
+configuration, alongside the existing production `PLAY_SERVICE_ACCOUNT_JSON` (or file),
+`PLAY_CERTIFICATES`, `PLAY_VERSION_CODES` and `PLAY_CLOUD_PROJECT_NUMBER`. This works independently
+of `LEADERBOARDS_ENABLED`; no account, scores or GPS history are used by the signer. Generate the
+key in a trusted environment with `openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256`.
+Keep a durable private copy outside source control. Do not reuse the APK, account or checkpoint keys.
+
+`GET /v1/backups` publishes availability and SPKI public keys without a database query.
+`POST /v1/backups/sign` accepts only a SHA-256 backup fingerprint and a fresh production Play
+Integrity token bound to `SHA256("RoadConquestBackup/v1\n" + fingerprint)`. IP rate limiting
+precedes external verification. Only the official licensed app on a device meeting strong integrity
+can request signatures; arbitrary unauthenticated digests are never blindly signed. No file content
+or saved GPS is uploaded or stored, and the signing service never reads/writes competition tables.
+
+The ZIP comment contains the signature, key ID and format version. Its signature covers every
+original ZIP byte, including CSVs, metadata, directory records and the zero-length original comment.
+Repacking, changing metadata, changing data, stripping the seal and changing checksums fail restore.
+Restore gets trusted keys only from the HTTPS service and caches them privately, allowing later
+offline verification. A fresh installation needs internet once. Older unsigned backups cannot be
+authenticated and are rejected rather than silently promoted to protected backups.
+
+For rotation, retain previous public SPKI keys in `BACKUP_VERIFICATION_KEYS_JSON`, a JSON array of
+base64url DER strings (up to seven previous keys). These remain available even with signing disabled.
+Never discard old verification keys while backups using them remain supported. Deploy/configure the
+signer before shipping the Android protected-export UI; signing fails closed while unconfigured.
+Private pre-restore recovery ZIPs instead use an installation-specific HMAC key in Android's private
+no-backup directory, keeping recovery offline. The key is never exported. Another installation cannot
+authenticate that private recovery copy.
+
+Restores mark track points, roads, visited places and pending place candidates ineligible for local
+weekly challenges. Delayed matching, backfill and geocoding carry that provenance forward. New live
+driving remains eligible; prior reward ledgers remain history and cannot pay twice. Existing pre-upgrade
+rows keep their eligibility because old imports were not previously labeled and cannot be identified
+retrospectively. Local restored totals remain visible on-device; global and friend rankings continue
+to accept only fresh attested evidence and are unaffected by restore.

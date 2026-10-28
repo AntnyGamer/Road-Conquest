@@ -62,7 +62,7 @@ class RestoreActivity : Activity() {
             setPadding(0, 0, 0, (12 * dp).toInt())
         })
         root.addView(TextView(this).apply {
-            text = "Choose a Road Conquest backup ZIP to restore trips, roads, distance, fog, discoveries, points and garage items.\n\nThe file is checked before confirmation, and your current progress is backed up. Tracking and verified sharing remain off afterward.\n\nSign in and restore Google Play VIP separately. Imported trips do not count toward verified rankings."
+            text = "Choose a protected Road Conquest backup ZIP to restore trips, roads, distance, fog, discoveries, points and garage items.\n\nThe signature is checked before confirmation. Altered or older unsigned files are rejected. Connect to the internet the first time you restore on a new installation; later checks can use saved verification keys. Your private recovery copy works offline on this installation.\n\nYour current progress is backed up. Tracking and verified sharing remain off afterward. Restored history does not earn weekly challenge credit or change verified rankings, including friend rankings.\n\nSign in and restore Google Play VIP separately."
             textSize = 15f
             setTextColor(Appearance.color(this@RestoreActivity, R.attr.rcTextSecondary))
             setBackgroundResource(R.drawable.settings_card_background)
@@ -148,6 +148,7 @@ class RestoreActivity : Activity() {
             val result = runCatching { backup.use { DataImporter.restore(applicationContext, it) } }
             runOnUiThread {
                 if (isDestroyed || isFinishing) return@runOnUiThread
+                restoreStarted = false
                 setBusy(false)
                 result.fold({
                     android.widget.Toast.makeText(this, "Progress restored. Tracking is off.", android.widget.Toast.LENGTH_LONG).show()

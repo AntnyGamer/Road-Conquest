@@ -129,7 +129,7 @@ test('early global denial respects exact request cost, current caps, cold state 
   assert.equal(s.db.prepare("SELECT COUNT(*) n FROM usage WHERE day='2026-10-19'").get().n, 0);
 });
 
-test('global denial preserves replay, conflict and health precedence and reloads refunded balances', async t => {
+test('global denial preserves replay, conflict and health precedence and applies known refunds', async t => {
   const s = store(); t.after(() => s.db.close());
   const first = { ...args(1), limit: 16, ipLimit: 16, costUnits: 8 };
   const second = { ...first, ...args(2, 2), limit: 16, ipLimit: 16, costUnits: 8 };
@@ -143,7 +143,8 @@ test('global denial preserves replay, conflict and health precedence and reloads
   assert.equal((await s.call('cancel', second)).status, 200);
   const reads = s.queries.filter(q => q.includes('SELECT bucket,used')).length;
   assert.equal((await s.call('reserve', next)).status, 200, 'refund invalidation must reopen available credits');
-  assert.equal(s.queries.filter(q => q.includes('SELECT bucket,used')).length, reads + 1);
+  assert.equal(s.queries.filter(q => q.includes('SELECT bucket,used')).length, reads + 1,
+    'the previously denied new client still loads its own counters');
   assert.equal((await s.call('dispatch', first)).status, 200);
   assert.equal((await s.call('failure', { ...first, status: 503 })).status, 200);
   const exhausted = { ...args(4, 5), limit: 12, ipLimit: 12 };
@@ -151,6 +152,37 @@ test('global denial preserves replay, conflict and health precedence and reloads
   s.advance(2000);
   assert.equal((await s.call('reserve', exhausted)).headers.get('X-RoadConquest-Error'), 'budget_global');
   assert.equal(s.db.prepare("SELECT used FROM usage WHERE bucket='attempts:all'").get().used, 3);
+});
+
+test('refunds retain exact warm balances while evicted clients still reload durable counters', async t => {
+  const s = store(); t.after(() => s.db.close());
+  const first = args(1), second = args(2);
+  await s.call('reserve', first);
+  await s.call('reserve', second);
+  const reads = () => s.queries.filter(q => q.includes('SELECT bucket,used')).length;
+  const start = reads();
+  await s.call('cancel', first);
+  await s.call('cancel', first);
+  assert.equal((await s.call('reserve', { ...args(3), limit: 12, ipLimit: 12 })).status, 200);
+  assert.equal(reads(), start, 'one warm refund can be applied once without discarding known balances');
+  assert.equal((await s.call('reserve', { ...args(4), limit: 8, ipLimit: 8 })).headers.get('X-RoadConquest-Error'), 'budget_global');
+  assert.equal(s.db.prepare("SELECT used FROM usage WHERE bucket='units:all'").get().used, 8);
+
+  s.advance(86_400_000);
+  for (let client = 1; client <= 300; client++) {
+    assert.equal((await s.call('reserve', args(1000 + client, client))).status, 200);
+    s.advance(1500);
+  }
+  const before = reads();
+  await s.call('cancel', args(1001, 1));
+  const current = args(2001, 300);
+  assert.equal((await s.call('reserve', current)).status, 200);
+  assert.equal(reads(), before, 'an evicted refund recipient does not invalidate the known global balance');
+  assert.equal((await s.call('reserve', { ...args(2002, 1), ipLimit: 8 })).status, 200,
+    'an evicted client reloads its refunded zero balance');
+  assert.equal(reads(), before + 1);
+  assert.equal((await s.call('reserve', { ...args(2003, 1), ipLimit: 4 })).headers.get('X-RoadConquest-Error'), 'budget_client');
+  assert.equal(s.db.prepare("SELECT used FROM usage WHERE bucket='units:all'").get().used, 1204);
 });
 
 test('rollback invalidates warmed counters and mutated permits before a retry', async t => {
@@ -258,4 +290,49 @@ test('cached bookkeeping matches cold durable reads through mixed requests and r
     if (i % 40 === 0) assert.deepEqual(snapshot(warm), snapshot(cold), 'durable state differs at operation ' + i);
   }
   assert.deepEqual(snapshot(warm), snapshot(cold));
+});
+
+test('known recovery writes retain probe metadata through dispatch, cancellation and success', async t => {
+  const s = store(); t.after(() => s.db.close());
+  const healthReads = () => s.queries.filter(q => q.startsWith('SELECT') && q.includes('FROM map_health')).length;
+  const failed = args(1), cancelled = args(2), recovered = args(3), next = args(4);
+  await s.call('reserve', failed); await s.call('dispatch', failed);
+  await s.call('failure', { ...failed, status: 503 });
+  s.advance(2000);
+  await s.call('reserve', cancelled);
+  const reads = healthReads();
+  await s.call('cancel', cancelled);
+  await s.call('reserve', recovered);
+  await s.call('dispatch', recovered);
+  await s.call('success', recovered);
+  s.advance(1500);
+  await s.call('reserve', next); await s.call('dispatch', next);
+  assert.equal(healthReads(), reads, 'known probe updates and clears need no immediate SQL reread');
+  assert.equal(s.db.prepare('SELECT COUNT(*) n FROM map_health').get().n, 0);
+  assert.equal(s.db.prepare("SELECT used FROM usage WHERE bucket='units:all'").get().used, 12);
+  assert.equal(s.db.prepare("SELECT used FROM usage WHERE bucket='attempts:all'").get().used, 4);
+});
+
+test('rolled-back recovery writes reload the durable probe before retrying', async t => {
+  const s = store(); t.after(() => s.db.close());
+  const failed = args(1), recovered = args(2);
+  await s.call('reserve', failed); await s.call('dispatch', failed);
+  await s.call('failure', { ...failed, status: 503 }); s.advance(2000);
+  const before = snapshot(s);
+  s.fail(true);
+  await assert.rejects(s.call('reserve', recovered), /injected commit failure/);
+  assert.deepEqual(snapshot(s), before);
+  s.fail(false);
+  assert.equal((await s.call('reserve', recovered)).status, 200);
+  assert.equal((await s.call('dispatch', recovered)).status, 200);
+  const dispatched = snapshot(s);
+  s.fail(true);
+  await assert.rejects(s.call('success', recovered), /injected commit failure/);
+  assert.deepEqual(snapshot(s), dispatched);
+  s.fail(false);
+  assert.equal((await s.call('success', recovered)).status, 200);
+  assert.equal(s.db.prepare('SELECT COUNT(*) n FROM map_health').get().n, 0);
+  s.restart();
+  s.advance(1500);
+  assert.equal((await s.call('reserve', args(3))).status, 200);
 });

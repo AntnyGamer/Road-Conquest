@@ -51,7 +51,8 @@ class ForumGifLoader {
         }
         internal fun allowed(url: String): Boolean = runCatching {
             val uri = URI(url)
-            uri.scheme == "https" && uri.host in hosts && uri.rawUserInfo == null &&
+            uri.scheme.equals("https", ignoreCase = true) &&
+                hosts.any { it.equals(uri.host, ignoreCase = true) } && uri.rawUserInfo == null &&
                 (uri.port == -1 || uri.port == 443) && uri.fragment == null && uri.path.endsWith(".gif",ignoreCase = true)
         }.getOrDefault(false)
     }

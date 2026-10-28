@@ -243,6 +243,7 @@ class RoadGeometryValidator {
         val total = parsed.sumOf { it.meters }
         val from = points[start.input].timestampMillis
         val duration = (points[end.input].timestampMillis - from).coerceAtLeast(0L)
+        val weeklyEligible = points[start.input].weeklyEligible && points[end.input].weeklyEligible
         val rawStart = JSONArray().put(points[start.input].longitude).put(points[start.input].latitude)
         val rawEnd = JSONArray().put(points[end.input].longitude).put(points[end.input].latitude)
         val uncertainty = points[start.input].accuracyMeters + points[end.input].accuracyMeters
@@ -278,7 +279,8 @@ class RoadGeometryValidator {
                     lastTimestamp = lastTime,
                     confidence = confidence,
                     reference = step.reference,
-                    countTowardsRoads = step.countTowardsRoads
+                    countTowardsRoads = step.countTowardsRoads,
+                    weeklyEligible = weeklyEligible
                 ))
             }
         }
@@ -314,7 +316,8 @@ class RoadGeometryValidator {
             lastTimestamp = road.lastTimestamp,
             confidence = minOf(previous.confidence, road.confidence),
             reference = previous.reference,
-            countTowardsRoads = previous.countTowardsRoads
+            countTowardsRoads = previous.countTowardsRoads,
+            weeklyEligible = previous.weeklyEligible && road.weeklyEligible
         )
     }
 
@@ -432,7 +435,8 @@ class RoadGeometryValidator {
                 reference = left.reference,
                 // An inferred anonymous connector is display geometry, not evidence that
                 // another independently countable road was unlocked.
-                countTowardsRoads = left.countTowardsRoads && !unnamedBridge && !crossRoadBridge
+                countTowardsRoads = left.countTowardsRoads && !unnamedBridge && !crossRoadBridge,
+                weeklyEligible = from.weeklyEligible && to.weeklyEligible
             )
             resolved[to.id] = minOf(left.confidence, right.confidence)
             bridged.add(to.id)

@@ -20,12 +20,13 @@ internal class FogGeoRaster private constructor(
     private val centerX get() = (westMeters + eastMeters) * 0.5
 
     /** Top-left, top-right, bottom-right, bottom-left latitude/longitude pairs. */
-    fun corners(): DoubleArray = doubleArrayOf(
-        latitude(northMeters), longitude(westMeters),
-        latitude(northMeters), longitude(eastMeters),
-        latitude(southMeters), longitude(eastMeters),
-        latitude(southMeters), longitude(westMeters)
-    )
+    fun corners(): DoubleArray {
+        val north = latitude(northMeters)
+        val south = latitude(southMeters)
+        val west = longitude(westMeters)
+        val east = longitude(eastMeters)
+        return doubleArrayOf(north, west, north, east, south, east, south, west)
+    }
 
     /**
      * Each visited tile is projected by the exact inverse of the raster's geographic

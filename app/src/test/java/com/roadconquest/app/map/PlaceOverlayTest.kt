@@ -2,6 +2,7 @@ package com.roadconquest.app.map
 
 import com.roadconquest.app.data.PlaceDiscovery
 import com.roadconquest.app.data.PlaceKind
+import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -626,6 +627,28 @@ class PlaceOverlayTest {
         assertTrue(PlaceGeometry.contains(polygon, 10.0, 179.9))
         assertFalse(PlaceGeometry.contains(polygon, 10.5, 178.0))
         assertFalse(PlaceGeometry.contains(polygon, 10.5, -178.0))
+        assertFalse(PlaceGeometry.contains(polygon, 10.5, 0.0))
+        assertFalse(PlaceGeometry.contains(polygon, 10.0, 0.0))
+    }
+
+    @Test fun polygonContainmentDoesNotMirrorBoundariesOnTheOppositeSideOfTheWorld() {
+        fun wrap(longitude: Double) = ((longitude + 540.0) % 360.0) - 180.0
+        for (west in listOf(-179.5, -75.0, 0.0, 90.0, 179.5)) {
+            val ring = listOf(wrap(west) to 10.0, wrap(west + 1.0) to 10.0,
+                wrap(west + 1.0) to 11.0, wrap(west) to 11.0)
+            // Orientation and the ring's starting vertex cannot change containment.
+            for (start in ring.indices) for (reversed in listOf(false, true)) {
+                val vertices = (ring.drop(start) + ring.take(start)).let { if (reversed) it.reversed() else it }
+                val coordinates = JSONArray().apply { (vertices + vertices.first()).forEach { (lon, lat) ->
+                    put(JSONArray().put(lon).put(lat))
+                } }
+                val polygon = JSONObject().put("type", "Polygon")
+                    .put("coordinates", JSONArray().put(coordinates))
+                assertTrue(PlaceGeometry.contains(polygon, 10.5, wrap(west + 0.5)))
+                assertFalse("Opposite longitude must remain outside: $west/$start/$reversed",
+                    PlaceGeometry.contains(polygon, 10.5, wrap(west + 180.5)))
+            }
+        }
     }
 
     @Test fun municipalityBoundaryEdgeIsRecognized() {

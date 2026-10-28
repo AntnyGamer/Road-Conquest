@@ -158,6 +158,37 @@ class TripHistoryRepositoryTest {
         assertEquals(4L, insights.pendingFixes)
     }
 
+    @Test fun newRoadInsightsExcludeLaterFragmentsOfAlreadyUnlockedRoadGroups() {
+        val context = RuntimeEnvironment.getApplication()
+        TrackingRepository(context).clearHistory()
+        val tracker = TrackingRepository(context)
+        tracker.insertLocations((0..2).map { index -> android.location.Location("gps").apply {
+            latitude = 40.0; longitude = -74.0 + index * 0.0001
+            accuracy = 5f; speed = 8f; time = 1_000_000L + index * 10_000L
+        } })
+        val db = tracker.readableDatabase()
+        fun road(id: String, group: String, firstAt: Long) = db.execSQL(
+            """INSERT INTO roads(segment_id,name,geometry_json,first_unlocked_at,last_driven_at,
+                road_group_id,min_lat,max_lat,min_lon,max_lon)
+                VALUES (?,'Road','[[-74,40],[-73.9,40]]',?,?,?,40,40,-74,-73.9)""",
+            arrayOf(id, firstAt, firstAt, group)
+        )
+        road("old", "shared", 900_000)
+        road("fragment", "shared", 1_005_000)
+        road("new-first", "fresh", 1_000_000)
+        road("new-second", "fresh", 1_020_000)
+        road("legacy-old", "", 900_000)
+        road("legacy-new", "", 1_010_000)
+        road("excluded", "x2|excluded", 1_010_000)
+        road("future", "future", 1_020_001)
+        val history = TripHistoryRepository(context)
+        val insights = history.insights(history.recentTrips().single())
+        assertEquals(2L, insights.newRoadGroups)
+        assertEquals(0L, insights.newTowns)
+        assertEquals(0L, insights.newTiles)
+        assertEquals(3L, insights.pendingFixes)
+    }
+
     @Test fun savedTripGpxDefaultsToPrivateEndpointsAndFullExportIsExplicit() {
         val context = RuntimeEnvironment.getApplication()
         val tracker = TrackingRepository(context)

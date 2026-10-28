@@ -1,0 +1,3 @@
+# Shared GPS replay client dependencies for both emulator workflows.
+grpcio==1.85.0
+protobuf==7.36.2

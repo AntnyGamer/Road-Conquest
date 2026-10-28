@@ -399,10 +399,16 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:text="Export data (.zip)"
+                android:text="Export protected backup (.zip)"
                 android:drawableStart="@drawable/ic_export"
                 android:drawableTint="?attr/rcAccent"
                 android:drawablePadding="12dp" />
+
+            <TextView
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="8dp" android:textSize="13sp"
+                android:textColor="?attr/rcTextSecondary"
+                android:text="Protected exports require internet access and Google Play app verification. Only a file fingerprint is sent for signing; your saved trips stay on this phone." />
 
             <Button android:id="@+id/importButton"
                 style="@style/RoadConquest.SettingsAction"

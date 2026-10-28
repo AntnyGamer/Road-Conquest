@@ -39,6 +39,18 @@ class MapTourDeviceTest {
             val root = activity.findViewById<FrameLayout>(R.id.root)
             return root.getChildAt(root.childCount - 1) as MapTour
         }
+        fun pressSystemBack(scenario: ActivityScenario<MainActivity>) {
+            // RESUMED does not guarantee window focus after recreation. Injecting Back
+            // before the new window receives focus can send it to the outgoing window.
+            val deadline = SystemClock.elapsedRealtime() + 5_000L
+            var focused = false
+            do {
+                scenario.onActivity { focused = it.hasWindowFocus() }
+                if (!focused) SystemClock.sleep(25)
+            } while (!focused && SystemClock.elapsedRealtime() < deadline)
+            assertTrue("The map window must receive focus before sending system Back", focused)
+            instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+        }
         try {
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
                 scenario.onActivity { activity ->
@@ -55,7 +67,7 @@ class MapTourDeviceTest {
                 }
                 // Send a real Back key to the foreground window. An accessibility global action can
                 // report success even when the system consumes it instead of dispatching Back.
-                instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+                pressSystemBack(scenario)
                 val deadline = SystemClock.elapsedRealtime() + 5_000L
                 var returned = false
                 do {
@@ -68,7 +80,7 @@ class MapTourDeviceTest {
                     assertTrue(Prefs.isTourHandled(activity))
                 }
                 // The same foreground Back-key dispatch also verifies the exit prompt.
-                instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+                pressSystemBack(scenario)
                 val exitDeadline = SystemClock.elapsedRealtime() + 5_000L
                 var prompted = false
                 do {

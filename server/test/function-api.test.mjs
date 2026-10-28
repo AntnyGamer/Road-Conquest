@@ -29,7 +29,10 @@ test("serverless accounts enforce authentication, privacy, limits and TLS with r
       assert.match(response.headers.get("Strict-Transport-Security"), /max-age=31536000/);
       return { status: response.status, body: await response.json() };
     }
-    assert.equal((await call("/health")).status, 200);
+    const health = await call("/health");
+    assert.equal(health.status, 200);
+    assert.deepEqual(health.body, (await call("/health/live")).body);
+    assert.equal(health.body.api_version, 1);
     const privacyPage = await api.fetch(new Request("https://accounts.example/privacy"));
     assert.equal(privacyPage.status, 200);
     assert.match(privacyPage.headers.get("Content-Type"), /^text\/html/u);
@@ -38,6 +41,8 @@ test("serverless accounts enforce authentication, privacy, limits and TLS with r
     assert.equal(deletionPage.status, 200);
     assert.match(await deletionPage.text(), /Delete Road Conquest Account/u);
     assert.equal((await call("/v1/me")).status, 401);
+    assert.deepEqual((await call("/v1/backups")).body, { available: false, keys: [] });
+    assert.equal((await call("/v1/backups/sign", "POST", { hash: "forged", integrity_token: "fake" })).status, 503);
     const credentials = { username: "FunctionDriver", password: "correct horse battery staple" };
     const signup = await call("/v1/signup", "POST", credentials);
     assert.equal(signup.status, 201);
