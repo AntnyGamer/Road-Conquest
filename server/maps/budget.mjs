@@ -50,8 +50,8 @@ export class MapBudget {
     }
   }
   reserve({ bucket, limit, ipLimit, costUnits = 1, spacingMs = 250, attemptId, healthKey }) {
-    if (!validKey(bucket) || !Number.isInteger(limit) || limit < 1 || // Geoapify's 2,700-credit ceiling is expressed in quarter-credit units.
-    limit > 10800 ||
+    // Geoapify's 2,700-credit ceiling is expressed in quarter-credit units.
+    if (!validKey(bucket) || !Number.isInteger(limit) || limit < 1 || limit > 10800 ||
         !Number.isInteger(ipLimit) || ipLimit < 1 || ipLimit > limit ||
         !Number.isInteger(costUnits) || costUnits < 1 || costUnits > 40 ||
         ![250, 1050].includes(spacingMs) || (attemptId !== undefined && !validId(attemptId)) ||
