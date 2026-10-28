@@ -11,6 +11,16 @@ requests as provider-level reserves. This increases admitted work but reduces
 the previous margin for other uses of the same provider accounts. The historical
 October 19 estimates below remain labeled with their original assumptions.
 
+The gateway also rejects untrusted matching and fallback-tile calls before reading
+GPS bodies or fetching remote provider switches. Its bounded Durable Object
+counter cache now retains up to 1,024 keys instead of 512. Because each matching
+client uses three per-address counters, this lets 200 warm clients reuse their
+stored counters without extra SQLite reads. A regression test compares two
+200-client passes; the second incurs no additional counter reads. Cold starts,
+new addresses and evictions still reload durable balances, and writes, provider
+requests and credit costs do not change. The larger bound uses some additional
+Worker memory but cannot make the cache unbounded.
+
 ## Limits most likely to matter
 
 | Resource | Published free allowance | Current application guard / effect |
