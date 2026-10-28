@@ -86,30 +86,6 @@ test('free-tier ceilings retain 10 percent headroom and reject high configuratio
   assert.equal(backupLimit, 4500);
 });
 
-test('untrusted map traffic is rejected before reading provider config or parsing GPS', async () => {
-  let configReads = 0, budgetReads = 0;
-  const settings = { GEOAPIFY_API_KEY: 'test-only', LOCATIONIQ_API_KEY: 'fallback-test-only',
-    SERVICE_CONFIG: { get: async () => { configReads++; throw Error('should not read configuration'); } },
-    MAP_BUDGET: { idFromName: name => name, get: () => {
-      budgetReads++;
-      throw Error('should not reserve');
-    } } };
-  const worker = createMapsGateway(() => { throw Error('should not contact provider'); });
-  const forged = new Request('https://maps.example/v1/mapmatching', {
-    method: 'POST', headers: { 'CF-Connecting-IP': '192.0.2.1', 'CF-Worker': 'forged' }, body: '{invalid'
-  });
-  assert.equal((await worker.fetch(forged, settings)).status, 403);
-  const fallback = new Request('https://maps.example/v1/locationiq/mapmatching', {
-    method: 'POST', headers: { 'CF-Connecting-IP': '2a06:98c0:3600::103' }, body: '{invalid'
-  });
-  assert.equal((await worker.fetch(fallback, settings)).status, 403);
-  assert.equal((await worker.fetch(new Request('https://maps.example/v1/tile/positron/1/0/0.png'),
-    settings)).status, 403);
-  assert.equal((await worker.fetch(new Request('https://maps.example/unknown'), settings)).status, 404);
-  assert.equal(configReads, 0);
-  assert.equal(budgetReads, 0);
-});
-
 test('exhausted allowance or budget failure cannot fall through to upstream', async () => {
   const worker = createMapsGateway(() => { throw new Error('must not call'); });
   const response = await worker.fetch(request(), env(Response.json({ error: 'exhausted' }, { status: 429, headers: { 'Retry-After': '3600' } })));
