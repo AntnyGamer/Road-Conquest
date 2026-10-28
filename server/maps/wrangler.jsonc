@@ -9,8 +9,8 @@
 		"enabled": true
 	},
 	"vars": {
-		"DAILY_CREDIT_CAP": "2400",
-		"LOCATIONIQ_DAILY_REQUEST_CAP": "4000"
+		"DAILY_CREDIT_CAP": "2700",
+		"LOCATIONIQ_DAILY_REQUEST_CAP": "4500"
 	},
 	"durable_objects": {
 		"bindings": [

@@ -59,6 +59,63 @@ test('malformed, oversized and untrusted-provenance requests never reach provide
   assert.equal((await worker.fetch(request('/v1/mapmatching', { 'CF-Connecting-IP': '2a06:98c0:3600::103' }), env())).status, 403);
   assert.equal((await worker.fetch(new Request('https://maps.example/anything'), env())).status, 404);
 });
+
+test('free-tier ceilings retain 10 percent headroom and reject high configuration overrides', async () => {
+  const settings = JSON.parse(readFileSync(new URL('../maps/wrangler.jsonc', import.meta.url), 'utf8'));
+  assert.equal(settings.vars.DAILY_CREDIT_CAP, '2700');
+  assert.equal(settings.vars.LOCATIONIQ_DAILY_REQUEST_CAP, '4500');
+  let primaryLimit, backupLimit;
+  const gatewayEnv = {
+    ...env(), LOCATIONIQ_API_KEY: 'fallback-test-only',
+    DAILY_CREDIT_CAP: '999999', LOCATIONIQ_DAILY_REQUEST_CAP: '999999',
+    MAP_BUDGET: { idFromName: name => name, get: name => ({ fetch: async (_url, init) => {
+      if (new URL(_url).pathname === '/reserve') {
+        const limit = JSON.parse(init.body).limit;
+        if (name === 'geoapify-free-allowance') primaryLimit = limit;
+        else backupLimit = limit;
+      }
+      return Response.json({ allowed: true });
+    } }) }
+  };
+  const worker = createMapsGateway(async () => Response.json({ type: 'FeatureCollection', features: [] }));
+  assert.equal((await worker.fetch(request(), gatewayEnv)).status, 200);
+  assert.equal((await worker.fetch(request('/v1/locationiq/mapmatching', {}, {
+    ...body, waypoints: body.waypoints.map(p => ({ ...p, accuracyMeters: 3 }))
+  }), gatewayEnv)).status, 200);
+  assert.equal(primaryLimit, 2700 * 4);
+  assert.equal(backupLimit, 4500);
+});
+
+test('untrusted calls fail before GPS parsing, KV configuration and quota accounting', async t => {
+  let reads = 0, configuration = 0, reservations = 0;
+  const stream = new ReadableStream({ pull() {
+    reads++;
+    throw new Error('An untrusted caller must not cause GPS body reads');
+  } }, { highWaterMark: 0 });
+  const settings = { GEOAPIFY_API_KEY: 'primary-test-only', LOCATIONIQ_API_KEY: 'backup-test-only',
+    SERVICE_CONFIG: { get: () => { configuration++; throw Error('Config was read'); } },
+    MAP_BUDGET: { idFromName: name => name, get: () => {
+      reservations++;
+      throw Error('Budget was opened');
+    } }
+  };
+  const worker = createMapsGateway(() => { throw Error('Provider was called'); });
+  const rejected = new Request('https://maps.example/v1/mapmatching', { method: 'POST',
+    headers: { 'CF-Connecting-IP': '192.0.2.1', 'CF-Worker': 'forged' },
+    body: stream, duplex: 'half' });
+  t.after(() => rejected.body.cancel().catch(() => {}));
+  const first = await worker.fetch(rejected, settings);
+  assert.equal(first.status, 403);
+  assert.equal(first.headers.get('Cache-Control'), 'no-store');
+  assert.equal((await first.json()).error, 'Direct client required');
+  assert.equal((await worker.fetch(new Request('https://maps.example/v1/locationiq/mapmatching', {
+    method: 'POST', headers: { 'CF-Connecting-IP': '2a06:98c0:3600::103' }, body: '{malformed'
+  }), settings)).status, 403);
+  assert.equal((await worker.fetch(new Request('https://maps.example/v1/tile/positron/1/0/0.png'), settings)).status, 403);
+  assert.equal((await worker.fetch(new Request('https://maps.example/unknown'), settings)).status, 404);
+  assert.deepEqual([reads, configuration, reservations], [0, 0, 0]);
+});
+
 test('exhausted allowance or budget failure cannot fall through to upstream', async () => {
   const worker = createMapsGateway(() => { throw new Error('must not call'); });
   const response = await worker.fetch(request(), env(Response.json({ error: 'exhausted' }, { status: 429, headers: { 'Retry-After': '3600' } })));
@@ -101,11 +158,28 @@ test('gateway reserves quarter-credit tiles and one-credit batches, even with 10
     { ...body, waypoints: Array(100).fill(body.waypoints[0]) }), captured())).status, 200);
   assert.equal(costs[0].costUnits, 1);
   assert.equal(costs[1].costUnits, 4);
-  assert.equal(costs[1].limit, 9600);
+  assert.equal(costs[1].limit, 10800);
   assert.equal(costs[1].ipLimit, 2400);
   assert.equal((await worker.fetch(request('/v1/mapmatching', {},
     { ...body, waypoints: Array(200).fill(body.waypoints[0]) }), captured())).status, 200);
   assert.equal(costs[2].costUnits, 8);
+});
+
+test('durable map budget accepts the enlarged quarter-credit allowance but not over-limit values', async () => {
+  const db = new DatabaseSync(':memory:');
+  try {
+    const budget = new MapBudget({ storage: { sql: { exec(sql, ...bindings) {
+      const statement = db.prepare(sql);
+      return statement.columns().length ? statement.all(...bindings) : (statement.run(...bindings), []);
+    } } } });
+    const requestBudget = limit => budget.fetch(new Request('https://budget/reserve', {
+      method: 'POST', body: JSON.stringify({
+        bucket: 'a'.repeat(64), limit, ipLimit: 2400, costUnits: 4
+      })
+    }));
+    assert.equal((await requestBudget(10800)).status, 200);
+    assert.equal((await requestBudget(10801)).status, 400);
+  } finally { db.close(); }
 });
 
 test('durable reservations persist across instances and enforce global and client caps', async () => {
@@ -192,7 +266,7 @@ test('LocationIQ has its own capped budget and a pinned matching-only upstream',
     { Authorization: 'account-token' }, { ...fallbackBody, target: 'https://evil.example', profile: 'walking' }), settings);
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('Cache-Control'), 'no-store');
-  assert.equal(reserved.limit, 4000);
+  assert.equal(reserved.limit, 4500);
   assert.equal(reserved.ipLimit, 1000);
   assert.equal(reserved.costUnits, 1);
   assert.equal(reserved.spacingMs, 1050);

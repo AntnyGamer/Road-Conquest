@@ -1,3 +1,17 @@
+# Road Conquest 1.0 Beta 66
+
+## What's new since Beta 65
+
+- **More matching headroom on Free:** The map gateway increases the shared Geoapify limit from 2,400 to 2,700 credits per UTC day and LocationIQ from 4,000 to 4,500 requests/day. Both remain at 90% of the published free-tier allowances, keeping a 10% reserve. Existing per-client limits, fallback order, matching strictness, GPS capture, storage, and cooldown pacing are unchanged. This increases admitted matching work, not guaranteed aggregate driving hours.
+- **Less gateway overhead:** Direct-client checks now reject untrusted map-matching and raster-tile calls before reading traces or provider switches. The expected response for unauthorized origins can become HTTP 403 even if a provider is disabled or the GPS body is malformed. Authorized callers retain their normal error handling.
+- **Lower quota-accounting read load:** The Cloudflare Durable Object uses a bounded 1,024-key in-memory counter cache instead of 512. Multi-client tests show repeated requests can reuse more counters without extra SQL SELECTs; durable reservations, refunds, restarts, and hard caps remain enforced. The larger cache consumes some additional Worker memory.
+- **Repository cleanup:** Remove three unused historical review/evidence files, retain all runtime resources, licenses, release tools and reproducibility-critical fixtures, and correct stale published quota descriptions.
+- **Compatibility:** Android 12+, versionCode **92**, versionName **1.0-beta.66**. App identity, signing key, local progress, purchase identities, and backend database schema are unchanged.
+
+**Deployment and publishing:** Merging this source and publishing the GitHub release does **not** deploy the map gateway, account function, or Play Store update. Deploy `server/maps/wrangler.jsonc` to Cloudflare to activate the higher quotas and request-handling improvements. Confirm production Play Integrity configuration allows version code 92 before relying on protected backup exports or verified requests in the new build. Verify that code 92 is unused in Play Console before separately uploading the signed AAB. Real fleet-wide driving capacity, supplier consumption and physical-device Play purchase/backup behavior require separate verification.
+
+---
+
 # Road Conquest 1.0 Beta 65
 
 ## What's new since Beta 64

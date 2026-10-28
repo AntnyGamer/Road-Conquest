@@ -29,7 +29,7 @@ test('remote switches accept only known booleans and coalesce/cache KV reads', a
 test('disabled providers never reserve quota or fetch upstream, and health supports free HEAD monitoring', async () => {
   const gateway = createMapsGateway(() => { throw new Error('No upstream allowed'); });
   const env = { GEOAPIFY_API_KEY: 'fake', MAP_BUDGET: {}, SERVICE_CONFIG: { get: async () => JSON.stringify({ version: 1, providers: { 'geoapify-matching': false } }) } };
-  const request = new Request('https://maps.example/v1/mapmatching', { method: 'POST', body: JSON.stringify({ mode: 'drive', waypoints: [
+  const request = new Request('https://maps.example/v1/mapmatching', { method: 'POST', headers: { 'CF-Connecting-IP': '192.0.2.1' }, body: JSON.stringify({ mode: 'drive', waypoints: [
     { location: [0,0], timestamp: '2026-01-01T00:00:00Z' }, { location: [0.001,0], timestamp: '2026-01-01T00:00:10Z' }
   ] }) });
   assert.equal((await gateway.fetch(request, env)).status, 503);
