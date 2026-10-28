@@ -86,6 +86,36 @@ test('free-tier ceilings retain 10 percent headroom and reject high configuratio
   assert.equal(backupLimit, 4500);
 });
 
+test('untrusted calls fail before GPS parsing, KV configuration and quota accounting', async t => {
+  let reads = 0, configuration = 0, reservations = 0;
+  const stream = new ReadableStream({ pull() {
+    reads++;
+    throw new Error('An untrusted caller must not cause GPS body reads');
+  } }, { highWaterMark: 0 });
+  const settings = { GEOAPIFY_API_KEY: 'primary-test-only', LOCATIONIQ_API_KEY: 'backup-test-only',
+    SERVICE_CONFIG: { get: () => { configuration++; throw Error('Config was read'); } },
+    MAP_BUDGET: { idFromName: name => name, get: () => {
+      reservations++;
+      throw Error('Budget was opened');
+    } }
+  };
+  const worker = createMapsGateway(() => { throw Error('Provider was called'); });
+  const rejected = new Request('https://maps.example/v1/mapmatching', { method: 'POST',
+    headers: { 'CF-Connecting-IP': '192.0.2.1', 'CF-Worker': 'forged' },
+    body: stream, duplex: 'half' });
+  t.after(() => rejected.body.cancel().catch(() => {}));
+  const first = await worker.fetch(rejected, settings);
+  assert.equal(first.status, 403);
+  assert.equal(first.headers.get('Cache-Control'), 'no-store');
+  assert.equal((await first.json()).error, 'Direct client required');
+  assert.equal((await worker.fetch(new Request('https://maps.example/v1/locationiq/mapmatching', {
+    method: 'POST', headers: { 'CF-Connecting-IP': '2a06:98c0:3600::103' }, body: '{malformed'
+  }), settings)).status, 403);
+  assert.equal((await worker.fetch(new Request('https://maps.example/v1/tile/positron/1/0/0.png'), settings)).status, 403);
+  assert.equal((await worker.fetch(new Request('https://maps.example/unknown'), settings)).status, 404);
+  assert.deepEqual([reads, configuration, reservations], [0, 0, 0]);
+});
+
 test('exhausted allowance or budget failure cannot fall through to upstream', async () => {
   const worker = createMapsGateway(() => { throw new Error('must not call'); });
   const response = await worker.fetch(request(), env(Response.json({ error: 'exhausted' }, { status: 429, headers: { 'Retry-After': '3600' } })));
