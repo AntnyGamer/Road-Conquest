@@ -70,14 +70,10 @@ export function createMapsGateway(fetchUpstream = fetch, { wait = waitForSlot, u
     if (!env.MAP_BUDGET) return json({ error: 'Map service is not configured' }, 503);
     const locationiq = url.pathname === '/v1/locationiq/mapmatching';
     const secret = locationiq ? env.LOCATIONIQ_API_KEY : env.GEOAPIFY_API_KEY;
-    const ip = request.headers.get('CF-Connecting-IP');
-    const untrustedClient = !ip || request.headers.has('CF-Worker') || ip === '2a06:98c0:3600::103';
     if (!secret) return json({ error: 'Map service is not configured' }, 503);
     let target;
     let payload;
     if ((url.pathname === '/v1/mapmatching' || locationiq) && request.method === 'POST') {
-      // Refuse untrusted callers before consuming GPS bytes or reading provider switches.
-      if (untrustedClient) return json({ error: 'Direct client required' }, 403);
       if (Number(request.headers.get('Content-Length')) > 32_768) return json({ error: 'Request too large' }, 413);
       const reader = request.body?.getReader();
       if (!reader) return json({ error: 'Missing trace' }, 400);
@@ -115,7 +111,6 @@ export function createMapsGateway(fetchUpstream = fetch, { wait = waitForSlot, u
       if (request.method !== 'GET' || !tile || !STYLES.has(tile[1])) return json({ error: 'Not found' }, 404);
       const [, style, z, x, y] = tile;
       if (+z > 19 || +x >= 2 ** +z || +y >= 2 ** +z) return json({ error: 'Invalid tile' }, 400);
-      if (untrustedClient) return json({ error: 'Direct client required' }, 403);
       target = new URL(`https://maps.geoapify.com/v1/tile/${style}/${z}/${x}/${y}.png`);
     }
     // Reading a trace or refreshing configuration can outlive its caller.
@@ -129,6 +124,8 @@ export function createMapsGateway(fetchUpstream = fetch, { wait = waitForSlot, u
     // Geoapify charges one credit per 100 matched waypoints and a quarter
     // credit per raster tile. Represent both in integer quarter-credit units.
     const costUnits = locationiq ? 1 : payload ? 4 * Math.ceil(payload.waypoints.length / 100) : 1;
+    const ip = request.headers.get('CF-Connecting-IP');
+    if (!ip || request.headers.has('CF-Worker') || ip === '2a06:98c0:3600::103') return json({ error: 'Direct client required' }, 403);
     const bytes = await sign(secret, new Date().toISOString().slice(0, 10) + '\n' + ip);
     const bucket = Array.from(bytes, x => x.toString(16).padStart(2, '0')).join('');
     // Public tiles retain their existing lightweight accounting/cache path.
