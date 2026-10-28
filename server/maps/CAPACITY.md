@@ -51,9 +51,9 @@ refund is inferred from a timeout, 5xx response, missing response or cancellatio
 after dispatch. App reservations are conservative; they are not supplier bills.
 
 All provider/global/client credit caps and queue pacing remain. Additional
-matching-attempt ceilings are 2,400/day globally and 600/day per client address
-for Geoapify, and 4,000/day globally and 1,000/day per address for LocationIQ at
-the default caps. These ceilings do not refund. Spent credits and admitted
+matching-attempt ceilings are 2,700/day globally and 600/day per client address
+for Geoapify, and 4,500/day globally and 1,000/day per address for LocationIQ at
+the updated default caps. These ceilings do not refund. Spent credits and admitted
 attempts must both fit. Shared-health rejections do not reserve either.
 
 No GPS trace, trace fingerprint or response body is stored in the budget object.
@@ -109,8 +109,10 @@ these allowances. This is headroom, not a universal capacity guarantee.
 
 ## Estimated driving capacity
 
-The model retains the earlier audit's working budgets of 1,920 Geoapify credits
-and 3,200 LocationIQ calls/day, below the app's hard caps. It assumes 900 retained
+The historical model below retains the earlier audit's working budgets of 1,920
+Geoapify credits and 3,200 LocationIQ calls/day. Those figures were selected
+before the October 28 increase to 2,700/4,500 and should not be mistaken for
+a capacity benchmark of the new limits. It assumes 900 retained
 fixes/hour, 75-minute online fragments, three context slots, startup and a final
 partial batch. Primary packing is 13 credits per fragment, or 10.4/hour. Backup
 timing stays 87 calls per fragment, or 69.6/hour.
