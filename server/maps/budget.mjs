@@ -28,6 +28,8 @@ export class MapBudget {
     // The object is the sole writer of its SQLite storage. Cache only metadata
     // read/written in synchronous transactions; eviction/restart falls back to SQL.
     this.counterCache = new Map();
+    // 1,024 entries retain the three per-address counters for 300 distinct
+    // matching clients without SQL reloads; at most 1,024 keys remain in memory.
     this.permitCache = new Map();
     this.sql.exec(USAGE_TABLE);
     this.sql.exec(`CREATE TABLE IF NOT EXISTS map_permits (
@@ -105,7 +107,7 @@ export class MapBudget {
     const missing = [];
     for (const key of keys) {
       if (this.counterCache.has(key)) counters.set(key,
-        remember(this.counterCache, key, this.counterCache.get(key), 512));
+        remember(this.counterCache, key, this.counterCache.get(key), 1024));
       else missing.push(key);
     }
     const used = key => counters.get(key) || 0;
@@ -119,7 +121,7 @@ export class MapBudget {
         'SELECT bucket,used FROM usage WHERE day = ? AND bucket IN (' + missing.map(() => '?').join(',') + ')',
         day, ...missing
       )) stored.set(row.bucket, row.used);
-      for (const key of missing) counters.set(key, remember(this.counterCache, key, stored.get(key) || 0, 512));
+      for (const key of missing) counters.set(key, remember(this.counterCache, key, stored.get(key) || 0, 1024));
     }
     if (used('all') * 4 + used('units:all') + costUnits > limit)
       return denied('budget_global', 'Daily map allowance exhausted', 429, Math.ceil((DAY - now % DAY) / 1000));
@@ -144,7 +146,7 @@ export class MapBudget {
       ...values);
     for (let i = 0; i < values.length; i += 3) {
       const key = values[i + 1], added = values[i + 2];
-      remember(this.counterCache, key, key === 'next-slot' ? added : used(key) + added, 512);
+      remember(this.counterCache, key, key === 'next-slot' ? added : used(key) + added, 1024);
     }
     if (attemptId) {
       this.sql.exec("INSERT INTO map_permits(id,day,bucket,cost,slot,state) VALUES(?,?,?,?,?,'reserved')",
@@ -201,7 +203,7 @@ export class MapBudget {
         if (permit.day === this.lastPrunedDay) {
           for (const key of ['units:all', 'units:' + permit.bucket]) {
             if (this.counterCache.has(key)) remember(this.counterCache, key,
-              Math.max(0, this.counterCache.get(key) - permit.cost), 512);
+              Math.max(0, this.counterCache.get(key) - permit.cost), 1024);
           }
         }
       }
