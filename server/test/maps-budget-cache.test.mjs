@@ -59,6 +59,25 @@ test('tile-only traffic retains useful client counters without loading matching-
   assert.deepEqual(snapshot(s), before);
 });
 
+test('bounded quota cache avoids repeated SQLite reads for 200 active client addresses', async t => {
+  const s = store(); t.after(() => s.db.close());
+  const reads = () => s.queries.filter(q => q.includes('SELECT bucket,used')).length;
+  for (let client = 1; client <= 200; client++) {
+    assert.equal((await s.call('reserve', args(client, client))).status, 200);
+    s.advance(1500);
+  }
+  const initial = reads();
+  assert.equal(initial, 200, 'new clients still load their authoritative durable balances');
+  assert.equal(s.sizes().counters, 604);
+  for (let client = 1; client <= 200; client++) {
+    assert.equal((await s.call('reserve', args(200 + client, client))).status, 200);
+    s.advance(1500);
+  }
+  assert.equal(reads(), initial, 'the second pass across 200 active clients makes no quota-counter reads');
+  assert.equal(s.sizes().counters, 604);
+  assert.equal(s.db.prepare("SELECT used FROM usage WHERE bucket='units:all'").get().used, 1600);
+});
+
 test('warm matching reuses bookkeeping reads without skipping quota or dispatch writes', async t => {
   const s = store(); t.after(() => s.db.close());
   for (let i = 1; i <= 200; i++) {
@@ -85,8 +104,8 @@ test('known global exhaustion avoids client counter reads while retaining durabl
     s.advance(1500);
   }
   const before = snapshot(s), start = s.queries.length;
-  // The first 100 clients have fallen out of the bounded cache. Another 100
-  // have no durable counters yet. Neither needs reading to prove global denial.
+  // Existing clients may still be warm, while new clients have no counters.
+  // Neither needs reading when the cached global budget proves denial.
   for (let i = 1; i <= 200; i++) {
     const input = { ...args(300 + i, i <= 100 ? i : 300 + i), limit: 1200, ipLimit: 1200 };
     assert.deepEqual(await response(await s.call('reserve', input)), {
@@ -169,7 +188,7 @@ test('refunds retain exact warm balances while evicted clients still reload dura
   assert.equal(s.db.prepare("SELECT used FROM usage WHERE bucket='units:all'").get().used, 8);
 
   s.advance(86_400_000);
-  for (let client = 1; client <= 300; client++) {
+  for (let client = 1; client <= 400; client++) {
     assert.equal((await s.call('reserve', args(1000 + client, client))).status, 200);
     s.advance(1500);
   }
@@ -182,7 +201,7 @@ test('refunds retain exact warm balances while evicted clients still reload dura
     'an evicted client reloads its refunded zero balance');
   assert.equal(reads(), before + 1);
   assert.equal((await s.call('reserve', { ...args(2003, 1), ipLimit: 4 })).headers.get('X-RoadConquest-Error'), 'budget_client');
-  assert.equal(s.db.prepare("SELECT used FROM usage WHERE bucket='units:all'").get().used, 1204);
+  assert.equal(s.db.prepare("SELECT used FROM usage WHERE bucket='units:all'").get().used, 1604);
 });
 
 test('rollback invalidates warmed counters and mutated permits before a retry', async t => {
@@ -216,27 +235,27 @@ test('eviction and restart reload durable permits, refunds and legacy counters',
   const day = '2026-10-19';
   s.db.prepare('INSERT INTO usage(day,bucket,used) VALUES(?,?,1)').run(day, 'all');
   s.db.prepare('INSERT INTO usage(day,bucket,used) VALUES(?,?,1)').run(day, key(1));
-  for (let i = 1; i <= 300; i++) {
+  for (let i = 1; i <= 400; i++) {
     assert.equal((await s.call('reserve', args(i, i))).status, 200);
     s.advance(1500);
   }
-  assert.deepEqual(s.sizes(), { counters: 512, permits: 64 }, 'client churn cannot grow metadata caches without bound');
+  assert.deepEqual(s.sizes(), { counters: 1024, permits: 64 }, 'client churn cannot grow metadata caches without bound');
   const first = args(1);
   const used = () => s.db.prepare("SELECT used FROM usage WHERE bucket='units:all'").get().used;
-  assert.equal(used(), 1200);
+  assert.equal(used(), 1600);
   assert.equal((await s.call('reserve', first)).status, 200);
-  assert.equal(used(), 1200);
+  assert.equal(used(), 1600);
   await s.call('cancel', first); await s.call('cancel', first);
-  assert.equal(used(), 1196);
+  assert.equal(used(), 1596);
   assert.equal((await s.call('dispatch', first)).status, 409);
   assert.equal((await s.call('reserve', first)).status, 409);
   // The old whole-credit records still constrain both caps after eviction.
-  assert.equal((await s.call('reserve', { ...args(301), limit: 1200, ipLimit: 1200 })).status, 429);
-  assert.equal((await s.call('reserve', { ...args(302), ipLimit: 4 })).headers.get('X-RoadConquest-Error'), 'budget_client');
+  assert.equal((await s.call('reserve', { ...args(401), limit: 1200, ipLimit: 1200 })).status, 429);
+  assert.equal((await s.call('reserve', { ...args(402), ipLimit: 4 })).headers.get('X-RoadConquest-Error'), 'budget_client');
   s.restart();
-  assert.equal((await s.call('reserve', { ...args(301), limit: 1200, ipLimit: 1200 })).status, 429);
+  assert.equal((await s.call('reserve', { ...args(401), limit: 1200, ipLimit: 1200 })).status, 429);
   s.advance(86_400_000);
-  assert.equal((await s.call('reserve', args(301))).status, 200);
+  assert.equal((await s.call('reserve', args(401))).status, 200);
   assert.equal(used(), 4);
   assert.equal((await s.call('cancel', first)).status, 409, 'daily pruning removes old permits from memory too');
 });
