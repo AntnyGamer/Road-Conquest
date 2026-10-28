@@ -79,7 +79,9 @@ test('free-tier ceilings retain 10 percent headroom and reject high configuratio
   };
   const worker = createMapsGateway(async () => Response.json({ type: 'FeatureCollection', features: [] }));
   assert.equal((await worker.fetch(request(), gatewayEnv)).status, 200);
-  assert.equal((await worker.fetch(request('/v1/locationiq/mapmatching', {}, fallbackBody), gatewayEnv)).status, 200);
+  assert.equal((await worker.fetch(request('/v1/locationiq/mapmatching', {}, {
+    ...body, waypoints: body.waypoints.map(p => ({ ...p, accuracyMeters: 3 }))
+  }), gatewayEnv)).status, 200);
   assert.equal(primaryLimit, 2700 * 4);
   assert.equal(backupLimit, 4500);
 });
