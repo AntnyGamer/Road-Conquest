@@ -135,6 +135,23 @@ test('gateway reserves quarter-credit tiles and one-credit batches, even with 10
   assert.equal(costs[2].costUnits, 8);
 });
 
+test('durable map budget accepts the enlarged quarter-credit allowance but not over-limit values', async () => {
+  const db = new DatabaseSync(':memory:');
+  try {
+    const budget = new MapBudget({ storage: { sql: { exec(sql, ...bindings) {
+      const statement = db.prepare(sql);
+      return statement.columns().length ? statement.all(...bindings) : (statement.run(...bindings), []);
+    } } } });
+    const requestBudget = limit => budget.fetch(new Request('https://budget/reserve', {
+      method: 'POST', body: JSON.stringify({
+        bucket: 'a'.repeat(64), limit, ipLimit: 2400, costUnits: 4
+      })
+    }));
+    assert.equal((await requestBudget(10800)).status, 200);
+    assert.equal((await requestBudget(10801)).status, 400);
+  } finally { db.close(); }
+});
+
 test('durable reservations persist across instances and enforce global and client caps', async () => {
   const db = new DatabaseSync(':memory:');
   let counterReads = 0;
