@@ -43,6 +43,15 @@ import java.time.Instant
 import java.util.concurrent.Executors
 import android.util.Log
 
+/**
+ * A provider refusing to delete the empty/partial SAF document must not hide the
+ * actual export failure. Keep both pieces of information visible in an Android dialog.
+ */
+internal fun exportFailureDetails(error: Throwable, cleanupFailed: Boolean): String = buildString {
+    append(error.message?.takeIf { it.isNotBlank() } ?: "Unknown error (${error.javaClass.simpleName})")
+    if (cleanupFailed) append("\n\nAn incomplete backup may remain. Delete it manually in Files.")
+}
+
 class SettingsActivity : Activity() {
     private fun setupPrivacyDescriptions() {
         val descriptions = listOf(
@@ -337,10 +346,12 @@ class SettingsActivity : Activity() {
                         refreshSummary()
                     },
                     onFailure = { error ->
-                        val message = if (cleanupFailed) {
-                            "Export failed. An incomplete backup may remain. Delete it manually in Files."
-                        } else "Export failed: ${error.message}"
-                        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+                        Log.e("RoadConquest", "Progress export failed", error)
+                        AlertDialog.Builder(this)
+                            .setTitle("Export failed")
+                            .setMessage(exportFailureDetails(error, cleanupFailed))
+                            .setPositiveButton("OK", null)
+                            .show()
                     }
                 )
             }
