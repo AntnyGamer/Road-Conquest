@@ -61,21 +61,26 @@ object DataImporter {
         if (temporaryFilesInitialized) return
         temporaryFilesInitialized = true
         BackupProtection.clearTemporaryFiles(context)
+        PassphraseBackup.clearTemporaryFiles(context)
         File(context.applicationContext.filesDir, "before-restore.tmp.zip").delete()
         context.cacheDir.listFiles().orEmpty().filter { it.name.startsWith(PREFIX) }.forEach {
             if (it.name.endsWith(".db")) SQLiteDatabase.deleteDatabase(it) else it.delete()
         }
     }
 
-    fun prepare(context: Context, input: InputStream): Prepared =
-        prepare(context, input) { BackupProtection.verify(context, it) }
+    fun prepare(context: Context, input: InputStream): Prepared = prepare(context, input, null)
+
+    fun prepare(context: Context, input: InputStream, passphrase: CharArray?): Prepared =
+        prepare(context, input, { BackupProtection.verify(context, it) }, passphrase)
 
     /** Explicit trust boundary allows structural-format fixtures to exercise parsing independently. */
-    internal fun prepare(context: Context, input: InputStream, authenticate: (File) -> Unit): Prepared {
+    internal fun prepare(context: Context, input: InputStream, authenticate: (File) -> Unit,
+                         passphrase: CharArray? = null): Prepared {
         clearTemporaryFiles(context)
         val helper = AppDatabase.get(context)
         val generation = synchronized(helper.historyLock) { helper.historyGeneration }
         val zipPath = File.createTempFile(PREFIX, ".zip", context.cacheDir)
+        var decryptedZip: File? = null
         val stage = File.createTempFile(PREFIX, ".db", context.cacheDir)
         var success = false
         try {
@@ -91,8 +96,19 @@ object DataImporter {
                     output.write(buffer, 0, read)
                 }
             }
-            authenticate(zipPath)
-            ZipFile(zipPath).use { zip ->
+            val verifiedZip = if (PassphraseBackup.isEncrypted(zipPath)) {
+                val password = passphrase ?: throw PassphraseBackup.PassphraseRequiredException()
+                File.createTempFile(PREFIX, ".zip", context.cacheDir).also { decrypted ->
+                    decryptedZip = decrypted
+                    PassphraseBackup.decrypt(zipPath, decrypted, password)
+                }
+            } else {
+                authenticate(zipPath)
+                zipPath
+            }
+            // Both verified Play ZIPs and authenticated decrypted ZIPs receive
+            // the identical bounded CSV/metadata checks and weekly-credit exclusions.
+            ZipFile(verifiedZip).use { zip ->
                 // A valid backup has only the supported tables and metadata.
                 // Check ZipFile's entry count before allocating an application
                 // list, rather than enumerating thousands of invalid extras.
@@ -214,6 +230,7 @@ object DataImporter {
             }
         } finally {
             zipPath.delete()
+            decryptedZip?.delete()
             if (!success) SQLiteDatabase.deleteDatabase(stage)
         }
     }
