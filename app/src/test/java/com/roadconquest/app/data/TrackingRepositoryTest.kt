@@ -58,6 +58,16 @@ class TrackingRepositoryTest {
                 4_000L, 18_000L))
     }
 
+    @Test fun stationaryOrWalkingSpeedCannotProveARoadCrossing() {
+        val a = -74.00025
+        val b = -74.00010
+        point(4_000L, lon = a, speed = 0f)
+        point(6_000L, lon = b, speed = 1.3f)
+        assertFalse("Apparent displacement with only low-speed fixes is insufficient",
+            repository.hasRecordedDrivingAcrossGap(40.0, a, 40.0, b,
+                4_000L, 6_000L))
+    }
+
     @Test fun locallySavedCompressedFixesCanProveActualMovement() {
         val a = -74.00025
         val b = -74.00010
