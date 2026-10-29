@@ -77,6 +77,60 @@ class PassphraseBackupTest {
         } finally { file.delete() }
     }
 
+    @Test fun privateExportDoesNotCreateAPlaintextIntermediateZip() {
+        val context: android.content.Context = RuntimeEnvironment.getApplication()
+        val repository = com.roadconquest.app.data.TrackingRepository(context)
+        repository.clearHistory()
+        val bytes = ByteArrayOutputStream()
+        var observedEncryptedWrite = false
+        val monitored = object : java.io.OutputStream() {
+            override fun write(value: Int) = bytes.write(value)
+            override fun write(buffer: ByteArray, offset: Int, length: Int) {
+                if (!observedEncryptedWrite && bytes.size() >= 38) {
+                    observedEncryptedWrite = true
+                    assertTrue("Never write a plaintext ZIP into the cache during encrypted export",
+                        context.cacheDir.listFiles().orEmpty().none {
+                            it.name.startsWith("roadconquest-private-export-")
+                        })
+                }
+                bytes.write(buffer, offset, length)
+            }
+        }
+        PassphraseBackup.writePortable(context, repository, monitored, password)
+        assertTrue(observedEncryptedWrite)
+        val backup = privateFile(bytes.toByteArray())
+        val decoded = File.createTempFile("private-test-", ".zip")
+        try {
+            PassphraseBackup.decrypt(backup, decoded, password)
+            java.util.zip.ZipFile(decoded).use { zip ->
+                assertNotNull(zip.getEntry("track_points.csv"))
+            }
+        } finally { backup.delete(); decoded.delete() }
+    }
+
+    @Test fun encryptedExportRejectsConcurrentDeviceHistoryDeletion() {
+        val context: android.content.Context = RuntimeEnvironment.getApplication()
+        val repository = com.roadconquest.app.data.TrackingRepository(context)
+        repository.clearHistory()
+        var deleted = false
+        val sink = object : java.io.OutputStream() {
+            override fun write(value: Int) {}
+            override fun write(buffer: ByteArray, offset: Int, length: Int) {
+                if (!deleted && length > 0) {
+                    deleted = true
+                    repository.clearHistory()
+                }
+            }
+        }
+        try {
+            PassphraseBackup.writePortable(context, repository, sink, password)
+            fail("History deleted during export must invalidate the backup")
+        } catch (expected: IllegalStateException) {
+            assertTrue(expected.message.orEmpty().contains("progress changed"))
+        }
+        assertTrue(deleted)
+    }
+
     @Test fun rejectsWeakPassphrasesBeforeWriting() {
         val output = ByteArrayOutputStream()
         try {
