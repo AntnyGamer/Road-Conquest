@@ -1,3 +1,18 @@
+# Road Conquest 1.0 Beta 68
+
+## What's new since Beta 67
+
+- **GitHub backups now have a portable option:** Settings → Export progress offers a private `.rcbackup` file that works without Google Play licensing or any backend. The entire progress ZIP, including GPS history, is encrypted with AES-256-GCM using a passphrase the user must retain. Imports require the same passphrase and pass all existing ZIP/CSV, metadata, provenance and ledger checks. Offline export uses a new random salt and nonce for every file. A private backup is not a normal ZIP and does not affect verified scoring.
+- **Faster, smaller private exports:** Write the encrypted ZIP directly to the selected destination rather than creating and rereading a second plaintext ZIP in cache. Prevent stale exports when device history is deleted or restored during the write. This lowers temporary storage and disk I/O without changing the encrypted file format.
+- **Retained Play-signed backups:** The existing `.zip` export continues to require the separately deployed Play Integrity signing service and a licensed Play build. Its trust policy, restore behavior and compatibility remain unchanged. Unsigned legacy ZIP archives are still rejected.
+- **Diagnostic export errors:** If Android's file provider refuses to delete a partial output, the error dialog reports the ORIGINAL failure and warns about the possible incomplete file separately.
+- **GPS-backed road and intersection repairs:** Preserve the ordinary 30 m/15 s verified-geometry turn display fallback, and add a stricter way to display otherwise missing turns up to 65 m or 45 seconds when three time-ordered GPS fixes actually show the approach, junction and exit. Straight seams (at most 25 m) additionally require real saved GPS movement, matching road names and aligned bearings. These repairs are visual-only: they do not mark pending fixes matched, create new roads, mileage, points, achievements, or verified credit. Missing/weak GPS, walking motion, reversed directions and ambiguous connections remain unresolved instead of fabricating roads.
+- **Compatibility:** Android 12+, versionCode **94**, versionName **1.0-beta.68**. No database schema, app identity, signing key, or server deployment change.
+
+**Testing / release requirements:** Verify full Android unit tests, lint, device emulator and release-startup gates before merging. Check an actual GitHub-installed APK: export a private file, restore it offline on a second installation using its passphrase, reject altered files and wrong passphrases, and verify historical road continuity without awarding credits. User GPS evidence from the screenshots was not available for automated reproduction; these changes do not guarantee every historic turn can be recovered. Confirm version code 94 is unused in Google Play before uploading an AAB. The Google Play signing service must be deployed separately if using Play-signed ZIP exports.
+
+---
+
 # Road Conquest 1.0 Beta 67
 
 ## What's new since Beta 66

@@ -34,6 +34,51 @@ class TrackingRepositoryTest {
             this.time = time
         })
 
+    @Test fun savedDrivingFixesCanConfirmOneActualShortRoadGap() {
+        val a = -74.00025
+        val b = -74.00010
+        point(4_000L, lon = a)
+        point(6_000L, lon = b)
+        assertTrue(repository.hasRecordedDrivingAcrossGap(40.0, a, 40.0, b,
+            4_000L, 6_000L))
+        assertFalse("No evidence for a nearby parallel gap",
+            repository.hasRecordedDrivingAcrossGap(40.0003, a, 40.0003, b,
+                4_000L, 6_000L))
+    }
+
+    @Test fun missingOrDiscontinuousEvidenceMustNotFillRoadGaps() {
+        val a = -74.00025
+        val b = -74.00010
+        assertFalse(repository.hasRecordedDrivingAcrossGap(40.0, a, 40.0, b, 4_000L, 6_000L))
+        point(4_000L, lon = a)
+        assertFalse(repository.hasRecordedDrivingAcrossGap(40.0, a, 40.0, b, 4_000L, 6_000L))
+        point(18_000L, lon = b)
+        assertFalse("A fourteen-second GPS gap cannot establish crossing",
+            repository.hasRecordedDrivingAcrossGap(40.0, a, 40.0, b,
+                4_000L, 18_000L))
+    }
+
+    @Test fun stationaryOrWalkingSpeedCannotProveARoadCrossing() {
+        val a = -74.00025
+        val b = -74.00010
+        point(4_000L, lon = a, speed = 0f)
+        point(6_000L, lon = b, speed = 1.3f)
+        assertFalse("Apparent displacement with only low-speed fixes is insufficient",
+            repository.hasRecordedDrivingAcrossGap(40.0, a, 40.0, b,
+                4_000L, 6_000L))
+    }
+
+    @Test fun locallySavedCompressedFixesCanProveActualMovement() {
+        val a = -74.00025
+        val b = -74.00010
+        point(4_000L, lon = a)
+        repository.recordSkippedDrivingFix(Location("gps").apply {
+            latitude = 40.0; longitude = b; accuracy = 4f; speed = 5f; time = 6_000L
+        })
+        assertTrue(repository.hasRecordedDrivingAcrossGap(40.0, a, 40.0, b,
+            4_000L, 6_000L))
+    }
+
     @Test fun nearbyTileCountUsesOneQueryAndHandlesTheDateLine() {
         val context = RuntimeEnvironment.getApplication()
         AppDatabase.get(context).writableDatabase.delete("explored_grid", null, null)

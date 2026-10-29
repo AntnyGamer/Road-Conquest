@@ -1438,6 +1438,188 @@ class TrackingRepository(context: Context) {
         return visits
     }
 
+    /**
+     * Evidence for a visual road-gap repair, not permission to unlock a road.
+     * Only recorded driving fixes can prove movement through this short seam.
+     * Query bounded, indexed timestamp windows in both the matching queue and
+     * locally retained compression samples. Never interpolate across a GPS outage.
+     */
+    @Synchronized
+    fun hasRecordedDrivingAcrossGap(
+        fromLat: Double, fromLon: Double, toLat: Double, toLon: Double,
+        departureTime: Long, arrivalTime: Long
+    ): Boolean = synchronized(dbHelper.historyLock) {
+        if (!isHistoryCurrent() || !listOf(fromLat, fromLon, toLat, toLon).all { it.isFinite() } ||
+            arrivalTime - departureTime !in 1L..15_000L
+        ) return@synchronized false
+        val start = (departureTime - 8_000L).coerceAtLeast(0L)
+        val end = arrivalTime + 8_000L
+        data class Fix(val lat: Double, val lon: Double, val accuracy: Float, val speed: Float, val time: Long)
+        val fixes = ArrayList<Fix>(64)
+        val db = dbHelper.readableDatabase
+        for (table in listOf("track_points", "skipped_driving_fixes")) {
+            db.query(table,
+                arrayOf("latitude", "longitude", "accuracy_m", "speed_mps", "timestamp_ms"),
+                "timestamp_ms >= ? AND timestamp_ms <= ?",
+                arrayOf(start.toString(), end.toString()),
+                null, null, "timestamp_ms ASC", "65"
+            ).use { cursor ->
+                // Dense or discontinuous evidence is not a reason to guess.
+                if (cursor.count > 64) return@synchronized false
+                while (cursor.moveToNext()) {
+                    val lat = cursor.getDouble(0)
+                    val lon = cursor.getDouble(1)
+                    val accuracy = cursor.getFloat(2)
+                    val speed = cursor.getFloat(3)
+                    if (lat.isFinite() && lon.isFinite() &&
+                        accuracy.isFinite() && accuracy in 0.01f..12f &&
+                        speed.isFinite() && speed >= 0f
+                    ) fixes += Fix(lat, lon, accuracy, speed, cursor.getLong(4))
+                }
+            }
+        }
+        fixes.sortBy { it.time }
+        val cosLat = kotlin.math.cos(Math.toRadians((fromLat + toLat) / 2.0))
+        val metersPerDegree = 6_371_008.8 * Math.PI / 180.0
+        fun xy(lat: Double, lon: Double) = Pair(
+            ((lon - fromLon + 540.0) % 360.0 - 180.0) * metersPerDegree * cosLat,
+            (lat - fromLat) * metersPerDegree
+        )
+        val (gx, gy) = xy(toLat, toLon)
+        val lengthSq = gx * gx + gy * gy
+        if (lengthSq !in 9.0..900.0) return@synchronized false
+        fun projection(fix: Fix): Double {
+            val (x, y) = xy(fix.lat, fix.lon)
+            return (x * gx + y * gy) / lengthSq
+        }
+        for (i in 0 until fixes.lastIndex) {
+            val before = fixes[i]
+            val after = fixes[i + 1]
+            val elapsed = after.time - before.time
+            if (elapsed !in 1L..12_000L ||
+                before.time > departureTime + 8_000L ||
+                after.time < arrivalTime - 8_000L
+            ) continue
+            val (ax, ay) = xy(before.lat, before.lon)
+            val (bx, by) = xy(after.lat, after.lon)
+            val firstDistance = kotlin.math.hypot(ax, ay)
+            val finalDistance = kotlin.math.hypot(bx - gx, by - gy)
+            val actualMovement = kotlin.math.hypot(bx - ax, by - ay)
+            // Low-accuracy driving observations and small GPS wander are not proof.
+            if (firstDistance > kotlin.math.max(8.0, before.accuracy + 3.0) ||
+                finalDistance > kotlin.math.max(8.0, after.accuracy + 3.0) ||
+                actualMovement < 5.0 ||
+                kotlin.math.max(before.speed, after.speed) < 2.2f ||
+                actualMovement > kotlin.math.sqrt(lengthSq) * 1.5 + 12.0 ||
+                actualMovement / (elapsed / 1_000.0) > 55.0
+            ) continue
+            if (projection(before) <= 0.40 && projection(after) >= 0.60) {
+                return@synchronized true
+            }
+        }
+        false
+    }
+
+    /**
+     * A longer missing intersection turn needs three time-ordered recorded GPS
+     * observations near its approach, projected road-centerline intersection and
+     * exit. This does not mark any fix matched or earn any road/score credit.
+     * Refuse sparse history, ambiguous GPS and jumps instead of extrapolating.
+     */
+    @Synchronized
+    fun hasRecordedDrivingThroughTurn(
+        fromLat: Double, fromLon: Double, bendLat: Double, bendLon: Double,
+        toLat: Double, toLon: Double, departureTime: Long, arrivalTime: Long
+    ): Boolean = synchronized(dbHelper.historyLock) {
+        if (!isHistoryCurrent() ||
+            !listOf(fromLat, fromLon, bendLat, bendLon, toLat, toLon).all { it.isFinite() } ||
+            arrivalTime - departureTime !in 1L..45_000L
+        ) return@synchronized false
+
+        val latScale = 6_371_008.8 * Math.PI / 180.0
+        val lonScale = latScale * kotlin.math.cos(Math.toRadians(bendLat))
+        if (lonScale < 0.01) return@synchronized false
+        fun xy(lat: Double, lon: Double) = Pair(
+            ((lon - bendLon + 540.0) % 360.0 - 180.0) * lonScale,
+            (lat - bendLat) * latScale
+        )
+        val (ax, ay) = xy(fromLat, fromLon)
+        val (bx, by) = xy(toLat, toLon)
+        val approachLength = kotlin.math.hypot(ax, ay)
+        val exitLength = kotlin.math.hypot(bx, by)
+        if (approachLength !in 4.0..65.0 || exitLength !in 4.0..65.0) return@synchronized false
+
+        data class Fix(val x: Double, val y: Double, val accuracy: Float,
+                       val speed: Float, val time: Long)
+        val fixes = ArrayList<Fix>(80)
+        val since = (departureTime - 10_000L).coerceAtLeast(0L).toString()
+        val until = (arrivalTime + 10_000L).toString()
+        val db = dbHelper.readableDatabase
+        for (table in listOf("track_points", "skipped_driving_fixes")) {
+            db.query(table, arrayOf("latitude", "longitude", "accuracy_m", "speed_mps", "timestamp_ms"),
+                "timestamp_ms BETWEEN ? AND ?", arrayOf(since, until),
+                null, null, "timestamp_ms ASC", "65").use { cursor ->
+                if (cursor.count >= 65) return@synchronized false
+                while (cursor.moveToNext()) {
+                    val accuracy = cursor.getFloat(2)
+                    val speed = cursor.getFloat(3)
+                    if (!accuracy.isFinite() || accuracy !in 0.01f..12f ||
+                        !speed.isFinite() || speed < 0f) continue
+                    val (x, y) = xy(cursor.getDouble(0), cursor.getDouble(1))
+                    if (x.isFinite() && y.isFinite())
+                        fixes += Fix(x, y, accuracy, speed, cursor.getLong(4))
+                }
+            }
+        }
+        if (fixes.size < 3) return@synchronized false
+        fixes.sortBy { it.time }
+
+        fun near(fix: Fix, x: Double, y: Double, radius: Double) =
+            kotlin.math.hypot(fix.x - x, fix.y - y) <= kotlin.math.max(radius, fix.accuracy.toDouble() + 3.0)
+        fun aligned(dx: Double, dy: Double, expectedX: Double, expectedY: Double): Boolean {
+            val length = kotlin.math.hypot(dx, dy)
+            val target = kotlin.math.hypot(expectedX, expectedY)
+            return length >= 4.0 && length <= 75.0 &&
+                (dx * expectedX + dy * expectedY) / (length * target) >= 0.65
+        }
+        for (middleIndex in fixes.indices) {
+            val middle = fixes[middleIndex]
+            if (!near(middle, 0.0, 0.0, 12.0)) continue
+            // Approach/exit checks are independent once the same observed
+            // junction point is fixed. This is quadratic instead of cubic in
+            // GPS samples and still requires a driving-speed fix in the triple.
+            var approachFound = false
+            var fastApproach = false
+            for (startIndex in 0 until middleIndex) {
+                val before = fixes[startIndex]
+                val duration = middle.time - before.time
+                if (duration !in 1L..20_000L ||
+                    before.time > departureTime + 10_000L ||
+                    !near(before, ax, ay, 13.0) ||
+                    !aligned(middle.x - before.x, middle.y - before.y, -ax, -ay)
+                ) continue
+                val distance = kotlin.math.hypot(middle.x - before.x, middle.y - before.y)
+                if (distance / (duration / 1_000.0) > 55.0) continue
+                approachFound = true
+                if (before.speed >= 2.2f) { fastApproach = true; break }
+            }
+            if (!approachFound) continue
+            for (endIndex in middleIndex + 1 until fixes.size) {
+                val after = fixes[endIndex]
+                val duration = after.time - middle.time
+                if (duration !in 1L..20_000L ||
+                    after.time < arrivalTime - 10_000L ||
+                    !near(after, bx, by, 13.0) ||
+                    !aligned(after.x - middle.x, after.y - middle.y, bx, by) ||
+                    (!fastApproach && maxOf(middle.speed, after.speed) < 2.2f)
+                ) continue
+                val distance = kotlin.math.hypot(after.x - middle.x, after.y - middle.y)
+                if (distance / (duration / 1_000.0) <= 55.0) return@synchronized true
+            }
+        }
+        false
+    }
+
     data class RoadQueryResult(val roads: List<RoadRecord>, val complete: Boolean)
 
     data class PendingRouteResult(

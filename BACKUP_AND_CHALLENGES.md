@@ -5,12 +5,24 @@ Settings → **Import and restore progress** accepts authenticated Road Conquest
 literal apostrophes; legacy format 9 could not distinguish an apostrophe before a formula
 from its spreadsheet-protection prefix. Format 11 preserves the first-unlock timestamps for new mile tiles. Format 12 also preserves compressed driving fixes. Older formats retain explored tiles but may have no reliable historical tile-unlock dates or compressed fixes.
 
-Portable exports require internet and a licensed official Google Play installation that passes
-app/device verification. The server signs the exact ZIP fingerprint; backup contents and GPS history
-are not sent to the signing service. Restore checks the signature before parsing, rejecting altered, repacked or
-unsigned files, including older unsigned exports. Trusted verification keys are fetched over HTTPS
-and saved privately; a new installation or signing key needs internet once. The signing service
-must be configured before releasing this feature; see [server setup](server/README.md#protected-local-backups).
+Settings now offers two portable backup choices:
+
+- **Private encrypted .rcbackup (GitHub or Google Play):** Requires a user-supplied passphrase of
+  at least 12 characters. AES-256-GCM authenticates and encrypts the complete ZIP including GPS
+  history; PBKDF2-HMAC-SHA256 (310,000 iterations, random 16-byte salt) derives the encryption
+  key and each export uses a random 12-byte nonce. This works offline on either installation type.
+  Keep your passphrase: it cannot be reset and is never stored in the app. Altered files and wrong
+  passphrases are rejected before restoring any data. Opening these files in a normal ZIP program
+  will not work; import them using Road Conquest.
+- **Google Play-verified .zip:** Requires internet and an official licensed Google Play installation
+  that passes app/device verification. The server signs the ZIP fingerprint; backup contents and
+  GPS history are not sent to the signing service. Trusted verification keys are fetched via HTTPS
+  and cached for offline restore. The signing service must be configured separately; see
+  [server setup](server/README.md#protected-local-backups).
+
+Both paths then use the same strict ZIP schema, CRC and data validation before confirmation.
+Older unsigned exports remain rejected. Neither import path grants verified scoring or restored
+weekly goal credit.
 
 The importer validates archive entries, CRCs, exact CSV columns, UTF-8, coordinates,
 geometry, timestamps, unique keys, road references, row counts, mileage and the points
