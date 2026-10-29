@@ -20,7 +20,8 @@ class MotionModeTracker {
             return isWalking
         }
         when {
-            speed >= 4f -> {
+            // Match the recording cutoff; faster walking/jogging is treated as driving.
+            speed >= 2.2f -> {
                 walkingSince = null
                 val start = fastSince ?: time.also { fastSince = it }
                 if (time - start >= 2_000L) {
@@ -28,7 +29,7 @@ class MotionModeTracker {
                     lastDriving = time
                 }
             }
-            speed in 0.5f..2.8f -> {
+            speed >= 0.5f -> {
                 fastSince = null
                 val start = walkingSince ?: time.also { walkingSince = it }
                 if (time - start >= 12_000L && lastDriving?.let { time - it < 45_000L } != true) {

@@ -391,6 +391,52 @@ class MatchingRetryTest {
         }
     }
 
+    @Test fun serviceStopMakesOneFinalRequestButKeepsProviderCooldownsAndDeletionGuards() {
+        for (mode in listOf("normal", "provider-cooldown", "deletion")) {
+            val app = RuntimeEnvironment.getApplication()
+            com.roadconquest.app.util.Prefs.setDeviceDataDeletionPending(app, false)
+            val controller = Robolectric.buildService(TrackingService::class.java)
+            val service = controller.get()
+            val repo = repository()
+            val ids = (0..3).map { index -> repo.insertLocation(Location("gps").apply {
+                latitude = 40.0; longitude = -74.0 - index * .001
+                accuracy = 5f; speed = 8f; time = System.currentTimeMillis() - 9_000 + index * 3_000
+            }) }
+            repo.deferMatching(ids, System.currentTimeMillis() + 300_000)
+            val submitted = mutableListOf<List<Long>>()
+            val matcher = object : com.roadconquest.app.matching.RoadMatcher {
+                override val unavailable = false
+                override fun rateLimitRemainingMs() = if (mode == "provider-cooldown") 60_000L else 0L
+                override fun match(points: List<com.roadconquest.app.data.TrackPoint>): com.roadconquest.app.matching.MatchResult {
+                    submitted += points.map { it.id }
+                    // A partial response leaves work behind: shutdown must not send it again.
+                    return com.roadconquest.app.matching.MatchResult(emptyList(), emptyMap(), explicitNoMatch = true)
+                }
+            }
+            org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofMinutes(10))
+            field(service, "repository").set(service, repo)
+            field(service, "matcher").set(service, matcher)
+            field(service, "lastMatchAttempt").setLong(service, android.os.SystemClock.elapsedRealtime())
+            (field(service, "persistedDrivingFixThisSession").get(service) as java.util.concurrent.atomic.AtomicBoolean).set(true)
+            field(service, "ready").setBoolean(service, true)
+            val storage = field(service, "storageExecutor").get(service) as ExecutorService
+            val matching = field(service, "matchingExecutor").get(service) as ScheduledExecutorService
+            try {
+                if (mode == "deletion") com.roadconquest.app.util.Prefs.setDeviceDataDeletionPending(app, true)
+                controller.destroy()
+                assertTrue(storage.awaitTermination(10, TimeUnit.SECONDS))
+                assertTrue(matching.awaitTermination(10, TimeUnit.SECONDS))
+                assertEquals(if (mode == "normal") 1 else 0, submitted.size)
+                if (mode == "normal") assertEquals(ids, submitted.single())
+                assertEquals(4L, repo.getSummary().trackPointCount)
+            } finally {
+                storage.shutdownNow()
+                matching.shutdownNow()
+                com.roadconquest.app.util.Prefs.setDeviceDataDeletionPending(app, false)
+            }
+        }
+    }
+
     @Test fun laterBatchDeadlineGetsATimerAfterEarlierBatchResolves() {
         val controller = Robolectric.buildService(TrackingService::class.java)
         val service = controller.get()

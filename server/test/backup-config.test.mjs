@@ -62,11 +62,15 @@ test('offline release preflight accepts existing credentials and rejects stale v
   const env = { ...base, BACKUP_SIGNING_PRIVATE_KEY: pem, FORUM_ENABLED: '1', VERIFIED_EVIDENCE_KEY: 'unchanged' };
   const status = await checkBackupConfig(env, '91');
   assert.equal(status.version_code, 91);
+  for (const version of [90, 92, 1000000]) {
+    assert.equal((await checkBackupConfig({ ...env, PLAY_VERSION_CODES: '90' }, version)).version_code, version);
+  }
+  await assert.rejects(checkBackupConfig(env, 89), /90 or newer/);
   assert.equal(status.cloud_project, base.PLAY_CLOUD_PROJECT_NUMBER);
   assert.doesNotMatch(JSON.stringify(status), /PRIVATE KEY|service_account|unchanged/);
   for (const change of [
     { BACKUP_SIGNING_PRIVATE_KEY: '' }, { BACKUP_SIGNING_PRIVATE_KEY: 'invalid-private-material' },
-    { BACKUP_SIGNING_PRIVATE_KEY: credentials }, { PLAY_VERSION_CODES: '90' }, { PLAY_CERTIFICATES: 'wrong' },
+    { BACKUP_SIGNING_PRIVATE_KEY: credentials }, { PLAY_CERTIFICATES: 'wrong' },
     { PLAY_CLOUD_PROJECT_NUMBER: '' }, { PLAY_SERVICE_ACCOUNT_JSON: '{private-material' },
     { PLAY_SERVICE_ACCOUNT_JSON: JSON.stringify({ type: 'service_account', client_email: 'test', private_key: pem }) },
     { BACKUP_VERIFICATION_KEYS_JSON: '[private-material' }, { NODE_ENV: 'development' }, { APPLY_SCHEMA_ON_STARTUP: '1' },

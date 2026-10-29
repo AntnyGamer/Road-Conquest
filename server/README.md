@@ -374,8 +374,12 @@ PLAY_SERVICE_ACCOUNT_JSON=<service-account JSON stored as a secret env var>
 # or PLAY_SERVICE_ACCOUNT_FILE=/run/secrets/play-integrity.json
 PLAY_CLOUD_PROJECT_NUMBER=<numeric linked Google Cloud project>
 PLAY_CERTIFICATES=<base64url SHA256 Play app-signing certificate without padding>
-PLAY_VERSION_CODES=90,91,92
 ```
+
+Play Integrity accepts canonical Android version codes **90 and newer**. The server enforces this
+minimum directly for backups and verified scoring; future versions need no allowlist update.
+The legacy `PLAY_VERSION_CODES` environment variable is ignored. App identity, signing certificate,
+Play licensing, device integrity and request binding are still required.
 
 Apply `schema.sql` as the database owner. Restricted API roles need
 `SELECT, INSERT, UPDATE, DELETE` on `cell_scores`, `competition_cells`,
@@ -428,7 +432,7 @@ tools do not deploy or modify Neon.
 Portable backup exports are authenticated with server-held P-256 signatures. Configure
 `BACKUP_SIGNING_PRIVATE_KEY` with a dedicated PKCS#8 PEM private key in the function's secret
 configuration, alongside the existing production `PLAY_SERVICE_ACCOUNT_JSON` (or file),
-`PLAY_CERTIFICATES`, `PLAY_VERSION_CODES` and `PLAY_CLOUD_PROJECT_NUMBER`. This works independently
+`PLAY_CERTIFICATES` and `PLAY_CLOUD_PROJECT_NUMBER`. This works independently
 of `LEADERBOARDS_ENABLED`; no account, scores or GPS history are used by the signer. Generate the
 key in a trusted environment with `openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256`.
 Keep a durable private copy outside source control. Do not reuse the APK, account or checkpoint keys.

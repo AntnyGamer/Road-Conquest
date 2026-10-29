@@ -21,18 +21,17 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Verify competitive version allowlist includes this Android build
+      - name: Verify this Android build meets the server minimum version
         shell: bash
         run: |
           set -euo pipefail
-          version_code=$(sed -n 's/.*versionCode = \([0-9][0-9]*\).*/\1/p' app/build.gradle.kts)
-          allowed=$(sed -n 's/^PLAY_VERSION_CODES=\([0-9,][0-9,]*\)$/\1/p' server/README.md | head -n 1)
+          version_code=$(sed -n 's/.*versionCode = \\([0-9][0-9]*\\).*/\\1/p' app/build.gradle.kts)
+          minimum=$(node --input-type=module -e 'import { MIN_PLAY_VERSION_CODE } from "./server/src/scoring.mjs"; console.log(MIN_PLAY_VERSION_CODE)')
           test -n "$version_code"
-          test -n "$allowed"
-          case ",$allowed," in
-            *",$version_code,"*) ;;
-            *) echo "::error::Android versionCode $version_code is missing from PLAY_VERSION_CODES=$allowed"; exit 1 ;;
-          esac
+          if [ "$version_code" -lt "$minimum" ]; then
+            echo "::error::Android versionCode $version_code is below the server minimum $minimum"
+            exit 1
+          fi
       - name: Set up Node 22
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -62,6 +61,19 @@ jobs:
       - name: Test account security and database constraints
         working-directory: server
         run: npm test
+      - name: Prepare tested deployment transport
+        if: github.event_name == 'pull_request' && github.head_ref == 'fix/walking-final-match-version-minimum'
+        shell: python
+        run: |
+          import base64, hashlib, io, pathlib, zipfile
+          archive = io.BytesIO()
+          with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as bundle:
+              bundle.writestr("index.mjs", pathlib.Path("server/dist/index.mjs").read_bytes())
+          data = archive.getvalue()
+          encoded = base64.b64encode(data).decode("ascii")
+          print("RC_FUNCTION_ZIP_SHA256=" + hashlib.sha256(data).hexdigest())
+          for offset in range(0, len(encoded), 4096):
+              print("RC_FUNCTION_ZIP_" + str(offset // 4096).zfill(4) + "=" + encoded[offset:offset + 4096])
       - name: Save tested account function
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

@@ -1,6 +1,12 @@
 import { createHash } from "node:crypto";
 import { isUtf8 } from "node:buffer";
 
+export const MIN_PLAY_VERSION_CODE = 90;
+export function supportsPlayVersion(version) {
+  return typeof version === "string" && /^[1-9][0-9]*$/u.test(version) &&
+    Number.isSafeInteger(Number(version)) && Number(version) >= MIN_PLAY_VERSION_CODE;
+}
+
 export class EvidenceError extends Error {
   constructor(message, status = 422) { super(message); this.status = status; }
 }
@@ -69,7 +75,7 @@ export function verifyIntegrityVerdict(payload, hash, config, now = Date.now()) 
   if (request?.requestHash !== hash || request?.requestPackageName !== config.packageName ||
       !Number.isSafeInteger(stamp) || now - stamp < -10000 || now - stamp > 120000 ||
       recognition !== "PLAY_RECOGNIZED" || app?.packageName !== config.packageName ||
-      !config.versions.includes(String(app?.versionCode)) ||
+      !supportsPlayVersion(app?.versionCode) ||
       !Array.isArray(app?.certificateSha256Digest) || app.certificateSha256Digest.length !== 1 ||
       !config.certificates.includes(app.certificateSha256Digest[0]) ||
       licensing !== "LICENSED" ||

@@ -565,7 +565,7 @@ class TrackingService : Service(), LocationListener {
                             try {
                                 repository.makePendingMatchingEligibleNow()
                                 matchingInFlight.set(true)
-                                runMatchingBatches()
+                                runMatchingBatches(finishing = true)
                             } catch (error: Exception) {
                                 Log.e("RoadConquest", "Final matching failed. Saved GPS remains for next launch", error)
                             }
@@ -847,7 +847,9 @@ class TrackingService : Service(), LocationListener {
     }
 
     /** Matches already persisted fixes on the serial matcher, including a final stop-time pass. */
-    private fun runMatchingBatches() {
+    private fun runMatchingBatches() = runMatchingBatches(finishing = false)
+
+    private fun runMatchingBatches(finishing: Boolean) {
         var needsRecovery = false
         try {
             repeat(MAX_MATCH_BATCHES_PER_RUN) { batchIndex ->
@@ -922,8 +924,8 @@ class TrackingService : Service(), LocationListener {
                 val nowElapsed = SystemClock.elapsedRealtime()
                 val wait = remainingRemoteMatchingDelayMs(nowElapsed, lastMatchAttempt, lastRemotePointLimit,
                     if (retryStartId == null) window.markableIds.size else 0)
-                if (cached == null && wait > 0L) {
-                    // This also covers final flushes and forced backlog retry runs.
+                if (!finishing && cached == null && wait > 0L) {
+                    // Normal forced/backlog retries keep the ordinary cadence.
                     scheduleBacklogContinuation(wait)
                     return
                 }
@@ -965,6 +967,9 @@ class TrackingService : Service(), LocationListener {
                         System.currentTimeMillis() +
                             maxOf(MATCH_RETRY_AFTER_FAILURE_MS, providerCooldown)
                     )
+                    // Shutdown has no later retry timer. Allow one final attempt,
+                    // but never turn it into a remote backlog-draining burst.
+                    if (finishing && matcher.lastCallUsedNetwork) return
                     // If the remote server rejected traffic, do not drain other
                     // pending batches into the same cooldown. Saved GPS persists,
                     // and the scheduled deferred retry will resume later.
@@ -1018,6 +1023,7 @@ class TrackingService : Service(), LocationListener {
                     noMatchBackoff.clear(window.markableIds)
                 }
 
+                if (finishing && matcher.lastCallUsedNetwork) return
                 continueMatchingBatch(batchIndex)
             }
         } catch (_: InterruptedException) {
@@ -1173,7 +1179,8 @@ class TrackingService : Service(), LocationListener {
         // independently throttled, so local progress does not consume credits.
         private const val MATCH_INTERVAL_MS = 30_000L
         // Match new roads online no more frequently than the original seven
-        // minute batching window, including forced retries and final flushes.
+        // minute batching window, including forced retries. A normal service
+        // stop may make one final request; provider quotas/cooldowns still apply.
         private const val MIN_REMOTE_MATCH_INTERVAL_MS = 7 * 60_000L
 
         internal fun remainingRemoteMatchingDelayMs(

@@ -23,6 +23,18 @@ class MotionModeTrackerTest {
         assertTrue(motion.observe(63_000L, 1.4f, 4f))
     }
 
+    @Test fun walkingAndDrivingMeetAtTheRecordingCutoffWithoutAnOverlap() {
+        for (speed in listOf(2.2f, 2.5f, 2.8f)) {
+            val motion = MotionModeTracker()
+            for (time in 0L..60_000L step 3_000L) assertFalse(motion.observe(time, speed, 4f))
+        }
+        val motion = MotionModeTracker()
+        for (time in 0L..12_000L step 3_000L) motion.observe(time, 2.19f, 4f)
+        assertTrue(motion.isWalking)
+        assertTrue(motion.observe(15_000L, 2.2f, 4f))
+        assertFalse(motion.observe(18_000L, 2.2f, 4f))
+    }
+
     @Test fun poorMissingDuplicateAndOldEvidenceCannotSelectWalking() {
         val motion = MotionModeTracker()
         for (time in 0L..30_000L step 3_000L) motion.observe(time, 1.5f, 60f)
