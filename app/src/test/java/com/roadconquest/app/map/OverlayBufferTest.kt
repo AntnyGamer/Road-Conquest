@@ -109,6 +109,66 @@ class OverlayBufferTest {
             1, display().starts.size - 1)
     }
 
+    @Test fun actualGpsThroughIntersectionRepairsLongerMissingTurnOnlyVisually() {
+        val app: android.content.Context = RuntimeEnvironment.getApplication()
+        val repo = com.roadconquest.app.data.TrackingRepository(app)
+        repo.clearHistory()
+        // The road fragments stop 44-45 m short of a perpendicular intersection.
+        // The old 30 m chord repair cannot connect this real 64 m gap.
+        val approach = namedFragment("Approach", 1_000L, 4_000L,
+            39.9990 to -74.0, 39.9996 to -74.0)
+        val exit = namedFragment("Exit", 12_000L, 14_000L,
+            40.0 to -73.99947, 40.0 to -73.9989)
+        fun visible() = OverlayRoads.prepare(listOf(approach, exit),
+            hasRecordedTurn = repo::hasRecordedDrivingThroughTurn)
+        assertEquals("Without a GPS-confirmed turn do not join intersection",
+            2, visible().starts.size - 1)
+        listOf(
+            Triple(4_000L, 39.9996, -74.0),
+            Triple(7_000L, 40.0, -74.0),
+            Triple(10_000L, 40.0, -73.99947)
+        ).forEach { (time, lat, lon) ->
+            repo.insertLocation(android.location.Location("gps").apply {
+                latitude = lat; longitude = lon; this.time = time
+                accuracy = 4f; speed = 8f
+            })
+        }
+        val result = visible()
+        assertEquals("Recorded route turns across the junction, display only",
+            1, result.starts.size - 1)
+        assertTrue("The correct road intersection is part of the visible line",
+            result.coordinates.indices.step(2).any {
+                kotlin.math.abs(result.coordinates[it] - 40.0) < 0.000001 &&
+                    kotlin.math.abs(result.coordinates[it + 1] - -74.0) < 0.000001
+            })
+        assertEquals("Visual repair adds no road unlocks", 0L,
+            repo.getSummary().roadSegmentCount)
+    }
+
+    @Test fun intersectionRepairRejectsWrongDirectionEvenWithThreeNearbyFixes() {
+        val app: android.content.Context = RuntimeEnvironment.getApplication()
+        val repo = com.roadconquest.app.data.TrackingRepository(app)
+        repo.clearHistory()
+        val approach = namedFragment("Approach", 1_000L, 4_000L,
+            39.9990 to -74.0, 39.9996 to -74.0)
+        val exit = namedFragment("Exit", 12_000L, 14_000L,
+            40.0 to -73.99947, 40.0 to -73.9989)
+        // Positions are near the junction but chronological direction is reversed.
+        listOf(
+            Triple(4_000L, 40.0, -73.99947),
+            Triple(7_000L, 40.0, -74.0),
+            Triple(10_000L, 39.9996, -74.0)
+        ).forEach { (time, lat, lon) ->
+            repo.insertLocation(android.location.Location("gps").apply {
+                latitude = lat; longitude = lon; this.time = time
+                accuracy = 4f; speed = 8f
+            })
+        }
+        val result = OverlayRoads.prepare(listOf(approach, exit),
+            hasRecordedTurn = repo::hasRecordedDrivingThroughTurn)
+        assertEquals(2, result.starts.size - 1)
+    }
+
     @Test fun straightSeamRequiresSameNameGoodGeometryAndRecentChronology() {
         val west = namedFragment("Main Street", 1_000L, 4_000L,
             40.0 to -74.0005, 40.0 to -74.00025)
