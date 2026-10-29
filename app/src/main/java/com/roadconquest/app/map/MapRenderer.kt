@@ -920,7 +920,7 @@ class MapRenderer(
                     // rendering if reading the extra visit table fails.
                     val visits = runCatching { repository.getVisitWindowsForRoads(saved) }
                         .getOrDefault(emptyMap())
-                    OverlayRoads.prepare(saved, visits)
+                    OverlayRoads.prepare(saved, visits, repository::hasRecordedDrivingAcrossGap)
                 }
                 val places = if (queryPlaces) {
                     repository.getExploredGridInBounds(queryNorth, queryEast, querySouth, queryWest)
