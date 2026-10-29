@@ -1438,6 +1438,85 @@ class TrackingRepository(context: Context) {
         return visits
     }
 
+    /**
+     * Evidence for a visual road-gap repair, not permission to unlock a road.
+     * Only recorded driving fixes can prove movement through this short seam.
+     * Query bounded, indexed timestamp windows in both the matching queue and
+     * locally retained compression samples. Never interpolate across a GPS outage.
+     */
+    @Synchronized
+    fun hasRecordedDrivingAcrossGap(
+        fromLat: Double, fromLon: Double, toLat: Double, toLon: Double,
+        departureTime: Long, arrivalTime: Long
+    ): Boolean = synchronized(dbHelper.historyLock) {
+        if (!isHistoryCurrent() || !listOf(fromLat, fromLon, toLat, toLon).all { it.isFinite() } ||
+            arrivalTime - departureTime !in 1L..15_000L
+        ) return@synchronized false
+        val start = (departureTime - 8_000L).coerceAtLeast(0L)
+        val end = arrivalTime + 8_000L
+        data class Fix(val lat: Double, val lon: Double, val accuracy: Float, val time: Long)
+        val fixes = ArrayList<Fix>(64)
+        val db = dbHelper.readableDatabase
+        for (table in listOf("track_points", "skipped_driving_fixes")) {
+            db.query(table,
+                arrayOf("latitude", "longitude", "accuracy_m", "timestamp_ms"),
+                "timestamp_ms >= ? AND timestamp_ms <= ?",
+                arrayOf(start.toString(), end.toString()),
+                null, null, "timestamp_ms ASC", "65"
+            ).use { cursor ->
+                // Dense or discontinuous evidence is not a reason to guess.
+                if (cursor.count > 64) return@synchronized false
+                while (cursor.moveToNext()) {
+                    val lat = cursor.getDouble(0)
+                    val lon = cursor.getDouble(1)
+                    val accuracy = cursor.getFloat(2)
+                    if (lat.isFinite() && lon.isFinite() &&
+                        accuracy.isFinite() && accuracy in 0.01f..12f
+                    ) fixes += Fix(lat, lon, accuracy, cursor.getLong(3))
+                }
+            }
+        }
+        fixes.sortBy { it.time }
+        val cosLat = kotlin.math.cos(Math.toRadians((fromLat + toLat) / 2.0))
+        val metersPerDegree = 6_371_008.8 * Math.PI / 180.0
+        fun xy(lat: Double, lon: Double) = Pair(
+            ((lon - fromLon + 540.0) % 360.0 - 180.0) * metersPerDegree * cosLat,
+            (lat - fromLat) * metersPerDegree
+        )
+        val (gx, gy) = xy(toLat, toLon)
+        val lengthSq = gx * gx + gy * gy
+        if (lengthSq !in 9.0..900.0) return@synchronized false
+        fun projection(fix: Fix): Double {
+            val (x, y) = xy(fix.lat, fix.lon)
+            return (x * gx + y * gy) / lengthSq
+        }
+        for (i in 0 until fixes.lastIndex) {
+            val before = fixes[i]
+            val after = fixes[i + 1]
+            val elapsed = after.time - before.time
+            if (elapsed !in 1L..12_000L ||
+                before.time > departureTime + 8_000L ||
+                after.time < arrivalTime - 8_000L
+            ) continue
+            val (ax, ay) = xy(before.lat, before.lon)
+            val (bx, by) = xy(after.lat, after.lon)
+            val firstDistance = kotlin.math.hypot(ax, ay)
+            val finalDistance = kotlin.math.hypot(bx - gx, by - gy)
+            val actualMovement = kotlin.math.hypot(bx - ax, by - ay)
+            // Low-accuracy driving observations and small GPS wander are not proof.
+            if (firstDistance > kotlin.math.max(8.0, before.accuracy + 3.0) ||
+                finalDistance > kotlin.math.max(8.0, after.accuracy + 3.0) ||
+                actualMovement < 5.0 ||
+                actualMovement > kotlin.math.sqrt(lengthSq) * 1.5 + 12.0 ||
+                actualMovement / (elapsed / 1_000.0) > 55.0
+            ) continue
+            if (projection(before) <= 0.40 && projection(after) >= 0.60) {
+                return@synchronized true
+            }
+        }
+        false
+    }
+
     data class RoadQueryResult(val roads: List<RoadRecord>, val complete: Boolean)
 
     data class PendingRouteResult(
