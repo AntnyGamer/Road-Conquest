@@ -22,7 +22,11 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
     companion object {
         val EMPTY = OverlayRoads(doubleArrayOf(), intArrayOf(0))
 
-        fun prepare(roads: List<RoadRecord>, visitWindows: Map<String, List<Pair<Long, Long>>> = emptyMap()): OverlayRoads {
+        fun prepare(
+            roads: List<RoadRecord>,
+            visitWindows: Map<String, List<Pair<Long, Long>>> = emptyMap(),
+            hasRecordedDriving: ((Double, Double, Double, Double, Long, Long) -> Boolean)? = null
+        ): OverlayRoads {
             if (roads.isEmpty()) return EMPTY
             val segments = ArrayList<Segment>(roads.size)
             val segmentFirstTimes = ArrayList<Long>(roads.size)
@@ -142,7 +146,8 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
             val originalSegmentCount = segments.size
             // Protect the original first-unlock connections before considering other visits.
             // Mixing later visits into this pass could make a previously valid turn ambiguous.
-            appendSupportedJunctions(segments, segmentFirstTimes, segmentLastTimes, nodes, degree, segmentNames)
+            appendSupportedJunctions(segments, segmentFirstTimes, segmentLastTimes, nodes, degree, segmentNames,
+                hasRecordedDriving = hasRecordedDriving)
             val occupied = HashSet<Int>()
             fun reserveConnectors(since: Int) {
                 for (index in since until segments.size) {
@@ -155,12 +160,14 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
                 // Saved visit intervals are stronger evidence than aggregate last-driven times.
                 // Add only unoccupied endpoints; never displace the original visible turns.
                 appendSupportedJunctions(segments, segmentFirstTimes, segmentLastTimes, nodes,
-                    degree, segmentNames, segmentVisits, occupied)
+                    degree, segmentNames, segmentVisits, occupied,
+                    hasRecordedDriving = hasRecordedDriving)
             } else {
                 // On larger viewports or if visit retrieval fails, keep the later-drive
                 // fallback without allowing it to erase first-unlock connections.
                 appendSupportedJunctions(segments, segmentFirstTimes, segmentLastTimes, nodes,
-                    degree, segmentNames, occupiedNodes = occupied, includeLastTimes = true)
+                    degree, segmentNames, occupiedNodes = occupied, includeLastTimes = true,
+                    hasRecordedDriving = hasRecordedDriving)
             }
             // Give each synthetic segment the same graph-adjacency treatment as actual roads.
             for (index in originalSegmentCount until segments.size) {
@@ -233,7 +240,8 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
             names: List<String>,
             visits: List<List<Pair<Long, Long>>>? = null,
             occupiedNodes: Set<Int> = emptySet(),
-            includeLastTimes: Boolean = false
+            includeLastTimes: Boolean = false,
+            hasRecordedDriving: ((Double, Double, Double, Double, Long, Long) -> Boolean)? = null
         ) {
             // Both passes inspect the original roads, never the already added connectors.
             val originalSize = firstTimes.size
@@ -284,17 +292,20 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
                     for (second in time / 1_000L..time / 1_000L + 15L) {
                         for (to in startsBySecond[second].orEmpty()) {
                             if (to == from || seenFrom[to] == from) continue
-                            val timeMatches = if (visits == null) {
-                                val firstGap = firstTimes[to] - time
-                                val lastGap = lastTimes[to] - time
-                                firstGap in 1L..MAX_SUPPORTED_JUNCTION_TIME_MS ||
-                                    (includeLastTimes && lastGap in 1L..MAX_SUPPORTED_JUNCTION_TIME_MS)
-                            } else {
-                                visits[to].any { (startedAt, _) ->
-                                    startedAt - time in 1L..MAX_SUPPORTED_JUNCTION_TIME_MS
+                            val nextAt = if (visits == null) {
+                                when {
+                                    firstTimes[to] - time in 1L..MAX_SUPPORTED_JUNCTION_TIME_MS ->
+                                        firstTimes[to]
+                                    includeLastTimes &&
+                                        lastTimes[to] - time in 1L..MAX_SUPPORTED_JUNCTION_TIME_MS ->
+                                        lastTimes[to]
+                                    else -> null
                                 }
-                            }
-                            if (!timeMatches) continue
+                            } else {
+                                visits[to].firstOrNull { (startedAt, _) ->
+                                    startedAt - time in 1L..MAX_SUPPORTED_JUNCTION_TIME_MS
+                                }?.first
+                            } ?: continue
                             val right = segments[to]
                             val distance = metersBetween(
                                 nodes[left.endNode].latitude, nodes[left.endNode].longitude,
@@ -308,7 +319,12 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
                             val bend = supportedJunctionBend(left.coordinates, right.coordinates, distance)
                                 ?: (if (names[from].isNotBlank() &&
                                     !names[from].equals("Unnamed road", ignoreCase = true) &&
-                                    names[from].trim().equals(names[to].trim(), ignoreCase = true)) {
+                                    names[from].trim().equals(names[to].trim(), ignoreCase = true) &&
+                                    (hasRecordedDriving == null || hasRecordedDriving(
+                                        nodes[left.endNode].latitude, nodes[left.endNode].longitude,
+                                        nodes[right.startNode].latitude, nodes[right.startNode].longitude,
+                                        time, nextAt
+                                    ))) {
                                     supportedStraightSeam(left.coordinates, right.coordinates, distance)
                                 } else null)
                                 ?: continue
