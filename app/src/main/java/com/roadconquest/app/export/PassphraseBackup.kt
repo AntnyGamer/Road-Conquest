@@ -26,6 +26,7 @@ object PassphraseBackup {
     private const val TAG_SIZE = 16
     private const val PBKDF2_ROUNDS = 310_000
     private const val MIN_PASSWORD_LENGTH = 12
+    private const val MAX_PASSWORD_LENGTH = 256
     private const val TEMP_PREFIX = "roadconquest-private-export-"
 
     class PassphraseRequiredException : IllegalArgumentException("This backup requires a passphrase.")
@@ -34,7 +35,7 @@ object PassphraseBackup {
         if (file.length() < (MAGIC.size + SALT_SIZE + NONCE_SIZE + TAG_SIZE).toLong()) return false
         return file.inputStream().use { input ->
             val header = ByteArray(MAGIC.size)
-            input.read(header) == header.size && header.contentEquals(MAGIC)
+            runCatching { input.readFully(header); header.contentEquals(MAGIC) }.getOrDefault(false)
         }
     }
 
@@ -47,7 +48,10 @@ object PassphraseBackup {
     }
 
     fun writePortable(context: Context, repository: TrackingRepository, output: OutputStream, password: CharArray) {
-        require(password.size >= MIN_PASSWORD_LENGTH) { "Use a passphrase of at least 12 characters." }
+        require(password.size in MIN_PASSWORD_LENGTH..MAX_PASSWORD_LENGTH) {
+            "Use a passphrase between 12 and 256 characters."
+        }
+        DataImporter.clearTemporaryFiles(context)
         val file = File.createTempFile(TEMP_PREFIX, ".zip", context.cacheDir)
         try {
             file.outputStream().use { DataExporter.writeZip(context, repository, it) }
@@ -60,7 +64,9 @@ object PassphraseBackup {
     }
 
     internal fun encrypt(plain: InputStream, output: OutputStream, password: CharArray) {
-        require(password.size >= MIN_PASSWORD_LENGTH) { "Use a passphrase of at least 12 characters." }
+        require(password.size in MIN_PASSWORD_LENGTH..MAX_PASSWORD_LENGTH) {
+            "Use a passphrase between 12 and 256 characters."
+        }
         val salt = ByteArray(SALT_SIZE).also(SecureRandom()::nextBytes)
         val nonce = ByteArray(NONCE_SIZE).also(SecureRandom()::nextBytes)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
@@ -73,7 +79,7 @@ object PassphraseBackup {
     }
 
     internal fun decrypt(encrypted: File, destination: File, password: CharArray) {
-        require(password.isNotEmpty()) { "Enter the backup passphrase." }
+        require(password.isNotEmpty() && password.size <= MAX_PASSWORD_LENGTH) { "Enter a valid backup passphrase." }
         require(encrypted.length() <= DataImporter.MAX_BYTES) { "Backup exceeds 512 MB" }
         encrypted.inputStream().buffered().use { input ->
             val header = ByteArray(MAGIC.size)
