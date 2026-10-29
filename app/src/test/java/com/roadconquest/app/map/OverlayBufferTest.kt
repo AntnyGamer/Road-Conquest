@@ -88,6 +88,27 @@ class OverlayBufferTest {
         assertEquals(1, driven.starts.size - 1)
     }
 
+    @Test fun realRepositoryGpsEvidenceControlsVisibleStraightRepair() {
+        val context: android.content.Context = RuntimeEnvironment.getApplication()
+        val repo = com.roadconquest.app.data.TrackingRepository(context)
+        repo.clearHistory()
+        val west = namedFragment("Main Street", 1_000L, 4_000L,
+            40.0 to -74.0005, 40.0 to -74.00025)
+        val east = namedFragment("Main Street", 6_000L, 8_000L,
+            40.0 to -74.00010, 40.0 to -73.99985)
+        fun display() = OverlayRoads.prepare(listOf(west, east),
+            hasRecordedDriving = repo::hasRecordedDrivingAcrossGap)
+        assertEquals(2, display().starts.size - 1)
+        listOf(4_000L to -74.00025, 6_000L to -74.00010).forEach { (time, lon) ->
+            repo.insertLocation(android.location.Location("gps").apply {
+                latitude = 40.0; longitude = lon; this.time = time
+                accuracy = 4f; speed = 5f
+            })
+        }
+        assertEquals("Real GPS crossing, not just road names, should connect the gap",
+            1, display().starts.size - 1)
+    }
+
     @Test fun straightSeamRequiresSameNameGoodGeometryAndRecentChronology() {
         val west = namedFragment("Main Street", 1_000L, 4_000L,
             40.0 to -74.0005, 40.0 to -74.00025)
