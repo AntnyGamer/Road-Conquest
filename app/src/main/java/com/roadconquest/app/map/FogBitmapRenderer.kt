@@ -168,7 +168,7 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
                 // fallback without allowing it to erase first-unlock connections.
                 appendSupportedJunctions(segments, segmentFirstTimes, segmentLastTimes, nodes,
                     degree, segmentNames, occupiedNodes = occupied, includeLastTimes = true,
-                    hasRecordedDriving = hasRecordedDriving)
+                    hasRecordedDriving = hasRecordedDriving, hasRecordedTurn = hasRecordedTurn)
             }
             // Give each synthetic segment the same graph-adjacency treatment as actual roads.
             for (index in originalSegmentCount until segments.size) {
