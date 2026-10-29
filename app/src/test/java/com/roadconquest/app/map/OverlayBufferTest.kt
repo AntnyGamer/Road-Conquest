@@ -49,6 +49,40 @@ class OverlayBufferTest {
         }
     }
 
+    private fun namedFragment(name: String, first: Long, last: Long, vararg coords: Pair<Double, Double>) =
+        RoadRecord(name + first, name,
+            coords.joinToString(prefix = "[", postfix = "]") { (lat, lon) -> "[$lon,$lat]" },
+            first, last, -90.0, 90.0, -180.0, 180.0)
+
+    @Test fun shortStraightSameRoadGapGetsVisibleConnectorWithoutNewStoredRoad() {
+        val west = namedFragment("Main Street", 1_000L, 4_000L,
+            40.0 to -74.0005, 40.0 to -74.00025)
+        val east = namedFragment("Main Street", 6_000L, 8_000L,
+            40.0 to -74.00010, 40.0 to -73.99985)
+        val result = OverlayRoads.prepare(listOf(west, east))
+        assertEquals("Straight, 13 m seam must not leave two blue fragments", 1, result.starts.size - 1)
+        assertTrue("Display-only midpoint must be on the road",
+            result.coordinates.indices.step(2).any {
+                kotlin.math.abs(result.coordinates[it] - 40.0) < 1e-8 &&
+                    result.coordinates[it + 1] in -74.00025..-74.00010
+            })
+    }
+
+    @Test fun straightSeamRequiresSameNameGoodGeometryAndRecentChronology() {
+        val west = namedFragment("Main Street", 1_000L, 4_000L,
+            40.0 to -74.0005, 40.0 to -74.00025)
+        val correct = namedFragment("Main Street", 6_000L, 8_000L,
+            40.0 to -74.00010, 40.0 to -73.99985)
+        val wrongName = correct.copy(name = "Other Road")
+        val distant = correct.copy(geometryJson = "[[-73.9995,40],[-73.9992,40]]")
+        val late = correct.copy(firstUnlockedAt = 30_000L, lastDrivenAt = 32_000L)
+        val wrongDirection = correct.copy(geometryJson = "[[-74.00010,40],[-74.00030,40]]")
+        for (candidate in listOf(wrongName, distant, late, wrongDirection)) {
+            assertEquals("Unsafe connector must not be drawn: $candidate",
+                2, OverlayRoads.prepare(listOf(west, candidate)).starts.size - 1)
+        }
+    }
+
     @Test fun baselineSceneFixtureCapturesEveryCoordinateBitAndChainStart() {
         val digest = MessageDigest.getInstance("SHA-256")
         val bytes = ByteBuffer.allocate(8)
