@@ -316,18 +316,21 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
                             // their tangent rays never intersect, so the turn-only repair misses it.
                             // Draw a short display-only link only when BOTH observed road
                             // directions support travelling straight across the unique seam.
-                            val bend = supportedJunctionBend(left.coordinates, right.coordinates, distance)
-                                ?: (if (names[from].isNotBlank() &&
-                                    !names[from].equals("Unnamed road", ignoreCase = true) &&
-                                    names[from].trim().equals(names[to].trim(), ignoreCase = true) &&
-                                    (hasRecordedDriving == null || hasRecordedDriving(
-                                        nodes[left.endNode].latitude, nodes[left.endNode].longitude,
-                                        nodes[right.startNode].latitude, nodes[right.startNode].longitude,
-                                        time, nextAt
-                                    ))) {
-                                    supportedStraightSeam(left.coordinates, right.coordinates, distance)
-                                } else null)
-                                ?: continue
+                            val turnBend = supportedJunctionBend(left.coordinates, right.coordinates, distance)
+                            val straightBend = if (turnBend == null && names[from].isNotBlank() &&
+                                !names[from].equals("Unnamed road", ignoreCase = true) &&
+                                names[from].trim().equals(names[to].trim(), ignoreCase = true)
+                            ) supportedStraightSeam(left.coordinates, right.coordinates, distance) else null
+                            val bend = turnBend ?: straightBend ?: continue
+                            // Only check indexed local GPS history for a geometry-supported
+                            // straight seam. Historical turn joins retain their old policy.
+                            if (turnBend == null && hasRecordedDriving != null &&
+                                !hasRecordedDriving(
+                                    nodes[left.endNode].latitude, nodes[left.endNode].longitude,
+                                    nodes[right.startNode].latitude, nodes[right.startNode].longitude,
+                                    time, nextAt
+                                )
+                            ) continue
                             seenFrom[to] = from
                             val candidate = JunctionCandidate(from, to, distance, bend)
                             offer(from, candidate, bestFrom, secondFrom)
