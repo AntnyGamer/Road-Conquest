@@ -351,8 +351,8 @@ class SettingsActivity : Activity() {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val first = password.text.toString()
                 val second = confirm.text.toString()
-                if (first.length < 12 || first != second) {
-                    warning.text = if (first.length < 12) "Use at least 12 characters."
+                if (first.length !in 12..256 || first != second) {
+                    warning.text = if (first.length !in 12..256) "Use between 12 and 256 characters."
                         else "Passphrases do not match."
                     return@setOnClickListener
                 }
