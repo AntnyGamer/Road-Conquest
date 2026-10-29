@@ -74,8 +74,11 @@ object DataImporter {
         prepare(context, input, { BackupProtection.verify(context, it) }, passphrase)
 
     /** Explicit trust boundary allows structural-format fixtures to exercise parsing independently. */
-    internal fun prepare(context: Context, input: InputStream, authenticate: (File) -> Unit,
-                         passphrase: CharArray? = null): Prepared {
+    internal fun prepare(context: Context, input: InputStream, authenticate: (File) -> Unit): Prepared =
+        prepare(context, input, authenticate, null)
+
+    private fun prepare(context: Context, input: InputStream, authenticate: (File) -> Unit,
+                        passphrase: CharArray?): Prepared {
         clearTemporaryFiles(context)
         val helper = AppDatabase.get(context)
         val generation = synchronized(helper.historyLock) { helper.historyGeneration }
