@@ -53,8 +53,8 @@ class PassphraseBackupTest {
 
     @Test fun actualGithubExportCanBeImportedWithoutPlayOrNetwork() {
         val context: android.content.Context = RuntimeEnvironment.getApplication()
+        com.roadconquest.app.data.TrackingRepository(context).clearHistory()
         val repository = com.roadconquest.app.data.TrackingRepository(context)
-        repository.clearHistory()
         val fix = android.location.Location("gps").apply {
             latitude = 40.0; longitude = -74.0; time = 1_000_000L; accuracy = 5f
         }
@@ -79,8 +79,8 @@ class PassphraseBackupTest {
 
     @Test fun privateExportDoesNotCreateAPlaintextIntermediateZip() {
         val context: android.content.Context = RuntimeEnvironment.getApplication()
+        com.roadconquest.app.data.TrackingRepository(context).clearHistory()
         val repository = com.roadconquest.app.data.TrackingRepository(context)
-        repository.clearHistory()
         val bytes = ByteArrayOutputStream()
         var observedEncryptedWrite = false
         val monitored = object : java.io.OutputStream() {
@@ -110,8 +110,8 @@ class PassphraseBackupTest {
 
     @Test fun encryptedExportRejectsConcurrentDeviceHistoryDeletion() {
         val context: android.content.Context = RuntimeEnvironment.getApplication()
+        com.roadconquest.app.data.TrackingRepository(context).clearHistory()
         val repository = com.roadconquest.app.data.TrackingRepository(context)
-        repository.clearHistory()
         var deleted = false
         val sink = object : java.io.OutputStream() {
             override fun write(value: Int) {}
