@@ -49,6 +49,10 @@ class MapProviderTest {
         )
         health.failed("seconds", 403, "60")
         health.failed("date", 401, date)
+        val expired = java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME.format(
+            java.time.Instant.ofEpochMilli(now - 60_000L).atZone(java.time.ZoneOffset.UTC)
+        )
+        health.failed("expired", 403, expired)
         health.failed("zero", 403, "0")
         health.failed("daily", 403, "86400")
         for (header in listOf(null, "invalid", "-1")) {
@@ -57,6 +61,7 @@ class MapProviderTest {
         }
         assertEquals(60_000L, health.remaining("seconds"))
         assertEquals(120_000L, health.remaining("date"))
+        assertEquals("An elapsed HTTP-date permits a bounded recovery probe", 1_000L, health.remaining("expired"))
         assertEquals(1_000L, health.remaining("zero"))
         assertEquals(86_400_000L, health.remaining("daily"))
         health.failed("daily", 403, "60")

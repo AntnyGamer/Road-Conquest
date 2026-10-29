@@ -159,7 +159,7 @@ class RestoreActivity : Activity() {
         }
     }
 
-    override fun onStart() { super.onStart(); ForegroundSession.app.onStart() }
+    override fun onStart() { super.onStart(); ForegroundSession.app.onStart(this) }
     override fun onStop() { ForegroundSession.app.onStop(isChangingConfigurations); super.onStop() }
     override fun onDestroy() {
         prepared?.close()

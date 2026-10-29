@@ -447,7 +447,7 @@ class AccountActivity : Activity() {
         if (session != null || signedInGroup.visibility == View.VISIBLE) render(session)
         // Also cover a successful login saved just before this receiver registered.
         if (session != null && intent.getBooleanExtra(EXTRA_ONBOARDING, false)) finish()
-        ForegroundSession.app.onStart()
+        ForegroundSession.app.onStart(this)
     }
 
     override fun onStop() {

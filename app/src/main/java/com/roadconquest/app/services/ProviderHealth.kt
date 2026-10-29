@@ -13,7 +13,7 @@ class ProviderHealth(private val now: () -> Long = System::currentTimeMillis) {
         val seconds = retryAfter?.toLongOrNull()
         val retry = if (seconds != null) seconds.takeIf { it >= 0L }?.coerceAtMost(86_400L)?.times(1000L) else retryAfter?.let {
             runCatching { ZonedDateTime.parse(it, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant().toEpochMilli() - now() }.getOrNull()
-        }?.takeIf { it >= 0L }
+        }?.coerceAtLeast(0L)
         val default = if (errorCode == "queue_busy" || errorCode == "provider_cooldown" ||
             errorCode == "budget_conflict") 1_000L
             // A gateway can recover from a brief upstream authorization failure.

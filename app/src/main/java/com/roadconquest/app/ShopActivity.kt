@@ -105,7 +105,7 @@ class ShopActivity : Activity() {
 
     override fun onStart() {
         super.onStart()
-        ForegroundSession.app.onStart()
+        ForegroundSession.app.onStart(this)
     }
 
     override fun onResume() {

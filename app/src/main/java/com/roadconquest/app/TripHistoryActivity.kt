@@ -91,6 +91,8 @@ class TripHistoryActivity : Activity() {
     private var displayedVip: Boolean? = null
     private var tripListGeneration = 0
     private var shownHistoryGeneration = -1L
+    private var listedThroughPointId = -1L
+    private var historyCheckGeneration = 0
     private var pendingGpxTrip: SavedTrip? = null
     private var redactGpxEnds = true
     private val vipBilling by lazy {
@@ -365,11 +367,21 @@ class TripHistoryActivity : Activity() {
         })
         val formatter = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT)
         worker.execute {
-            val result = runCatching { TripHistoryRepository(applicationContext).recentTrips(if (vip) 500 else 100) }
+            val result = runCatching {
+                val history = TripHistoryRepository(applicationContext)
+                // Capture before scanning: a concurrent append must not be marked as displayed.
+                history.latestPointId() to history.recentTrips(if (vip) 500 else 100)
+            }
             runOnUiThread {
                 if (isDestroyed || displayedVip != vip ||
                     listGeneration != tripListGeneration) return@runOnUiThread
-                result.fold({ trips ->
+                result.fold({ (latestPointId, trips) ->
+                    listedThroughPointId = latestPointId
+                    selectedTripButton = null
+                    selectedTrip?.let { selected ->
+                        val updated = trips.firstOrNull { it.firstId == selected.firstId }
+                        if (updated != null && updated != selected) loadTrip(updated)
+                    }
                     if (trips.isEmpty()) {
                         column.addView(TextView(this@TripHistoryActivity).apply {
                             text = "No drives yet. Recorded trips will appear here."
@@ -390,6 +402,13 @@ class TripHistoryActivity : Activity() {
                             minHeight = dp(66)
                             gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
                             setPadding(dp(16), dp(8), dp(16), dp(8))
+                            if (trip.firstId == selectedTrip?.firstId) {
+                                selectedTripButton = this
+                                isSelected = true
+                                contentDescription = "$text, selected trip"
+                                setBackgroundResource(R.drawable.selected_filter_background)
+                                setTextColor(Appearance.color(this@TripHistoryActivity, R.attr.rcOnAccent))
+                            }
                             setOnClickListener {
                                 selectedTripButton?.apply {
                                     isSelected = false
@@ -424,6 +443,18 @@ class TripHistoryActivity : Activity() {
                         text = "Trip history is temporarily unavailable."
                     })
                 })
+            }
+        }
+    }
+
+    private fun refreshHistoryIfChanged() {
+        val check = ++historyCheckGeneration
+        worker.execute {
+            val latest = runCatching { TripHistoryRepository(applicationContext).latestPointId() }
+            runOnUiThread {
+                if (!isDestroyed && resumed && check == historyCheckGeneration &&
+                    latest.getOrNull()?.let { it != listedThroughPointId } == true
+                ) refreshTripList()
             }
         }
     }
@@ -674,7 +705,7 @@ class TripHistoryActivity : Activity() {
         playButton?.text = "Play replay"
     }
 
-    override fun onStart() { super.onStart(); ForegroundSession.app.onStart(); mapView?.onStart() }
+    override fun onStart() { super.onStart(); ForegroundSession.app.onStart(this); mapView?.onStart() }
     override fun onResume() {
         super.onResume()
         resumed = true
@@ -697,9 +728,11 @@ class TripHistoryActivity : Activity() {
         }
         vipBilling.refresh(includeOffer = false)
         refreshVipControls()
+        refreshHistoryIfChanged()
     }
     override fun onPause() {
         resumed = false
+        historyCheckGeneration++
         handler.removeCallbacks(retryReplayProvider)
         pauseReplay()
         mapView?.onPause()
