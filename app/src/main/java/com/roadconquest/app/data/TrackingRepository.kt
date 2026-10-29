@@ -1585,30 +1585,36 @@ class TrackingRepository(context: Context) {
         for (middleIndex in fixes.indices) {
             val middle = fixes[middleIndex]
             if (!near(middle, 0.0, 0.0, 12.0)) continue
+            // Approach/exit checks are independent once the same observed
+            // junction point is fixed. This is quadratic instead of cubic in
+            // GPS samples and still requires a driving-speed fix in the triple.
+            var approachFound = false
+            var fastApproach = false
             for (startIndex in 0 until middleIndex) {
                 val before = fixes[startIndex]
-                val firstDuration = middle.time - before.time
-                if (firstDuration !in 1L..20_000L ||
+                val duration = middle.time - before.time
+                if (duration !in 1L..20_000L ||
                     before.time > departureTime + 10_000L ||
                     !near(before, ax, ay, 13.0) ||
                     !aligned(middle.x - before.x, middle.y - before.y, -ax, -ay)
                 ) continue
-                for (endIndex in middleIndex + 1 until fixes.size) {
-                    val after = fixes[endIndex]
-                    val lastDuration = after.time - middle.time
-                    if (lastDuration !in 1L..20_000L ||
-                        after.time < arrivalTime - 10_000L ||
-                        !near(after, bx, by, 13.0) ||
-                        !aligned(after.x - middle.x, after.y - middle.y, bx, by) ||
-                        maxOf(before.speed, middle.speed, after.speed) < 2.2f
-                    ) continue
-                    // An urban stop is fine; an impossible displacement is not.
-                    val firstDistance = kotlin.math.hypot(middle.x - before.x, middle.y - before.y)
-                    val lastDistance = kotlin.math.hypot(after.x - middle.x, after.y - middle.y)
-                    if (firstDistance / (firstDuration / 1_000.0) <= 55.0 &&
-                        lastDistance / (lastDuration / 1_000.0) <= 55.0
-                    ) return@synchronized true
-                }
+                val distance = kotlin.math.hypot(middle.x - before.x, middle.y - before.y)
+                if (distance / (duration / 1_000.0) > 55.0) continue
+                approachFound = true
+                if (before.speed >= 2.2f) { fastApproach = true; break }
+            }
+            if (!approachFound) continue
+            for (endIndex in middleIndex + 1 until fixes.size) {
+                val after = fixes[endIndex]
+                val duration = after.time - middle.time
+                if (duration !in 1L..20_000L ||
+                    after.time < arrivalTime - 10_000L ||
+                    !near(after, bx, by, 13.0) ||
+                    !aligned(after.x - middle.x, after.y - middle.y, bx, by) ||
+                    (!fastApproach && maxOf(middle.speed, after.speed) < 2.2f)
+                ) continue
+                val distance = kotlin.math.hypot(after.x - middle.x, after.y - middle.y)
+                if (distance / (duration / 1_000.0) <= 55.0) return@synchronized true
             }
         }
         false
