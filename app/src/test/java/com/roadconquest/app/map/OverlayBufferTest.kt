@@ -90,8 +90,8 @@ class OverlayBufferTest {
 
     @Test fun realRepositoryGpsEvidenceControlsVisibleStraightRepair() {
         val context: android.content.Context = RuntimeEnvironment.getApplication()
+        com.roadconquest.app.data.TrackingRepository(context).clearHistory()
         val repo = com.roadconquest.app.data.TrackingRepository(context)
-        repo.clearHistory()
         val west = namedFragment("Main Street", 1_000L, 4_000L,
             40.0 to -74.0005, 40.0 to -74.00025)
         val east = namedFragment("Main Street", 6_000L, 8_000L,
@@ -111,8 +111,8 @@ class OverlayBufferTest {
 
     @Test fun actualGpsThroughIntersectionRepairsLongerMissingTurnOnlyVisually() {
         val app: android.content.Context = RuntimeEnvironment.getApplication()
+        com.roadconquest.app.data.TrackingRepository(app).clearHistory()
         val repo = com.roadconquest.app.data.TrackingRepository(app)
-        repo.clearHistory()
         // The road fragments stop 44-45 m short of a perpendicular intersection.
         // The old 30 m chord repair cannot connect this real 64 m gap.
         val approach = namedFragment("Approach", 1_000L, 4_000L,
@@ -147,8 +147,8 @@ class OverlayBufferTest {
 
     @Test fun intersectionRepairRejectsWrongDirectionEvenWithThreeNearbyFixes() {
         val app: android.content.Context = RuntimeEnvironment.getApplication()
+        com.roadconquest.app.data.TrackingRepository(app).clearHistory()
         val repo = com.roadconquest.app.data.TrackingRepository(app)
-        repo.clearHistory()
         val approach = namedFragment("Approach", 1_000L, 4_000L,
             39.9990 to -74.0, 39.9996 to -74.0)
         val exit = namedFragment("Exit", 12_000L, 14_000L,
