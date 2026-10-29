@@ -79,7 +79,9 @@ class RestoreActivity : Activity() {
                     startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                         addCategory(Intent.CATEGORY_OPENABLE)
                         type = "*/*"
-                        putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream"))
+                        // Private .rcbackup files may be assigned provider-specific MIME types.
+                        // Let the strict backup validator reject unrelated file types instead
+                        // of hiding legitimate encrypted backups in Android's picker.
                     }, REQUEST_IMPORT)
                 } catch (_: ActivityNotFoundException) { status.text = "Android's file picker is unavailable." }
             }
