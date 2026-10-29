@@ -6,6 +6,8 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.text.InputType
+import android.widget.EditText
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -14,6 +16,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import com.roadconquest.app.export.DataImporter
+import com.roadconquest.app.export.PassphraseBackup
 import com.roadconquest.app.util.Appearance
 import com.roadconquest.app.util.MeasurementUnits
 import android.graphics.Typeface
@@ -62,7 +65,7 @@ class RestoreActivity : Activity() {
             setPadding(0, 0, 0, (12 * dp).toInt())
         })
         root.addView(TextView(this).apply {
-            text = "Choose a protected Road Conquest backup ZIP to restore trips, roads, distance, fog, discoveries, points and garage items.\n\nThe signature is checked before confirmation. Altered or older unsigned files are rejected. Connect to the internet the first time you restore on a new installation; later checks can use saved verification keys. Your private recovery copy works offline on this installation.\n\nYour current progress is backed up. Tracking and verified sharing remain off afterward. Restored history does not earn weekly challenge credit or change verified rankings, including friend rankings.\n\nSign in and restore Google Play VIP separately."
+            text = "Choose a Road Conquest backup to restore trips, roads, distance, fog, discoveries, points and garage items.\n\nPrivate .rcbackup files work offline on GitHub or Play builds and require their export passphrase. Google Play-verified .zip files require saved verification keys or internet. Altered and unsigned files are rejected.\n\nYour current progress is backed up. Tracking and verified sharing remain off afterward. Restored history does not earn weekly challenge credit or change verified rankings.\n\nSign in and restore Google Play VIP separately."
             textSize = 15f
             setTextColor(Appearance.color(this@RestoreActivity, R.attr.rcTextSecondary))
             setBackgroundResource(R.drawable.settings_card_background)
@@ -70,7 +73,7 @@ class RestoreActivity : Activity() {
             setPadding(inset, inset, inset, inset)
         })
         choose = Button(this).apply {
-            text = "Choose backup (.zip)"
+            text = "Choose backup (.zip or .rcbackup)"
             setOnClickListener {
                 try {
                     startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
@@ -110,12 +113,32 @@ class RestoreActivity : Activity() {
         recovery.isEnabled = !value && DataImporter.previousBackup(this).isFile
     }
 
-    private fun validate(open: () -> java.io.InputStream) {
-        if (busy) return
+    private fun promptPassphrase(open: () -> java.io.InputStream) {
+        val field = EditText(this).apply {
+            hint = "Backup passphrase"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            val p = (16 * resources.displayMetrics.density).toInt()
+            setPadding(p, p, p, p)
+        }
+        AlertDialog.Builder(this).setTitle("Unlock private backup")
+            .setMessage("Enter the passphrase used when this backup was exported.")
+            .setView(field)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Unlock") { _, _ ->
+                val secret = field.text.toString().toCharArray()
+                field.text.clear()
+                validate(open, secret)
+            }.show()
+    }
+
+    private fun validate(open: () -> java.io.InputStream, passphrase: CharArray? = null) {
+        if (busy) { passphrase?.fill(0.toChar()); return }
         setBusy(true)
         status.text = "Checking backup…"
         worker.execute {
-            val result = runCatching { open().use { DataImporter.prepare(applicationContext, it) } }
+            val result = try {
+                runCatching { open().use { DataImporter.prepare(applicationContext, it, passphrase) } }
+            } finally { passphrase?.fill(0.toChar()) }
             runOnUiThread {
                 if (isDestroyed || isFinishing) { result.getOrNull()?.close(); return@runOnUiThread }
                 setBusy(false)
@@ -135,7 +158,10 @@ class RestoreActivity : Activity() {
                             restore(backup)
                         }
                         .setOnDismissListener { if (prepared === backup) { prepared = null; backup.close() } }.show()
-                }, { status.text = "Backup was not imported: ${it.message ?: "invalid or unreadable file"}" })
+                }, { error ->
+                    if (error is PassphraseBackup.PassphraseRequiredException) promptPassphrase(open)
+                    else status.text = "Backup was not imported: ${error.message ?: "invalid or unreadable file"}"
+                })
             }
         }
     }
