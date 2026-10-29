@@ -1520,6 +1520,100 @@ class TrackingRepository(context: Context) {
         false
     }
 
+    /**
+     * A longer missing intersection turn needs three time-ordered recorded GPS
+     * observations near its approach, projected road-centerline intersection and
+     * exit. This does not mark any fix matched or earn any road/score credit.
+     * Refuse sparse history, ambiguous GPS and jumps instead of extrapolating.
+     */
+    @Synchronized
+    fun hasRecordedDrivingThroughTurn(
+        fromLat: Double, fromLon: Double, bendLat: Double, bendLon: Double,
+        toLat: Double, toLon: Double, departureTime: Long, arrivalTime: Long
+    ): Boolean = synchronized(dbHelper.historyLock) {
+        if (!isHistoryCurrent() ||
+            !listOf(fromLat, fromLon, bendLat, bendLon, toLat, toLon).all { it.isFinite() } ||
+            arrivalTime - departureTime !in 1L..45_000L
+        ) return@synchronized false
+
+        val latScale = 6_371_008.8 * Math.PI / 180.0
+        val lonScale = latScale * kotlin.math.cos(Math.toRadians(bendLat))
+        if (lonScale < 0.01) return@synchronized false
+        fun xy(lat: Double, lon: Double) = Pair(
+            ((lon - bendLon + 540.0) % 360.0 - 180.0) * lonScale,
+            (lat - bendLat) * latScale
+        )
+        val (ax, ay) = xy(fromLat, fromLon)
+        val (bx, by) = xy(toLat, toLon)
+        val approachLength = kotlin.math.hypot(ax, ay)
+        val exitLength = kotlin.math.hypot(bx, by)
+        if (approachLength !in 4.0..65.0 || exitLength !in 4.0..65.0) return@synchronized false
+
+        data class Fix(val x: Double, val y: Double, val accuracy: Float,
+                       val speed: Float, val time: Long)
+        val fixes = ArrayList<Fix>(80)
+        val since = (departureTime - 10_000L).coerceAtLeast(0L).toString()
+        val until = (arrivalTime + 10_000L).toString()
+        val db = dbHelper.readableDatabase
+        for (table in listOf("track_points", "skipped_driving_fixes")) {
+            db.query(table, arrayOf("latitude", "longitude", "accuracy_m", "speed_mps", "timestamp_ms"),
+                "timestamp_ms BETWEEN ? AND ?", arrayOf(since, until),
+                null, null, "timestamp_ms ASC", "65").use { cursor ->
+                if (cursor.count >= 65) return@synchronized false
+                while (cursor.moveToNext()) {
+                    val accuracy = cursor.getFloat(2)
+                    val speed = cursor.getFloat(3)
+                    if (!accuracy.isFinite() || accuracy !in 0.01f..12f ||
+                        !speed.isFinite() || speed < 0f) continue
+                    val (x, y) = xy(cursor.getDouble(0), cursor.getDouble(1))
+                    if (x.isFinite() && y.isFinite())
+                        fixes += Fix(x, y, accuracy, speed, cursor.getLong(4))
+                }
+            }
+        }
+        if (fixes.size < 3) return@synchronized false
+        fixes.sortBy { it.time }
+
+        fun near(fix: Fix, x: Double, y: Double, radius: Double) =
+            kotlin.math.hypot(fix.x - x, fix.y - y) <= kotlin.math.max(radius, fix.accuracy.toDouble() + 3.0)
+        fun aligned(dx: Double, dy: Double, expectedX: Double, expectedY: Double): Boolean {
+            val length = kotlin.math.hypot(dx, dy)
+            val target = kotlin.math.hypot(expectedX, expectedY)
+            return length >= 4.0 && length <= 75.0 &&
+                (dx * expectedX + dy * expectedY) / (length * target) >= 0.65
+        }
+        for (middleIndex in fixes.indices) {
+            val middle = fixes[middleIndex]
+            if (!near(middle, 0.0, 0.0, 12.0)) continue
+            for (startIndex in 0 until middleIndex) {
+                val before = fixes[startIndex]
+                val firstDuration = middle.time - before.time
+                if (firstDuration !in 1L..20_000L ||
+                    before.time > departureTime + 10_000L ||
+                    !near(before, ax, ay, 13.0) ||
+                    !aligned(middle.x - before.x, middle.y - before.y, -ax, -ay)
+                ) continue
+                for (endIndex in middleIndex + 1 until fixes.size) {
+                    val after = fixes[endIndex]
+                    val lastDuration = after.time - middle.time
+                    if (lastDuration !in 1L..20_000L ||
+                        after.time < arrivalTime - 10_000L ||
+                        !near(after, bx, by, 13.0) ||
+                        !aligned(after.x - middle.x, after.y - middle.y, bx, by) ||
+                        maxOf(before.speed, middle.speed, after.speed) < 2.2f
+                    ) continue
+                    // An urban stop is fine; an impossible displacement is not.
+                    val firstDistance = kotlin.math.hypot(middle.x - before.x, middle.y - before.y)
+                    val lastDistance = kotlin.math.hypot(after.x - middle.x, after.y - middle.y)
+                    if (firstDistance / (firstDuration / 1_000.0) <= 55.0 &&
+                        lastDistance / (lastDuration / 1_000.0) <= 55.0
+                    ) return@synchronized true
+                }
+            }
+        }
+        false
+    }
+
     data class RoadQueryResult(val roads: List<RoadRecord>, val complete: Boolean)
 
     data class PendingRouteResult(
