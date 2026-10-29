@@ -51,16 +51,38 @@ object PassphraseBackup {
         require(password.size in MIN_PASSWORD_LENGTH..MAX_PASSWORD_LENGTH) {
             "Use a passphrase between 12 and 256 characters."
         }
-        DataImporter.clearTemporaryFiles(context)
-        val file = File.createTempFile(TEMP_PREFIX, ".zip", context.cacheDir)
-        try {
-            file.outputStream().use { DataExporter.writeZip(context, repository, it) }
-            // The encrypted wrapper adds a 38-byte header and a 16-byte authentication tag.
-            require(file.length() <= DataImporter.MAX_BYTES - MAGIC.size - SALT_SIZE - NONCE_SIZE - TAG_SIZE) {
-                "Backup exceeds 512 MB"
+        // Stream the compressed ZIP directly through AES-GCM. An intermediate ZIP
+        // duplicated up to 512 MB on internal storage and read the entire file twice.
+        // Only the encrypted destination sees location history, never the signing server.
+        val salt = ByteArray(SALT_SIZE).also(SecureRandom()::nextBytes)
+        val nonce = ByteArray(NONCE_SIZE).also(SecureRandom()::nextBytes)
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, key(password, salt), GCMParameterSpec(128, nonce))
+        output.write(MAGIC)
+        output.write(salt)
+        output.write(nonce)
+        CipherOutputStream(output, cipher).use { encrypted ->
+            val maxPlainBytes = DataImporter.MAX_BYTES - MAGIC.size - SALT_SIZE - NONCE_SIZE - TAG_SIZE
+            var written = 0L
+            // DataExporter closes its ZIP stream. The outer cipher must remain open
+            // until its own use block finalizes the authentication tag exactly once.
+            val bounded = object : OutputStream() {
+                override fun write(value: Int) {
+                    if (written >= maxPlainBytes) throw java.io.IOException("Backup exceeds 512 MB")
+                    encrypted.write(value)
+                    written++
+                }
+                override fun write(buffer: ByteArray, offset: Int, length: Int) {
+                    if (length < 0 || length.toLong() > maxPlainBytes - written)
+                        throw java.io.IOException("Backup exceeds 512 MB")
+                    encrypted.write(buffer, offset, length)
+                    written += length
+                }
+                override fun flush() = encrypted.flush()
+                override fun close() = flush()
             }
-            file.inputStream().use { encrypt(it, output, password) }
-        } finally { file.delete() }
+            DataExporter.writeZip(context, repository, bounded)
+        }
     }
 
     internal fun encrypt(plain: InputStream, output: OutputStream, password: CharArray) {
