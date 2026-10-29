@@ -83,6 +83,12 @@ object PassphraseBackup {
             }
             DataExporter.writeZip(context, repository, bounded)
         }
+        // As with Play-signed exports, never publish a stale GPS snapshot when
+        // the owner deleted or restored device history while it was being saved.
+        check(repository.isHistoryCurrent() &&
+            !com.roadconquest.app.util.Prefs.isDeviceDataDeletionPending(context)) {
+            "Device progress changed while exporting. Export again."
+        }
     }
 
     internal fun encrypt(plain: InputStream, output: OutputStream, password: CharArray) {
