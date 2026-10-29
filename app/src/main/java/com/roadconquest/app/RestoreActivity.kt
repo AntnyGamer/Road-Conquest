@@ -131,7 +131,9 @@ class RestoreActivity : Activity() {
             }.show()
     }
 
-    private fun validate(open: () -> java.io.InputStream, passphrase: CharArray? = null) {
+    private fun validate(open: () -> java.io.InputStream) = validate(open, null)
+
+    private fun validate(open: () -> java.io.InputStream, passphrase: CharArray?) {
         if (busy) { passphrase?.fill(0.toChar()); return }
         setBusy(true)
         status.text = "Checking backup…"
