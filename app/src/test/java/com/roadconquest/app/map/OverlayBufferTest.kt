@@ -68,6 +68,26 @@ class OverlayBufferTest {
             })
     }
 
+    @Test fun productionStraightGapNeedsRecordedDrivingProof() {
+        val west = namedFragment("Main Street", 1_000L, 4_000L,
+            40.0 to -74.0005, 40.0 to -74.00025)
+        val east = namedFragment("Main Street", 6_000L, 8_000L,
+            40.0 to -74.00010, 40.0 to -73.99985)
+        var inspected = false
+        val notDriven = OverlayRoads.prepare(listOf(west, east),
+            hasRecordedDriving = { _, _, _, _, from, to ->
+                inspected = true
+                assertEquals(4_000L, from)
+                assertEquals(6_000L, to)
+                false
+            })
+        assertTrue("Eligible straight gap must ask for actual driving evidence", inspected)
+        assertEquals("Roads without recorded movement remain separate", 2, notDriven.starts.size - 1)
+        val driven = OverlayRoads.prepare(listOf(west, east),
+            hasRecordedDriving = { _, _, _, _, _, _ -> true })
+        assertEquals(1, driven.starts.size - 1)
+    }
+
     @Test fun straightSeamRequiresSameNameGoodGeometryAndRecentChronology() {
         val west = namedFragment("Main Street", 1_000L, 4_000L,
             40.0 to -74.0005, 40.0 to -74.00025)
