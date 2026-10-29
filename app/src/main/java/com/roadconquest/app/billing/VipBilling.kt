@@ -184,8 +184,8 @@ class VipBilling(
             if (result.responseCode == BillingClient.BillingResponseCode.OK) {
                 val vipPurchases = purchases.filter { VipEntitlement.PRODUCT_ID in it.products }
                 val owned = vipPurchases.any { it.purchaseState == Purchase.PurchaseState.PURCHASED }
-                // A purchase callback or another screen may have confirmed a
-                // newer state while this async query was in flight. In that
+                // A purchase callback or another successful query may have
+                // confirmed a newer state while this query was in flight. In that
                 // case don't let this potentially stale result revoke/grant VIP.
                 // Start pending acknowledgements before a new entitlement causes
                 // the current screen to recreate and close its Billing connection.

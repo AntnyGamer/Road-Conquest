@@ -48,6 +48,14 @@ class MapRenderingDeviceTest {
     @Test fun hiddenTripReplayDefersProviderReloadUntilResumed() {
         val app = InstrumentationRegistry.getInstrumentation().targetContext
         val originalMode = Prefs.mapMode(app)
+        TrackingRepository(app).clearHistory()
+        val repository = TrackingRepository(app)
+        val firstTime = System.currentTimeMillis() - 4_000_000L
+        fun fix(time: Long) = Location("gps").apply {
+            latitude = 40.0; longitude = -74.0 + (time - firstTime) / 1_000_000_000.0
+            accuracy = 3f; speed = 8f; this.time = time
+        }
+        repository.insertLocations(listOf(fix(firstTime), fix(firstTime + 10_000)))
         try {
             Prefs.setMapMode(app, MapMode.STREETS)
             ActivityScenario.launch(TripHistoryActivity::class.java).use { scenario ->
@@ -58,7 +66,31 @@ class MapRenderingDeviceTest {
                     view.getMapAsync { it.getStyle { ready.countDown() } }
                 }
                 assertTrue("Replay's bundled style must load", ready.await(30, TimeUnit.SECONDS))
+                fun awaitTrips(count: Int, selectedPoints: Int? = null) {
+                    val deadline = SystemClock.elapsedRealtime() + 10_000L
+                    var matches = false
+                    while (!matches && SystemClock.elapsedRealtime() < deadline) {
+                        scenario.onActivity { activity ->
+                            val column = TripHistoryActivity::class.java.getDeclaredField("tripList")
+                                .apply { isAccessible = true }.get(activity) as android.widget.LinearLayout
+                            val buttons = (0 until column.childCount).count { column.getChildAt(it) is android.widget.Button }
+                            val selected = TripHistoryActivity::class.java.getDeclaredField("selectedTrip")
+                                .apply { isAccessible = true }.get(activity) as? com.roadconquest.app.data.SavedTrip
+                            matches = buttons == count && (selectedPoints == null || selected?.pointCount == selectedPoints)
+                        }
+                        if (!matches) SystemClock.sleep(50)
+                    }
+                    assertTrue("Returning must show $count current drives and refreshed selection", matches)
+                }
+                awaitTrips(1)
+                scenario.onActivity { activity ->
+                    val column = TripHistoryActivity::class.java.getDeclaredField("tripList")
+                        .apply { isAccessible = true }.get(activity) as android.widget.LinearLayout
+                    (column.getChildAt(1) as android.widget.Button).performClick()
+                }
                 scenario.moveToState(Lifecycle.State.CREATED)
+                // Grow the selected drive and add another while the Trips screen is hidden.
+                repository.insertLocations(listOf(fix(firstTime + 20_000), fix(firstTime + 2_000_000), fix(firstTime + 2_010_000)))
                 scenario.onActivity { activity ->
                     val generation = TripHistoryActivity::class.java.getDeclaredField("replayStyleGeneration")
                         .apply { isAccessible = true }
@@ -70,13 +102,14 @@ class MapRenderingDeviceTest {
                     assertEquals("Hidden replay must not reload map resources", before, generation.getInt(activity))
                 }
                 scenario.moveToState(Lifecycle.State.RESUMED)
+                awaitTrips(2, selectedPoints = 3)
                 scenario.onActivity { activity ->
                     val mode = TripHistoryActivity::class.java.getDeclaredField("replayMode")
                         .apply { isAccessible = true }.get(activity)
                     assertEquals("Returning applies the current appearance", MapMode.NIGHT, mode)
                 }
             }
-        } finally { Prefs.setMapMode(app, originalMode) }
+        } finally { Prefs.setMapMode(app, originalMode); repository.clearHistory() }
     }
 
     @org.junit.Before fun skipFirstUseTour() {
@@ -578,6 +611,13 @@ class MapRenderingDeviceTest {
                 scenario.moveToState(Lifecycle.State.CREATED)
                 scenario.moveToState(Lifecycle.State.RESUMED)
                 awaitState("Reopening resumes the previous tracking session, including manual mode") {
+                    !Prefs.isTrackingPaused(app) && TrackingService.isRunning
+                }
+            }
+            manager.activeNotifications.single { it.id == 4101 }.notification.actions.single().actionIntent.send()
+            awaitState("Tracking stops before reopening Garage") { Prefs.isTrackingPaused(app) && !TrackingService.isRunning }
+            ActivityScenario.launch(ShopActivity::class.java).use {
+                awaitState("Garage also resumes a notification-paused session") {
                     !Prefs.isTrackingPaused(app) && TrackingService.isRunning
                 }
             }

@@ -84,7 +84,7 @@ class ForumActivity : Activity() {
     }
 
     override fun attachBaseContext(newBase: Context) { super.attachBaseContext(Appearance.wrap(newBase)) }
-    override fun onStart() { super.onStart(); ForegroundSession.app.onStart() }
+    override fun onStart() { super.onStart(); ForegroundSession.app.onStart(this) }
     override fun onStop() { ForegroundSession.app.onStop(isChangingConfigurations); super.onStop() }
 
     override fun onCreate(savedInstanceState: Bundle?) {

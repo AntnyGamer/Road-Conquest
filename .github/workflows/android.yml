@@ -21,18 +21,17 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Verify competitive version allowlist includes this Android build
+      - name: Verify this Android build meets the server minimum version
         shell: bash
         run: |
           set -euo pipefail
           version_code=$(sed -n 's/.*versionCode = \([0-9][0-9]*\).*/\1/p' app/build.gradle.kts)
-          allowed=$(sed -n 's/^PLAY_VERSION_CODES=\([0-9,][0-9,]*\)$/\1/p' server/README.md | head -n 1)
+          minimum=$(node --input-type=module -e 'import { MIN_PLAY_VERSION_CODE } from "./server/src/scoring.mjs"; console.log(MIN_PLAY_VERSION_CODE)')
           test -n "$version_code"
-          test -n "$allowed"
-          case ",$allowed," in
-            *",$version_code,"*) ;;
-            *) echo "::error::Android versionCode $version_code is missing from PLAY_VERSION_CODES=$allowed"; exit 1 ;;
-          esac
+          if [ "$version_code" -lt "$minimum" ]; then
+            echo "::error::Android versionCode $version_code is below the server minimum $minimum"
+            exit 1
+          fi
       - name: Set up Node 22
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:

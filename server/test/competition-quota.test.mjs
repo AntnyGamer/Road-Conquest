@@ -9,7 +9,7 @@ import { evidenceHash, EvidenceError } from '../src/scoring.mjs';
 import { GRID_ID, LATITUDE_STEP, LONGITUDE_STEP, cellFor } from '../src/cells.mjs';
 
 const config = { dataset: GRID_ID, checkpointKey: 'K'.repeat(43), packageName: 'com.roadconquest.app',
-  versions: ['71'], certificates: ['A'.repeat(43)] };
+  certificates: ['A'.repeat(43)] };
 const gate = () => Promise.withResolvers();
 function evidence(run = { run: '00000000-0000-4000-8000-000000000001', nonce: 'N'.repeat(43), sequence: 0 }) {
   const cell = cellFor(40, -75), now = Date.now();
@@ -52,7 +52,7 @@ test('twenty concurrent exact submissions spend one Google decode and commit one
         return Response.json({ tokenPayloadExternal: {
           requestDetails: { requestHash: hash, requestPackageName: config.packageName, timestampMillis: String(Date.now()) },
           appIntegrity: { appRecognitionVerdict: 'PLAY_RECOGNIZED', packageName: config.packageName,
-            versionCode: '71', certificateSha256Digest: config.certificates },
+            versionCode: '90', certificateSha256Digest: config.certificates },
           accountDetails: { appLicensingVerdict: 'LICENSED' },
           deviceIntegrity: { deviceRecognitionVerdict: ['MEETS_DEVICE_INTEGRITY', 'MEETS_STRONG_INTEGRITY'] }
         } });

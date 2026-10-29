@@ -11,13 +11,15 @@ class ProviderHealth(private val now: () -> Long = System::currentTimeMillis) {
         // Seconds are the common Retry-After form. Only run the RFC date parser
         // for non-numeric headers instead of throwing on every numeric response.
         val seconds = retryAfter?.toLongOrNull()
-        val retry = if (seconds != null) seconds.coerceIn(0L, 86_400L) * 1000L else retryAfter?.let {
+        val retry = if (seconds != null) seconds.takeIf { it >= 0L }?.coerceAtMost(86_400L)?.times(1000L) else retryAfter?.let {
             runCatching { ZonedDateTime.parse(it, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant().toEpochMilli() - now() }.getOrNull()
-        } ?: 0L
+        }?.coerceAtLeast(0L)
         val default = if (errorCode == "queue_busy" || errorCode == "provider_cooldown" ||
             errorCode == "budget_conflict") 1_000L
-            else when (status) { 401, 403 -> 86_400_000L; 429 -> 60_000L; else -> 30_000L }
-        until[id] = maxOf(until[id] ?: 0L, now() + maxOf(default, retry).coerceAtMost(86_400_000L))
+            // A gateway can recover from a brief upstream authorization failure.
+            // Honor its explicit delay, retaining the conservative fallback if absent.
+            else when (status) { 401, 403 -> if (retry != null) 1_000L else 86_400_000L; 429 -> 60_000L; else -> 30_000L }
+        until[id] = maxOf(until[id] ?: 0L, now() + maxOf(default, retry ?: 0L).coerceAtMost(86_400_000L))
     }
     companion object { val shared = ProviderHealth() }
 }

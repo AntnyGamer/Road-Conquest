@@ -115,6 +115,11 @@ class TripHistoryRepository(context: Context) {
     /** Cheap invalidation token for screens resuming after a restore or deletion. */
     fun currentHistoryGeneration(): Long = helper.historyGeneration
 
+    /** Indexed append token: unchanged resumes need no scan of the trip archive. */
+    fun latestPointId(): Long = helper.readableDatabase.rawQuery(
+        "SELECT COALESCE(MAX(id),0) FROM track_points", null
+    ).use { check(it.moveToFirst()); it.getLong(0) }
+
     /** Cheap generation check; protects outgoing shares after a device-data reset. */
     fun isCurrentTrip(trip: SavedTrip): Boolean =
         trip.historyGeneration == helper.historyGeneration

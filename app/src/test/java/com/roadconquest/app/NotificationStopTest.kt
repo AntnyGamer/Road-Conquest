@@ -158,6 +158,36 @@ class NotificationStopTest {
         assertTrue(session.onStart())
     }
 
+    @Test fun secondaryScreenReopenResumesButInternalNavigationAndDeletionDoNot() {
+        val app = RuntimeEnvironment.getApplication()
+        val session = ForegroundSession()
+        Prefs.setManualOnly(app, true)
+        Prefs.setTrackingPaused(app, true)
+        assertTrue(session.onStart(app))
+        assertFalse(Prefs.isTrackingPaused(app))
+        assertEquals(TrackingService::class.java.name, Shadows.shadowOf(app).nextStartedService.component!!.className)
+
+        Prefs.setTrackingPaused(app, true)
+        assertFalse(session.onStart(app))
+        assertTrue("Internal navigation must retain the notification stop", Prefs.isTrackingPaused(app))
+        assertNull(Shadows.shadowOf(app).nextStartedService)
+        session.onStop(false)
+        session.onStop(false)
+        Prefs.setDeviceDataDeletionPending(app, true)
+        assertTrue(session.onStart(app))
+        assertTrue(Prefs.isTrackingPaused(app))
+        assertNull(Shadows.shadowOf(app).nextStartedService)
+    }
+
+    @Test fun secondaryScreenReopenReleasesPauseWhenLocationCannotStartYet() {
+        val app = RuntimeEnvironment.getApplication()
+        Shadows.shadowOf(app).denyPermissions(Manifest.permission.ACCESS_FINE_LOCATION)
+        Prefs.setTrackingPaused(app, true)
+        ForegroundSession().onStart(app)
+        assertFalse("Map permission recovery must not remain blocked by the old pause", Prefs.isTrackingPaused(app))
+        assertNull(Shadows.shadowOf(app).nextStartedService)
+    }
+
     @Test fun unrelatedActionDoesNotPauseOrStopTracking() {
         val app = RuntimeEnvironment.getApplication()
         val controller = Robolectric.buildService(TrackingService::class.java).create()

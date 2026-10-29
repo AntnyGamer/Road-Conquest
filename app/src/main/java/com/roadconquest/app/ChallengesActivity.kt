@@ -334,7 +334,7 @@ class ChallengesActivity : Activity() {
         enableRecursively(friends)
     }
 
-    override fun onStart() { super.onStart(); ForegroundSession.app.onStart() }
+    override fun onStart() { super.onStart(); ForegroundSession.app.onStart(this) }
     override fun onResume() { super.onResume(); refresh() }
     override fun onStop() { ForegroundSession.app.onStop(isChangingConfigurations); super.onStop() }
     override fun onDestroy() { generation++; worker.shutdownNow(); super.onDestroy() }

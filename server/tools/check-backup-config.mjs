@@ -4,11 +4,12 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createBackups } from '../src/backups.mjs';
 import { playIntegrityConfig } from '../src/integrity.mjs';
+import { MIN_PLAY_VERSION_CODE, supportsPlayVersion } from '../src/scoring.mjs';
 
 /** Offline only: no Google calls, database access, deployment or secret output. */
 export async function checkBackupConfig(env, versionCode) {
-  if (!/^[1-9][0-9]*$/.test(String(versionCode)) || !Number.isSafeInteger(Number(versionCode)) || Number(versionCode) < 71) {
-    throw new Error('Supply the intended Android versionCode (71 or newer).');
+  if (!supportsPlayVersion(String(versionCode))) {
+    throw new Error('Supply the intended Android versionCode (' + MIN_PLAY_VERSION_CODE + ' or newer).');
   }
   for (const [key, value] of Object.entries({ NODE_ENV: 'production', REQUIRE_HTTPS: '1', TRUST_PROXY: '1', APPLY_SCHEMA_ON_STARTUP: '0' })) {
     if (env[key] !== value) throw new Error(key + '=' + value + ' is required for the existing production function.');
@@ -16,8 +17,7 @@ export async function checkBackupConfig(env, versionCode) {
   if (!env.BACKUP_SIGNING_PRIVATE_KEY) throw new Error('BACKUP_SIGNING_PRIVATE_KEY is required.');
   let config;
   try { config = playIntegrityConfig(env); }
-  catch { throw new Error('Check the production PLAY_SERVICE_ACCOUNT_JSON/FILE, PLAY_CERTIFICATES, PLAY_VERSION_CODES and PLAY_CLOUD_PROJECT_NUMBER.'); }
-  if (!config.versions.includes(String(versionCode))) throw new Error('PLAY_VERSION_CODES must include the intended Android versionCode.');
+  catch { throw new Error('Check the production PLAY_SERVICE_ACCOUNT_JSON/FILE, PLAY_CERTIFICATES and PLAY_CLOUD_PROJECT_NUMBER.'); }
   try {
     const account = JSON.parse(config.credentialsJson || await readFile(config.credentialsFile, 'utf8'));
     if (account?.type !== 'service_account' || typeof account.client_email !== 'string' || !account.client_email.trim() ||

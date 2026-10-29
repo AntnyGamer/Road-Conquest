@@ -1,3 +1,20 @@
+# Road Conquest 1.0 Beta 67
+
+## What's new since Beta 66
+
+- **Walking and driving agree:** The walking marker stays below the 2.2 m/s driving threshold, and switches back to the car at that threshold after the existing hysteresis. This preserves slow driving and turns.
+- **Final road matching:** Stopping tracking permits one final matching pass past the local batching delay. Provider cooldowns and quota limits still apply. Data deletion starts no final request, and partial results do not trigger a shutdown retry burst.
+- **Reliable VIP restoration:** A newer pending or failed ownership query cannot discard a successful restoration. Newer successful refunds and purchase callbacks still override stale results. Garage ads share the Garage purchase check, removing duplicate Play clients and lookups.
+- **Provider recovery:** Valid Retry-After delays on authorization failures allow a timely recovery instead of forcing 24 hours. Missing or malformed headers keep the conservative fallback, and existing longer cooldowns cannot be shortened.
+- **Current trip history:** Returning to Trips checks the newest saved point before rescanning. New background drives appear, and an extended selected drive reloads its replay and summary while retaining selection.
+- **Tracking resumes from every app screen:** Reopening Garage, Trips, Account, Badges, Goals, Community, Restore or Rankings resumes a notification-paused session when location access permits. Internal navigation, notification-shade dismissal and recreation retain the stop; deletion remains blocked.
+- **Future Play builds:** Protected backups and verified requests accept version codes 90 and newer. Certificate, licensing, device-integrity and request-binding checks remain required. CI and backup preflight use the same minimum policy.
+- **Compatibility:** Android 12+, versionCode **93**, versionName **1.0-beta.67**.
+
+**Backend and publishing:** The tested account-function policy is already active as Neon deployment 36. No additional map-gateway or database change is required for Beta 67. Signed GitHub APK/AAB publication is gated on the full test, lint, native-map and release-startup suite. Google Play upload remains separate; confirm version code 93 is unused in Play Console. Physical-device Play purchases and protected export/restore still require real-device verification.
+
+---
+
 # Road Conquest 1.0 Beta 66
 
 ## What's new since Beta 65

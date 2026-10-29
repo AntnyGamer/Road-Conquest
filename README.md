@@ -1,4 +1,4 @@
-# Road Conquest 1.0 Beta 66
+# Road Conquest 1.0 Beta 67
 
 Road Conquest remembers the roads you drive and the places you visit, revealing them through a
 cloud-textured fog map.
@@ -6,6 +6,8 @@ cloud-textured fog map.
 [Download the Android app](https://github.com/AntnyGamer/RoadConquest-Beta/releases) ·
 [Source and issues](https://github.com/AntnyGamer/RoadConquest-Beta) ·
 [GNU AGPL v3 license](LICENSE)
+
+Beta 67 aligns the walking marker with driving capture, completes a final matching pass when tracking stops, restores VIP reliably, respects provider recovery delays, refreshes Trips after background drives, and resumes notification-paused tracking from secondary screens. The deployed account service accepts Play version codes 90 and newer. See [release notes](RELEASE_NOTES.md).
 
 Beta 66 raises free map-matching gateway limits within provider allowances, rejects untrusted requests earlier, and cuts repeated quota-accounting reads. It also removes three unreferenced historical review files. This release requires separately deploying the updated Cloudflare map gateway; see [release notes](RELEASE_NOTES.md) for verification and provider-reserve tradeoffs.
 
@@ -58,12 +60,12 @@ Grant Precise location. For automatic background tracking, choose Allow all the 
 location settings and allow background battery use. Settings includes shortcuts to the relevant
 Android screens. Allow notifications to see the tracking notification and its Stop tracking control.
 
-The new release builds **Beta 66** with Android application ID
-`com.roadconquest.app` and internal version code **92**. Beta 65 used code 91,
+The new release builds **Beta 67** with Android application ID
+`com.roadconquest.app` and internal version code **93**. Beta 66 used code 92, Beta 65 used code 91,
 Beta 64 used code 90, Beta 63 used code 89 and Beta 62 used code 88.
 Google Play permanently reserves uploaded version codes, including drafts and
-testing tracks. Before uploading a **signed Beta 66 release bundle**, confirm
-that code 92 is still available in Play Console. The unsigned CI bundle cannot be uploaded.
+testing tracks. Before uploading a **signed Beta 67 release bundle**, confirm
+that code 93 is still available in Play Console. The unsigned CI bundle cannot be uploaded.
 Do not confuse a locally tested development build with an already-published signed release.
 The app shows its exact version in Settings → About. Treat the application ID as permanent once
 the Google Play listing is created; changing it later would create a different app.

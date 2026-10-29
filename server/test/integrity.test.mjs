@@ -9,7 +9,7 @@ const privateKey = generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKe
   .export({ type: "pkcs8", format: "pem" });
 const config = {
   credentialsJson: JSON.stringify({ type: "service_account", client_email: "verifier@example.iam.gserviceaccount.com", private_key: privateKey }),
-  packageName: "com.roadconquest.app", versions: ["71"], certificates: ["A".repeat(43)]
+  packageName: "com.roadconquest.app", certificates: ["A".repeat(43)]
 };
 
 test('scoring and backup signing share OAuth credentials but independently verify every bound request', async () => {
@@ -44,7 +44,7 @@ test('scoring and backup signing share OAuth credentials but independently verif
         requestDetails: { requestHash: token.startsWith('backup-') ? requestHash : 'wrong-bound-hash',
           requestPackageName: config.packageName, timestampMillis: String(Date.now()) },
         appIntegrity: { appRecognitionVerdict: 'PLAY_RECOGNIZED', packageName: config.packageName,
-          versionCode: '71', certificateSha256Digest: config.certificates },
+          versionCode: '90', certificateSha256Digest: config.certificates },
         accountDetails: { appLicensingVerdict: 'LICENSED' },
         deviceIntegrity: { deviceRecognitionVerdict: ['MEETS_DEVICE_INTEGRITY', 'MEETS_STRONG_INTEGRITY'] }
       } });
@@ -109,7 +109,7 @@ test("concurrent verification shares OAuth refreshes and verifies each bound Goo
     return Response.json({ tokenPayloadExternal: {
       requestDetails: { requestHash: "hash", requestPackageName: config.packageName, timestampMillis: String(Date.now()) },
       appIntegrity: { appRecognitionVerdict: "PLAY_RECOGNIZED", packageName: config.packageName,
-        versionCode: "71", certificateSha256Digest: config.certificates },
+        versionCode: "90", certificateSha256Digest: config.certificates },
       accountDetails: { appLicensingVerdict: "LICENSED" },
       deviceIntegrity: { deviceRecognitionVerdict: ["MEETS_DEVICE_INTEGRITY", "MEETS_STRONG_INTEGRITY"] }
     } });
@@ -194,7 +194,7 @@ test('rejected Integrity OAuth credentials refresh on retry without a delayed fa
     return Response.json({ tokenPayloadExternal: {
       requestDetails: { requestHash: 'hash', requestPackageName: config.packageName, timestampMillis: String(Date.now()) },
       appIntegrity: { appRecognitionVerdict: 'PLAY_RECOGNIZED', packageName: config.packageName,
-        versionCode: '71', certificateSha256Digest: config.certificates },
+        versionCode: '90', certificateSha256Digest: config.certificates },
       accountDetails: { appLicensingVerdict: 'LICENSED' },
       deviceIntegrity: { deviceRecognitionVerdict: ['MEETS_DEVICE_INTEGRITY', 'MEETS_STRONG_INTEGRITY'] }
     } });
