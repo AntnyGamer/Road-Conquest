@@ -25,7 +25,8 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
         fun prepare(
             roads: List<RoadRecord>,
             visitWindows: Map<String, List<Pair<Long, Long>>> = emptyMap(),
-            hasRecordedDriving: ((Double, Double, Double, Double, Long, Long) -> Boolean)? = null
+            hasRecordedDriving: ((Double, Double, Double, Double, Long, Long) -> Boolean)? = null,
+            hasRecordedTurn: ((Double, Double, Double, Double, Double, Double, Long, Long) -> Boolean)? = null
         ): OverlayRoads {
             if (roads.isEmpty()) return EMPTY
             val segments = ArrayList<Segment>(roads.size)
@@ -147,7 +148,7 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
             // Protect the original first-unlock connections before considering other visits.
             // Mixing later visits into this pass could make a previously valid turn ambiguous.
             appendSupportedJunctions(segments, segmentFirstTimes, segmentLastTimes, nodes, degree, segmentNames,
-                hasRecordedDriving = hasRecordedDriving)
+                hasRecordedDriving = hasRecordedDriving, hasRecordedTurn = hasRecordedTurn)
             val occupied = HashSet<Int>()
             fun reserveConnectors(since: Int) {
                 for (index in since until segments.size) {
@@ -161,7 +162,7 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
                 // Add only unoccupied endpoints; never displace the original visible turns.
                 appendSupportedJunctions(segments, segmentFirstTimes, segmentLastTimes, nodes,
                     degree, segmentNames, segmentVisits, occupied,
-                    hasRecordedDriving = hasRecordedDriving)
+                    hasRecordedDriving = hasRecordedDriving, hasRecordedTurn = hasRecordedTurn)
             } else {
                 // On larger viewports or if visit retrieval fails, keep the later-drive
                 // fallback without allowing it to erase first-unlock connections.
@@ -241,7 +242,8 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
             visits: List<List<Pair<Long, Long>>>? = null,
             occupiedNodes: Set<Int> = emptySet(),
             includeLastTimes: Boolean = false,
-            hasRecordedDriving: ((Double, Double, Double, Double, Long, Long) -> Boolean)? = null
+            hasRecordedDriving: ((Double, Double, Double, Double, Long, Long) -> Boolean)? = null,
+            hasRecordedTurn: ((Double, Double, Double, Double, Double, Double, Long, Long) -> Boolean)? = null
         ) {
             // Both passes inspect the original roads, never the already added connectors.
             val originalSize = firstTimes.size
@@ -289,21 +291,25 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
                     } else visits[from][timeIndex].second
                     if (visits == null && timeIndex == 1 && time == firstTimes[from]) continue
                     // Bounded timestamp index: avoids quadratic work with years of unlocked roads.
-                    for (second in time / 1_000L..time / 1_000L + 15L) {
+                    // The ordinary safe repair stays at 15 seconds. With saved
+                    // GPS, a stoplight/slow turn can prove a longer (45 s) traversal.
+                    val timeLimit = if (hasRecordedTurn == null) MAX_SUPPORTED_JUNCTION_TIME_MS
+                        else MAX_RECORDED_TURN_TIME_MS
+                    for (second in time / 1_000L..time / 1_000L + timeLimit / 1_000L) {
                         for (to in startsBySecond[second].orEmpty()) {
                             if (to == from || seenFrom[to] == from) continue
                             val nextAt = if (visits == null) {
                                 when {
-                                    firstTimes[to] - time in 1L..MAX_SUPPORTED_JUNCTION_TIME_MS ->
+                                    firstTimes[to] - time in 1L..timeLimit ->
                                         firstTimes[to]
                                     includeLastTimes &&
-                                        lastTimes[to] - time in 1L..MAX_SUPPORTED_JUNCTION_TIME_MS ->
+                                        lastTimes[to] - time in 1L..timeLimit ->
                                         lastTimes[to]
                                     else -> null
                                 }
                             } else {
                                 visits[to].firstOrNull { (startedAt, _) ->
-                                    startedAt - time in 1L..MAX_SUPPORTED_JUNCTION_TIME_MS
+                                    startedAt - time in 1L..timeLimit
                                 }?.first
                             } ?: continue
                             val right = segments[to]
@@ -311,20 +317,35 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
                                 nodes[left.endNode].latitude, nodes[left.endNode].longitude,
                                 nodes[right.startNode].latitude, nodes[right.startNode].longitude
                             )
-                            if (distance !in ENDPOINT_JOIN_TOLERANCE_M..MAX_SUPPORTED_JUNCTION_DISTANCE_M) continue
-                            // Parallel, same-named road fragments can have a real straight seam:
-                            // their tangent rays never intersect, so the turn-only repair misses it.
-                            // Draw a short display-only link only when BOTH observed road
-                            // directions support travelling straight across the unique seam.
-                            val turnBend = supportedJunctionBend(left.coordinates, right.coordinates, distance)
-                            val straightBend = if (turnBend == null && names[from].isNotBlank() &&
+                            if (distance !in ENDPOINT_JOIN_TOLERANCE_M..MAX_RECORDED_TURN_DISTANCE_M) continue
+                            val normalTime = nextAt - time in 1L..MAX_SUPPORTED_JUNCTION_TIME_MS
+                            // Existing 30 m/15 s ray intersection remains the first choice.
+                            // For larger or slower real turns, require THREE ordered GPS
+                            // samples through the actual bend before joining visually.
+                            val ordinaryBend = if (normalTime && distance <= MAX_SUPPORTED_JUNCTION_DISTANCE_M)
+                                supportedJunctionBend(left.coordinates, right.coordinates, distance)
+                                else null
+                            val extendedBend = if (ordinaryBend == null && hasRecordedTurn != null)
+                                supportedJunctionBend(left.coordinates, right.coordinates, distance,
+                                    MAX_RECORDED_TURN_DISTANCE_M)
+                                else null
+                            val confirmedTurn = if (extendedBend != null && hasRecordedTurn != null)
+                                hasRecordedTurn(
+                                    nodes[left.endNode].latitude, nodes[left.endNode].longitude,
+                                    extendedBend.first, extendedBend.second,
+                                    nodes[right.startNode].latitude, nodes[right.startNode].longitude,
+                                    time, nextAt
+                                ) else false
+                            // Straight gaps still need the same name, aligned bearings
+                            // and saved GPS. A turning road never becomes a straight chord.
+                            val straightBend = if (normalTime && ordinaryBend == null &&
+                                names[from].isNotBlank() &&
                                 !names[from].equals("Unnamed road", ignoreCase = true) &&
                                 names[from].trim().equals(names[to].trim(), ignoreCase = true)
                             ) supportedStraightSeam(left.coordinates, right.coordinates, distance) else null
-                            val bend = turnBend ?: straightBend ?: continue
-                            // Only check indexed local GPS history for a geometry-supported
-                            // straight seam. Historical turn joins retain their old policy.
-                            if (turnBend == null && hasRecordedDriving != null &&
+                            val bend = ordinaryBend ?: extendedBend?.takeIf { confirmedTurn }
+                                ?: straightBend ?: continue
+                            if (bend === straightBend && hasRecordedDriving != null &&
                                 !hasRecordedDriving(
                                     nodes[left.endNode].latitude, nodes[left.endNode].longitude,
                                     nodes[right.startNode].latitude, nodes[right.startNode].longitude,
@@ -436,7 +457,8 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
         }
 
         private fun supportedJunctionBend(
-            left: DoubleArray, right: DoubleArray, directMeters: Double
+            left: DoubleArray, right: DoubleArray, directMeters: Double,
+            maxDistance: Double = MAX_SUPPORTED_JUNCTION_DISTANCE_M
         ): Pair<Double, Double>? {
             if (left.size < 4 || right.size < 4) return null
             val aLat = left[left.size - 2]
@@ -472,8 +494,8 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
             if (approach < 0.0 || exit > 0.0) return null
             val toBend = hypot(approach * ux, approach * uy)
             val fromBend = hypot(exit * vx, exit * vy)
-            if (toBend > MAX_SUPPORTED_JUNCTION_DISTANCE_M ||
-                fromBend > MAX_SUPPORTED_JUNCTION_DISTANCE_M ||
+            if (toBend > maxDistance ||
+                fromBend > maxDistance ||
                 toBend + fromBend > directMeters * 1.5 + 8.0) return null
             return (aLat + approach * uy / metersPerDegree) to
                 (aLon + approach * ux / metersPerLongitude)
@@ -581,6 +603,8 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
         private const val ENDPOINT_JOIN_TOLERANCE_M = 1.0
         private const val MAX_SUPPORTED_JUNCTION_TIME_MS = 15_000L
         private const val MAX_SUPPORTED_JUNCTION_DISTANCE_M = 30.0
+        private const val MAX_RECORDED_TURN_DISTANCE_M = 65.0
+        private const val MAX_RECORDED_TURN_TIME_MS = 45_000L
         private const val MAX_STRAIGHT_SEAM_DISTANCE_M = 25.0
         private const val MAX_STRAIGHT_SEAM_BEARING_DEGREES = 12.0
         private const val MIN_JUNCTION_DIRECTION_M = 4.0
