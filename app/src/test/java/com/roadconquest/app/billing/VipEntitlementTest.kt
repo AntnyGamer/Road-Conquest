@@ -109,17 +109,35 @@ class VipEntitlementTest {
         }
     }
 
-    @Test fun olderQueryCannotChangeOwnershipWhileNewerQueryIsPending() {
+    @Test fun successfulRestoreIsNotDiscardedByNewerPendingOrFailedQuery() {
         val context = org.robolectric.RuntimeEnvironment.getApplication()
         VipEntitlement.updateFromPlay(context, false)
         try {
             val olderQuery = VipEntitlement.beginOwnershipQuery()
             val newerQuery = VipEntitlement.beginOwnershipQuery()
             VipEntitlement.updateIfCurrent(context, true, olderQuery)
-            assertFalse("An older response must wait for the newer ownership check",
+            assertTrue("A pending check that may fail must not suppress a confirmed purchase",
                 VipEntitlement.isActive(context))
+            // A failed newer request makes no entitlement update. The confirmed
+            // purchase remains available; a later successful refund can revoke it.
+            assertTrue(VipEntitlement.isActive(context))
             VipEntitlement.updateIfCurrent(context, false, newerQuery)
             assertFalse(VipEntitlement.isActive(context))
+        } finally {
+            VipEntitlement.updateFromPlay(context, false)
+        }
+    }
+
+    @Test fun lateSuccessfulRestoreCannotUndoNewerConfirmedRefund() {
+        val context = org.robolectric.RuntimeEnvironment.getApplication()
+        VipEntitlement.updateFromPlay(context, false)
+        try {
+            val olderQuery = VipEntitlement.beginOwnershipQuery()
+            val newerQuery = VipEntitlement.beginOwnershipQuery()
+            VipEntitlement.updateIfCurrent(context, false, newerQuery)
+            VipEntitlement.updateIfCurrent(context, true, olderQuery)
+            assertFalse("A late restore must not override a newer successful check",
+                VipEntitlement.isActive(context))
         } finally {
             VipEntitlement.updateFromPlay(context, false)
         }

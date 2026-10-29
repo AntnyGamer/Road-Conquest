@@ -41,6 +41,30 @@ class MapProviderTest {
         assertEquals(60_000L, health.remaining("invalid"))
     }
 
+    @Test fun authorizationFailuresHonorExplicitRecoveryWithoutShorteningExistingCooldowns() {
+        var now = 1_000_000L
+        val health = ProviderHealth { now }
+        val date = java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME.format(
+            java.time.Instant.ofEpochMilli(now + 120_000L).atZone(java.time.ZoneOffset.UTC)
+        )
+        health.failed("seconds", 403, "60")
+        health.failed("date", 401, date)
+        health.failed("zero", 403, "0")
+        health.failed("daily", 403, "86400")
+        for (header in listOf(null, "invalid", "-1")) {
+            health.failed("invalid:$header", 403, header)
+            assertEquals(86_400_000L, health.remaining("invalid:$header"))
+        }
+        assertEquals(60_000L, health.remaining("seconds"))
+        assertEquals(120_000L, health.remaining("date"))
+        assertEquals(1_000L, health.remaining("zero"))
+        assertEquals(86_400_000L, health.remaining("daily"))
+        health.failed("daily", 403, "60")
+        assertEquals("A second response cannot clear a quota cooldown", 86_400_000L, health.remaining("daily"))
+        now += 60_001L
+        assertEquals("Retry the recovered provider after its delay", 0L, health.remaining("seconds"))
+    }
+
     @Test fun optionalOverviewTilesAndLabelsCannotDisableTheEntireVectorMap() {
         assertTrue(BaseMapProviders.isMapCriticalRequest("openfreemap", "/planet"))
         assertTrue(BaseMapProviders.isMapCriticalRequest("openfreemap", "/planet/release/2/1/1.pbf"))

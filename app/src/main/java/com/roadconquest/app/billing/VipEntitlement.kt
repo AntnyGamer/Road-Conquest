@@ -20,8 +20,9 @@ object VipEntitlement {
     private const val VIP_KEY = "vip_lifetime_owned"
     private val listeners = CopyOnWriteArraySet<() -> Unit>()
     private var ownershipRevision = 0L
+    private var confirmedRevision = 0L
 
-    /** Only the latest query across all Billing clients may change ownership. */
+    /** Order requests without treating an unfinished or failed query as authoritative. */
     @Synchronized internal fun beginOwnershipQuery(): Long = ++ownershipRevision
 
     fun isActive(context: Context): Boolean =
@@ -35,17 +36,24 @@ object VipEntitlement {
     fun removeListener(listener: () -> Unit) { listeners.remove(listener) }
 
     /**
-     * Ignore responses superseded by a newer query or purchase callback.
+     * Ignore responses superseded by a newer successful query or purchase callback.
      * Compare and apply under the same lock, including unchanged confirmations.
      */
     @Synchronized internal fun updateIfCurrent(context: Context, owned: Boolean, expectedRevision: Long) {
-        if (ownershipRevision == expectedRevision) updateFromPlay(context, owned)
+        if (expectedRevision <= confirmedRevision) return
+        confirmedRevision = expectedRevision
+        applyOwnership(context, owned)
     }
 
     @Synchronized internal fun updateFromPlay(context: Context, owned: Boolean) {
         // A repeated purchase callback is still newer than an in-flight query,
         // even when the offline cache already contains the same ownership.
         ownershipRevision++
+        confirmedRevision = ownershipRevision
+        applyOwnership(context, owned)
+    }
+
+    private fun applyOwnership(context: Context, owned: Boolean) {
         if (isActive(context) == owned) return
         context.applicationContext.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
             .edit().putBoolean(VIP_KEY, owned).apply()

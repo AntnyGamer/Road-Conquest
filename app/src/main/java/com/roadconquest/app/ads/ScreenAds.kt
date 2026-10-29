@@ -37,6 +37,7 @@ class ScreenAds(
     private val activity: Activity,
     private val root: View,
     private val rewardButton: Button? = null,
+    private val checkVipOwnership: Boolean = true,
     private val onRewardSaved: () -> Unit = {}
 ) {
     private val footer = activity.findViewById<View>(R.id.adBannerFooter)
@@ -61,15 +62,9 @@ class ScreenAds(
     private var privacyRevision = AdPrivacy.revision
     private var recoveryUsed = false
     private var vipChecked = false
-    private val vipBilling = VipBilling(activity) { _, checked, _ ->
-        if (checked) {
-            vipChecked = true
-            if (active && alive()) {
-                if (VipEntitlement.isActive(activity)) suspendAdsForVip()
-                else resumeAfterVipCheck()
-            }
-        }
-    }
+    private val vipBilling = if (checkVipOwnership) VipBilling(activity) { _, checked, _ ->
+        onVipOwnershipChecked(checked)
+    } else null
     private val vipListener: () -> Unit = {
         activity.runOnUiThread {
             if (alive() && active) {
@@ -98,7 +93,16 @@ class ScreenAds(
         // Restore a prior Play purchase before initializing/loading ads. A
         // cached offline VIP entitlement also suppresses ads immediately.
         if (VipEntitlement.isActive(activity)) suspendAdsForVip()
-        vipBilling.refresh(includeOffer = false)
+        vipBilling?.refresh(includeOffer = false)
+    }
+
+    /** Garage shares its purchase check rather than opening a second Billing client. */
+    fun onVipOwnershipChecked(checked: Boolean) {
+        vipChecked = checked
+        if (checked && active && alive()) {
+            if (VipEntitlement.isActive(activity)) suspendAdsForVip()
+            else resumeAfterVipCheck()
+        }
     }
 
     private fun resumeAfterVipCheck() {
@@ -149,7 +153,7 @@ class ScreenAds(
         destroyed = true
         onPause()
         VipEntitlement.removeListener(vipListener)
-        vipBilling.close()
+        vipBilling?.close()
         destroyBanner()
     }
 

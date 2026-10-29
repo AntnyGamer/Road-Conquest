@@ -49,7 +49,7 @@ class ShopActivity : Activity() {
     private var lastSnapshot: ProgressionSnapshot? = null
     private var appliedGoldUi = false
     private var vipThemeRecreationRequested = false
-    /** Avoid duplicate recreates when Shop and banner Billing clients report the same refund. */
+    /** Avoid duplicate recreates while a refund is rebuilding the theme. */
     private fun refreshVipThemeIfNeeded(): Boolean {
         if (vipThemeRecreationRequested) return true
         if (appliedGoldUi != Prefs.isGoldUiEnabled(this)) {
@@ -93,12 +93,14 @@ class ShopActivity : Activity() {
             vipOffer = offer
             vipChecked = checked
             vipMessage = status
+            if (::ads.isInitialized) ads.onVipOwnershipChecked(checked)
             // A refund can revoke a VIP-only Golden UI while Garage is open.
             // Rebuild the theme immediately instead of showing stale gold
             // surfaces until the user leaves and reopens the screen.
             if (!refreshVipThemeIfNeeded()) lastSnapshot?.let(::render)
         }
-        ads = ScreenAds(this, findViewById(R.id.shopRoot), findViewById(R.id.shopRewardButton), ::refresh)
+        ads = ScreenAds(this, findViewById(R.id.shopRoot), findViewById(R.id.shopRewardButton),
+            checkVipOwnership = false, onRewardSaved = ::refresh)
     }
 
     override fun onStart() {
@@ -110,8 +112,8 @@ class ShopActivity : Activity() {
         super.onResume()
         if (refreshVipThemeIfNeeded()) return
         if (::items.isInitialized) refresh()
-        if (::vipBilling.isInitialized) vipBilling.refresh()
         if (::ads.isInitialized) ads.onResume()
+        if (::vipBilling.isInitialized) vipBilling.refresh()
     }
 
     private fun refresh() {
