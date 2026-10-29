@@ -47,13 +47,14 @@ object PassphraseBackup {
         } finally { spec.clearPassword() }
     }
 
-    fun writePortable(context: Context, repository: TrackingRepository, output: OutputStream, password: CharArray) {
+    /**
+     * Both the streaming ZIP export and byte-stream tests must use one format
+     * implementation. In particular, the salt, nonce and GCM tag layout cannot diverge.
+     */
+    private fun withEncryptedOutput(output: OutputStream, password: CharArray, write: (OutputStream) -> Unit) {
         require(password.size in MIN_PASSWORD_LENGTH..MAX_PASSWORD_LENGTH) {
             "Use a passphrase between 12 and 256 characters."
         }
-        // Stream the compressed ZIP directly through AES-GCM. An intermediate ZIP
-        // duplicated up to 512 MB on internal storage and read the entire file twice.
-        // Only the encrypted destination sees location history, never the signing server.
         val salt = ByteArray(SALT_SIZE).also(SecureRandom()::nextBytes)
         val nonce = ByteArray(NONCE_SIZE).also(SecureRandom()::nextBytes)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
@@ -61,7 +62,15 @@ object PassphraseBackup {
         output.write(MAGIC)
         output.write(salt)
         output.write(nonce)
-        CipherOutputStream(output, cipher).use { encrypted ->
+        // Closing this stream writes the final authentication tag, once.
+        CipherOutputStream(output, cipher).use(write)
+    }
+
+    fun writePortable(context: Context, repository: TrackingRepository, output: OutputStream, password: CharArray) {
+        // Stream the compressed ZIP directly through AES-GCM. An intermediate ZIP
+        // duplicated up to 512 MB on internal storage and read the entire file twice.
+        // Only the encrypted destination sees location history, never the signing server.
+        withEncryptedOutput(output, password) { encrypted ->
             val maxPlainBytes = DataImporter.MAX_BYTES - MAGIC.size - SALT_SIZE - NONCE_SIZE - TAG_SIZE
             var written = 0L
             // DataExporter closes its ZIP stream. The outer cipher must remain open
@@ -91,20 +100,8 @@ object PassphraseBackup {
         }
     }
 
-    internal fun encrypt(plain: InputStream, output: OutputStream, password: CharArray) {
-        require(password.size in MIN_PASSWORD_LENGTH..MAX_PASSWORD_LENGTH) {
-            "Use a passphrase between 12 and 256 characters."
-        }
-        val salt = ByteArray(SALT_SIZE).also(SecureRandom()::nextBytes)
-        val nonce = ByteArray(NONCE_SIZE).also(SecureRandom()::nextBytes)
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.ENCRYPT_MODE, key(password, salt), GCMParameterSpec(128, nonce))
-        output.write(MAGIC)
-        output.write(salt)
-        output.write(nonce)
-        // Closing the cipher stream writes the final GCM tag.
-        CipherOutputStream(output, cipher).use { encrypted -> plain.copyTo(encrypted, 32 * 1024) }
-    }
+    internal fun encrypt(plain: InputStream, output: OutputStream, password: CharArray) =
+        withEncryptedOutput(output, password) { encrypted -> plain.copyTo(encrypted, 32 * 1024) }
 
     internal fun decrypt(encrypted: File, destination: File, password: CharArray) {
         require(password.isNotEmpty() && password.size <= MAX_PASSWORD_LENGTH) { "Enter a valid backup passphrase." }
