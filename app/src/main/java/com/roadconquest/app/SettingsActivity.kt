@@ -12,6 +12,7 @@ import android.content.pm.PackageManager
 import android.location.LocationManager
 import android.os.Build
 import android.os.Bundle
+import android.text.InputType
 import android.text.SpannableString
 import android.text.Spanned
 import android.text.style.TextAppearanceSpan
@@ -31,6 +32,7 @@ import com.roadconquest.app.account.AccountStore
 import com.roadconquest.app.data.LocalDataReset
 import com.roadconquest.app.data.TrackingRepository
 import com.roadconquest.app.export.DataImporter
+import com.roadconquest.app.export.PassphraseBackup
 import com.roadconquest.app.util.Prefs
 import com.roadconquest.app.util.Appearance
 import com.roadconquest.app.util.UiTheme
@@ -142,10 +144,12 @@ class SettingsActivity : Activity() {
     private val dataExecutor = Executors.newSingleThreadExecutor()
     @Volatile private var summaryGeneration = 0
     private var appliedGoldUi = false
+    private var pendingExportUsesPassword = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         setTheme(Appearance.themeRes(this))
         super.onCreate(savedInstanceState)
+        pendingExportUsesPassword = savedInstanceState?.getBoolean("pending_export_password") == true
         appliedGoldUi = Prefs.isGoldUiEnabled(this)
         WindowCompat.enableEdgeToEdge(window)
         val lightSystemBars = !Appearance.isDark(this)
@@ -261,16 +265,25 @@ class SettingsActivity : Activity() {
         deleteDeviceDataButton.setOnClickListener { showDeleteDeviceDataDialog() }
 
         findViewById<Button>(R.id.exportButton).setOnClickListener {
-            val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-                addCategory(Intent.CATEGORY_OPENABLE)
-                type = "application/zip"
-                putExtra(Intent.EXTRA_TITLE, "RoadConquest-data-${Instant.now().toString().take(10)}.zip")
-            }
-            try {
-                startActivityForResult(intent, REQUEST_EXPORT)
-            } catch (_: ActivityNotFoundException) {
-                Toast.makeText(this, "Android's file picker is unavailable on this device.", Toast.LENGTH_LONG).show()
-            }
+            AlertDialog.Builder(this).setTitle("Export progress")
+                .setItems(arrayOf(
+                    "Private backup (works with GitHub and Play builds)",
+                    "Google Play-verified ZIP (Play installs only)"
+                )) { _, selected ->
+                    pendingExportUsesPassword = selected == 0
+                    val extension = if (pendingExportUsesPassword) ".rcbackup" else ".zip"
+                    val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                        type = if (pendingExportUsesPassword) "application/octet-stream" else "application/zip"
+                        putExtra(Intent.EXTRA_TITLE, "RoadConquest-data-${Instant.now().toString().take(10)}$extension")
+                    }
+                    try {
+                        startActivityForResult(intent, REQUEST_EXPORT)
+                    } catch (_: ActivityNotFoundException) {
+                        pendingExportUsesPassword = false
+                        Toast.makeText(this, "Android's file picker is unavailable on this device.", Toast.LENGTH_LONG).show()
+                    }
+                }.show()
         }
 
     }
@@ -307,16 +320,74 @@ class SettingsActivity : Activity() {
         if (::accountSummaryText.isInitialized) refreshAccountControls()
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean("pending_export_password", pendingExportUsesPassword)
+        super.onSaveInstanceState(outState)
+    }
+
+    private fun requestPrivateExport(uri: Uri) {
+        val padding = (16 * resources.displayMetrics.density).toInt()
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(padding, padding / 2, padding, 0)
+        }
+        layout.addView(TextView(this).apply {
+            text = "Choose a passphrase of at least 12 characters and keep it safe. " +
+                "This encrypts your entire location history offline. You will need the passphrase to restore on any device."
+        })
+        fun passwordField(hint: String) = EditText(this).apply {
+            this.hint = hint
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            layout.addView(this)
+        }
+        val password = passwordField("Passphrase (12+ characters)")
+        val confirm = passwordField("Confirm passphrase")
+        val warning = TextView(this).apply { layout.addView(this) }
+        val dialog = AlertDialog.Builder(this).setTitle("Encrypt private backup")
+            .setView(layout).setNegativeButton("Cancel") { _, _ ->
+                runCatching { contentResolver.delete(uri, null, null) }
+            }.setPositiveButton("Export", null).create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val first = password.text.toString()
+                val second = confirm.text.toString()
+                if (first.length < 12 || first != second) {
+                    warning.text = if (first.length < 12) "Use at least 12 characters."
+                        else "Passphrases do not match."
+                    return@setOnClickListener
+                }
+                val secret = first.toCharArray()
+                password.text.clear()
+                confirm.text.clear()
+                dialog.dismiss()
+                writeExport(uri, secret)
+            }
+        }
+        dialog.show()
+    }
+
     @Deprecated("Used for a simple Storage Access Framework export on minSdk 31")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != REQUEST_EXPORT || resultCode != RESULT_OK) return
+        if (requestCode != REQUEST_EXPORT) return
+        val encrypted = pendingExportUsesPassword
+        pendingExportUsesPassword = false
+        if (resultCode != RESULT_OK) return
         val uri = data?.data ?: return
+        if (encrypted) requestPrivateExport(uri) else writeExport(uri, null)
+    }
+
+    private fun writeExport(uri: Uri, password: CharArray?) {
         Thread {
-            val result = runCatching {
-                contentResolver.openOutputStream(uri, "w")?.use { output ->
-                    com.roadconquest.app.export.BackupProtection.writePortable(this, repository, output)
-                } ?: error("Could not open export destination")
+            val result = try {
+                runCatching {
+                    contentResolver.openOutputStream(uri, "w")?.use { output ->
+                        if (password != null) PassphraseBackup.writePortable(this, repository, output, password)
+                        else com.roadconquest.app.export.BackupProtection.writePortable(this, repository, output)
+                    } ?: error("Could not open export destination")
+                }
+            } finally {
+                password?.fill(0.toChar())
             }
             var cleanupFailed = false
             if (result.isSuccess) {
