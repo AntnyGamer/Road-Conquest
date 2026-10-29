@@ -77,8 +77,11 @@ class OverlayBufferTest {
         val notDriven = OverlayRoads.prepare(listOf(west, east),
             hasRecordedDriving = { _, _, _, _, from, to ->
                 inspected = true
-                assertEquals(4_000L, from)
-                assertEquals(6_000L, to)
+                // The first-unlock pass and historical last-visit pass can
+                // both ask about this same geometric seam.
+                assertTrue(from == 1_000L || from == 4_000L)
+                assertTrue(to == 6_000L || to == 8_000L)
+                assertTrue(to > from)
                 false
             })
         assertTrue("Eligible straight gap must ask for actual driving evidence", inspected)
