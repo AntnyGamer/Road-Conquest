@@ -16,7 +16,7 @@ class PassphraseBackupTest {
     private val password = "correct horse battery staple".toCharArray()
 
     private fun privateFile(contents: ByteArray): File = File.createTempFile("encrypted-test-", ".rcbackup",
-        RuntimeEnvironment.getApplication<android.content.Context>().cacheDir).apply { writeBytes(contents) }
+        RuntimeEnvironment.getApplication().cacheDir).apply { writeBytes(contents) }
 
     @Test fun crossInstallPortableRoundTripAuthenticatesAllBytes() {
         val plain = ByteArray(40_000) { (it % 251).toByte() }
@@ -49,6 +49,32 @@ class PassphraseBackupTest {
                 fail("Tampered backup was accepted")
             } catch (_: IllegalArgumentException) { }
         } finally { file.delete(); restored.delete() }
+    }
+
+    @Test fun actualGithubExportCanBeImportedWithoutPlayOrNetwork() {
+        val context: android.content.Context = RuntimeEnvironment.getApplication()
+        val repository = com.roadconquest.app.data.TrackingRepository(context)
+        repository.clearHistory()
+        val fix = android.location.Location("gps").apply {
+            latitude = 40.0; longitude = -74.0; time = 1_000_000L; accuracy = 5f
+        }
+        repository.insertLocation(fix)
+        val out = ByteArrayOutputStream()
+        PassphraseBackup.writePortable(context, repository, out, password)
+        val data = out.toByteArray()
+        val file = privateFile(data)
+        try {
+            assertTrue(PassphraseBackup.isEncrypted(file))
+            assertThrows(PassphraseBackup.PassphraseRequiredException::class.java) {
+                ByteArrayInputStream(data).use { DataImporter.prepare(context, it).close() }
+            }
+            ByteArrayInputStream(data).use {
+                DataImporter.prepare(context, it, password).use { prepared ->
+                    assertEquals(1L, prepared.summary.trackPointCount)
+                }
+            }
+            assertEquals(1L, repository.getSummary().trackPointCount)
+        } finally { file.delete() }
     }
 
     @Test fun rejectsWeakPassphrasesBeforeWriting() {
