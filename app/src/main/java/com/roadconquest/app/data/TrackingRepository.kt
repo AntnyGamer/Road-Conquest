@@ -1454,12 +1454,12 @@ class TrackingRepository(context: Context) {
         ) return@synchronized false
         val start = (departureTime - 8_000L).coerceAtLeast(0L)
         val end = arrivalTime + 8_000L
-        data class Fix(val lat: Double, val lon: Double, val accuracy: Float, val time: Long)
+        data class Fix(val lat: Double, val lon: Double, val accuracy: Float, val speed: Float, val time: Long)
         val fixes = ArrayList<Fix>(64)
         val db = dbHelper.readableDatabase
         for (table in listOf("track_points", "skipped_driving_fixes")) {
             db.query(table,
-                arrayOf("latitude", "longitude", "accuracy_m", "timestamp_ms"),
+                arrayOf("latitude", "longitude", "accuracy_m", "speed_mps", "timestamp_ms"),
                 "timestamp_ms >= ? AND timestamp_ms <= ?",
                 arrayOf(start.toString(), end.toString()),
                 null, null, "timestamp_ms ASC", "65"
@@ -1470,9 +1470,11 @@ class TrackingRepository(context: Context) {
                     val lat = cursor.getDouble(0)
                     val lon = cursor.getDouble(1)
                     val accuracy = cursor.getFloat(2)
+                    val speed = cursor.getFloat(3)
                     if (lat.isFinite() && lon.isFinite() &&
-                        accuracy.isFinite() && accuracy in 0.01f..12f
-                    ) fixes += Fix(lat, lon, accuracy, cursor.getLong(3))
+                        accuracy.isFinite() && accuracy in 0.01f..12f &&
+                        speed.isFinite() && speed >= 0f
+                    ) fixes += Fix(lat, lon, accuracy, speed, cursor.getLong(4))
                 }
             }
         }
@@ -1507,6 +1509,7 @@ class TrackingRepository(context: Context) {
             if (firstDistance > kotlin.math.max(8.0, before.accuracy + 3.0) ||
                 finalDistance > kotlin.math.max(8.0, after.accuracy + 3.0) ||
                 actualMovement < 5.0 ||
+                kotlin.math.max(before.speed, after.speed) < 2.2f ||
                 actualMovement > kotlin.math.sqrt(lengthSq) * 1.5 + 12.0 ||
                 actualMovement / (elapsed / 1_000.0) > 55.0
             ) continue
