@@ -343,10 +343,15 @@ class SettingsActivity : Activity() {
         val password = passwordField("Passphrase (12+ characters)")
         val confirm = passwordField("Confirm passphrase")
         val warning = TextView(this).apply { layout.addView(this) }
+        var exportStarted = false
         val dialog = AlertDialog.Builder(this).setTitle("Encrypt private backup")
-            .setView(layout).setNegativeButton("Cancel") { _, _ ->
-                runCatching { contentResolver.delete(uri, null, null) }
-            }.setPositiveButton("Export", null).create()
+            .setView(layout).setNegativeButton("Cancel", null)
+            .setPositiveButton("Export", null).create()
+        // Android creates the destination before the passphrase dialog. Back,
+        // outside-tap and explicit Cancel must all clean up the empty file.
+        dialog.setOnDismissListener {
+            if (!exportStarted) runCatching { contentResolver.delete(uri, null, null) }
+        }
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val first = password.text.toString()
@@ -359,6 +364,7 @@ class SettingsActivity : Activity() {
                 val secret = first.toCharArray()
                 password.text.clear()
                 confirm.text.clear()
+                exportStarted = true
                 dialog.dismiss()
                 writeExport(uri, secret)
             }
