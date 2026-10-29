@@ -306,11 +306,11 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
                             // Draw a short display-only link only when BOTH observed road
                             // directions support travelling straight across the unique seam.
                             val bend = supportedJunctionBend(left.coordinates, right.coordinates, distance)
-                                ?: if (names[from].isNotBlank() &&
+                                ?: (if (names[from].isNotBlank() &&
                                     !names[from].equals("Unnamed road", ignoreCase = true) &&
                                     names[from].trim().equals(names[to].trim(), ignoreCase = true)) {
                                     supportedStraightSeam(left.coordinates, right.coordinates, distance)
-                                } else null
+                                } else null)
                                 ?: continue
                             seenFrom[to] = from
                             val candidate = JunctionCandidate(from, to, distance, bend)
