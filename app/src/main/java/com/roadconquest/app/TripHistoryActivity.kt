@@ -36,11 +36,10 @@ import com.roadconquest.app.util.Prefs
 import com.roadconquest.app.util.StatsText
 import com.roadconquest.app.map.BaseMapProviders
 import com.roadconquest.app.map.MapMode
+import com.roadconquest.app.map.tripReplayBounds
 import com.roadconquest.app.services.ServiceConfig
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraUpdateFactory
-import org.maplibre.android.geometry.LatLng
-import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
@@ -660,10 +659,8 @@ class TripHistoryActivity : Activity() {
         }
         // No route is exposed on selection: the replay draws only the traversed prefix.
         showPosition(seek?.progress ?: 0)
-        val bounds = LatLngBounds.Builder()
-        points.forEach { bounds.include(LatLng(it.latitude, it.longitude)) }
         val expectedGeneration = generation
-        val tripBounds = bounds.build()
+        val tripBounds = tripReplayBounds(points)
         mapView?.post {
             if (!isDestroyed && mapReady && generation == expectedGeneration) {
                 map?.moveCamera(CameraUpdateFactory.newLatLngBounds(tripBounds, dp(26)))

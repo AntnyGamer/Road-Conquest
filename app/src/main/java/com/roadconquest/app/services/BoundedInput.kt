@@ -8,7 +8,9 @@ internal fun readBoundedUtf8(input: InputStream, limit: Int): String {
     val output = ByteArrayOutputStream()
     val buffer = ByteArray(8192)
     while (true) {
+        if (Thread.currentThread().isInterrupted) throw InterruptedException("Service request cancelled")
         val count = input.read(buffer)
+        if (Thread.currentThread().isInterrupted) throw InterruptedException("Service request cancelled")
         if (count < 0) return output.toString(Charsets.UTF_8.name())
         if (output.size() + count > limit) throw IOException("Service response too large")
         output.write(buffer, 0, count)

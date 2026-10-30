@@ -53,6 +53,7 @@ class LocationIqMatcher(
     }
 
     @Synchronized override fun match(points: List<TrackPoint>): MatchResult? {
+        checkMatchingCancellation()
         unavailable = false
         lastCallUsedNetwork = false
         if (!validPoints(points)) return null
@@ -91,7 +92,12 @@ class LocationIqMatcher(
             val result = parse(body, points)
             if (result != null) responses.put(payload, body)
             result
-        } catch (_: Exception) {
+        } catch (error: Exception) {
+            if (error is InterruptedException) {
+                Thread.currentThread().interrupt()
+                throw error
+            }
+            checkMatchingCancellation()
             unavailable = true
             health.failed(providerId)
             null

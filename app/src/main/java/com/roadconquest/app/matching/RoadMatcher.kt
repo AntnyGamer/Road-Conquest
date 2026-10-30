@@ -54,6 +54,7 @@ class FallbackRoadMatcher(private val providers: List<RoadMatcher>) : RoadMatche
         match(points, unmatchedPointIds(points))
 
     @Synchronized override fun match(points: List<TrackPoint>, pendingIds: Set<Long>): MatchResult? {
+        checkMatchingCancellation()
         if (providers.any { it.rateLimitRemainingMs() > 0L }) {
             // Incomplete cached evidence must not suppress a ready backup provider.
             cachedMatch(points, pendingIds)?.takeIf {
@@ -63,6 +64,7 @@ class FallbackRoadMatcher(private val providers: List<RoadMatcher>) : RoadMatche
         unavailable = false
         lastCallUsedNetwork = false
         for (provider in providers) {
+            checkMatchingCancellation()
             if (provider.rateLimitRemainingMs() > 0L) continue
             // Keep the original prefix unless it contains NO eligible work.
             // Then use one contiguous window with real approach context around
@@ -71,6 +73,7 @@ class FallbackRoadMatcher(private val providers: List<RoadMatcher>) : RoadMatche
             lastUsedProviderPointLimit = providerLimit
             lastUsedProviderPointOffset = providerOffset(points, pendingIds, providerLimit)
             val result = provider.match(lastSubmittedPoints(points))
+            checkMatchingCancellation()
             if (provider.lastCallUsedNetwork) {
                 lastCallUsedNetwork = true
                 lastNetworkProviderPointLimit = provider.lastNetworkProviderPointLimit
@@ -108,6 +111,10 @@ class FallbackRoadMatcher(private val providers: List<RoadMatcher>) : RoadMatche
             }
         })
     }
+}
+
+internal fun checkMatchingCancellation() {
+    if (Thread.currentThread().isInterrupted) throw InterruptedException("Road matching cancelled")
 }
 
 internal fun RoadMatcher.lastSubmittedPoints(points: List<TrackPoint>): List<TrackPoint> =

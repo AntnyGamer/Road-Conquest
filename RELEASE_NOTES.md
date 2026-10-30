@@ -9,6 +9,8 @@
 - **Fewer unnecessary requests:** Obsolete queued settings account reads are skipped. Interrupted GPS uploads fail through the private JSON contract before any provider allowance is used, and oversized uploads retain HTTP 413 even when cancellation fails.
 - **Restore cancellation:** Encrypted restores honor cancellation while reading ciphertext and plaintext and remove partial decrypted output on failure.
 - **Readable system controls:** Navigation-bar icons follow the app's theme, and fog-off daytime maps use dark status-bar icons.
+- **Date-line trip replay:** Crossing from 179°E to 179°W keeps the replay camera near the trip instead of fitting almost the whole world.
+- **Cancelled matching:** Interrupted matching stops before starting another provider request, response reads honor cancellation, and cancellation does not impose a false provider cooldown.
 - **Stable release identity:** versionName **1.0**, versionCode **95**, Android 12+. The Android application ID and permanent signing identity stay the same, with no database migration.
 
 **Deployment and compatibility:** Town medals and UI improvements are local app changes. Activating the interrupted-upload gateway fix requires separately deploying the updated maps Worker. Existing tracking, backup formats, local weekly eligibility and verified scoring policies are retained. Public/friend competitive rankings remain hidden by the existing feature flag. GitHub publication and any Play upload remain gated on their required release checks.
