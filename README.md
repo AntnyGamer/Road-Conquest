@@ -1,4 +1,4 @@
-# Road Conquest 1.0 Beta 67
+# Road Conquest 1.0
 
 Road Conquest remembers the roads you drive and the places you visit, revealing them through a
 cloud-textured fog map.
@@ -6,6 +6,8 @@ cloud-textured fog map.
 [Download the Android app](https://github.com/AntnyGamer/RoadConquest-Beta/releases) ·
 [Source and issues](https://github.com/AntnyGamer/RoadConquest-Beta) ·
 [GNU AGPL v3 license](LICENSE)
+
+Version 1.0 adds town completion medals, 30 achievements, searchable settings, and further reliability and performance improvements. Bronze unlocks at 25%, silver at 50%, and gold at 100% of town area explored through map tiles. See [release notes](RELEASE_NOTES.md) and [town completion details](TOWN_COMPLETION.md).
 
 Beta 67 aligns the walking marker with driving capture, completes a final matching pass when tracking stops, restores VIP reliably, respects provider recovery delays, refreshes Trips after background drives, and resumes notification-paused tracking from secondary screens. The deployed account service accepts Play version codes 90 and newer. See [release notes](RELEASE_NOTES.md).
 
@@ -60,12 +62,12 @@ Grant Precise location. For automatic background tracking, choose Allow all the 
 location settings and allow background battery use. Settings includes shortcuts to the relevant
 Android screens. Allow notifications to see the tracking notification and its Stop tracking control.
 
-The new release builds **Beta 67** with Android application ID
-`com.roadconquest.app` and internal version code **93**. Beta 66 used code 92, Beta 65 used code 91,
+The new release builds **1.0** with Android application ID
+`com.roadconquest.app` and internal version code **95**. Beta 68 used code 94, Beta 67 used code 93, Beta 66 used code 92, Beta 65 used code 91,
 Beta 64 used code 90, Beta 63 used code 89 and Beta 62 used code 88.
 Google Play permanently reserves uploaded version codes, including drafts and
-testing tracks. Before uploading a **signed Beta 67 release bundle**, confirm
-that code 93 is still available in Play Console. The unsigned CI bundle cannot be uploaded.
+testing tracks. Before uploading a **signed 1.0 release bundle**, confirm
+that code 95 is still available in Play Console. The unsigned CI bundle cannot be uploaded.
 Do not confuse a locally tested development build with an already-published signed release.
 The app shows its exact version in Settings → About. Treat the application ID as permanent once
 the Google Play listing is created; changing it later would create a different app.
@@ -141,8 +143,8 @@ OSM-way or matcher-fragment count.
 
 ## Accounts and leaderboards
 
-This beta hides public and friend rankings, visibility controls and live verified-drive
-sharing through `FeatureFlags.LEADERBOARDS_VISIBLE = false`. No verification evidence is
+This release keeps public and friend rankings, visibility controls and live verified-drive
+sharing hidden through `FeatureFlags.LEADERBOARDS_VISIBLE = false`. No verification evidence is
 collected or uploaded while hidden. Local weekly goals and friend management remain available.
 The retained competition implementation requires production verification infrastructure
 before it can be enabled.

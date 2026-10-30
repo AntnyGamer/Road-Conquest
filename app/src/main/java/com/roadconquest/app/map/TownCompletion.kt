@@ -163,7 +163,11 @@ internal class TownCompletion {
 
         /** Local artwork also works on the offline style without downloading glyphs. */
         fun badge(progress: TownCompletionProgress): Bitmap {
-            val bitmap = Bitmap.createBitmap(88, 104, Bitmap.Config.ARGB_8888)
+            val bitmap = Bitmap.createBitmap(88, 104, Bitmap.Config.ARGB_8888).apply {
+                // MapLibre derives image pixelRatio from bitmap density. Keep
+                // the medal and 13 dp percentage readable on high-density phones.
+                density = Bitmap.DENSITY_DEFAULT
+            }
             val canvas = Canvas(bitmap)
             val paint = Paint(Paint.ANTI_ALIAS_FLAG)
             if (progress.medal != TownMedal.NONE) {

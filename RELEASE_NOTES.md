@@ -1,3 +1,20 @@
+# Road Conquest 1.0
+
+## What's new since Beta 68
+
+- **Town completion medals:** Town overlays show a small explored percentage and a bronze badge at 25%, silver at 50%, or gold at **100%**. Completion measures the part of unlocked map tiles inside the original town boundary. Border tiles, holes, disconnected parts and visual overlaps do not inflate coverage. Earned tiers survive full backups.
+- **30 new achievements:** More road, tile, mileage and place milestones, plus ten achievements in the new Town Badges category. Existing awards and payouts remain owned. Achievement filters survive rotation.
+- **Searchable settings:** Seven categories with a dedicated Backups & data section, last-backup status, control-label search, and Back navigation to the category list. Navigation survives rotation and theme changes.
+- **Faster local calculations:** Prepared polygon checks avoid unnecessary intersections, visible town results are reused on unchanged pans, geometry caching is bounded, and town backfill reuses existing tile totals without rereading unchanged progression.
+- **Fewer unnecessary requests:** Obsolete queued settings account reads are skipped. Interrupted GPS uploads fail through the private JSON contract before any provider allowance is used, and oversized uploads retain HTTP 413 even when cancellation fails.
+- **Restore cancellation:** Encrypted restores honor cancellation while reading ciphertext and plaintext and remove partial decrypted output on failure.
+- **Readable system controls:** Navigation-bar icons follow the app's theme, and fog-off daytime maps use dark status-bar icons.
+- **Stable release identity:** versionName **1.0**, versionCode **95**, Android 12+. The Android application ID and permanent signing identity stay the same, with no database migration.
+
+**Deployment and compatibility:** Town medals and UI improvements are local app changes. Activating the interrupted-upload gateway fix requires separately deploying the updated maps Worker. Existing tracking, backup formats, local weekly eligibility and verified scoring policies are retained. Public/friend competitive rankings remain hidden by the existing feature flag. GitHub publication and any Play upload remain gated on their required release checks.
+
+---
+
 # Road Conquest 1.0 Beta 68
 
 ## What's new since Beta 67

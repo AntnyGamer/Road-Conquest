@@ -98,8 +98,25 @@ class SettingsNavigationDeviceTest {
                     }
                     if (!markerShown) SystemClock.sleep(50)
                 } while (!markerShown && SystemClock.elapsedRealtime() < markerDeadline)
+                val snapshotReady = java.util.concurrent.CountDownLatch(1)
+                var goldPixels = 0
+                scenario.onActivity {
+                    val point = map.projection.toScreenLocation(center)
+                    map.snapshot { bitmap ->
+                        save("completed-town-render", bitmap)
+                        for (y in maxOf(0, point.y.toInt() - 130)..minOf(bitmap.height - 1, point.y.toInt() + 130)) {
+                            for (x in maxOf(0, point.x.toInt() - 130)..minOf(bitmap.width - 1, point.x.toInt() + 130)) {
+                                val pixel = bitmap.getPixel(x, y)
+                                if (Color.red(pixel) > 180 && Color.green(pixel) in 120..235 && Color.blue(pixel) < 150) goldPixels++
+                            }
+                        }
+                        snapshotReady.countDown()
+                    }
+                }
+                assertTrue(snapshotReady.await(15, java.util.concurrent.TimeUnit.SECONDS))
                 capture("completed-town-map")
                 assertTrue("The earned badge and percentage must actually render, not only exist in a layer", markerShown)
+                assertTrue("The native map snapshot must contain the gold medal artwork", goldPixels > 10)
                 scenario.onActivity {
                     assertNotNull(map.style?.getLayer("roadconquest-town-completion-badges"))
                     assertEquals("Gold", renderer.overlayInfoAt(map.projection.toScreenLocation(center))?.completionMedal)
@@ -145,7 +162,7 @@ class SettingsNavigationDeviceTest {
                     capture("search-${theme.name.lowercase()}")
                 }
             }
-            val preview = Bitmap.createBitmap(440, 170, Bitmap.Config.ARGB_8888)
+            val preview = Bitmap.createBitmap(440, 170, Bitmap.Config.ARGB_8888).apply { density = Bitmap.DENSITY_DEFAULT }
             val canvas = Canvas(preview)
             canvas.drawColor(Color.rgb(239, 244, 250))
             val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(20, 32, 57); textSize = 17f }

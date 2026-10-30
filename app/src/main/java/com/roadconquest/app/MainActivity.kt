@@ -244,11 +244,7 @@ class MainActivity : Activity() {
         appliedGoldUi = Prefs.isGoldUiEnabled(this)
         mapWasCentered = savedInstanceState?.getBoolean(STATE_MAP_CENTERED) ?: false
         WindowCompat.enableEdgeToEdge(window)
-        WindowCompat.getInsetsController(window, window.decorView).apply {
-            isAppearanceLightStatusBars = false
-            // Transparent system bars sit over the dark fog, including in light UI mode.
-            isAppearanceLightNavigationBars = false
-        }
+        updateSystemBarContrast()
         MapLibre.getInstance(this)
         setContentView(R.layout.activity_main)
         pendingTourStep = savedInstanceState?.getInt(STATE_TOUR_STEP, -1)?.takeIf { it >= 0 }
@@ -412,6 +408,7 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        updateSystemBarContrast()
         com.roadconquest.app.notifications.OptionalNotifications.initialize(this)
         if (!repository.isHistoryCurrent()) {
             recreatingForAppearance = true
@@ -460,6 +457,16 @@ class MainActivity : Activity() {
             return
         }
         continueAfterTour()
+    }
+
+    private fun updateSystemBarContrast() {
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            // The top bar is over the map; the bottom bar is over the themed
+            // control panel. Fog-off daytime maps need dark top icons too.
+            isAppearanceLightStatusBars = !Prefs.isFogEnabled(this@MainActivity) &&
+                Prefs.mapMode(this@MainActivity) in listOf(MapMode.STREETS, MapMode.MINIMAL)
+            isAppearanceLightNavigationBars = !Appearance.isDark(this@MainActivity)
+        }
     }
 
     private fun continueAfterTour() {
