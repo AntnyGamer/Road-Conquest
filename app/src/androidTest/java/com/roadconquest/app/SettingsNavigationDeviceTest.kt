@@ -1,9 +1,6 @@
 package com.roadconquest.app
 
 import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.Paint
 import android.os.SystemClock
 import android.view.View
 import android.widget.EditText
@@ -11,9 +8,6 @@ import android.widget.LinearLayout
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import com.roadconquest.app.map.TownCompletion
-import com.roadconquest.app.map.TownCompletionProgress
-import com.roadconquest.app.map.TownMedal
 import com.roadconquest.app.util.Prefs
 import com.roadconquest.app.util.UiTheme
 import org.junit.Assert.*
@@ -58,16 +52,6 @@ class SettingsNavigationDeviceTest {
                     capture("search-${theme.name.lowercase()}")
                 }
             }
-            val preview = Bitmap.createBitmap(440, 170, Bitmap.Config.ARGB_8888).apply { density = android.util.DisplayMetrics.DENSITY_DEFAULT }
-            val canvas = Canvas(preview)
-            canvas.drawColor(Color.rgb(239, 244, 250))
-            val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(20, 32, 57); textSize = 17f }
-            for ((index, percent) in listOf(12, 25, 50, 100).withIndex()) {
-                val progress = TownCompletionProgress(percent, TownCompletion.medalFor(percent), 0.0, 0.0)
-                canvas.drawBitmap(TownCompletion.badge(progress), 12f + index * 110, 12f, null)
-                canvas.drawText(if (index == 0) "Exploring" else TownMedal.entries[index].label, 12f + index * 110, 145f, paint)
-            }
-            save("town-badges", preview)
         } finally { Prefs.setUiTheme(context, previous) }
     }
 
