@@ -98,25 +98,36 @@ class SettingsNavigationDeviceTest {
                     }
                     if (!markerShown) SystemClock.sleep(50)
                 } while (!markerShown && SystemClock.elapsedRealtime() < markerDeadline)
-                val snapshotReady = java.util.concurrent.CountDownLatch(1)
-                var goldPixels = 0
                 scenario.onActivity {
                     val registered = map.style?.getImage("town-completion-GOLD-100")
                     assertNotNull("The current native style must own the medal artwork", registered)
                     registered?.let { save("registered-town-badge", it) }
-                    val point = map.projection.toScreenLocation(center)
-                    map.snapshot { bitmap ->
-                        save("completed-town-render", bitmap)
-                        for (y in maxOf(0, point.y.toInt() - 130)..minOf(bitmap.height - 1, point.y.toInt() + 130)) {
-                            for (x in maxOf(0, point.x.toInt() - 130)..minOf(bitmap.width - 1, point.x.toInt() + 130)) {
-                                val pixel = bitmap.getPixel(x, y)
-                                if (Color.red(pixel) > 180 && Color.green(pixel) in 120..235 && Color.blue(pixel) < 150) goldPixels++
-                            }
-                        }
-                        snapshotReady.countDown()
-                    }
                 }
-                assertTrue(snapshotReady.await(15, java.util.concurrent.TimeUnit.SECONDS))
+                // A rendered-feature query can succeed during the symbol's initial
+                // zero-opacity placement frame. Wait for actual native pixels too.
+                val artworkDeadline = SystemClock.elapsedRealtime() + 10_000
+                var goldPixels = 0
+                var renderedBitmap: Bitmap? = null
+                do {
+                    val snapshotReady = java.util.concurrent.CountDownLatch(1)
+                    scenario.onActivity {
+                        val point = map.projection.toScreenLocation(center)
+                        map.snapshot { bitmap ->
+                            renderedBitmap = bitmap
+                            goldPixels = 0
+                            for (y in maxOf(0, point.y.toInt() - 130)..minOf(bitmap.height - 1, point.y.toInt() + 130)) {
+                                for (x in maxOf(0, point.x.toInt() - 130)..minOf(bitmap.width - 1, point.x.toInt() + 130)) {
+                                    val pixel = bitmap.getPixel(x, y)
+                                    if (Color.red(pixel) > 180 && Color.green(pixel) in 120..235 && Color.blue(pixel) < 150) goldPixels++
+                                }
+                            }
+                            snapshotReady.countDown()
+                        }
+                    }
+                    assertTrue(snapshotReady.await(15, java.util.concurrent.TimeUnit.SECONDS))
+                    if (goldPixels <= 10) SystemClock.sleep(100)
+                } while (goldPixels <= 10 && SystemClock.elapsedRealtime() < artworkDeadline)
+                renderedBitmap?.let { save("completed-town-render", it) }
                 capture("completed-town-map")
                 assertTrue("The earned badge and percentage must actually render, not only exist in a layer", markerShown)
                 assertTrue("The native map snapshot must contain the gold medal artwork", goldPixels > 10)
