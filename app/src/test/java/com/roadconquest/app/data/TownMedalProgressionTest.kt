@@ -48,4 +48,28 @@ class TownMedalProgressionTest {
         assertTrue(preserved.unlocked)
         assertEquals(123L, preserved.rewardPoints)
     }
+
+    @Test fun cachedTownCanEarnGoldWithoutOpeningTheTownOverlay() {
+        val tracking = TrackingRepository(context)
+        val progression = ProgressionRepository(context)
+        val origin = com.roadconquest.app.map.FogGrid.cell(40.0, -74.0)!!
+        val center = com.roadconquest.app.map.FogGrid.center(origin)
+        val corners = com.roadconquest.app.map.FogGrid.corners(center.first, center.second)
+        val place = PlaceDiscovery(PlaceKind.TOWN, "offline-town", "Offline Town", countryName = "Testland",
+            visitedAt = 1_000_000L, latitude = center.first, longitude = center.second)
+        progression.recordPlace(place)
+        val geometry = """{"type":"Polygon","coordinates":[[[${corners[1]},${corners[4]}],[${corners[3]},${corners[4]}],[${corners[3]},${corners[0]}],[${corners[1]},${corners[0]}],[${corners[1]},${corners[4]}]]]}"""
+        val data = com.roadconquest.app.map.PlaceOverlayData(place.key, place.displayName, place.kind, null, 1.0, geometry)
+        assertTrue(com.roadconquest.app.map.PlaceOverlayCache.write(context, place, data, verifiedForDiscovery = true))
+        tracking.recordExploredGridCell(android.location.Location("gps").apply {
+            latitude = center.first; longitude = center.second; accuracy = 5f; time = 1_000_000L
+        })
+        com.roadconquest.app.util.Prefs.setPlaceOverlayMode(context, com.roadconquest.app.map.PlaceOverlayMode.NONE)
+        com.roadconquest.app.map.TownCompletionTracker.reset()
+        val snapshot = ProgressionManager.sync(context, tracking.getSummary())
+        assertEquals(1L, snapshot.goldTowns)
+        assertTrue("Town achievements should be rewarded without opening overlays", "town_gold_1" in snapshot.rewardedAchievements)
+        val balance = snapshot.balance
+        assertEquals(balance, ProgressionManager.sync(context, tracking.getSummary()).balance)
+    }
 }

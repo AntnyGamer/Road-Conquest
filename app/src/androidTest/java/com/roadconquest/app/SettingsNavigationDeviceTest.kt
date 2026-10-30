@@ -23,6 +23,90 @@ import java.io.File
 
 @RunWith(AndroidJUnit4::class)
 class SettingsNavigationDeviceTest {
+    @get:org.junit.Rule val permissions: androidx.test.rule.GrantPermissionRule =
+        androidx.test.rule.GrantPermissionRule.grant(*buildList {
+            add(android.Manifest.permission.ACCESS_FINE_LOCATION)
+            add(android.Manifest.permission.ACCESS_COARSE_LOCATION)
+            if (android.os.Build.VERSION.SDK_INT >= 33) add(android.Manifest.permission.POST_NOTIFICATIONS)
+        }.toTypedArray())
+
+    @Test fun completedTownRendersItsMedalAndPercentageAndClearsWithTheOverlay() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        com.roadconquest.app.data.TrackingRepository(context).clearHistory()
+        val tracking = com.roadconquest.app.data.TrackingRepository(context)
+        val progression = com.roadconquest.app.data.ProgressionRepository(context)
+        com.roadconquest.app.map.PlaceOverlayCache.clear(context)
+        val origin = com.roadconquest.app.map.FogGrid.cell(40.0, -74.0)!!
+        val first = com.roadconquest.app.map.FogGrid.center(origin)
+        val last = com.roadconquest.app.map.FogGrid.center(origin.copy(row = origin.row + 3, column = origin.column + 3))
+        val sw = com.roadconquest.app.map.FogGrid.corners(first.first, first.second)
+        val ne = com.roadconquest.app.map.FogGrid.corners(last.first, last.second)
+        val center = org.maplibre.android.geometry.LatLng((sw[4] + ne[0]) / 2, (sw[1] + ne[3]) / 2)
+        val place = com.roadconquest.app.data.PlaceDiscovery(com.roadconquest.app.data.PlaceKind.TOWN,
+            "completion-device-town", "Completion Town", countryName = "Testland",
+            visitedAt = System.currentTimeMillis(), latitude = first.first, longitude = first.second)
+        progression.recordPlace(place)
+        val geometry = """{"type":"Polygon","coordinates":[[[${sw[1]},${sw[4]}],[${ne[3]},${sw[4]}],[${ne[3]},${ne[0]}],[${sw[1]},${ne[0]}],[${sw[1]},${sw[4]}]]]}"""
+        val overlay = com.roadconquest.app.map.PlaceOverlayData(place.key, place.displayName, place.kind, null, 40.0, geometry)
+        assertTrue(com.roadconquest.app.map.PlaceOverlayCache.write(context, place, overlay, verifiedForDiscovery = true))
+        for (row in 0..3) for (column in 0..3) {
+            val point = com.roadconquest.app.map.FogGrid.center(origin.copy(row = origin.row + row, column = origin.column + column))
+            tracking.recordExploredGridCell(android.location.Location("gps").apply {
+                latitude = point.first; longitude = point.second; accuracy = 5f; time = System.currentTimeMillis()
+            })
+        }
+        Prefs.setManualOnly(context, true)
+        Prefs.setTourHandled(context, true)
+        Prefs.setAccountPromptShown(context, true)
+        Prefs.setBackgroundPromptShown(context, true)
+        Prefs.setFogEnabled(context, false)
+        Prefs.setMapMode(context, com.roadconquest.app.map.MapMode.STREETS)
+        Prefs.setPlaceOverlayMode(context, com.roadconquest.app.map.PlaceOverlayMode.TOWN)
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                val ready = java.util.concurrent.CountDownLatch(1)
+                lateinit var map: org.maplibre.android.maps.MapLibreMap
+                lateinit var renderer: com.roadconquest.app.map.MapRenderer
+                scenario.onActivity { activity ->
+                    activity.findViewById<org.maplibre.android.maps.MapView>(R.id.mapView).getMapAsync { loaded ->
+                        map = loaded
+                        renderer = MainActivity::class.java.getDeclaredField("renderer").apply { isAccessible = true }
+                            .get(activity) as com.roadconquest.app.map.MapRenderer
+                        loaded.getStyle {
+                            renderer.centerOnStartingLocation(center.latitude, center.longitude, force = true)
+                            loaded.moveCamera(org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(center, 11.0))
+                            renderer.refreshPlaceOverlays()
+                            ready.countDown()
+                        }
+                    }
+                }
+                assertTrue(ready.await(30, java.util.concurrent.TimeUnit.SECONDS))
+                val deadline = SystemClock.elapsedRealtime() + 15_000
+                var progress: Int? = null
+                do {
+                    scenario.onActivity { progress = renderer.overlayInfoAt(map.projection.toScreenLocation(center))?.completionPercent }
+                    if (progress != 100) SystemClock.sleep(50)
+                } while (progress != 100 && SystemClock.elapsedRealtime() < deadline)
+                assertEquals(100, progress)
+                scenario.onActivity {
+                    assertNotNull(map.style?.getLayer("roadconquest-town-completion-badges"))
+                    assertEquals("Gold", renderer.overlayInfoAt(map.projection.toScreenLocation(center))?.completionMedal)
+                }
+                capture("completed-town-map")
+                scenario.onActivity {
+                    renderer.setPlaceOverlayMode(com.roadconquest.app.map.PlaceOverlayMode.NONE)
+                    assertNull(renderer.overlayInfoAt(map.projection.toScreenLocation(center)))
+                }
+            }
+        } finally {
+            Prefs.setPlaceOverlayMode(context, com.roadconquest.app.map.PlaceOverlayMode.NONE)
+            Prefs.setFogEnabled(context, true)
+            tracking.clearHistory()
+            com.roadconquest.app.map.PlaceOverlayCache.clear(context)
+        }
+    }
+
     @Test fun settingsCategoriesSearchAndAppearanceRemainUsableOnDevice() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext

@@ -77,6 +77,7 @@ object ProgressionManager {
 
     fun resetLocalProgression(context: Context) {
         ProgressionRepository(context).clearProgression()
+        com.roadconquest.app.map.TownCompletionTracker.reset()
         Achievements.reset(context)
         PlaceOverlayCache.clear(context)
         com.roadconquest.app.util.Prefs.resetCosmetics(context)

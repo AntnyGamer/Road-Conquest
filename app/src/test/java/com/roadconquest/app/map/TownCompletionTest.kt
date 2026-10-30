@@ -58,7 +58,7 @@ class TownCompletionTest {
         assertTrue(progress.longitude in west..east)
     }
 
-    @Test fun holesAndDisconnectedPartsUseTheirOwnAreaAndAnInteriorBadgeAnchor() {
+    @Test fun holesUseTheirOwnAreaAndAnInteriorBadgeAnchor() {
         val c = FogGrid.corners(40.0, -74.0)
         val far = FogGrid.center(first.copy(column = first.column + 1))
         val d = FogGrid.corners(far.first, far.second)
@@ -73,6 +73,36 @@ class TownCompletionTest {
         assertEquals(100, TownCompletion().calculate(geometry.toString()) { _, _, _, _ -> coords(2) }!!.percent)
     }
 
+    @Test fun disconnectedTownPartsContributeAreaWithoutFillingTheGapBetweenThem() {
+        val start = JSONObject(town(1)).getJSONArray("coordinates")
+        val center = FogGrid.center(first.copy(column = first.column + 3))
+        val c = FogGrid.corners(center.first, center.second)
+        val end = JSONArray().put(ring(c[1], c[4], c[3], c[0]))
+        val geometry = JSONObject().put("type", "MultiPolygon")
+            .put("coordinates", JSONArray().put(start).put(end))
+        val progress = requireNotNull(TownCompletion().calculate(geometry.toString()) { _, _, _, _ -> coords(1) })
+        assertEquals(50, progress.percent)
+        assertTrue(PlaceGeometry.contains(geometry, progress.latitude, progress.longitude))
+    }
+
+    @Test fun visualTownPartitionPreservesOriginalCompletionAndSuppliesAVisibleAnchor() {
+        val engine = TownCompletion()
+        val original = requireNotNull(engine.calculate(town(4)) { _, _, _, _ -> coords(1) })
+        val a = FogGrid.center(first.copy(column = first.column + 1))
+        val b = FogGrid.center(first.copy(column = first.column + 2))
+        val left = FogGrid.corners(a.first, a.second)
+        val right = FogGrid.corners(b.first, b.second)
+        val smaller = JSONObject().put("type", "Polygon").put("coordinates",
+            JSONArray().put(ring(left[1], left[4], right[3], right[0]))).toString()
+        val outer = PlaceOverlayData("outer", "Outer", com.roadconquest.app.data.PlaceKind.TOWN, null, 4.0, town(4), original)
+        val inner = PlaceOverlayData("inner", "Inner", com.roadconquest.app.data.PlaceKind.TOWN, null, 2.0, smaller)
+        val shown = TownOverlayPartition.render(listOf(outer, inner)).shown.first { it.key == "outer" }
+        assertEquals(25, shown.completion!!.percent)
+        assertFalse(PlaceGeometry.contains(JSONObject(shown.geometryJson), original.latitude, original.longitude))
+        val anchor = requireNotNull(engine.anchor(shown.geometryJson))
+        assertTrue(PlaceGeometry.contains(JSONObject(shown.geometryJson), anchor.first, anchor.second))
+    }
+
     @Test fun unchangedTileRevisionReusesGeometryButHistoryResetRecalculates() {
         val engine = TownCompletion()
         assertEquals(25, engine.calculate(town(), 1L to 5L) { _, _, _, _ -> coords(5) }!!.percent)
@@ -82,5 +112,20 @@ class TownCompletionTest {
 
     @Test fun malformedBoundariesDoNotInventProgress() {
         assertNull(TownCompletion().calculate("{}") { _, _, _, _ -> coords(20) })
+    }
+
+    @Test fun townsAcrossTheDateLineDoNotBecomeAlmostWorldWide() {
+        val boundary = JSONObject().put("type", "Polygon").put("coordinates",
+            JSONArray().put(ring(179.995, 39.999, -179.995, 40.001))).toString()
+        val west = FogGrid.cell(40.0, 179.999)!!
+        val east = FogGrid.cell(40.0, -179.999)!!
+        val samples = listOf(west, east).flatMap { FogGrid.center(it).let { p -> listOf(p.first, p.second) } }.toDoubleArray()
+        val progress = requireNotNull(TownCompletion().calculate(boundary) { north, e, south, w ->
+            assertTrue(w > e)
+            assertTrue(north - south < 0.1)
+            samples
+        })
+        assertEquals(100, progress.percent)
+        assertTrue(kotlin.math.abs(progress.longitude) > 179.99)
     }
 }

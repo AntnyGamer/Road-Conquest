@@ -131,6 +131,24 @@ class PassphraseBackupTest {
         assertTrue(deleted)
     }
 
+    @Test fun cancelledPrivateRestoreStopsBeforePasswordDerivationOrWriting() {
+        val output = ByteArrayOutputStream()
+        PassphraseBackup.encrypt(ByteArrayInputStream("private history".toByteArray()), output, password)
+        val file = privateFile(output.toByteArray())
+        val restored = File(file.parentFile, "cancelled-restore.zip")
+        try {
+            Thread.currentThread().interrupt()
+            val error = assertThrows(IllegalStateException::class.java) {
+                PassphraseBackup.decrypt(file, restored, password)
+            }
+            assertEquals("Import cancelled", error.message)
+            assertFalse(restored.exists())
+        } finally {
+            Thread.interrupted()
+            file.delete(); restored.delete()
+        }
+    }
+
     @Test fun rejectsWeakPassphrasesBeforeWriting() {
         val output = ByteArrayOutputStream()
         try {

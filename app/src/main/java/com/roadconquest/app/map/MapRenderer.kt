@@ -1119,6 +1119,7 @@ class MapRenderer(
         val otherPartition = if (kind == com.roadconquest.app.data.PlaceKind.TOWN &&
             other.isNotEmpty()
         ) TownOverlayPartition.render(other) else null
+        var badgePlaces = otherPartition?.shown ?: other
         val (fillFeatures, boundaries) = if (officialUs.isNotEmpty()) {
             val censusLayers = officialUs.mapNotNull {
                 when {
@@ -1133,6 +1134,7 @@ class MapRenderer(
             val officialPartition = if (censusLayers.size > 1) {
                 TownOverlayPartition.renderOfficialUs(officialUs)
             } else null
+            badgePlaces = (officialPartition?.shown ?: officialUs) + (otherPartition?.shown ?: other)
             val officialFills = officialPartition?.fills ?: overlayFeatureCollection(officialUs)
             val officialBorders = officialPartition?.outlines ?:
                 TownOverlayPartition.authoritativeOutlines(officialUs)
@@ -1144,12 +1146,18 @@ class MapRenderer(
             otherPartition?.let { it.fills to it.outlines } ?: overlayFeatureCollections(snapshot)
         }
         val badgeFeatures = JSONArray()
-        if (kind == PlaceKind.TOWN) for (place in snapshot) {
+        if (kind == PlaceKind.TOWN) for (place in badgePlaces) {
             val progress = place.completion ?: continue
+            // Completion always uses the original boundary. If a nested town
+            // removed its center from the visual partition, place the marker
+            // inside the remaining visible town instead of over its neighbor.
+            val anchor = if (PlaceGeometry.contains(JSONObject(place.geometryJson), progress.latitude, progress.longitude)) {
+                progress.latitude to progress.longitude
+            } else townCompletion.anchor(place.geometryJson) ?: continue
             badgeFeatures.put(JSONObject().put("type", "Feature")
                 .put("properties", JSONObject().put("icon", TownCompletion.imageId(progress)))
                 .put("geometry", JSONObject().put("type", "Point")
-                    .put("coordinates", JSONArray().put(progress.longitude).put(progress.latitude))))
+                    .put("coordinates", JSONArray().put(anchor.second).put(anchor.first))))
         }
         val badges = JSONObject().put("type", "FeatureCollection").put("features", badgeFeatures).toString()
         mainHandler.post {
@@ -1825,6 +1833,8 @@ class MapRenderer(
         carIconBitmap = null
         nearbyMarkerImages.values.forEach { it.recycle() }
         nearbyMarkerImages.clear()
+        townBadgeImages.values.forEach { it.recycle() }
+        townBadgeImages.clear()
         overlayGeneration++
         // The overlay collections are owned by overlayExecutor. Do not clear
         // its HashMap on this UI thread while an in-flight polygon conversion

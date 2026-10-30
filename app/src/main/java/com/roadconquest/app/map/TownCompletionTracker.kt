@@ -18,6 +18,14 @@ internal object TownCompletionTracker {
     private var remaining = 0
     private var engine = TownCompletion()
 
+    @Synchronized fun reset() {
+        revision = null
+        places = emptyList()
+        cursor = 0
+        remaining = 0
+        engine = TownCompletion()
+    }
+
     @Synchronized fun sync(context: Context, snapshot: ProgressionSnapshot, expectedHistory: Long?): Boolean {
         if (snapshot.tilesUnlocked == 0L) return false
         val tracking = TrackingRepository(context)

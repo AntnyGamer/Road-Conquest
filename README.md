@@ -72,6 +72,8 @@ the Google Play listing is created; changing it later would create a different a
 
 ## Explore
 
+- Town overlays now show exploration percentages and bronze (25%), silver (50%), or gold (100%) badges. Completion uses the part of unlocked map tiles inside each town's original boundary. Earn 30 additional achievements, including a new Town Badges category. [Town completion details](TOWN_COMPLETION.md).
+- Settings opens to seven searchable categories, including a dedicated Backups & data section. Search by a category or control name; Back returns to the category list before leaving Settings.
 - The first-use Quick tour previews a discovery without location access, then highlights the real
   tracking, Layers, Trips/Badges/Goals, Garage and Settings controls. Skip it or replay it from
   Settings → Quick tour. The optional Back-to-exit prompt explains whether tracking remains on;

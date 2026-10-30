@@ -38,16 +38,36 @@ internal class TownCompletion {
     private val factory = GeometryFactory()
     private data class Shape(val geometry: Geometry, val latitude: Double, val longitude: Double,
         var revision: Pair<Long, Long>? = null, var progress: TownCompletionProgress? = null)
-    private val shapes = object : LinkedHashMap<String, Shape>(32, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Shape>?) = size > 128
+    private val shapes = LinkedHashMap<String, Shape>(32, 0.75f, true)
+
+    private fun shape(json: String): Shape {
+        shapes[json]?.let { return it }
+        val parsed = readShape(JSONObject(json))
+        // A count-only cache can retain hundreds of huge municipal geometries.
+        // Bound both the number of towns and the actual coordinate workload.
+        if (parsed.geometry.numPoints <= 50_000) {
+            shapes[json] = parsed
+            var points = shapes.values.sumOf { it.geometry.numPoints }
+            val iterator = shapes.entries.iterator()
+            while (shapes.size > 32 || points > 50_000) {
+                val oldest = iterator.next()
+                points -= oldest.value.geometry.numPoints
+                iterator.remove()
+            }
+        }
+        return parsed
     }
+
+    fun anchor(geometryJson: String): Pair<Double, Double>? = runCatching {
+        shape(geometryJson).let { it.latitude to wrap(it.longitude) }
+    }.getOrNull()
 
     fun calculate(
         geometryJson: String,
         revision: Pair<Long, Long>? = null,
         explored: (north: Double, east: Double, south: Double, west: Double) -> DoubleArray
     ): TownCompletionProgress? = runCatching {
-        val shape = shapes.getOrPut(geometryJson) { readShape(JSONObject(geometryJson)) }
+        val shape = shape(geometryJson)
         if (revision != null && shape.revision == revision) return shape.progress
         val geometry = shape.geometry
         var covered = 0.0
@@ -55,6 +75,7 @@ internal class TownCompletion {
             if (Thread.currentThread().isInterrupted) return null
             val polygon = geometry.getGeometryN(index)
             val bounds = polygon.envelopeInternal
+            val prepared = org.locationtech.jts.geom.prep.PreparedGeometryFactory.prepare(polygon)
             // Tile centers can lie just outside the town while their footprint overlaps it.
             val south = latitude(bounds.minY) - 0.02
             val north = latitude(bounds.maxY) + 0.02
@@ -71,8 +92,12 @@ internal class TownCompletion {
                 val tileEast = tileWest + (corners[3] - corners[1])
                 val tileShape = factory.toGeometry(org.locationtech.jts.geom.Envelope(
                     tileWest, tileEast, sin(Math.toRadians(corners[4])), sin(Math.toRadians(corners[0]))))
-                if (polygon.envelopeInternal.intersects(tileShape.envelopeInternal)) {
-                    covered += polygon.intersection(tileShape).area
+                if (bounds.intersects(tileShape.envelopeInternal)) {
+                    covered += when {
+                        prepared.covers(tileShape) -> tileShape.area
+                        prepared.intersects(tileShape) -> polygon.intersection(tileShape).area
+                        else -> 0.0
+                    }
                 }
             }
         }
