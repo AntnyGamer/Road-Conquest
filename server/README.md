@@ -28,6 +28,11 @@ ROADCONQUEST_ACCOUNT_API_URL=https://accounts.example.com
   timing differences and has PostgreSQL-backed per-IP plus per-username attempt limits. In
   production those rate-limit identifiers are HMACed before storage so the database does not keep
   raw IP addresses or reversible low-entropy username keys.
+- Password hashing and verification share a per-instance limit of two active scrypt operations
+  and eight waiting callers. Overflow returns HTTP 503 so a burst cannot allocate an unbounded
+  password-work queue or fill the shared thread pool with 128 MiB derivations. Queue order is
+  preserved through successful and failed work. Busy requests may wait or retry; hash parameters,
+  stored credentials, dummy verification and PostgreSQL attempt limits are unchanged.
 - Session tokens contain 256 bits of randomness. Only SHA-256 hashes of session tokens are stored
   in PostgreSQL. The Android client encrypts its token with Android Keystore AES-GCM.
 - The Android client rejects non-HTTPS account endpoints. `android:allowBackup="false"` keeps app
