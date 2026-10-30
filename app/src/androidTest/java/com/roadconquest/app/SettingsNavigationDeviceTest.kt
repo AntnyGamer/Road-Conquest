@@ -101,6 +101,9 @@ class SettingsNavigationDeviceTest {
                 val snapshotReady = java.util.concurrent.CountDownLatch(1)
                 var goldPixels = 0
                 scenario.onActivity {
+                    val registered = map.style?.getImage("town-completion-GOLD-100")
+                    assertNotNull("The current native style must own the medal artwork", registered)
+                    registered?.let { save("registered-town-badge", it) }
                     val point = map.projection.toScreenLocation(center)
                     map.snapshot { bitmap ->
                         save("completed-town-render", bitmap)

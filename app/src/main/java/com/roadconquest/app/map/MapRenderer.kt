@@ -1058,7 +1058,7 @@ class MapRenderer(
 
     private fun installTownBadgeLayer(style: Style) {
         style.addLayer(SymbolLayer(TOWN_BADGE_LAYER_ID, TOWN_BADGE_SOURCE_ID)
-            .withProperties(iconImage(Expression.image(Expression.get("icon"))),
+            .withProperties(iconImage(Expression.get("icon")),
                 iconSize(0.65f), iconAllowOverlap(true), iconIgnorePlacement(true))
             .apply { minZoom = 7f })
     }
