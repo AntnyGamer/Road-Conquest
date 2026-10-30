@@ -107,6 +107,15 @@ Null or empty OAuth credentials are rejected before purchase, Integrity or push 
 and a later attempt can refresh authorization. GIF-provider timeouts, throttling and
 server errors return a retryable 503, while invalid links remain 400 responses.
 
+Identical overlapping forum submissions on one instance share their active receipt/profile
+checks before moderation. At most 32 checks are retained; overflow follows the ordinary
+read path. Entries are removed after success or failure, so later retries fetch fresh
+receipts and penalties. Keys include the account, submission ID and content hash. This
+reduces duplicate database reads without caching authorization or changing per-request
+authentication, rate budgets, moderation or locked transaction checks. Separate instances
+still rely on the database for idempotency. Deploy the account function to activate this
+optimization; no schema migration is needed.
+
 ## Free Neon deployment
 
 The same account API can run as a Neon Function beside its persistent PostgreSQL database.
