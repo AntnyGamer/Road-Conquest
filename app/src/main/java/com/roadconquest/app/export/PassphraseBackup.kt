@@ -9,6 +9,8 @@ import java.security.SecureRandom
 import javax.crypto.Cipher
 import javax.crypto.CipherInputStream
 import javax.crypto.CipherOutputStream
+import javax.crypto.BadPaddingException
+import javax.crypto.IllegalBlockSizeException
 import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.PBEKeySpec
@@ -146,7 +148,13 @@ object PassphraseBackup {
                 }
             } catch (e: java.io.IOException) {
                 destination.delete()
-                throw IllegalArgumentException("Incorrect passphrase or altered backup.", e)
+                // CipherInputStream wraps authentication/final-block failures in
+                // IOException. A full disk or failed output file is an I/O error
+                // too, and must retain its actual cause instead of blaming the key.
+                if (e.cause is BadPaddingException || e.cause is IllegalBlockSizeException) {
+                    throw IllegalArgumentException("Incorrect passphrase or altered backup.", e)
+                }
+                throw e
             } catch (e: Exception) {
                 // Cancellation and size-limit failures must also remove partial plaintext.
                 destination.delete()
