@@ -115,7 +115,7 @@ object Achievements {
             AchievementProgress("ads_10", "Ad Regular", "Watch 10 ads", AchievementCategory.ADS, metrics.adsWatched.toDouble(), 10.0, "ads", 200),
             AchievementProgress("ads_25", "Ad Supporter", "Watch 25 ads", AchievementCategory.ADS, metrics.adsWatched.toDouble(), 25.0, "ads", 500),
             AchievementProgress("ads_50", "Ad Veteran", "Watch 50 ads", AchievementCategory.ADS, metrics.adsWatched.toDouble(), 50.0, "ads", 1_000),
-            AchievementProgress("ads_100", "Ad Legend", "Watch 100 ads", AchievementCategory.ADS, metrics.adsWatched.toDouble(), 100.0, "ads", 2_500)
+            AchievementProgress("ads_100", "Ad Legend", "Watch 100 ads", AchievementCategory.ADS, metrics.adsWatched.toDouble(), 100.0, "ads", 2_500),
 
             AchievementProgress("roads_25", "Neighborhood Scout", "Unlock 25 roads", AchievementCategory.ROADS, roads, 25.0, "roads", 150),
             AchievementProgress("roads_50", "Street Seeker", "Unlock 50 roads", AchievementCategory.ROADS, roads, 50.0, "roads", 225),

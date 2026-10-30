@@ -42,6 +42,9 @@ class AchievementsActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         setTheme(Appearance.themeRes(this))
         super.onCreate(savedInstanceState)
+        selectedCategory = savedInstanceState?.getString("achievement_category")?.let { saved ->
+            AchievementCategory.entries.firstOrNull { it.name == saved }
+        } ?: AchievementCategory.ROADS
         WindowCompat.enableEdgeToEdge(window)
         val lightSystemBars = !Appearance.isDark(this)
         WindowCompat.getInsetsController(window, window.decorView).apply {
@@ -205,6 +208,11 @@ class AchievementsActivity : Activity() {
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density + 0.5f).toInt()
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString("achievement_category", selectedCategory.name)
+        super.onSaveInstanceState(outState)
+    }
 
     override fun onStart() {
         super.onStart()

@@ -4,6 +4,10 @@ import android.app.Activity
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.AbsoluteSizeSpan
+import android.text.style.StyleSpan
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
@@ -34,7 +38,10 @@ internal class SettingsNavigation(private val activity: Activity, state: Bundle?
     init {
         for (section in sections) {
             val button = Button(activity, null, 0, R.style.RoadConquest_SettingsAction).apply {
-                text = "${section.title}\n${section.detail}"
+                text = SpannableString("${section.title}\n${section.detail}").apply {
+                    setSpan(StyleSpan(android.graphics.Typeface.BOLD), 0, section.title.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    setSpan(AbsoluteSizeSpan(13, true), section.title.length + 1, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                }
                 textSize = 15f
                 gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
                 minHeight = dp(80)
@@ -48,6 +55,9 @@ internal class SettingsNavigation(private val activity: Activity, state: Bundle?
             }
             categories.addView(button, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
         }
+        // This helper restores query and category together; framework EditText restoration
+        // must not fire a later watcher and unexpectedly return to the category list.
+        search.isSaveEnabled = false
         search.setText(state?.getString("settings_query").orEmpty())
         search.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
@@ -65,7 +75,7 @@ internal class SettingsNavigation(private val activity: Activity, state: Bundle?
         categories.visibility = if (home) View.VISIBLE else View.GONE
         var matches = 0
         for (section in sections) {
-            val haystack = "${section.title} ${section.detail} ${section.keywords}".lowercase(Locale.ROOT)
+            val haystack = "${section.title} ${section.detail} ${section.keywords} ${contentText(activity.findViewById(section.id))}".lowercase(Locale.ROOT)
             val visible = if (query.isNotEmpty()) words.all { it in haystack } else section == chosen
             activity.findViewById<View>(section.id).visibility = if (visible) View.VISIBLE else View.GONE
             if (visible) matches++
@@ -89,6 +99,12 @@ internal class SettingsNavigation(private val activity: Activity, state: Bundle?
     fun save(state: Bundle) {
         state.putInt("settings_section", selected)
         state.putString("settings_query", search.text.toString())
+    }
+
+    private fun contentText(view: View): String = when (view) {
+        is TextView -> view.text.toString()
+        is android.view.ViewGroup -> (0 until view.childCount).joinToString(" ") { contentText(view.getChildAt(it)) }
+        else -> ""
     }
 
     private fun dp(value: Int) = (value * activity.resources.displayMetrics.density + 0.5f).toInt()
