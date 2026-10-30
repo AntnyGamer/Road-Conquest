@@ -72,6 +72,7 @@ class AchievementsActivity : Activity() {
                 AchievementCategory.TILES to findViewById(R.id.achievementTilesButton),
                 AchievementCategory.DISTANCE to findViewById(R.id.achievementDistanceButton),
                 AchievementCategory.PLACES to findViewById(R.id.achievementPlacesButton),
+                AchievementCategory.TOWNS to findViewById(R.id.achievementTownsButton),
                 AchievementCategory.ADS to findViewById(R.id.achievementAdsButton),
                 AchievementCategory.EXTRA to findViewById(R.id.achievementExtraButton)
             )

@@ -1007,6 +1007,10 @@ class MainActivity : Activity() {
         var firstVisited = "Loading…"
         var lastVisited = "Loading…"
         val area = MeasurementUnits.current().area(info.areaSquareKilometers)
+        val completion = info.completionPercent?.let {
+            "\n\nExplored: $it% of town area\nBadge: ${info.completionMedal}\n" +
+                "Bronze 25% · Silver 50% · Gold 100%\nBased on unlocked map tiles inside the town boundary."
+        }.orEmpty()
         val dialog = AlertDialog.Builder(this)
             .setTitle(info.name)
             .setMessage("")
@@ -1017,7 +1021,7 @@ class MainActivity : Activity() {
         fun updateDialog() {
             val heading = if (populationSource == "2020 Census") "Population (2020 Census)"
                 else "Population"
-            dialog.setMessage("$type\n$heading: $population\nArea: $area\nFirst visited: $firstVisited\nLast visited: $lastVisited")
+            dialog.setMessage("$type\n$heading: $population\nArea: $area\nFirst visited: $firstVisited\nLast visited: $lastVisited$completion")
         }
         updateDialog()
         summaryExecutor.execute {

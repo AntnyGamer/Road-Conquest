@@ -114,6 +114,8 @@ class SettingsActivity : Activity() {
         com.roadconquest.app.notifications.OptionalNotifications.initialize(this)
         setupOptionalNotifications()
     }
+    private lateinit var navigation: SettingsNavigation
+    private var backCallback: android.window.OnBackInvokedCallback? = null
     private lateinit var ads: ScreenAds
     private var enteredForeground = false
     private var recreatingForAppearance = false
@@ -159,7 +161,14 @@ class SettingsActivity : Activity() {
         }
         setContentView(R.layout.activity_settings)
         setupPrivacyDescriptions()
-        findViewById<Button>(R.id.backNavButton).setOnClickListener { finish() }
+        navigation = SettingsNavigation(this, savedInstanceState)
+        findViewById<Button>(R.id.backNavButton).setOnClickListener { handleSettingsBack() }
+        if (Build.VERSION.SDK_INT >= 33) {
+            backCallback = android.window.OnBackInvokedCallback { handleSettingsBack() }.also {
+                onBackInvokedDispatcher.registerOnBackInvokedCallback(
+                    android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, it)
+            }
+        }
         ads = ScreenAds(this, findViewById(R.id.settingsRoot))
         applySafeAreaInsets()
         setupAppearance()
@@ -321,9 +330,18 @@ class SettingsActivity : Activity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        navigation.save(outState)
         outState.putBoolean("pending_export_password", pendingExportUsesPassword)
         super.onSaveInstanceState(outState)
     }
+
+    private fun handleSettingsBack() {
+        if (!navigation.back()) finish()
+    }
+
+    @Deprecated("Android 12 fallback; newer versions use OnBackInvokedCallback")
+    @android.annotation.SuppressLint("GestureBackNavigation")
+    override fun onBackPressed() { handleSettingsBack() }
 
     private fun requestPrivateExport(uri: Uri) {
         val padding = (16 * resources.displayMetrics.density).toInt()
@@ -744,6 +762,11 @@ class SettingsActivity : Activity() {
                 if (isDestroyed || generation != summaryGeneration) return@runOnUiThread
                 result.fold(
                     onSuccess = { (summary, progression) ->
+                        val lastBackup = getSharedPreferences("roadconquest_export_history", MODE_PRIVATE)
+                            .getLong("last_completed_at", 0L)
+                        findViewById<TextView>(R.id.backupStatusText).text = "Last successful backup: " +
+                            if (lastBackup <= 0L) "Never" else java.text.DateFormat.getDateTimeInstance()
+                                .format(java.util.Date(lastBackup))
                         summaryText.text = buildString {
                             append(StatsText.settingsOverview(this@SettingsActivity, summary, progression))
                             append("\n\nTRACKING\n")
@@ -773,6 +796,7 @@ class SettingsActivity : Activity() {
     }
 
     override fun onDestroy() {
+        if (Build.VERSION.SDK_INT >= 33) backCallback?.let(onBackInvokedDispatcher::unregisterOnBackInvokedCallback)
         ads.destroy()
         summaryGeneration++
         summaryExecutor.shutdownNow()

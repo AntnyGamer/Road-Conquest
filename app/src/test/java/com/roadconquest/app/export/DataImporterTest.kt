@@ -49,6 +49,21 @@ class DataImporterTest {
         } }
     }.toByteArray()
 
+    @Test fun earnedTownMedalsSurviveFullBackupRestore() {
+        val generation = TrackingRepository(context).getSummary().historyGeneration
+        val progression = ProgressionRepository(context)
+        progression.recordTownCompletion("backup-town", 3, generation)
+        progression.awardAchievement("town_gold_1", 750)
+        val original = export()
+        TrackingRepository(context).clearHistory()
+        prepareFixture(context, ByteArrayInputStream(original)).use { DataImporter.restore(context, it) }
+        val restored = ProgressionRepository(context).snapshot()
+        assertEquals(1L, restored.bronzeTowns)
+        assertEquals(1L, restored.silverTowns)
+        assertEquals(1L, restored.goldTowns)
+        assertEquals(750L, restored.rewardedAchievementPoints["town_gold_1"])
+    }
+
     @Test fun restoredHistoryAndDelayedDiscoveriesCannotEarnWeeklyCreditButNewDrivingCan() {
         val now = System.currentTimeMillis()
         val week = WeeklyChallenges.weekStart(now)

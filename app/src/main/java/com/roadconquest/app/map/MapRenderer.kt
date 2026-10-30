@@ -144,6 +144,8 @@ class MapRenderer(
     private var loadedOverlayCacheGeneration = -1L
     private var loadedOverlayData: List<PlaceOverlayData> = emptyList()
     private val overlayBounds = OverlayBoundsCache()
+    private val townCompletion = TownCompletion()
+    private val townBadgeImages = linkedMapOf<String, Bitmap>()
     @Volatile private var destroyed = false
     private val liveLocation = LiveLocation()
     private val motionMode = MotionModeTracker()
@@ -598,7 +600,9 @@ class MapRenderer(
         }.getOrDefault(kind)
         val population = feature.getNumberProperty("population")?.toLong()
         val area = feature.getNumberProperty("area_sq_km")?.toDouble() ?: return null
-        return PlaceOverlayInfo(key, name, featureKind, population, area)
+        return PlaceOverlayInfo(key, name, featureKind, population, area,
+            feature.getNumberProperty("completion_percent")?.toInt(),
+            feature.getStringProperty("completion_medal"))
     }
 
     fun refreshCosmetics() {
@@ -647,6 +651,7 @@ class MapRenderer(
             installRecordedRouteLayer(style)
             installRoadLayer(style)
             installNearbyMarkerLayer(style)
+            installTownBadgeLayer(style)
             installCarLayer(style)
             updateCarLayer()
             // Initialize the camera from a fresh cached fix before the first
@@ -831,6 +836,7 @@ class MapRenderer(
         loadedPlaceBounds = null
         refreshViewport(loadRoads = false)
         refreshNearbyExploration()
+        refreshVisibleTownOverlays()
     }
 
     fun refreshTracking() = refreshViewport(loadRoads = false)
@@ -1044,11 +1050,21 @@ class MapRenderer(
                 )
             )
         }
+        style.addSource(GeoJsonSource(TOWN_BADGE_SOURCE_ID, EMPTY_FEATURES))
+        townBadgeImages.forEach { (id, image) -> style.addImage(id, image) }
         refreshPlaceOverlays()
+    }
+
+    private fun installTownBadgeLayer(style: Style) {
+        style.addLayer(SymbolLayer(TOWN_BADGE_LAYER_ID, TOWN_BADGE_SOURCE_ID)
+            .withProperties(iconImage(Expression.image(Expression.get("icon"))),
+                iconSize(0.65f), iconAllowOverlap(false), iconIgnorePlacement(false))
+            .apply { minZoom = 7f })
     }
 
     private fun clearPlaceOverlaySources() {
         overlayPublication.reset()
+        (map.style?.getSource(TOWN_BADGE_SOURCE_ID) as? GeoJsonSource)?.setGeoJson(EMPTY_FEATURES)
         for (mode in OVERLAY_MODES) {
             (map.style?.getSource(overlaySourceId(mode)) as? GeoJsonSource)?.setGeoJson(EMPTY_FEATURES)
             (map.style?.getSource(overlayBoundarySourceId(mode)) as? GeoJsonSource)?.setGeoJson(EMPTY_FEATURES)
@@ -1066,11 +1082,22 @@ class MapRenderer(
         // Polygon conversion can be expensive for many visited municipalities.
         // Build immutable GeoJSON on overlayExecutor instead of blocking the map's UI thread.
         val viewport = if (kind == PlaceKind.TOWN && data.size >= 200) visibleTownViewport else null
-        val snapshot = if (viewport != null) {
+        val visible = if (viewport != null) {
             data.filter { place ->
                 viewport.intersects(overlayBounds.get(place))
             }
         } else data.toList()
+        val snapshot = if (kind == PlaceKind.TOWN) {
+            val revision = repository.exploredGridState()
+            val progression = ProgressionRepository(context)
+            visible.map { place ->
+                val completion = townCompletion.calculate(place.geometryJson, revision, repository::getExploredGridInBounds)
+                val earned = completion?.let {
+                    progression.recordTownCompletion(place.key, it.medal.ordinal, revision.first)
+                } ?: 0
+                place.copy(completion = completion?.copy(medal = TownMedal.entries[maxOf(earned, completion.medal.ordinal)]))
+            }
+        } else visible
         // This gets called after normal activity refreshes as well as during
         // incremental downloads. If the complete geometry set is already drawn,
         // skip costly JTS polygon clipping and GeoJSON serialization altogether.
@@ -1116,6 +1143,15 @@ class MapRenderer(
         } else {
             otherPartition?.let { it.fills to it.outlines } ?: overlayFeatureCollections(snapshot)
         }
+        val badgeFeatures = JSONArray()
+        if (kind == PlaceKind.TOWN) for (place in snapshot) {
+            val progress = place.completion ?: continue
+            badgeFeatures.put(JSONObject().put("type", "Feature")
+                .put("properties", JSONObject().put("icon", TownCompletion.imageId(progress)))
+                .put("geometry", JSONObject().put("type", "Point")
+                    .put("coordinates", JSONArray().put(progress.longitude).put(progress.latitude))))
+        }
+        val badges = JSONObject().put("type", "FeatureCollection").put("features", badgeFeatures).toString()
         mainHandler.post {
             if (destroyed || generation != overlayGeneration || overlayMode.kind != kind ||
                 expectedCacheGeneration != PlaceOverlayCache.generation()) return@post
@@ -1131,6 +1167,17 @@ class MapRenderer(
                     ?: return@publish false
                 val boundarySource = style.getSource(overlayBoundarySourceId(mode)) as? GeoJsonSource
                     ?: return@publish false
+                val badgeSource = style.getSource(TOWN_BADGE_SOURCE_ID) as? GeoJsonSource
+                    ?: return@publish false
+                for (place in snapshot) place.completion?.let { progress ->
+                    val id = TownCompletion.imageId(progress)
+                    if (id !in townBadgeImages) {
+                        val image = TownCompletion.badge(progress)
+                        townBadgeImages[id] = image
+                        style.addImage(id, image)
+                    }
+                }
+                badgeSource.setGeoJson(badges)
                 fillSource.setGeoJson(fillFeatures)
                 boundarySource.setGeoJson(boundaries)
                 true
@@ -1792,6 +1839,8 @@ class MapRenderer(
         private val OVERLAY_MODES = listOf(PlaceOverlayMode.COUNTRY, PlaceOverlayMode.STATE, PlaceOverlayMode.TOWN)
         private const val COUNTRY_OVERLAY_SOURCE_ID = "roadconquest-country-overlays"
         private const val STATE_OVERLAY_SOURCE_ID = "roadconquest-state-overlays"
+        private const val TOWN_BADGE_SOURCE_ID = "roadconquest-town-completion"
+        private const val TOWN_BADGE_LAYER_ID = "roadconquest-town-completion-badges"
         private const val TOWN_OVERLAY_SOURCE_ID = "roadconquest-town-overlays"
         private const val COUNTRY_OVERLAY_BOUNDARY_SOURCE_ID = "roadconquest-country-overlay-boundaries"
         private const val STATE_OVERLAY_BOUNDARY_SOURCE_ID = "roadconquest-state-overlay-boundaries"
