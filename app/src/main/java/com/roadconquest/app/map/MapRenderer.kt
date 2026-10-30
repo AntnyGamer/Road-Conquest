@@ -145,6 +145,7 @@ class MapRenderer(
     private var loadedOverlayData: List<PlaceOverlayData> = emptyList()
     private val overlayBounds = OverlayBoundsCache()
     private val townCompletion = TownCompletion()
+    private val townCompletionSnapshots = TownCompletionSnapshotCache()
     private val townBadgeImages = linkedMapOf<String, Bitmap>()
     @Volatile private var destroyed = false
     private val liveLocation = LiveLocation()
@@ -1058,7 +1059,7 @@ class MapRenderer(
     private fun installTownBadgeLayer(style: Style) {
         style.addLayer(SymbolLayer(TOWN_BADGE_LAYER_ID, TOWN_BADGE_SOURCE_ID)
             .withProperties(iconImage(Expression.image(Expression.get("icon"))),
-                iconSize(0.65f), iconAllowOverlap(false), iconIgnorePlacement(false))
+                iconSize(0.65f), iconAllowOverlap(true), iconIgnorePlacement(true))
             .apply { minZoom = 7f })
     }
 
@@ -1090,7 +1091,7 @@ class MapRenderer(
         val snapshot = if (kind == PlaceKind.TOWN) {
             val revision = repository.exploredGridState()
             val progression = ProgressionRepository(context)
-            visible.map { place ->
+            townCompletionSnapshots.decorate(visible, revision, PlaceOverlayCache.contentRevision()) { place ->
                 val completion = townCompletion.calculate(place.geometryJson, revision, repository::getExploredGridInBounds)
                 val earned = completion?.let {
                     progression.recordTownCompletion(place.key, it.medal.ordinal, revision.first).tier

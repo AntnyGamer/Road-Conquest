@@ -89,11 +89,21 @@ class SettingsNavigationDeviceTest {
                     if (progress != 100) SystemClock.sleep(50)
                 } while (progress != 100 && SystemClock.elapsedRealtime() < deadline)
                 assertEquals(100, progress)
+                val markerDeadline = SystemClock.elapsedRealtime() + 10_000
+                var markerShown = false
+                do {
+                    scenario.onActivity {
+                        markerShown = map.queryRenderedFeatures(map.projection.toScreenLocation(center),
+                            "roadconquest-town-completion-badges").isNotEmpty()
+                    }
+                    if (!markerShown) SystemClock.sleep(50)
+                } while (!markerShown && SystemClock.elapsedRealtime() < markerDeadline)
+                capture("completed-town-map")
+                assertTrue("The earned badge and percentage must actually render, not only exist in a layer", markerShown)
                 scenario.onActivity {
                     assertNotNull(map.style?.getLayer("roadconquest-town-completion-badges"))
                     assertEquals("Gold", renderer.overlayInfoAt(map.projection.toScreenLocation(center))?.completionMedal)
                 }
-                capture("completed-town-map")
                 scenario.onActivity {
                     renderer.setPlaceOverlayMode(com.roadconquest.app.map.PlaceOverlayMode.NONE)
                     assertNull(renderer.overlayInfoAt(map.projection.toScreenLocation(center)))

@@ -6,7 +6,7 @@ Town completion measures the area inside the original municipal boundary covered
 - Silver: 50% explored.
 - Gold: 100% explored. A town at 95–99% remains silver.
 
-The town overlay displays a medal near the town's interior center and a small percentage below it. Before bronze, the percentage appears on its own. Markers use local artwork, respect map collisions and appear from zoom 7. Tapping the town shows the percentage, earned badge and tier guide. A boundary is required; unavailable or invalid boundaries do not produce invented progress.
+The town overlay displays a medal near the town's interior center and a small percentage below it. Before bronze, the percentage appears on its own. Markers use local artwork, remain visible above base-map labels and appear from zoom 7. Tapping the town shows the percentage, earned badge and tier guide. A boundary is required; unavailable or invalid boundaries do not produce invented progress.
 
 Calculations use equal-area latitude coordinates, original boundaries, and local saved tiles. Cached boundaries are checked in bounded foreground batches even when a different overlay is selected. No extra GPS listener, provider request or backend deployment is added. Existing explored tiles qualify on upgrade. Large histories may take several foreground progress refreshes to finish the initial medal backfill.
 

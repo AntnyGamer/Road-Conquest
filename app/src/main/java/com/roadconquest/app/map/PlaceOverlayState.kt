@@ -39,3 +39,25 @@ internal class OverlayBoundsCache(
 
     fun clear() { bounds.clear() }
 }
+
+/** Worker-owned cache for a complete visible town snapshot. Panning an unchanged
+ * set must not repeat hundreds of coverage scans after the small JTS cache evicts
+ * old shapes. Keep exact immutable inputs, never trust geometry hash equality.
+ */
+internal class TownCompletionSnapshotCache {
+    private var grid: Pair<Long, Long>? = null
+    private var boundaries = -1L
+    private var input: List<PlaceOverlayData> = emptyList()
+    private var output: List<PlaceOverlayData> = emptyList()
+
+    fun decorate(data: List<PlaceOverlayData>, gridState: Pair<Long, Long>, boundaryRevision: Long,
+                 calculate: (PlaceOverlayData) -> PlaceOverlayData): List<PlaceOverlayData> {
+        if (grid == gridState && boundaries == boundaryRevision && input == data) return output
+        val calculated = data.map(calculate)
+        grid = gridState
+        boundaries = boundaryRevision
+        input = data
+        output = calculated
+        return calculated
+    }
+}
