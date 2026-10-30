@@ -102,6 +102,9 @@ class SettingsNavigationDeviceTest {
                     val registered = map.style?.getImage("town-completion-GOLD-100")
                     assertNotNull("The current native style must own the medal artwork", registered)
                     registered?.let { save("registered-town-badge", it) }
+                    InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")?.let { output ->
+                        File(output, "completed-town-style.json").writeText(map.style!!.json)
+                    }
                 }
                 // A rendered-feature query can succeed during the symbol's initial
                 // zero-opacity placement frame. Wait for actual native pixels too.
@@ -128,9 +131,37 @@ class SettingsNavigationDeviceTest {
                     if (goldPixels <= 10) SystemClock.sleep(100)
                 } while (goldPixels <= 10 && SystemClock.elapsedRealtime() < artworkDeadline)
                 renderedBitmap?.let { save("completed-town-render", it) }
-                capture("completed-town-map")
+                // Also verify the composed screen, since a native snapshot alone
+                // cannot prove that TextureView presented the marker to the user.
+                val presentationDeadline = SystemClock.elapsedRealtime() + 10_000
+                var presentedPixels = 0
+                var screenBitmap: Bitmap? = null
+                do {
+                    var screenPoint = android.graphics.PointF()
+                    scenario.onActivity { activity ->
+                        val view = activity.findViewById<org.maplibre.android.maps.MapView>(R.id.mapView)
+                        val offset = IntArray(2)
+                        view.getLocationOnScreen(offset)
+                        val local = map.projection.toScreenLocation(center)
+                        screenPoint = android.graphics.PointF(local.x + offset[0], local.y + offset[1])
+                    }
+                    instrumentation.waitForIdleSync()
+                    screenBitmap = instrumentation.uiAutomation.takeScreenshot()
+                    presentedPixels = 0
+                    screenBitmap?.let { bitmap ->
+                        for (y in maxOf(0, screenPoint.y.toInt() - 130)..minOf(bitmap.height - 1, screenPoint.y.toInt() + 130)) {
+                            for (x in maxOf(0, screenPoint.x.toInt() - 130)..minOf(bitmap.width - 1, screenPoint.x.toInt() + 130)) {
+                                val pixel = bitmap.getPixel(x, y)
+                                if (Color.red(pixel) > 180 && Color.green(pixel) in 120..235 && Color.blue(pixel) < 150) presentedPixels++
+                            }
+                        }
+                    }
+                    if (presentedPixels <= 10) SystemClock.sleep(100)
+                } while (presentedPixels <= 10 && SystemClock.elapsedRealtime() < presentationDeadline)
+                screenBitmap?.let { save("completed-town-map", it) }
                 assertTrue("The earned badge and percentage must actually render, not only exist in a layer", markerShown)
                 assertTrue("The native map snapshot must contain the gold medal artwork", goldPixels > 10)
+                assertTrue("The composed screen must present the gold medal artwork", presentedPixels > 10)
                 scenario.onActivity {
                     assertNotNull(map.style?.getLayer("roadconquest-town-completion-badges"))
                     assertEquals("Gold", renderer.overlayInfoAt(map.projection.toScreenLocation(center))?.completionMedal)

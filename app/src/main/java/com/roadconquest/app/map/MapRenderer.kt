@@ -652,7 +652,6 @@ class MapRenderer(
             installRecordedRouteLayer(style)
             installRoadLayer(style)
             installNearbyMarkerLayer(style)
-            installTownBadgeLayer(style)
             installCarLayer(style)
             updateCarLayer()
             // Initialize the camera from a fresh cached fix before the first
@@ -1057,10 +1056,15 @@ class MapRenderer(
     }
 
     private fun installTownBadgeLayer(style: Style) {
-        style.addLayer(SymbolLayer(TOWN_BADGE_LAYER_ID, TOWN_BADGE_SOURCE_ID)
+        if (style.getLayer(TOWN_BADGE_LAYER_ID) != null) return
+        val layer = SymbolLayer(TOWN_BADGE_LAYER_ID, TOWN_BADGE_SOURCE_ID)
             .withProperties(iconImage(Expression.get("icon")),
                 iconSize(0.65f), iconAllowOverlap(true), iconIgnorePlacement(true))
-            .apply { minZoom = 7f })
+            .apply { minZoom = 7f }
+        // Create the symbol layer only after its local artwork is registered.
+        // Keep the live car above town badges when publishing after style load.
+        if (style.getLayer(CAR_LAYER_ID) != null) style.addLayerBelow(layer, CAR_LAYER_ID)
+        else style.addLayer(layer)
     }
 
     private fun clearPlaceOverlaySources() {
@@ -1186,6 +1190,7 @@ class MapRenderer(
                         style.addImage(id, image)
                     }
                 }
+                installTownBadgeLayer(style)
                 badgeSource.setGeoJson(badges)
                 fillSource.setGeoJson(fillFeatures)
                 boundarySource.setGeoJson(boundaries)
