@@ -71,6 +71,8 @@ data class ProgressionSnapshot(
 
 enum class PurchaseResult { PURCHASED, OWNED, INSUFFICIENT_POINTS }
 
+internal data class TownCompletionUpdate(val tier: Int, val changed: Boolean)
+
 class ProgressionRepository(context: Context) {
     private val appContext = context.applicationContext
     private val dbHelper = AppDatabase.get(appContext)
@@ -568,15 +570,15 @@ class ProgressionRepository(context: Context) {
     ).use { it.moveToFirst() }
 
     /** Durable earned town tiers use the existing backed-up counter ledger. */
-    internal fun recordTownCompletion(key: String, tier: Int, expectedGeneration: Long): Int =
+    internal fun recordTownCompletion(key: String, tier: Int, expectedGeneration: Long): TownCompletionUpdate =
         synchronized(dbHelper.historyLock) {
-            if (!isCurrentHistory(expectedGeneration)) return@synchronized 0
+            if (!isCurrentHistory(expectedGeneration)) return@synchronized TownCompletionUpdate(0, false)
             val db = dbHelper.writableDatabase
             val counterKey = "town_completion_v1:$key"
             val previous = counter(db, counterKey).toInt().coerceIn(0, 3)
             val earned = maxOf(previous, tier.coerceIn(0, 3))
             if (earned > previous) putCounter(db, counterKey, earned.toLong())
-            earned
+            TownCompletionUpdate(earned, earned > previous)
         }
 
     fun snapshot(): ProgressionSnapshot = synchronized(dbHelper.historyLock) {

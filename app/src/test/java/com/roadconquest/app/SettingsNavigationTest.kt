@@ -10,9 +10,14 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
+import org.robolectric.annotation.SQLiteMode
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31, 37], manifest = Config.NONE)
+// Match the existing UI suites; actual native rendering is verified on devices.
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
+@SQLiteMode(SQLiteMode.Mode.LEGACY)
 class SettingsNavigationTest {
     @Test fun categoriesSearchAndBackKeepEveryControlReachable() {
         val controller = Robolectric.buildActivity(SettingsActivity::class.java).create()

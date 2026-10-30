@@ -28,10 +28,15 @@ internal object TownCompletionTracker {
 
     @Synchronized fun sync(context: Context, snapshot: ProgressionSnapshot, expectedHistory: Long?): Boolean {
         if (snapshot.tilesUnlocked == 0L) return false
+        val database = AppDatabase.get(context)
+        val history = database.historyGeneration
+        if (expectedHistory != null && expectedHistory != history) return false
+        // snapshot() already counted persisted tiles under historyLock. New tiles
+        // can only append within this generation; the next snapshot catches them.
+        // Reuse that count instead of issuing another COUNT on every UI refresh.
+        val state = history to snapshot.tilesUnlocked
         val tracking = TrackingRepository(context)
-        val state = tracking.exploredGridState()
-        if (expectedHistory != null && expectedHistory != state.first) return false
-        val next = Revision(AppDatabase.get(context), state.first, state.second,
+        val next = Revision(database, state.first, state.second,
             PlaceOverlayCache.contentRevision(), snapshot.towns)
         val progression = ProgressionRepository(context)
         if (next != revision) {
@@ -53,8 +58,8 @@ internal object TownCompletionTracker {
             } else PlaceOverlayCache.read(context, place).data
             if (cached != null && cached.containsRecordedVisit(place)) {
                 engine.calculate(cached.geometryJson, state, tracking::getExploredGridInBounds)?.let {
-                    val tier = progression.recordTownCompletion(place.key, it.medal.ordinal, state.first)
-                    if (tier > 0) changed = true
+                    val update = progression.recordTownCompletion(place.key, it.medal.ordinal, state.first)
+                    changed = update.changed || changed
                 }
             }
         }

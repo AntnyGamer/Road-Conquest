@@ -1093,7 +1093,7 @@ class MapRenderer(
             visible.map { place ->
                 val completion = townCompletion.calculate(place.geometryJson, revision, repository::getExploredGridInBounds)
                 val earned = completion?.let {
-                    progression.recordTownCompletion(place.key, it.medal.ordinal, revision.first)
+                    progression.recordTownCompletion(place.key, it.medal.ordinal, revision.first).tier
                 } ?: 0
                 place.copy(completion = completion?.copy(medal = TownMedal.entries[maxOf(earned, completion.medal.ordinal)]))
             }

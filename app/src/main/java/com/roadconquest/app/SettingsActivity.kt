@@ -145,6 +145,7 @@ class SettingsActivity : Activity() {
     private val accountExecutor = Executors.newSingleThreadExecutor()
     private val dataExecutor = Executors.newSingleThreadExecutor()
     @Volatile private var summaryGeneration = 0
+    @Volatile private var accountRefreshGeneration = 0
     private var appliedGoldUi = false
     private var pendingExportUsesPassword = false
 
@@ -611,6 +612,7 @@ class SettingsActivity : Activity() {
     }
 
     private fun refreshAccountControls() {
+        val refresh = ++accountRefreshGeneration
         val session = AccountStore.load(this)
         val accountConfigured = AccountClient.isConfigured()
         val verifySwitch = findViewById<Switch>(R.id.verifyDrivesSwitch)
@@ -637,9 +639,10 @@ class SettingsActivity : Activity() {
         }
         if (accountConfigured && competitionVisible) {
             accountExecutor.execute {
+                if (isDestroyed || isFinishing || refresh != accountRefreshGeneration) return@execute
                 val status = runCatching { AccountClient.competition() }
                 runOnUiThread {
-                    if (isDestroyed) return@runOnUiThread
+                    if (isDestroyed || refresh != accountRefreshGeneration) return@runOnUiThread
                     verificationStatus.text = status.fold(
                         onSuccess = {
                             if (it.optBoolean("available")) "Verified scoring is available."
@@ -664,9 +667,14 @@ class SettingsActivity : Activity() {
 
         if (session == null || !accountConfigured) return
         accountExecutor.execute {
+            // A resume/recreation can queue another read behind an active
+            // request. Skip obsolete reads, while confirmed privacy writes on
+            // this same executor are still allowed to finish.
+            if (isDestroyed || isFinishing || refresh != accountRefreshGeneration ||
+                AccountStore.load(this)?.token != session.token) return@execute
             val result = runCatching { AccountClient.me(session.token) }
             runOnUiThread {
-                if (isDestroyed || AccountStore.load(this)?.token != session.token) return@runOnUiThread
+                if (isDestroyed || refresh != accountRefreshGeneration || AccountStore.load(this)?.token != session.token) return@runOnUiThread
                 result.fold(
                     onSuccess = { account ->
                         val updated = AccountStore.refreshIfUnchanged(
@@ -798,6 +806,7 @@ class SettingsActivity : Activity() {
     override fun onDestroy() {
         if (Build.VERSION.SDK_INT >= 33) backCallback?.let(onBackInvokedDispatcher::unregisterOnBackInvokedCallback)
         ads.destroy()
+        accountRefreshGeneration++
         summaryGeneration++
         summaryExecutor.shutdownNow()
         // Confirmed account/privacy writes must finish even if Settings closes immediately.

@@ -22,8 +22,10 @@ class TownMedalProgressionTest {
     @Test fun townTiersAreDistinctDurableAndAwardTheirAchievementsOnlyOnce() {
         val repository = ProgressionRepository(context)
         val summary = TrackingRepository(context).getSummary()
-        assertEquals(3, repository.recordTownCompletion("town-a", 3, summary.historyGeneration))
-        assertEquals(3, repository.recordTownCompletion("town-a", 1, summary.historyGeneration))
+        assertTrue(repository.recordTownCompletion("town-a", 3, summary.historyGeneration).changed)
+        val unchanged = repository.recordTownCompletion("town-a", 1, summary.historyGeneration)
+        assertEquals(3, unchanged.tier)
+        assertFalse(unchanged.changed)
         repository.recordTownCompletion("town-b", 1, summary.historyGeneration)
         var snapshot = ProgressionRepository(context).snapshot()
         assertEquals(2L, snapshot.bronzeTowns)
@@ -33,7 +35,7 @@ class TownMedalProgressionTest {
         assertTrue(snapshot.rewardedAchievements.containsAll(listOf("town_bronze_1", "town_silver_1", "town_gold_1")))
         assertEquals(snapshot.balance, ProgressionManager.sync(context, summary).balance)
         TrackingRepository(context).clearHistory()
-        assertEquals(0, repository.recordTownCompletion("stale-town", 3, summary.historyGeneration))
+        assertEquals(TownCompletionUpdate(0, false), repository.recordTownCompletion("stale-town", 3, summary.historyGeneration))
         assertEquals(0L, ProgressionRepository(context).snapshot().goldTowns)
     }
     @Test fun allAchievementIdsStayUniqueAndExistingAwardsRemainOwned() {
