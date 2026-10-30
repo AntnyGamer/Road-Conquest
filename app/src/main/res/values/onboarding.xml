@@ -25,7 +25,7 @@
     <string name="tour_garage_title">Make it yours.</string>
     <string name="tour_garage_body">Earn points from new roads, achievements, and first visits to new places. Tap Garage to spend them on car styles, colors, and other cosmetics.</string>
     <string name="tour_settings_title">Your map. Your choices.</string>
-    <string name="tour_settings_body">Settings has light and dark appearance, tracking options, backup and restore, and the privacy policy. Review location sharing under Data and privacy.\n\nReplay this guide anytime from Settings → Quick tour. An account is optional. If needed, setup follows the tour.</string>
+    <string name="tour_settings_body">Search settings or choose a category for map appearance, tracking, notifications and privacy, or backups and data. Account controls are under Account &amp; community.\n\nReplay this guide from Settings → Help &amp; about → Quick tour. An account is optional. If needed, setup follows the tour.</string>
     <string name="tour_replay">Quick tour</string>
     <string name="tour_replay_detail">A quick guide to your map and tracking controls.</string>
     <string name="exit_confirmation_setting">Confirm before exiting with Back</string>

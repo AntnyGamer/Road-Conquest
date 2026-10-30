@@ -69,7 +69,7 @@ Google Play permanently reserves uploaded version codes, including drafts and
 testing tracks. Before uploading a **signed 1.0 release bundle**, confirm
 that code 95 is still available in Play Console. The unsigned CI bundle cannot be uploaded.
 Do not confuse a locally tested development build with an already-published signed release.
-The app shows its exact version in Settings → About. Treat the application ID as permanent once
+The app shows its exact version in Settings → Help & about. Treat the application ID as permanent once
 the Google Play listing is created; changing it later would create a different app.
 
 ## Explore
@@ -78,7 +78,7 @@ the Google Play listing is created; changing it later would create a different a
 - Settings opens to seven searchable categories, including a dedicated Backups & data section. Search by a category or control name; Back returns to the category list before leaving Settings.
 - The first-use Quick tour previews a discovery without location access, then highlights the real
   tracking, Layers, Trips/Badges/Goals, Garage and Settings controls. Skip it or replay it from
-  Settings → Quick tour. The optional Back-to-exit prompt explains whether tracking remains on;
+  Settings → Help & about → Quick tour. The optional Back-to-exit prompt explains whether tracking remains on;
   Settings can turn this prompt off or back on. Leaving the map does not stop the tracking service.
 - Recorded driving appears while matching is pending; confirmed road geometry then refines it.
 - A tightly bounded, GPS-supported connector can close a short split between differently named
@@ -116,7 +116,7 @@ the Google Play listing is created; changing it later would create a different a
   require the same passphrase when restoring on another device. The Settings summary shows
   when a complete backup export was last made. New map-tile first-unlock times are saved and
   exported starting with this branch; older tiles keep unknown discovery dates rather than invented timestamps.
-- Create an optional account, change your username and manage leaderboard visibility. There are exactly two destructive account/data actions in the app: Account → Delete account removes the cloud account while keeping saved device history and requires the current account password; Settings → Data and privacy → Delete local data removes all local Road Conquest data while keeping the cloud account and leaderboard scores and requires typing the exact local confirmation phrase. Local full-data deletion works while signed out, stops tracking, disables verified-drive sharing and removes private interrupted-export snapshots.
+- Create an optional account, change your username and manage leaderboard visibility. There are exactly two destructive account/data actions in the app: Account → Delete account removes the cloud account while keeping saved device history and requires the current account password; Settings → Backups & data → Delete local data removes all local Road Conquest data while keeping the cloud account and leaderboard scores and requires typing the exact local confirmation phrase. Local full-data deletion works while signed out, stops tracking, disables verified-drive sharing and removes private interrupted-export snapshots.
 
 Map drawing and viewport refresh timers stop while the map activity is hidden. Returning reloads
 roads changed during background tracking; GPS sampling and saved driving history are unaffected.
@@ -323,7 +323,7 @@ Satellite detail varies by area.
 Geoapify street tiles and geoBoundaries country/region datasets provide the documented backups.
 Crashlytics is optional, initializes only after consent in Settings, and does not include Analytics.
 
-Settings → Licenses and map credits contains the app license and provider notices. Third-party
+Settings → Help & about → Licenses and map credits contains the app license and provider notices. Third-party
 styles, map data, imagery and dependencies retain their own licenses and service terms. See
 [NOTICE](NOTICE) and the credits under `app/src/main/assets/`.
 
