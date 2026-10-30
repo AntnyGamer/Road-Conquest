@@ -166,7 +166,7 @@ internal class TownCompletion {
             val bitmap = Bitmap.createBitmap(88, 104, Bitmap.Config.ARGB_8888).apply {
                 // MapLibre derives image pixelRatio from bitmap density. Keep
                 // the medal and 13 dp percentage readable on high-density phones.
-                density = Bitmap.DENSITY_DEFAULT
+                density = android.util.DisplayMetrics.DENSITY_DEFAULT
             }
             val canvas = Canvas(bitmap)
             val paint = Paint(Paint.ANTI_ALIAS_FLAG)

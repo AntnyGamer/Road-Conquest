@@ -162,7 +162,7 @@ class SettingsNavigationDeviceTest {
                     capture("search-${theme.name.lowercase()}")
                 }
             }
-            val preview = Bitmap.createBitmap(440, 170, Bitmap.Config.ARGB_8888).apply { density = Bitmap.DENSITY_DEFAULT }
+            val preview = Bitmap.createBitmap(440, 170, Bitmap.Config.ARGB_8888).apply { density = android.util.DisplayMetrics.DENSITY_DEFAULT }
             val canvas = Canvas(preview)
             canvas.drawColor(Color.rgb(239, 244, 250))
             val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(20, 32, 57); textSize = 17f }
