@@ -1148,7 +1148,8 @@ class MapRenderer(
         // Clip manageable neighboring region polygons in the display only.
         // Original GPS evidence and cached source geometries remain unchanged.
         val partitionRegions = kind == PlaceKind.STATE && snapshot.size in 2..15 &&
-            snapshot.sumOf { it.geometryJson.length } <= 1_000_000
+            snapshot.sumOf { it.geometryJson.length } <= 1_000_000 &&
+            TownOverlayPartition.safeForPlanarRegionPartition(snapshot)
         val otherPartition = if ((kind == PlaceKind.TOWN && other.isNotEmpty()) ||
             partitionRegions
         ) TownOverlayPartition.render(other) else null
