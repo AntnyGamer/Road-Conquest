@@ -23,7 +23,7 @@ if (fixes <= 0 || hoursPerUser <= 0 || local >= 1 || fraction <= 0 || fraction >
 const config = JSON.parse(readFileSync(new URL('../maps/wrangler.jsonc', import.meta.url), 'utf8'));
 const primaryCap = Number(config.vars.DAILY_CREDIT_CAP);
 const backupCap = Number(config.vars.LOCATIONIQ_DAILY_REQUEST_CAP);
-// Same reference as maps/CAPACITY.md: 75-minute fragments, three context
+// Reference model: 75-minute fragments, three context
 // slots, startup plus a final partial batch. Backup retains its 52.5s cadence.
 const fragmentHours = 1.25;
 const primaryPerHour = (1 + Math.ceil(fixes * fragmentHours / 97)) / fragmentHours;
