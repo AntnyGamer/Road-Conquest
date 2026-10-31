@@ -2,6 +2,8 @@
 
 ## Changes since 1.0
 
+- **Strict road geometry:** The live map no longer draws synthetic turn and straight-gap connectors inferred from timestamps, road tangents or raw GPS. Only saved matched polylines are rendered (with sub-meter endpoint snapping). Unmatched turns remain gaps until a real matching pass supplies their road shape; saved roads and earned progress are unchanged.
+- **Backup cancellation:** The passphrase is now confirmed before Android creates a destination document, so dismissing that dialog cannot leave a newly created zero-byte file. Storage providers can still leave partial files on failures during an active write.
 - **More balanced new earnings:** New roads earn 2 points, towns 35, states or regions 150, and countries 500. Weekly challenges and future achievement milestones award fewer points. Existing balances, earned ledger entries, purchases and already-owned achievements are preserved.
 - **Starting-place statistics:** The first verified starting town, state/region and country now appear as explored in Settings → Your progress. They do not give starting-place points or count toward earned milestones.
 - **Clearer choices:** Backup export formats and map-overlay options use separated tappable buttons; the Explore Nearby action is visually distinct. Town medal icons occupy less map space.

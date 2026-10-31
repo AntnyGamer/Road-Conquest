@@ -150,6 +150,7 @@ class SettingsActivity : Activity() {
     @Volatile private var accountRefreshGeneration = 0
     private var appliedGoldUi = false
     private var pendingExportUsesPassword = false
+    private var pendingPrivatePassword: CharArray? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         setTheme(Appearance.themeRes(this))
@@ -282,7 +283,7 @@ class SettingsActivity : Activity() {
 
         findViewById<Button>(R.id.exportButton).setOnClickListener {
             showActionChoices(this, "Export progress", listOf(
-                "Private backup · GitHub or Play" to { beginExport(true) },
+                "Private backup · GitHub or Play" to { requestPrivateExportBeforePicker() },
                 "Google Play-verified ZIP · Play only" to { beginExport(false) }
             ))
         }
@@ -301,6 +302,8 @@ class SettingsActivity : Activity() {
             startActivityForResult(intent, REQUEST_EXPORT)
         } catch (_: ActivityNotFoundException) {
             pendingExportUsesPassword = false
+            pendingPrivatePassword?.fill(0.toChar())
+            pendingPrivatePassword = null
             Toast.makeText(this, "Android's file picker is unavailable on this device.", Toast.LENGTH_LONG).show()
         }
     }
@@ -351,7 +354,7 @@ class SettingsActivity : Activity() {
     @android.annotation.SuppressLint("GestureBackNavigation")
     override fun onBackPressed() { handleSettingsBack() }
 
-    private fun requestPrivateExport(uri: Uri) {
+    private fun requestPrivateExportBeforePicker() {
         val padding = (16 * resources.displayMetrics.density).toInt()
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -369,15 +372,9 @@ class SettingsActivity : Activity() {
         val password = passwordField("Passphrase (12+ characters)")
         val confirm = passwordField("Confirm passphrase")
         val warning = TextView(this).apply { layout.addView(this) }
-        var exportStarted = false
         val dialog = AlertDialog.Builder(this).setTitle("Encrypt private backup")
             .setView(layout).setNegativeButton("Cancel", null)
             .setPositiveButton("Export", null).create()
-        // Android creates the destination before the passphrase dialog. Back,
-        // outside-tap and explicit Cancel must all clean up the empty file.
-        dialog.setOnDismissListener {
-            if (!exportStarted) runCatching { contentResolver.delete(uri, null, null) }
-        }
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val first = password.text.toString()
@@ -390,9 +387,10 @@ class SettingsActivity : Activity() {
                 val secret = first.toCharArray()
                 password.text.clear()
                 confirm.text.clear()
-                exportStarted = true
                 dialog.dismiss()
-                writeExport(uri, secret)
+                pendingPrivatePassword?.fill(0.toChar())
+                pendingPrivatePassword = secret
+                beginExport(true)
             }
         }
         dialog.show()
@@ -403,10 +401,20 @@ class SettingsActivity : Activity() {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode != REQUEST_EXPORT) return
         val encrypted = pendingExportUsesPassword
+        val password = pendingPrivatePassword
+        pendingPrivatePassword = null
         pendingExportUsesPassword = false
-        if (resultCode != RESULT_OK) return
-        val uri = data?.data ?: return
-        if (encrypted) requestPrivateExport(uri) else writeExport(uri, null)
+        if (resultCode != RESULT_OK) { password?.fill(0.toChar()); return }
+        val uri = data?.data ?: run { password?.fill(0.toChar()); return }
+        if (encrypted && password == null) {
+            // A recreated activity cannot recover the temporary password. Never
+            // accidentally write an unencrypted file or leave the empty document.
+            val deleted = runCatching { contentResolver.delete(uri, null, null) > 0 }.getOrDefault(false)
+            Toast.makeText(this, if (deleted) "Export cancelled. Try again."
+                else "Export cancelled. Delete the empty backup in Files.", Toast.LENGTH_LONG).show()
+            return
+        }
+        writeExport(uri, password)
     }
 
     private fun writeExport(uri: Uri, password: CharArray?) {
@@ -832,6 +840,8 @@ class SettingsActivity : Activity() {
     }
 
     override fun onDestroy() {
+        pendingPrivatePassword?.fill(0.toChar())
+        pendingPrivatePassword = null
         if (Build.VERSION.SDK_INT >= 33) backCallback?.let(onBackInvokedDispatcher::unregisterOnBackInvokedCallback)
         ads.destroy()
         accountRefreshGeneration++

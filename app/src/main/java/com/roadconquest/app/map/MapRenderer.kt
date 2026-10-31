@@ -951,7 +951,8 @@ class MapRenderer(
                         .getOrDefault(emptyMap())
                     OverlayRoads.prepare(saved, visits,
                         repository::hasRecordedDrivingAcrossGap,
-                        repository::hasRecordedDrivingThroughTurn)
+                        repository::hasRecordedDrivingThroughTurn,
+                        includeEstimatedConnectors = false)
                 }
                 val places = if (queryPlaces) {
                     repository.getExploredGridInBounds(queryNorth, queryEast, querySouth, queryWest)
@@ -971,7 +972,7 @@ class MapRenderer(
                     footprint.takeIf { roadQuery?.complete == true },
                     footprint.takeIf { queryPlaces },
                     if (pending.roads.isEmpty()) EMPTY_FEATURES
-                    else roadFeatures(OverlayRoads.prepare(pending.roads)),
+                    else roadFeatures(OverlayRoads.prepare(pending.roads, includeEstimatedConnectors = false)),
                     pending.roads.isNotEmpty(),
                     pending.oldestVisiblePendingTimestampMillis?.plus(PENDING_ROUTE_MAX_AGE_MS)
                 )

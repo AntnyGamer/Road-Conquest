@@ -26,14 +26,16 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
             roads: List<RoadRecord>,
             visitWindows: Map<String, List<Pair<Long, Long>>> = emptyMap(),
             hasRecordedDriving: ((Double, Double, Double, Double, Long, Long) -> Boolean)? = null,
-            hasRecordedTurn: ((Double, Double, Double, Double, Double, Double, Long, Long) -> Boolean)? = null
+            hasRecordedTurn: ((Double, Double, Double, Double, Double, Double, Long, Long) -> Boolean)? = null,
+            includeEstimatedConnectors: Boolean = true
         ): OverlayRoads {
             if (roads.isEmpty()) return EMPTY
             val segments = ArrayList<Segment>(roads.size)
             val segmentFirstTimes = ArrayList<Long>(roads.size)
             val segmentLastTimes = ArrayList<Long>(roads.size)
             val segmentNames = ArrayList<String>(roads.size)
-            val segmentVisits = if (visitWindows.isEmpty()) null else ArrayList<List<Pair<Long, Long>>>(roads.size)
+            val segmentVisits = if (!includeEstimatedConnectors || visitWindows.isEmpty()) null
+                else ArrayList<List<Pair<Long, Long>>>(roads.size)
             val nodes = ArrayList<Node>(roads.size * 2)
             val buckets = HashMap<Cell, MutableList<Int>>(roads.size * 2)
             val lookupCell = Cell(0, 0, 0)
@@ -83,9 +85,11 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
                     assignNode(endLatitude, endLongitude, startNode)
                 }
                 segments += Segment(coordinates, startNode, endNode)
-                segmentFirstTimes += firstUnlockedAt
-                segmentLastTimes += lastDrivenAt
-                segmentNames += roadName
+                if (includeEstimatedConnectors) {
+                    segmentFirstTimes += firstUnlockedAt
+                    segmentLastTimes += lastDrivenAt
+                    segmentNames += roadName
+                }
                 segmentVisits?.add(visits)
             }
 
@@ -140,11 +144,14 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
                 addAdjacent(segments[i].endNode, i)
             }
 
+            val originalSegmentCount = segments.size
+            // The real map does not infer intersections using ray extensions.
+            // Only recorded matcher polylines can establish actual road geometry.
+            if (includeEstimatedConnectors) {
             // Repair only confirmed, dangling road ends recorded seconds apart on the same
             // drive. These are display-only links: no roads, miles or achievements are awarded.
             // Snap to the intersection of the two already-matched centerline directions;
             // never draw a long straight chord that cuts through the inside of a turn.
-            val originalSegmentCount = segments.size
             // Protect the original first-unlock connections before considering other visits.
             // Mixing later visits into this pass could make a previously valid turn ambiguous.
             appendSupportedJunctions(segments, segmentFirstTimes, segmentLastTimes, nodes, degree, segmentNames,
@@ -169,6 +176,7 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
                 appendSupportedJunctions(segments, segmentFirstTimes, segmentLastTimes, nodes,
                     degree, segmentNames, occupiedNodes = occupied, includeLastTimes = true,
                     hasRecordedDriving = hasRecordedDriving, hasRecordedTurn = hasRecordedTurn)
+            }
             }
             // Give each synthetic segment the same graph-adjacency treatment as actual roads.
             for (index in originalSegmentCount until segments.size) {

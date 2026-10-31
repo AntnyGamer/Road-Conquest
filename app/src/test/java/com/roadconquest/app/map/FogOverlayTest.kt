@@ -46,6 +46,19 @@ class FogOverlayTest {
             lats.min(), lats.max(), lons.min(), lons.max())
     }
 
+    @Test fun mapNeverInventsBendsWithoutMatchedRoadGeometryEvenWhenGpsSupportsTurn() {
+        val approach = junctionRoad("English Oak Road", 1_000_000L,
+            -75.0588 to 39.7390, -75.0587 to 39.7392)
+        val exit = junctionRoad("Black Oak Court", 1_006_000L,
+            -75.05855 to 39.73935, -75.05835 to 39.7394)
+        val shown = OverlayRoads.prepare(listOf(approach, exit),
+            hasRecordedDriving = { _, _, _, _, _, _ -> true },
+            hasRecordedTurn = { _, _, _, _, _, _, _, _ -> true },
+            includeEstimatedConnectors = false)
+        assertEquals("Missing road shape must remain an honest gap", 3, shown.starts.size)
+        assertEquals("No synthetic points are added", 8, shown.coordinates.size)
+    }
+
     @Test fun confirmedFlandersToColonialTurnVisuallyJoinsWithoutInventingRoadHistory() {
         // Translated coordinates derived from the geometry of a recorded broken turn.
         val incoming = junctionRoad("approach", 1_000_000L,
