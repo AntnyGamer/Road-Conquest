@@ -7,43 +7,9 @@ cloud-textured fog map.
 [Source and issues](https://github.com/AntnyGamer/Road-Conquest) ·
 [GNU AGPL v3 license](LICENSE)
 
-**Release 1.0** updates the previous 1.1 build with improved recovery of historic town visits (including older histories without a saved starting-location marker), cleaner map controls, harder and lower-reward town badges, and small local performance simplifications. See [current release notes](RELEASE_NOTES.md).
+**Release 1.0** improves historic town discovery from saved GPS, map controls, town-badge balance, and local performance. See the [release notes](RELEASE_NOTES.md) and [town completion details](TOWN_COMPLETION.md).
 
-The previously published 1.0 build (code 95) introduced town completion medals, 30 achievements and searchable settings. Bronze unlocks at 25%, silver at 50%, and gold at 100% of town area explored through map tiles. See [town completion details](TOWN_COMPLETION.md).
-
-Beta 67 aligns the walking marker with driving capture, completes a final matching pass when tracking stops, restores VIP reliably, respects provider recovery delays, refreshes Trips after background drives, and resumes notification-paused tracking from secondary screens. The deployed account service accepts Play version codes 90 and newer. See [previous releases](https://github.com/AntnyGamer/Road-Conquest/releases).
-
-Beta 66 raises free map-matching gateway limits within provider allowances, rejects untrusted requests earlier, and cuts repeated quota-accounting reads. It also removes three unreferenced historical review files. This release requires separately deploying the updated Cloudflare map gateway; see [previous releases](https://github.com/AntnyGamer/Road-Conquest/releases) for verification and provider-reserve tradeoffs.
-
-Beta 65 prepares protected ZIP backups, preserves new weekly credit while excluding restored drives, repairs additional missing junction turns and polygon containment, and strengthens Forum Plus/server efficiency. Portable backup exports need the newly configured backend signing service before this build is distributed. See [previous releases](https://github.com/AntnyGamer/Road-Conquest/releases) for prerequisites and verification scope.
-
-Beta 64 restores map-provider failover in trip replay, redraws the Streets/Minimal/Night icons, isolates forum drafts and pending actions across account changes, and improves Forum Plus purchase handling and setup diagnostics. Repeat receipt checks avoid unused encryption/database transfer. See [previous releases](https://github.com/AntnyGamer/Road-Conquest/releases) for the complete changes and verification scope.
-
-Beta 63 improves slow-turn recording and historical road-gap retries, filters tiny walking/scatter trips without deleting their fixes, switches the live marker to a pedestrian while walking, adds automatic regional distance/area units and distinct map-style icons, and reduces unnecessary forum database work. The backup confirmation uses the same regional units.
-
-Beta 62 improved forum readability, the discovery tour, notification resets, exact matching-response reuse, account/billing request efficiency and local map performance.
-
-Beta 60 added a replayable Quick tour, accuracy-guarded junction matching improvements, and groundwork for a moderated opt-in community. Forum posting and purchases depend on their separately configured backend, moderation and Play services.
-
-Beta 59 fixes spurious low-zoom map fallback caused by HTTP 304 and isolated auxiliary tile errors, repairs the trip GPX privacy-choice save flow, improves dark-mode Cancel contrast and simplifies strictly equivalent road-matching and visit logic. It also clarifies Satellite-only failures. See [previous releases](https://github.com/AntnyGamer/Road-Conquest/releases).
-
-Beta 58 refreshes MapLibre OpenGL, OkHttp, Gradle, the setup-java CI action and emulator replay dependencies, while retaining the existing app package, signed update path and stored progress. Release verification exercises map rendering, driving, backups, account-server checks and startup on supported Android versions. See [previous releases](https://github.com/AntnyGamer/Road-Conquest/releases).
-
-Beta 57 improves slow walking/driving exploration, preserves large detailed roads in backups, prevents confirmed restores from being interrupted by screen rotation, refreshes maps after restores, and keeps pending signup/login consistent across rotation. It also polishes Back buttons and map-device test reliability. See [previous releases](https://github.com/AntnyGamer/Road-Conquest/releases) for verification and compatibility details.
-
-Beta 56 fixes missing or dotted town borders, preserves more short-turn approach evidence, scopes retries to actually submitted fixes, and avoids repeated online matching when strict saved-road or exact-cache evidence is sufficient. It reduces repeated geometry parsing, map refresh work, local writes and backup allocations while preserving matching quality checks and saved data. Exact overlay updates and cache accounting are more reliable. See [previous releases](https://github.com/AntnyGamer/Road-Conquest/releases) for resource tradeoffs and the separate backend deployment requirements.
-
-Beta 55 simplified the map status, account controls, Settings, trip history, VIP descriptions and achievement touch targets without changing driving or saved-progress rules.
-
-Beta 54 explicitly declares the Advertising ID permission used by AdMob and adds a release check for both the Play bundle and APK. It also fixes unnecessary cooldowns when a map provider is intentionally disabled, lets the map recover when cached provider settings expire, and avoids reparsing the map gateway address on each tile request. Invalid coordinates are now safely rejected by both matching adapters, including cached lookups; valid GPS matching, rewards and saved history are unchanged. Oversized malformed backup ZIP directories are rejected before unnecessary allocation, and large exports generate less temporary CSV garbage without changing valid restores or their format.
-
-Beta 53 improves continuity of driven roads at regional zoom, shows a bounded first-load cover while the map settles, reduces duplicate LocationIQ credits while retaining a visible attribution link, coalesces redundant provider refreshes and reduces unnecessary retries, and makes Gold/Regular launcher icon changes safer. Saved roads and tracking data are unchanged.
-
-Beta 52 fixed trip-replay scrolling and dark-mode button contrast, made town shading require the correct boundary polygon, improves distant road and municipality rendering, and avoids duplicate overlapping population requests. Saved-road visit checks decode each road once per scan. The included account-server artifact reduces repeated verified-driving database requests and reports verification outages without waiting for slow response cleanup; activating server changes requires a separate deployment.
-
-Beta 51 makes the map controls more compact, adds a numbered Explore Nearby tile overlay, and improves matching allowance accounting and outage recovery. International town discovery handles ISO-only country addresses, cross-border address conflicts, and English aliases of native municipality names. GPS recording and explored tiles are worldwide; external road and boundary coverage is best-effort, and the public Nominatim service cannot support unlimited concurrent discovery traffic (see [international support](INTERNATIONAL_SUPPORT.md)). Existing progress and purchases remain intact; competitive rankings and verification uploads remain hidden by default.
-See [backup and challenges details](BACKUP_AND_CHALLENGES.md). Previously unlocked roads, exploration, purchases, and scoring are
-preserved when installing an update signed with the same app identity over an existing installation.
+Earlier beta history is available in [GitHub Releases](https://github.com/AntnyGamer/Road-Conquest/releases).
 
 ## Install
 
@@ -51,7 +17,7 @@ Android 12 or newer is required. Download the signed APK from Releases for direc
 The GitHub APK uses the permanent upload key and updates compatible GitHub-installed betas.
 For an app installed through Google Play, update through Play instead: Play uses its separate
 app-signing key. Do not uninstall or clear app data to work around a signature error.
-Do not change installation channels without a compatible restorable backup. Password-free ZIP exports are archive-only and cannot be imported; previously authenticated restore formats remain supported.
+Do not change installation channels without a compatible restorable backup. Password-free ZIP exports are archive-only and cannot be imported; authenticated backups in the current format can be restored.
 For Google Play, download the **signed** `RoadConquest-<version>.aab` from the [GitHub Releases](https://github.com/AntnyGamer/Road-Conquest/releases) page, not the unsigned intermediate from GitHub Actions. The Actions artifact is named `android-build-inputs-unsigned` and contains `app-release-UNSIGNED-DO-NOT-UPLOAD.aab`, which Google Play cannot accept. Each release also includes the Android Studio project and SHA-256 checksums.
 
 If Play still reports an invalid signature for the **signed release** bundle, compare the SHA-256 fingerprint under Play Console → Test and release → App integrity → **Upload key certificate** (not the separate Google Play **App signing key certificate**) with the release upload key:
@@ -64,16 +30,7 @@ Grant Precise location. For automatic background tracking, choose Allow all the 
 location settings and allow background battery use. Settings includes shortcuts to the relevant
 Android screens. Allow notifications to see the tracking notification and its Stop tracking control.
 
-The current **Release 1.0** builds with Android application ID
-`com.roadconquest.app` and internal version code **97**. The earlier 1.1 release used code 96 and the earlier 1.0 build used code 95; Beta 68 used code 94, Beta 67 used code 93, Beta 66 used code 92, Beta 65 used code 91,
-Beta 64 used code 90, Beta 63 used code 89 and Beta 62 used code 88.
-Google Play permanently reserves uploaded version codes, including drafts and
-testing tracks. Before uploading the signed **Release 1.0** bundle, confirm
-that code 97 is still available in Play Console. The unsigned CI bundle cannot be uploaded.
-The current GitHub release uses tag `release-v1.0` so the historical `v1.0` and `v1.1` tags stay unchanged.
-Do not confuse a locally tested development build with an already-published signed release.
-The app shows its exact version in Settings → Help & about. Treat the application ID as permanent once
-the Google Play listing is created; changing it later would create a different app.
+Release 1.0 uses Android application ID `com.roadconquest.app`, internal version code **97**, and GitHub tag `release-v1.0`. Earlier development builds used other tags; these remain in GitHub history. Google Play permanently reserves uploaded version codes, even in testing tracks, so confirm 97 is unused before uploading. The app shows its exact version in Settings → Help & about.
 
 ## Explore
 
