@@ -1037,7 +1037,7 @@ class ProgressionRepositoryTest {
                     candidate.latitude, candidate.longitude)
             )))
         }
-        assertEquals(originalPoints + 200L, progression.snapshot().balance)
+        assertEquals(originalPoints + 2 * PlaceKind.TOWN.rewardPoints, progression.snapshot().balance)
     }
 
     @Test fun aFreshTownCandidateRetainsTheRealFixAtMunicipalBoundaries() {
