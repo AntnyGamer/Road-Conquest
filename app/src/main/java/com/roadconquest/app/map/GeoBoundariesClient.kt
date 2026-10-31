@@ -58,6 +58,7 @@ class GeoBoundariesClient(private val loadJson: (String, Int) -> JSONObject = ::
             val features = data.getJSONArray("features")
             val expectedName = place.displayName.trim()
             var geometry: JSONObject? = null
+            var selectedArea = 0.0
             for (i in 0 until features.length()) {
                 val feature = features.optJSONObject(i) ?: continue
                 val name = feature.optJSONObject("properties")?.optString("shapeName")?.trim() ?: continue
@@ -67,13 +68,14 @@ class GeoBoundariesClient(private val loadJson: (String, Int) -> JSONObject = ::
                 if ((type != "Polygon" && type != "MultiPolygon") ||
                     (containment && !PlaceGeometry.contains(candidate, place.latitude, place.longitude))
                 ) continue
-                if (geometry != null) return null // Still reject ambiguous multiple matches.
+                val area = PlaceOverlayClient.areaSquareKilometers(candidate)
+                if (!area.isFinite() || area <= 0.0) continue
+                if (geometry != null) return null // Still reject ambiguous valid matches.
                 geometry = candidate
+                selectedArea = area
             }
             val selected = geometry ?: return null
-            val area = PlaceOverlayClient.areaSquareKilometers(selected)
-            if (!area.isFinite() || area <= 0) return null
-            return PlaceOverlayData(place.key, place.displayName, place.kind, null, area, selected.toString())
+            return PlaceOverlayData(place.key, place.displayName, place.kind, null, selectedArea, selected.toString())
         }
         private fun readJson(raw: String, limit: Int): JSONObject {
             var url = raw
