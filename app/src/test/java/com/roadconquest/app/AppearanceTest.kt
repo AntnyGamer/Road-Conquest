@@ -121,6 +121,10 @@ class AppearanceTest {
             assertTrue(activity.findViewById<Button>(R.id.distanceUnitsButton).text.contains("Kilometers"))
             val mapCategory = activity.findViewById<android.widget.LinearLayout>(R.id.mapSettingsCard)
             val trackingCategory = activity.findViewById<android.widget.LinearLayout>(R.id.trackingSettingsCard)
+            val fog = mapCategory.findViewById<View>(R.id.fogSwitch)
+            assertNotNull(fog)
+            assertTrue("Fog belongs first in Appearance", mapCategory.indexOfChild(fog) <
+                mapCategory.indexOfChild(mapCategory.findViewById(R.id.mapStyleButton)))
             assertNotNull(mapCategory.findViewById<View>(R.id.showTownMedalsSwitch))
             assertNotNull(mapCategory.findViewById<View>(R.id.autoFollowCarSwitch))
             assertNotNull(mapCategory.findViewById<View>(R.id.distanceUnitsButton))
@@ -268,17 +272,18 @@ class AppearanceTest {
         } finally { controller.destroy() }
     }
 
-    @Test fun mapSettingsGearTintChangesWithTheSelectedAppearance() {
+    @Test fun mapSettingsGearMatchesOtherMapControlsAcrossThemes() {
         val app = RuntimeEnvironment.getApplication()
-        for ((theme, attribute) in listOf(
-            UiTheme.LIGHT to R.attr.rcTextPrimary,
-            UiTheme.DARK to R.attr.rcAccent,
-            UiTheme.SYSTEM to R.attr.rcTextSecondary
+        for ((theme, gold) in listOf(
+            UiTheme.LIGHT to false, UiTheme.DARK to false,
+            UiTheme.SYSTEM to false, UiTheme.DARK to true
         )) {
             Prefs.setUiTheme(app, theme)
-            val context = ContextThemeWrapper(Appearance.wrap(app), R.style.Theme_RoadConquest)
-            assertEquals(Appearance.color(context, attribute), Appearance.mapSettingsIconColor(context))
+            Prefs.setGoldUiEnabled(app, gold)
+            val context = ContextThemeWrapper(Appearance.wrap(app), Appearance.themeRes(app))
+            assertEquals(Appearance.color(context, R.attr.rcTextPrimary), Appearance.mapSettingsIconColor(context))
         }
+        Prefs.setGoldUiEnabled(app, false)
     }
 
     @Test fun privacyPageOpensFromSettingsWithoutAThirdDeleteButton() {
