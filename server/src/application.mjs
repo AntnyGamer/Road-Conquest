@@ -293,6 +293,20 @@ async function handle(req, res) {
   if (req.method === "GET" && url.pathname === "/v1/backups") {
     return send(res, 200, backups.status()); // Public verification keys do not wake the database.
   }
+  // Portable backups use a stable, domain-separated per-account secret instead
+  // of Google Play licensing. No GPS archive or backup bytes reach the service.
+  // A different Road Conquest account cannot recover another account's key.
+  if (req.method === "GET" && url.pathname === "/v1/backups/account-key") {
+    if (!bearerToken(req)) return send(res, 401, { error: "Sign in to use secure backups." });
+    const access = await rateLimitedUser(req, "backup-key-ip", 60, 60_000);
+    if (!access.allowed) return send(res, 429, { error: "Try again later." });
+    if (!access.user) return send(res, 401, { error: "Sign in to use secure backups." });
+    const key = createHmac("sha256", PEPPER)
+      .update("RoadConquestAccountBackup/v1\0", "utf8")
+      .update(String(access.user.id), "utf8")
+      .digest("base64url");
+    return send(res, 200, { key });
+  }
 
   const ip = clientIp(req);
   if (req.method === "POST" && url.pathname === "/v1/backups/sign") {
