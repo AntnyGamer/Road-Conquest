@@ -1,4 +1,4 @@
-# Road Conquest 1.1
+# Road Conquest Release 1.0
 
 Road Conquest remembers the roads you drive and the places you visit, revealing them through a
 cloud-textured fog map.
@@ -7,9 +7,9 @@ cloud-textured fog map.
 [Source and issues](https://github.com/AntnyGamer/Road-Conquest) ·
 [GNU AGPL v3 license](LICENSE)
 
-Version 1.1 rebalances newly earned points, improves exploration statistics, boundary presentation and settings, and avoids unnecessary settings-screen work. See [release notes](RELEASE_NOTES.md).
+**Release 1.0** updates the previous 1.1 build with improved recovery of historic town visits, cleaner map controls, harder and lower-reward town badges, and small local performance simplifications. See [current release notes](RELEASE_NOTES.md).
 
-Version 1.0 added town completion medals, 30 achievements, searchable settings, and further reliability and performance improvements. Bronze unlocks at 25%, silver at 50%, and gold at 100% of town area explored through map tiles. See [release notes](RELEASE_NOTES.md) and [town completion details](TOWN_COMPLETION.md).
+The previously published 1.0 build (code 95) introduced town completion medals, 30 achievements and searchable settings. Bronze unlocks at 25%, silver at 50%, and gold at 100% of town area explored through map tiles. See [town completion details](TOWN_COMPLETION.md).
 
 Beta 67 aligns the walking marker with driving capture, completes a final matching pass when tracking stops, restores VIP reliably, respects provider recovery delays, refreshes Trips after background drives, and resumes notification-paused tracking from secondary screens. The deployed account service accepts Play version codes 90 and newer. See [release notes](RELEASE_NOTES.md).
 
@@ -51,7 +51,7 @@ Android 12 or newer is required. Download the signed APK from Releases for direc
 The GitHub APK uses the permanent upload key and updates compatible GitHub-installed betas.
 For an app installed through Google Play, update through Play instead: Play uses its separate
 app-signing key. Do not uninstall or clear app data to work around a signature error.
-Do not change installation channels without a compatible restorable backup. The new 1.1 password-free ZIP is an export-only archive and cannot be imported; previously authenticated restore formats remain supported.
+Do not change installation channels without a compatible restorable backup. Password-free ZIP exports are archive-only and cannot be imported; previously authenticated restore formats remain supported.
 For Google Play, download the **signed** `RoadConquest-<version>.aab` from the [GitHub Releases](https://github.com/AntnyGamer/Road-Conquest/releases) page, not the unsigned intermediate from GitHub Actions. The Actions artifact is named `android-build-inputs-unsigned` and contains `app-release-UNSIGNED-DO-NOT-UPLOAD.aab`, which Google Play cannot accept. Each release also includes the Android Studio project and SHA-256 checksums.
 
 If Play still reports an invalid signature for the **signed release** bundle, compare the SHA-256 fingerprint under Play Console → Test and release → App integrity → **Upload key certificate** (not the separate Google Play **App signing key certificate**) with the release upload key:
@@ -64,12 +64,13 @@ Grant Precise location. For automatic background tracking, choose Allow all the 
 location settings and allow background battery use. Settings includes shortcuts to the relevant
 Android screens. Allow notifications to see the tracking notification and its Stop tracking control.
 
-The current release builds **1.1** with Android application ID
-`com.roadconquest.app` and internal version code **96**. Release 1.0 used code 95; Beta 68 used code 94, Beta 67 used code 93, Beta 66 used code 92, Beta 65 used code 91,
+The current **Release 1.0** builds with Android application ID
+`com.roadconquest.app` and internal version code **97**. The earlier 1.1 release used code 96 and the earlier 1.0 build used code 95; Beta 68 used code 94, Beta 67 used code 93, Beta 66 used code 92, Beta 65 used code 91,
 Beta 64 used code 90, Beta 63 used code 89 and Beta 62 used code 88.
 Google Play permanently reserves uploaded version codes, including drafts and
-testing tracks. Before uploading a **signed 1.1 release bundle**, confirm
-that code 96 is still available in Play Console. The unsigned CI bundle cannot be uploaded.
+testing tracks. Before uploading the signed **Release 1.0** bundle, confirm
+that code 97 is still available in Play Console. The unsigned CI bundle cannot be uploaded.
+The current GitHub release uses tag `release-v1.0` so the historical `v1.0` and `v1.1` tags stay unchanged.
 Do not confuse a locally tested development build with an already-published signed release.
 The app shows its exact version in Settings → Help & about. Treat the application ID as permanent once
 the Google Play listing is created; changing it later would create a different app.
@@ -223,8 +224,8 @@ Configure these repository secrets from the private signing backup:
 - `ROADCONQUEST_RELEASE_STORE_PASSWORD`
 - `ROADCONQUEST_RELEASE_KEY_PASSWORD`
 
-Keep the signing backup outside the repository and release assets. Each release needs a new
-`versionName` and increasing `versionCode`; two-part and three-part release versions are supported.
+Keep the signing backup outside the repository and release assets. Each released build needs an
+unused increasing `versionCode` and a distinct GitHub tag; two-part and three-part numeric Android version names are supported.
 
 Override the account endpoint with the Gradle property
 `ROADCONQUEST_ACCOUNT_API_URL=https://accounts.example.com`. Local matching recognizes repeat visits to previously verified roads on-device and sends other matching
