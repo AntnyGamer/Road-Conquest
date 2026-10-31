@@ -57,7 +57,6 @@ data class ProgressionSnapshot(
     val states: Long,
     val countries: Long,
     val adsWatched: Long,
-    val lowestBatteryPercent: Int,
     val purchasedItems: Set<String>,
     val rewardedAchievements: Set<String>,
     /** Unique one-mile fog tiles stored in explored_grid; separate from leaderboard cells. */
@@ -524,16 +523,6 @@ class ProgressionRepository(context: Context) {
             scheduleCandidateRetry(dbHelper.writableDatabase, candidate, nowMillis)
         }
 
-    fun recordBatteryPercent(percent: Int): Boolean = synchronized(dbHelper.historyLock) {
-        if (!isCurrentHistory()) return@synchronized false
-        if (percent !in 0..100) return@synchronized false
-        val db = dbHelper.writableDatabase
-        val previous = counterOrNull(db, COUNTER_LOWEST_BATTERY) ?: 101L
-        if (percent >= previous) return@synchronized false
-        putCounter(db, COUNTER_LOWEST_BATTERY, percent.toLong())
-        true
-    }
-
     /** Credit points and the completed-view counter together, once per SDK reward receipt. */
     fun recordCompletedAd(receiptId: String, points: Long): Boolean = synchronized(dbHelper.historyLock) {
         require(receiptId.isNotBlank() && points > 0L)
@@ -658,14 +647,13 @@ class ProgressionRepository(context: Context) {
             }
         }
 
-        // Fetch the three progression counters with one tiny indexed query instead of opening
-        // three separate cursors every time the map/UI refreshes its progression snapshot.
-        val counters = HashMap<String, Long>(3)
+        // Fetch progression counters together instead of opening separate cursors.
+        val counters = HashMap<String, Long>(2)
         db.query(
             "progression_counters",
             arrayOf("counter_key", "value"),
-            "counter_key IN (?,?,?)",
-            arrayOf(COUNTER_REWARDED_ROADS, COUNTER_ADS_WATCHED, COUNTER_LOWEST_BATTERY),
+            "counter_key IN (?,?)",
+            arrayOf(COUNTER_REWARDED_ROADS, COUNTER_ADS_WATCHED),
             null, null, null
         ).use { cursor ->
             while (cursor.moveToNext()) counters[cursor.getString(0)] = cursor.getLong(1)
@@ -697,8 +685,6 @@ class ProgressionRepository(context: Context) {
             exploredStates = explored[PlaceKind.STATE] ?: 0L,
             exploredCountries = explored[PlaceKind.COUNTRY] ?: 0L,
             adsWatched = counters[COUNTER_ADS_WATCHED] ?: 0L,
-            lowestBatteryPercent = (counters[COUNTER_LOWEST_BATTERY] ?: 101L)
-                .toInt().coerceIn(0, 101),
             purchasedItems = purchases,
             rewardedAchievements = rewardedAchievements,
             rewardedAchievementPoints = rewardedAchievementPoints
@@ -1114,6 +1100,5 @@ class ProgressionRepository(context: Context) {
         private const val BASELINE_CANDIDATE_Y = Long.MIN_VALUE
         private const val COUNTER_REWARDED_ROADS = "rewarded_roads"
         private const val COUNTER_ADS_WATCHED = "ads_watched"
-        private const val COUNTER_LOWEST_BATTERY = "lowest_battery_percent"
     }
 }
