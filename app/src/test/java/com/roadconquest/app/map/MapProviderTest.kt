@@ -154,6 +154,10 @@ class MapProviderTest {
         val data = JSONObject("""{"type":"FeatureCollection","features":[{"properties":{"shapeName":"Test Region"},"geometry":{"type":"Polygon","coordinates":[[[0,0],[2,0],[2,2],[0,2],[0,0]]]}}]}""")
         val state = PlaceDiscovery(PlaceKind.STATE,"gb|test region","Test Region","","United Kingdom",1L,1.0,1.0)
         assertNotNull(GeoBoundariesClient.parse(state, data, true))
+        val adm0 = JSONObject("""{"type":"FeatureCollection","features":[{"geometry":{"type":"Polygon","coordinates":[[[0,0],[2,0],[2,2],[0,2],[0,0]]]}}]}""")
+        assertNotNull("Country geometry does not require region-name metadata",
+            GeoBoundariesClient.parse(state.copy(kind = PlaceKind.COUNTRY), adm0, true))
+        assertNull("Regions still require matching names", GeoBoundariesClient.parse(state, adm0, true))
         assertNull(GeoBoundariesClient.parse(state.copy(displayName="Wrong Region"), data, true))
         assertNull(GeoBoundariesClient.parse(state.copy(latitude=5.0), data, true))
         assertNull(GeoBoundariesClient.parse(state.copy(kind=PlaceKind.TOWN), data, true))
