@@ -78,7 +78,10 @@ class ProgressionResourceTest {
         val method = ProgressionRepository::class.java.getDeclaredMethod("baselineComplete", SQLiteDatabase::class.java)
             .apply { isAccessible = true }
         // Each kind is absent, resolved, marked missing, or both (4^3 states).
-        for (state in 0 until 64) {
+        // Keep 64 independent fixture states but avoid 64 separate disk commits.
+        db.beginTransaction()
+        try {
+            for (state in 0 until 64) {
             db.delete("progression_counters", null, null)
             for ((index, kind) in PlaceKind.entries.withIndex()) {
                 val flags = (state shr (index * 2)) and 3
@@ -93,6 +96,10 @@ class ProgressionResourceTest {
                 ).use { it.moveToFirst() }
             }
             assertEquals("state=$state", original, method.invoke(repository, db))
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
         }
     }
 
@@ -110,8 +117,9 @@ class ProgressionResourceTest {
         val method = ProgressionRepository::class.java.getDeclaredMethod("municipalityIdentity", String::class.java)
             .apply { isAccessible = true }
         val kinds = listOf("township", "borough", "municipality", "village", "town", "city")
+        val whitespace = Regex("\\s+")
         fun original(value: String): Pair<String, String> {
-            val text = value.trim().lowercase(Locale.ROOT).replace(Regex("\\s+"), " ").removePrefix("the ")
+            val text = value.trim().lowercase(Locale.ROOT).replace(whitespace, " ").removePrefix("the ")
             for (kind in kinds) {
                 val prefix = "$kind of "
                 if (text.startsWith(prefix)) return text.removePrefix(prefix) to kind

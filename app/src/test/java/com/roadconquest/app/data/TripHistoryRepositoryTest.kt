@@ -20,15 +20,21 @@ class TripHistoryRepositoryTest {
                 VALUES (40,-74,?,?,0,?,?)""", arrayOf<Any>(accuracy,speed,start + index * 3_000,
                     if (index == 0) 0.0 else meters))
         }
-        insert(1_000_000, 0.0, 6.0, 25.0)
-        insert(3_000_000, 1.4, 5.0, 45.0)
-        insert(5_000_000, 8.0, 40.0, 30.0)
-        insert(7_000_000, 8.0, 3.0, 12.0)
-        insert(9_000_000, 8.0, 3.0, 0.0)
-        insert(11_000_000, 0.0, 3.0, 0.0)
-        // Fast walking/running may exceed the live driving filter's basic
-        // speed threshold. It must not manufacture another 0.0-mile trip.
-        insert(13_000_000, 2.6, 3.0, 0.0)
+        db.beginTransaction()
+        try {
+            insert(1_000_000, 0.0, 6.0, 25.0)
+            insert(3_000_000, 1.4, 5.0, 45.0)
+            insert(5_000_000, 8.0, 40.0, 30.0)
+            insert(7_000_000, 8.0, 3.0, 12.0)
+            insert(9_000_000, 8.0, 3.0, 0.0)
+            insert(11_000_000, 0.0, 3.0, 0.0)
+            // Fast walking/running may exceed the live driving filter's basic
+            // speed threshold. It must not manufacture another 0.0-mile trip.
+            insert(13_000_000, 2.6, 3.0, 0.0)
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
         val trips = TripHistoryRepository(context).recentTrips(2)
         // Legacy driving history can have no computed distance. Preserve its
         // replay/export when speed evidence exists, even with a zero total.
