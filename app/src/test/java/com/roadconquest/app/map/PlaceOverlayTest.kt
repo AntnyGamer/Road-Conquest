@@ -436,6 +436,27 @@ class PlaceOverlayTest {
         }
     }
 
+    @Test fun futureDatedNegativeCacheCannotBlockBoundaryRetries() {
+        val context = RuntimeEnvironment.getApplication()
+        val place = PlaceDiscovery(PlaceKind.COUNTRY, "zz", "Example", "", "", 1L, 1.0, 1.0)
+        PlaceOverlayCache.clear(context)
+        try {
+            val digest = MessageDigest.getInstance("SHA-256")
+                .digest("${place.kind.name}|${place.key}".toByteArray(Charsets.UTF_8))
+                .joinToString("") { "%02x".format(Locale.US, it.toInt() and 0xff) }
+            val directory = File(context.filesDir, "place-overlays-v3")
+            assertTrue(directory.mkdirs() || directory.isDirectory)
+            val file = File(directory, "$digest.json")
+            file.writeText(JSONObject().put("found", false)
+                .put("fetched_at", System.currentTimeMillis() + 86_400_000L).toString())
+            assertFalse(PlaceOverlayCache.read(context, place).cached)
+            assertFalse(file.exists())
+            assertTrue(PlaceOverlayCache.write(context, place, null))
+            assertTrue("Fresh negative cache still prevents duplicate requests",
+                PlaceOverlayCache.read(context, place).cached)
+        } finally { PlaceOverlayCache.clear(context) }
+    }
+
     @Test fun staleFetchCannotRecreateOverlayCacheAfterDeletion() {
         val context = RuntimeEnvironment.getApplication()
         val place = PlaceDiscovery(
