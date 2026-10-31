@@ -29,7 +29,7 @@ internal object UnitedStatesMunicipalityAtPoint {
             connectTimeout = 8_000
             readTimeout = 20_000
             setRequestProperty("User-Agent",
-                "RoadConquest/${BuildConfig.VERSION_NAME} (+https://github.com/AntnyGamer/RoadConquest-Beta)")
+                "RoadConquest/${BuildConfig.VERSION_NAME} (+https://github.com/AntnyGamer/Road-Conquest)")
             if (geoJson) setRequestProperty("Accept", "application/geo+json, application/json")
         }
 
