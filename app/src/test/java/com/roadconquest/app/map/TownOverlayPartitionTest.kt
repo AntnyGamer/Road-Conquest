@@ -22,6 +22,8 @@ class TownOverlayPartitionTest {
             .copy(kind = PlaceKind.STATE)
         assertTrue(TownOverlayPartition.safeForPlanarRegionPartition(listOf(ordinary)))
         assertFalse(TownOverlayPartition.safeForPlanarRegionPartition(listOf(ordinary, crossing)))
+        assertEquals("Wide bounds cannot cull date-line towns", null,
+            OverlayViewport.ofGeometry(crossing.geometryJson))
         assertFalse(TownOverlayPartition.safeForPlanarRegionPartition(listOf(ordinary,
             crossing.copy(geometryJson = "invalid"))))
     }
