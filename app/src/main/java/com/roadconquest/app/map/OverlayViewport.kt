@@ -6,8 +6,8 @@ import org.json.JSONObject
 /**
  * Conservative viewport prefilter for town overlays. A missing/odd envelope
  * means "include", never silently hide a discovered town or its border.
- * Longitudes outside the ordinary world interval are kept unfiltered so
- * dateline/world-wrap polygons cannot be accidentally clipped.
+ * Longitudes outside the ordinary world interval or spanning more than half
+ * the world are kept unfiltered so date-line polygons cannot be hidden.
  */
 internal data class OverlayViewport(
     val west: Double, val east: Double, val south: Double, val north: Double
@@ -68,7 +68,8 @@ internal data class OverlayViewport(
             }
             walk(coordinates, 0)
             if (!west.isFinite() || !east.isFinite() || !south.isFinite() || !north.isFinite() ||
-                west < -180.0 || east > 180.0 || south < -90.0 || north > 90.0
+                west < -180.0 || east > 180.0 || east - west > 180.0 ||
+                south < -90.0 || north > 90.0
             ) null else OverlayViewport(west, east, south, north)
         }.getOrNull()
     }
