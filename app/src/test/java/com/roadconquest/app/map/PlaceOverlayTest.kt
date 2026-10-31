@@ -75,6 +75,27 @@ class PlaceOverlayTest {
         } finally { PlaceOverlayCache.clear(context) }
     }
 
+    @Test fun interruptedBoundaryCacheWritesDoNotLeavePermanentNewFiles() {
+        val context = RuntimeEnvironment.getApplication()
+        PlaceOverlayCache.clear(context)
+        try {
+            val place = PlaceDiscovery(PlaceKind.COUNTRY, "us", "United States", "", "", 1L, 40.0, -74.0)
+            val polygon = """{"type":"Polygon","coordinates":[[[-75,39],[-73,39],[-73,41],[-75,41],[-75,39]]]}"""
+            assertTrue(PlaceOverlayCache.write(context, place,
+                PlaceOverlayData(place.key, place.displayName, place.kind, null, 100.0, polygon)))
+            val directory = File(context.filesDir, "place-overlays-v3")
+            val leftover = File(directory, "interrupted.json.new")
+            leftover.writeText("abandoned write".repeat(500))
+            val recovery = File(directory, "unrelated.json.bak")
+            recovery.writeText("previous committed data")
+            PlaceOverlayCache.trimForTest(context, Long.MAX_VALUE, Int.MAX_VALUE)
+            assertFalse("An unfinished AtomicFile write is never a valid cache", leftover.exists())
+            assertTrue("A .bak may be the last committed version", recovery.exists())
+            assertEquals(polygon, PlaceOverlayCache.read(context, place).data?.geometryJson)
+            assertCacheAccountingMatchesDisk(context)
+        } finally { PlaceOverlayCache.clear(context) }
+    }
+
     @Test fun legacyStateCacheIsReclaimedWithoutDeletingCountryOrNewStateData() {
         val context = RuntimeEnvironment.getApplication()
         PlaceOverlayCache.clear(context)
