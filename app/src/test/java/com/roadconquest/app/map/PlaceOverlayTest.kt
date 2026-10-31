@@ -426,6 +426,12 @@ class PlaceOverlayTest {
             val magic = file.inputStream().use { byteArrayOf(it.read().toByte(), it.read().toByte()) }
             assertEquals(0x1f, magic[0].toInt() and 0xff)
             assertEquals(0x8b, magic[1].toInt() and 0xff)
+            val saved = java.util.zip.GZIPInputStream(file.inputStream()).bufferedReader().use {
+                JSONObject(it.readText())
+            }
+            assertTrue(saved.getBoolean("found"))
+            assertFalse("Successful polygons do not need the negative-cache expiry timestamp",
+                saved.has("fetched_at"))
             assertEquals(JSONObject(data.geometryJson).toString(),
                 PlaceOverlayCache.readVerifiedForDiscovery(context, place)?.geometryJson)
 
@@ -514,6 +520,11 @@ class PlaceOverlayTest {
             assertFalse(PlaceOverlayCache.read(context, place).cached)
             assertFalse(file.exists())
             assertTrue(PlaceOverlayCache.write(context, place, null))
+            val negative = java.util.zip.GZIPInputStream(file.inputStream()).bufferedReader().use {
+                JSONObject(it.readText())
+            }
+            assertFalse(negative.getBoolean("found"))
+            assertTrue("Negative entries still require their expiry timestamp", negative.has("fetched_at"))
             assertTrue("Fresh negative cache still prevents duplicate requests",
                 PlaceOverlayCache.read(context, place).cached)
         } finally { PlaceOverlayCache.clear(context) }
