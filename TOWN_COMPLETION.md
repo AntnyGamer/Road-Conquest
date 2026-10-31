@@ -10,6 +10,8 @@ The town overlay displays a compact medal near the town's interior center and a 
 
 Calculations use equal-area latitude coordinates, original boundaries, and local saved tiles. Cached boundaries are checked in bounded foreground batches even when a different overlay is selected. No extra GPS listener, provider request or backend deployment is added. Existing explored tiles qualify on upgrade. Large histories may take several foreground progress refreshes to finish the initial medal backfill.
 
+Town-badge achievements now require 5/20/75 bronze towns, 3/15/50 silver towns, and 2/8/20/50 gold towns, with smaller one-time rewards. The achievement IDs are unchanged for backup and reward-ledger compatibility, and previously earned achievements retain their recorded points. This does not change the underlying bronze (25%), silver (50%) or gold (100%) medal thresholds.
+
 Earned tiers remain owned if a later boundary correction changes the current percentage. Each town counts once per attained tier, with silver/gold towns also qualifying for lower-tier achievements. The existing reward ledger awards achievement points once. Town tier counters, earned achievements and their exact historical point awards travel through full backups and are removed by local-data deletion. They never grant verified or weekly driving credit.
 
 The 30 new achievements cover intermediate and long-term road, tile, distance and place milestones, including 10 town-medal achievements. Existing achievement IDs and payouts are preserved.
