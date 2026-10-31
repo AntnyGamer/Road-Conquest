@@ -78,21 +78,28 @@ class ProgressionResourceTest {
         val method = ProgressionRepository::class.java.getDeclaredMethod("baselineComplete", SQLiteDatabase::class.java)
             .apply { isAccessible = true }
         // Each kind is absent, resolved, marked missing, or both (4^3 states).
-        for (state in 0 until 64) {
-            db.delete("progression_counters", null, null)
-            for ((index, kind) in PlaceKind.entries.withIndex()) {
-                val flags = (state shr (index * 2)) and 3
-                val name = kind.name.lowercase()
-                if (flags and 1 != 0) db.execSQL("INSERT INTO progression_counters VALUES (?, 1)", arrayOf("baseline:$name:fixture"))
-                if (flags and 2 != 0) db.execSQL("INSERT INTO progression_counters VALUES (?, 1)", arrayOf("baseline_missing:$name"))
+        // Keep 64 independent fixture states but avoid 64 separate disk commits.
+        db.beginTransaction()
+        try {
+            for (state in 0 until 64) {
+                db.delete("progression_counters", null, null)
+                for ((index, kind) in PlaceKind.entries.withIndex()) {
+                    val flags = (state shr (index * 2)) and 3
+                    val name = kind.name.lowercase()
+                    if (flags and 1 != 0) db.execSQL("INSERT INTO progression_counters VALUES (?, 1)", arrayOf("baseline:$name:fixture"))
+                    if (flags and 2 != 0) db.execSQL("INSERT INTO progression_counters VALUES (?, 1)", arrayOf("baseline_missing:$name"))
+                }
+                val original = PlaceKind.entries.all { kind ->
+                    db.rawQuery(
+                        "SELECT 1 FROM progression_counters WHERE counter_key LIKE ? OR counter_key = ? LIMIT 1",
+                        arrayOf("baseline:${kind.name.lowercase()}:%", "baseline_missing:${kind.name.lowercase()}")
+                    ).use { it.moveToFirst() }
+                }
+                assertEquals("state=$state", original, method.invoke(repository, db))
             }
-            val original = PlaceKind.entries.all { kind ->
-                db.rawQuery(
-                    "SELECT 1 FROM progression_counters WHERE counter_key LIKE ? OR counter_key = ? LIMIT 1",
-                    arrayOf("baseline:${kind.name.lowercase()}:%", "baseline_missing:${kind.name.lowercase()}")
-                ).use { it.moveToFirst() }
-            }
-            assertEquals("state=$state", original, method.invoke(repository, db))
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
         }
     }
 
@@ -103,15 +110,16 @@ class ProgressionResourceTest {
             assertEquals(1, repository.resolveCandidate(candidate.copy(cellX = 123, cellY = 456),
                 listOf(discoveries().last().copy(key = "ca|ontario|other", displayName = "Other", latitude = 44.0))))
         })
-        assertEquals(100L, repository.snapshot().balance)
+        assertEquals(35L, repository.snapshot().balance)
     }
 
     @Test fun municipalNamesMatchOriginalIncludingOverlappingAndTruncatedKinds() {
         val method = ProgressionRepository::class.java.getDeclaredMethod("municipalityIdentity", String::class.java)
             .apply { isAccessible = true }
         val kinds = listOf("township", "borough", "municipality", "village", "town", "city")
+        val whitespace = Regex("\\s+")
         fun original(value: String): Pair<String, String> {
-            val text = value.trim().lowercase(Locale.ROOT).replace(Regex("\\s+"), " ").removePrefix("the ")
+            val text = value.trim().lowercase(Locale.ROOT).replace(whitespace, " ").removePrefix("the ")
             for (kind in kinds) {
                 val prefix = "$kind of "
                 if (text.startsWith(prefix)) return text.removePrefix(prefix) to kind

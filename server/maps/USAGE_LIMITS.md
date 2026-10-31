@@ -39,8 +39,9 @@ Sources checked October 19: [Geoapify credits](https://www.geoapify.com/pricing-
 [Play Integrity limits](https://developer.android.com/google/play/integrity/setup#increase-daily).
 Published allowances are not a readout of the project's actual remaining usage.
 Other applications/services using the same accounts consume their allowances.
+See [the region and road-matching accuracy review](ACCURACY_REVIEW.md) for validation limits.
 
-The [additional quota review](../QUOTA_REVIEW.md) reduces first-day metered SQL
+The October quota improvements reduce first-day metered SQL
 reads from 68,814 to 37,622 and writes from 45,624 to 44,814 for the same 6,400
 local workerd matching operations. It also reduces 20 overlapping exact verified
 submissions from 20 Google decodes to one, scoped to one authenticated operation
@@ -103,7 +104,6 @@ missing, unmatched, stale or ambiguous context still requires the original
 request. A 100-fix stream fixture avoids two online matcher invocations while
 preserving all 104 records and one verified road. Provider replies are stubbed;
 these counts are not added as another fleet capacity multiplier.
-See the [accuracy review](ACCURACY_REVIEW.md) for the previous changes as well.
 
 ## Reproducible hours and daily-driver planning
 

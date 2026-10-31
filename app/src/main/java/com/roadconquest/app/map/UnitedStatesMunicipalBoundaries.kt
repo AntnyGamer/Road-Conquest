@@ -201,7 +201,7 @@ internal object UnitedStatesMunicipalBoundaries {
                 readTimeout = 20_000
                 requestMethod = "GET"
                 setRequestProperty("User-Agent",
-                    "RoadConquest/${BuildConfig.VERSION_NAME} (+https://github.com/AntnyGamer/RoadConquest-Beta)")
+                    "RoadConquest/${BuildConfig.VERSION_NAME} (+https://github.com/AntnyGamer/Road-Conquest)")
                 setRequestProperty("Accept", "application/geo+json, application/json")
             }
             try {

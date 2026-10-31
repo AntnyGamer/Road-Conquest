@@ -31,6 +31,10 @@ internal object TownOverlayPartition {
 
     private val factory = GeometryFactory()
 
+    /** JTS is planar: a region spanning the date line must keep its source geometry. */
+    internal fun safeForPlanarRegionPartition(data: List<PlaceOverlayData>): Boolean =
+        data.all { OverlayViewport.ofGeometry(it.geometryJson) != null }
+
     fun render(data: List<PlaceOverlayData>): Result = render(data, officialUs = false)
 
     /**

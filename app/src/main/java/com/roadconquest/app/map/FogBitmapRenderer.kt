@@ -26,7 +26,8 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
             roads: List<RoadRecord>,
             visitWindows: Map<String, List<Pair<Long, Long>>> = emptyMap(),
             hasRecordedDriving: ((Double, Double, Double, Double, Long, Long) -> Boolean)? = null,
-            hasRecordedTurn: ((Double, Double, Double, Double, Double, Double, Long, Long) -> Boolean)? = null
+            hasRecordedTurn: ((Double, Double, Double, Double, Double, Double, Long, Long) -> Boolean)? = null,
+            requireMatchedConnectorGeometry: Boolean = false
         ): OverlayRoads {
             if (roads.isEmpty()) return EMPTY
             val segments = ArrayList<Segment>(roads.size)
@@ -34,6 +35,7 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
             val segmentLastTimes = ArrayList<Long>(roads.size)
             val segmentNames = ArrayList<String>(roads.size)
             val segmentVisits = if (visitWindows.isEmpty()) null else ArrayList<List<Pair<Long, Long>>>(roads.size)
+            val geometryByName = if (requireMatchedConnectorGeometry) HashMap<String, MutableList<Int>>() else null
             val nodes = ArrayList<Node>(roads.size * 2)
             val buckets = HashMap<Cell, MutableList<Int>>(roads.size * 2)
             val lookupCell = Cell(0, 0, 0)
@@ -82,7 +84,13 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
                 } else {
                     assignNode(endLatitude, endLongitude, startNode)
                 }
+                val segmentIndex = segments.size
                 segments += Segment(coordinates, startNode, endNode)
+                if (geometryByName != null && roadName.isNotBlank()) {
+                    geometryByName.getOrPut(roadName.trim().lowercase(java.util.Locale.ROOT)) {
+                        ArrayList(2)
+                    }.add(segmentIndex)
+                }
                 segmentFirstTimes += firstUnlockedAt
                 segmentLastTimes += lastDrivenAt
                 segmentNames += roadName
@@ -148,7 +156,8 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
             // Protect the original first-unlock connections before considering other visits.
             // Mixing later visits into this pass could make a previously valid turn ambiguous.
             appendSupportedJunctions(segments, segmentFirstTimes, segmentLastTimes, nodes, degree, segmentNames,
-                hasRecordedDriving = hasRecordedDriving, hasRecordedTurn = hasRecordedTurn)
+                hasRecordedDriving = hasRecordedDriving, hasRecordedTurn = hasRecordedTurn,
+                    geometryByName = geometryByName)
             val occupied = HashSet<Int>()
             fun reserveConnectors(since: Int) {
                 for (index in since until segments.size) {
@@ -162,13 +171,15 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
                 // Add only unoccupied endpoints; never displace the original visible turns.
                 appendSupportedJunctions(segments, segmentFirstTimes, segmentLastTimes, nodes,
                     degree, segmentNames, segmentVisits, occupied,
-                    hasRecordedDriving = hasRecordedDriving, hasRecordedTurn = hasRecordedTurn)
+                    hasRecordedDriving = hasRecordedDriving, hasRecordedTurn = hasRecordedTurn,
+                    geometryByName = geometryByName)
             } else {
                 // On larger viewports or if visit retrieval fails, keep the later-drive
                 // fallback without allowing it to erase first-unlock connections.
                 appendSupportedJunctions(segments, segmentFirstTimes, segmentLastTimes, nodes,
                     degree, segmentNames, occupiedNodes = occupied, includeLastTimes = true,
-                    hasRecordedDriving = hasRecordedDriving, hasRecordedTurn = hasRecordedTurn)
+                    hasRecordedDriving = hasRecordedDriving, hasRecordedTurn = hasRecordedTurn,
+                    geometryByName = geometryByName)
             }
             // Give each synthetic segment the same graph-adjacency treatment as actual roads.
             for (index in originalSegmentCount until segments.size) {
@@ -243,7 +254,8 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
             occupiedNodes: Set<Int> = emptySet(),
             includeLastTimes: Boolean = false,
             hasRecordedDriving: ((Double, Double, Double, Double, Long, Long) -> Boolean)? = null,
-            hasRecordedTurn: ((Double, Double, Double, Double, Double, Double, Long, Long) -> Boolean)? = null
+            hasRecordedTurn: ((Double, Double, Double, Double, Double, Double, Long, Long) -> Boolean)? = null,
+            geometryByName: Map<String, List<Int>>? = null
         ) {
             // Both passes inspect the original roads, never the already added connectors.
             val originalSize = firstTimes.size
@@ -371,15 +383,89 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
                 val right = segments[candidate.to]
                 val end = nodes[left.endNode]
                 val start = nodes[right.startNode]
-                segments += Segment(
+                val geometry = if (geometryByName == null) {
                     doubleArrayOf(
                         end.latitude, end.longitude, candidate.bendLatitude, candidate.bendLongitude,
                         start.latitude, start.longitude
-                    ),
-                    left.endNode,
-                    right.startNode
-                )
+                    )
+                } else matchedConnectorShape(
+                    segments, names, geometryByName, candidate.from, candidate.to,
+                    end.latitude, end.longitude, start.latitude, start.longitude
+                ) ?: continue
+                segments += Segment(geometry, left.endNode, right.startNode)
             }
+        }
+
+
+        /** Use only previously saved centerline geometry for estimated connectors on the live map. */
+        private fun matchedConnectorShape(
+            segments: List<Segment>, names: List<String>, byName: Map<String, List<Int>>,
+            fromIndex: Int, toIndex: Int, startLat: Double, startLon: Double,
+            endLat: Double, endLon: Double
+        ): DoubleArray? {
+            val latScale = EARTH_RADIUS_M * PI / 180.0
+            val lonScale = latScale * cos(Math.toRadians((startLat + endLat) / 2.0))
+            if (lonScale < 0.01 || abs(startLon - endLon) > 1.0) return null
+            val direct = hypot((endLat - startLat) * latScale, (endLon - startLon) * lonScale)
+            if (direct > MAX_RECORDED_TURN_DISTANCE_M) return null
+            data class Projection(val edge: Int, val t: Double, val meters: Double, val station: Double)
+            fun project(path: DoubleArray, lat: Double, lon: Double): Projection? {
+                var best: Projection? = null
+                var position = 0.0
+                for (i in 0 until path.size - 2 step 2) {
+                    val dx = (path[i + 3] - path[i + 1]) * lonScale
+                    val dy = (path[i + 2] - path[i]) * latScale
+                    val length2 = dx * dx + dy * dy
+                    val t = if (length2 < 1e-8) 0.0 else (
+                        ((lon - path[i + 1]) * lonScale * dx +
+                            (lat - path[i]) * latScale * dy) / length2
+                    ).coerceIn(0.0, 1.0)
+                    val meters = hypot((lon - path[i + 1]) * lonScale - t * dx,
+                        (lat - path[i]) * latScale - t * dy)
+                    val length = sqrt(length2)
+                    if (best == null || meters < best.meters) {
+                        best = Projection(i, t, meters, position + t * length)
+                    }
+                    position += length
+                }
+                return best
+            }
+            var best: DoubleArray? = null
+            var shortest = Double.POSITIVE_INFINITY
+            val keys = sequenceOf(names[fromIndex], names[toIndex])
+                .filter(String::isNotBlank).map { it.trim().lowercase(java.util.Locale.ROOT) }.distinct()
+            for (key in keys) for (index in byName[key].orEmpty()) {
+                if (index == fromIndex || index == toIndex) continue
+                val path = segments[index].coordinates
+                val a = project(path, startLat, startLon) ?: continue
+                val b = project(path, endLat, endLon) ?: continue
+                if (a.meters > 2.5 || b.meters > 2.5) continue
+                val length = abs(a.station - b.station)
+                if (length < 0.5 || length > direct * 2.0 + 12.0 ||
+                    length > MAX_RECORDED_TURN_DISTANCE_M * 2.0 ||
+                    length >= shortest) continue
+                val points = ArrayList<Double>()
+                fun append(lat: Double, lon: Double) {
+                    if (points.size >= 2 && points[points.size - 2] == lat && points.last() == lon) return
+                    points.add(lat); points.add(lon)
+                }
+                fun appendProjection(p: Projection) {
+                    append(path[p.edge] + (path[p.edge + 2] - path[p.edge]) * p.t,
+                        path[p.edge + 1] + (path[p.edge + 3] - path[p.edge + 1]) * p.t)
+                }
+                append(startLat, startLon)
+                appendProjection(a)
+                if (a.station <= b.station) {
+                    for (i in a.edge + 2..b.edge step 2) append(path[i], path[i + 1])
+                } else {
+                    for (i in a.edge downTo b.edge + 2 step 2) append(path[i], path[i + 1])
+                }
+                appendProjection(b)
+                append(endLat, endLon)
+                best = points.toDoubleArray()
+                shortest = length
+            }
+            return best
         }
 
         private data class JunctionCandidate(

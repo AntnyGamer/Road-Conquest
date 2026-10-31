@@ -20,15 +20,21 @@ class TripHistoryRepositoryTest {
                 VALUES (40,-74,?,?,0,?,?)""", arrayOf<Any>(accuracy,speed,start + index * 3_000,
                     if (index == 0) 0.0 else meters))
         }
-        insert(1_000_000, 0.0, 6.0, 25.0)
-        insert(3_000_000, 1.4, 5.0, 45.0)
-        insert(5_000_000, 8.0, 40.0, 30.0)
-        insert(7_000_000, 8.0, 3.0, 12.0)
-        insert(9_000_000, 8.0, 3.0, 0.0)
-        insert(11_000_000, 0.0, 3.0, 0.0)
-        // Fast walking/running may exceed the live driving filter's basic
-        // speed threshold. It must not manufacture another 0.0-mile trip.
-        insert(13_000_000, 2.6, 3.0, 0.0)
+        db.beginTransaction()
+        try {
+            insert(1_000_000, 0.0, 6.0, 25.0)
+            insert(3_000_000, 1.4, 5.0, 45.0)
+            insert(5_000_000, 8.0, 40.0, 30.0)
+            insert(7_000_000, 8.0, 3.0, 12.0)
+            insert(9_000_000, 8.0, 3.0, 0.0)
+            insert(11_000_000, 0.0, 3.0, 0.0)
+            // Fast walking/running may exceed the live driving filter's basic
+            // speed threshold. It must not manufacture another 0.0-mile trip.
+            insert(13_000_000, 2.6, 3.0, 0.0)
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
         val trips = TripHistoryRepository(context).recentTrips(2)
         // Legacy driving history can have no computed distance. Preserve its
         // replay/export when speed evidence exists, even with a zero total.
@@ -68,9 +74,15 @@ class TripHistoryRepositoryTest {
                 INSERT INTO track_points(latitude,longitude,accuracy_m,speed_mps,bearing_deg,timestamp_ms,distance_m)
                 SELECT 40,-74,3,8,90,?+x*?,0.5 FROM n""", arrayOf<Any>(count-1,start,interval))
         }
-        insert(20, 1_000_000, 1000)
-        insert(3, 10_000_000, 2_000_000) // Three singletons, each separated by a parked stop.
-        insert(20000, 100_000_000, 3000)
+        db.beginTransaction()
+        try {
+            insert(20, 1_000_000, 1000)
+            insert(3, 10_000_000, 2_000_000) // Three singletons, each separated by a parked stop.
+            insert(20000, 100_000_000, 3000)
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
         val history = TripHistoryRepository(context)
         val trips = history.recentTrips(2)
         assertEquals(listOf(20000, 20), trips.map { it.pointCount })
@@ -97,11 +109,17 @@ class TripHistoryRepositoryTest {
         TrackingRepository(context).clearHistory()
         val db = AppDatabase.get(context).writableDatabase
         val times = listOf(1_000_000L, 1_020_000L, 1_060_000L, 1_080_000L, 1_100_000L)
-        times.forEachIndexed { index, time ->
-            db.execSQL(
-                "INSERT INTO track_points(latitude, longitude, accuracy_m, speed_mps, bearing_deg, timestamp_ms) VALUES (?,?,?,?,?,?)",
-                arrayOf<Any>(40.0, -74.0 + index * 0.001, 5.0, 10.0, 0.0, time)
-            )
+        db.beginTransaction()
+        try {
+            times.forEachIndexed { index, time ->
+                db.execSQL(
+                    "INSERT INTO track_points(latitude, longitude, accuracy_m, speed_mps, bearing_deg, timestamp_ms) VALUES (?,?,?,?,?,?)",
+                    arrayOf<Any>(40.0, -74.0 + index * 0.001, 5.0, 10.0, 0.0, time)
+                )
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
         }
 
         val history = TripHistoryRepository(context)

@@ -3,11 +3,11 @@
 The purpose is long-term, optional exploration goals, not requiring extra driving or ad watching.
 
 ## Sources
-- **New road:** 5 points (unchanged; old rewarded-road counters stay valid).
-- **New town/state/country:** 100 / 500 / 1,500 points (unchanged; first discovery only).
-- **Weekly bonuses:** 5 roads = 75, 25 roads = 250, 1 town = 75, 3 towns = 300. Complete as many as naturally fit existing trips. The prior 25-road/3-town IDs and reward values are preserved; new IDs are awarded once per UTC week.
-- **Achievement milestones:** Existing IDs, thresholds and awards remain unchanged. New 250 / 2,500 / 5,000 / 10,000 road and mileage goals, plus intermediate/advanced town, state and country milestones, make longer progression visible without any new GPS work.
-- **Ads:** Unchanged reward callback and milestones; VIP remains ad-free. No ad streaks or penalties for taking a break.
+- **New road:** 2 points. Previously rewarded roads retain their recorded points.
+- **New town/state/country:** 35 / 150 / 500 points (first discovery only). Starting places count as explored, but do not earn rewards or achievement progress.
+- **Weekly bonuses:** 5 roads = 20, 25 roads = 70, 1 town = 25, 3 towns = 80 (195 points maximum per week). Already-awarded amounts remain unchanged. Goals award once per UTC week.
+- **Achievement milestones:** IDs and thresholds are unchanged. Future eligible payouts are approximately half the previous rates, rounded to 5 points. Past awards retain their exact recorded amounts.
+- **Ads:** Per-ad rewards stay as configured and shown by AdMob, but future ad achievement bonuses are smaller. VIP remains ad-free.
 
 ## Shop progression
 - **Early:** 300–650 points for familiar colors and basic customization.
@@ -16,4 +16,4 @@ The purpose is long-term, optional exploration goals, not requiring extra drivin
 - **Starting options:** Classic car, blue car, blue roads and standard UI stay free.
 - Purchases are permanent, not recharged by adjusted prices; all existing catalog IDs and purchased entitlements are preserved.
 
-This is a configuration balance, not a change to GPS tracking, anti-cheat/leaderboards, saved locations, database schema or existing point balances. New achievements can pay retroactively when a qualifying player next syncs. Weekly bonuses are once per challenge per week, including the existing prior-week matching grace window.
+Existing balances, purchases, GPS tracking, backend scoring and backups are unaffected. Newly qualified achievements can still pay when progress syncs. The weekly one-week grace period is unchanged.

@@ -429,8 +429,15 @@ class MainActivity : Activity() {
             return
         }
         resumed = true
+        if (Prefs.keepMapScreenAwake(this)) {
+            window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
         mapView.onResume()
         val overlayMode = Prefs.placeOverlayMode(this)
+        renderer?.setTownMedalsEnabled(Prefs.showTownMedals(this))
+        renderer?.setAutoFollowEnabled(Prefs.isAutoFollowCar(this))
         renderer?.setFogEnabled(Prefs.isFogEnabled(this))
         renderer?.setMapMode(Prefs.mapMode(this))
         val overlayModeChanged = renderer?.placeOverlayMode() != overlayMode
@@ -630,6 +637,7 @@ class MainActivity : Activity() {
         statsHandler.removeCallbacks(queuedPlaceResolution)
         statsRefreshScheduled = false
         stopPreviewLocation()
+        window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         mapView.onPause()
         super.onPause()
     }
@@ -962,10 +970,9 @@ class MainActivity : Activity() {
         val choices = arrayOf("No overlay", "Countries: blue", "States and regions: purple", "Towns: green")
         val current = renderer?.placeOverlayMode() ?: Prefs.placeOverlayMode(this)
         val selected = modes.indexOf(current).coerceAtLeast(0)
-        AlertDialog.Builder(this)
-            .setTitle("Map overlay")
-            .setSingleChoiceItems(choices, selected) { dialog, which ->
-                val next = modes[which]
+        showActionChoices(this, "Map overlay", choices.indices.map { index ->
+            val next = modes[index]
+            (if (index == selected) "✓ ${choices[index]}" else choices[index]) to {
                 if (next != current) {
                     renderer?.setPlaceOverlayMode(next) ?: Prefs.setPlaceOverlayMode(this, next)
                     if (next != PlaceOverlayMode.NONE) {
@@ -976,11 +983,11 @@ class MainActivity : Activity() {
                         resolvePendingPlaces()
                     }
                 }
-                dialog.dismiss()
             }
-            .setNeutralButton(if (renderer?.isNearbyExplorationVisible() == true) "Hide nearby" else "Explore nearby") { _, _ -> showNearbyExploration() }
-            .setNegativeButton("Cancel", null)
-            .show()
+        } + listOf(
+            (if (renderer?.isNearbyExplorationVisible() == true) "Hide nearby exploration"
+             else "Explore nearby · 5×5 map tiles") to { showNearbyExploration() }
+        ), separateLast = true)
     }
 
     /** A numbered, georeferenced 5×5 mile-cell overlay, computed entirely on device. */

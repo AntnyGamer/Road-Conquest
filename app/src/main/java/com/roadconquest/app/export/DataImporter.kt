@@ -106,6 +106,9 @@ object DataImporter {
                     PassphraseBackup.decrypt(zipPath, decrypted, password)
                 }
             } else {
+                require(!ExportOnlyBackup.isExportOnly(zipPath)) {
+                    "This ZIP is export-only and cannot be restored in Road Conquest."
+                }
                 authenticate(zipPath)
                 zipPath
             }

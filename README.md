@@ -1,13 +1,15 @@
-# Road Conquest 1.0
+# Road Conquest 1.1
 
 Road Conquest remembers the roads you drive and the places you visit, revealing them through a
 cloud-textured fog map.
 
-[Download the Android app](https://github.com/AntnyGamer/RoadConquest-Beta/releases) ·
-[Source and issues](https://github.com/AntnyGamer/RoadConquest-Beta) ·
+[Download the Android app](https://github.com/AntnyGamer/Road-Conquest/releases) ·
+[Source and issues](https://github.com/AntnyGamer/Road-Conquest) ·
 [GNU AGPL v3 license](LICENSE)
 
-Version 1.0 adds town completion medals, 30 achievements, searchable settings, and further reliability and performance improvements. Bronze unlocks at 25%, silver at 50%, and gold at 100% of town area explored through map tiles. See [release notes](RELEASE_NOTES.md) and [town completion details](TOWN_COMPLETION.md).
+Version 1.1 rebalances newly earned points, improves exploration statistics, boundary presentation and settings, and avoids unnecessary settings-screen work. See [release notes](RELEASE_NOTES.md).
+
+Version 1.0 added town completion medals, 30 achievements, searchable settings, and further reliability and performance improvements. Bronze unlocks at 25%, silver at 50%, and gold at 100% of town area explored through map tiles. See [release notes](RELEASE_NOTES.md) and [town completion details](TOWN_COMPLETION.md).
 
 Beta 67 aligns the walking marker with driving capture, completes a final matching pass when tracking stops, restores VIP reliably, respects provider recovery delays, refreshes Trips after background drives, and resumes notification-paused tracking from secondary screens. The deployed account service accepts Play version codes 90 and newer. See [release notes](RELEASE_NOTES.md).
 
@@ -49,8 +51,8 @@ Android 12 or newer is required. Download the signed APK from Releases for direc
 The GitHub APK uses the permanent upload key and updates compatible GitHub-installed betas.
 For an app installed through Google Play, update through Play instead: Play uses its separate
 app-signing key. Do not uninstall or clear app data to work around a signature error.
-Export a progress backup before changing installation channels.
-For Google Play, download the **signed** `RoadConquest-<version>.aab` from the [GitHub Releases](https://github.com/AntnyGamer/RoadConquest-Beta/releases) page, not the unsigned intermediate from GitHub Actions. The Actions artifact is named `android-build-inputs-unsigned` and contains `app-release-UNSIGNED-DO-NOT-UPLOAD.aab`, which Google Play cannot accept. Each release also includes the Android Studio project and SHA-256 checksums.
+Do not change installation channels without a compatible restorable backup. The new 1.1 password-free ZIP is an export-only archive and cannot be imported; previously authenticated restore formats remain supported.
+For Google Play, download the **signed** `RoadConquest-<version>.aab` from the [GitHub Releases](https://github.com/AntnyGamer/Road-Conquest/releases) page, not the unsigned intermediate from GitHub Actions. The Actions artifact is named `android-build-inputs-unsigned` and contains `app-release-UNSIGNED-DO-NOT-UPLOAD.aab`, which Google Play cannot accept. Each release also includes the Android Studio project and SHA-256 checksums.
 
 If Play still reports an invalid signature for the **signed release** bundle, compare the SHA-256 fingerprint under Play Console → Test and release → App integrity → **Upload key certificate** (not the separate Google Play **App signing key certificate**) with the release upload key:
 
@@ -62,12 +64,12 @@ Grant Precise location. For automatic background tracking, choose Allow all the 
 location settings and allow background battery use. Settings includes shortcuts to the relevant
 Android screens. Allow notifications to see the tracking notification and its Stop tracking control.
 
-The new release builds **1.0** with Android application ID
-`com.roadconquest.app` and internal version code **95**. Beta 68 used code 94, Beta 67 used code 93, Beta 66 used code 92, Beta 65 used code 91,
+The current release builds **1.1** with Android application ID
+`com.roadconquest.app` and internal version code **96**. Release 1.0 used code 95; Beta 68 used code 94, Beta 67 used code 93, Beta 66 used code 92, Beta 65 used code 91,
 Beta 64 used code 90, Beta 63 used code 89 and Beta 62 used code 88.
 Google Play permanently reserves uploaded version codes, including drafts and
-testing tracks. Before uploading a **signed 1.0 release bundle**, confirm
-that code 95 is still available in Play Console. The unsigned CI bundle cannot be uploaded.
+testing tracks. Before uploading a **signed 1.1 release bundle**, confirm
+that code 96 is still available in Play Console. The unsigned CI bundle cannot be uploaded.
 Do not confuse a locally tested development build with an already-published signed release.
 The app shows its exact version in Settings → Help & about. Treat the application ID as permanent once
 the Google Play listing is created; changing it later would create a different app.
@@ -94,8 +96,10 @@ the Google Play listing is created; changing it later would create a different a
   permanently clears fog across that entire tile, with a gradual 1,500-foot fade beyond
   its edges. Good location fixes can unlock tiles while walking or stopped too, without
   adding driving miles. Existing exploration history remains visible in the new grid.
-- Earn points from newly unlocked roads, achievements and first visits to towns, states/regions
-  and countries. The compact map stats distinguish **Driving** miles/roads from **Exploration**
+- Earn 2 points per newly unlocked road, 35 per new town, 150 per state/region,
+  and 500 per country, plus smaller achievement and weekly bonuses. Starting places
+  count toward exploration totals but earn no points or achievements. Previous
+  point awards and purchased cosmetics remain intact. The compact map stats distinguish **Driving** miles/roads from **Exploration**
   tiles. Tap the labeled **Garage · ⚔ points** chip to open the shop. The bottom bar keeps
   three primary destinations—**Trips**, **Badges** and **Goals**—without a duplicate Garage
   button. Settings organizes detailed totals into Driving, Exploration, Progression,
@@ -103,6 +107,9 @@ the Google Play listing is created; changing it later would create a different a
 - Open Garage & Shop to buy and equip car shapes, car colors, road colors, or the Golden
   Road Conquest UI and launcher icon. Purchases are one-time and equipped cosmetics can be changed later.
 - Choose Streets, Minimal, Night or Satellite maps, and a Light, Dark or phone-controlled appearance.
+  Settings also offers optional town medals, car-follow mode (pauses on map gestures),
+  Automatic/Miles/Kilometers distance labels, and keeping the screen awake only while the map is visible.
+  All four choices are local display controls; map tracking and scoring stay unchanged.
 - **VIP (one-time $2.99 US purchase through Google Play, configured separately in Play Console):** remove banners/rewarded-ad offers, equip Gold car/road/UI cosmetics for free, and unlock trip extras: access up to 500 recent drives instead of the free 100, share text summaries, and save GPX routes with optional start/end redaction. Existing point purchases remain owned. Basic drive summaries, 100-trip history, animated replay and full progress backups/restores **remain free**. Play restores VIP after reinstall. VIP requires an active `vip_lifetime` product (see [VIP setup](PLAY_VIP_SETUP.md)).
 - Use the map overlay button to highlight countries, states/regions, or towns, or choose **Explore nearby** for an on-device 5×5-tile progress check at the visible map center. Walking can reveal tiles; only driving earns road credit. Tap a highlighted area for population, area and visit dates when available.
 - Tap an unlocked road for its name, saved length, first-unlocked time, last-driven time and times driven.
@@ -110,10 +117,11 @@ the Google Play listing is created; changing it later would create a different a
   Optional rewarded ads in the Garage grant the displayed points only after confirmed completion, and count toward ad milestones.
 - Use automatic tracking or control it manually. Stop tracking from the foreground notification.
 - Export driving history, road geometry, explored places, place discoveries, point awards,
-  purchases and progression counters from Settings. Select an offline, passphrase-encrypted
-  **.rcbackup** (supports GitHub and Play installs) or an official Google Play-verified **.zip**
-  (requires a licensed Play installation and configured signing backend). Private backups
-  require the same passphrase when restoring on another device. The Settings summary shows
+  purchases and progression counters from Settings as a readable, password-free
+  **export-only .zip** on GitHub and Play installations. The archive can be inspected
+  externally but **cannot be imported or restored into Road Conquest**; it contains
+  sensitive GPS history, so store it privately. Older protected backups remain
+  restorable through the separate legacy import flow. The Settings summary shows
   when a complete backup export was last made. New map-tile first-unlock times are saved and
   exported starting with this branch; older tiles keep unknown discovery dates rather than invented timestamps.
 - Create an optional account, change your username and manage leaderboard visibility. There are exactly two destructive account/data actions in the app: Account → Delete account removes the cloud account while keeping saved device history and requires the current account password; Settings → Backups & data → Delete local data removes all local Road Conquest data while keeping the cloud account and leaderboard scores and requires typing the exact local confirmation phrase. Local full-data deletion works while signed out, stops tracking, disables verified-drive sharing and removes private interrupted-export snapshots.

@@ -129,6 +129,7 @@ object PlaceOverlayCache {
     // outlines need the stricter verification rules.
     private const val DIRECTORY = "place-overlays-v3"
     private const val TOWN_DIRECTORY = "place-overlays-v5-world-admin"
+    private const val STATE_DIRECTORY = "place-overlays-v4-states-full"
     // All states use one Census cache, independent of the worldwide OSM cache.
     private const val US_OFFICIAL_DIRECTORY = "place-overlays-us-census-v1"
     // These formats were retired in Betas 9 and 37/38 and are never read now.
@@ -152,10 +153,17 @@ object PlaceOverlayCache {
     private fun trimCache(context: Context, keep: File? = null,
                           maxBytes: Long = CACHE_BUDGET_BYTES,
                           maxFiles: Int = CACHE_BUDGET_FILES) {
-        val files = listOf(DIRECTORY, TOWN_DIRECTORY, US_OFFICIAL_DIRECTORY)
+        val files = listOf(DIRECTORY, TOWN_DIRECTORY, STATE_DIRECTORY, US_OFFICIAL_DIRECTORY)
             .flatMap { name ->
                 File(context.applicationContext.filesDir, name).listFiles().orEmpty()
-                    .filter { it.isFile && it.name.endsWith(".json") }
+                    .filter { entry ->
+                        // AtomicFile's .new is an uncommitted write, never a valid cache.
+                        // Under mutationLock no writer can still be using it.
+                        if (entry.isFile && entry.name.endsWith(".json.new")) {
+                            entry.delete()
+                            false
+                        } else entry.isFile && entry.name.endsWith(".json")
+                    }
             }
         var bytes = files.sumOf { it.length() }
         var count = files.size
@@ -271,10 +279,20 @@ object PlaceOverlayCache {
 
     fun generation(): Long = generation.get()
 
+    /** The former state cache shared a directory with still-valid country polygons. */
+    private fun reclaimOldStateCache(context: Context, place: PlaceDiscovery, target: File) {
+        if (place.kind != PlaceKind.STATE) return
+        val obsolete = File(File(context.applicationContext.filesDir, DIRECTORY), target.name)
+        if (obsolete.isFile || File(obsolete.path + ".bak").isFile ||
+            File(obsolete.path + ".new").isFile) forgetCacheFile(obsolete)
+    }
+
     fun read(context: Context, place: PlaceDiscovery): PlaceOverlayCacheResult =
         synchronized(mutationLock) {
             initialTrim(context)
-            readCacheFile(file(context, place), place)
+            val target = file(context, place)
+            reclaimOldStateCache(context, place, target)
+            readCacheFile(target, place)
         }
 
     /** Census municipalities for all 50 states are cached separately from OSM. */
@@ -302,16 +320,18 @@ object PlaceOverlayCache {
 
     // The normal and authoritative U.S. overlay caches share the same JSON format.
     private fun overlayCacheJson(data: PlaceOverlayData?, verified: Boolean = false): JSONObject {
-        val json = JSONObject()
-            .put("found", data != null)
-            .put("fetched_at", System.currentTimeMillis())
-        if (data != null) {
+        val json = JSONObject().put("found", data != null)
+        // Only negative lookups expire. Successful polygon entries are kept by
+        // the LRU budget and never read fetched_at, so do not persist that field.
+        if (data == null) json.put("fetched_at", System.currentTimeMillis())
+        else {
             if (verified) json.put("discovery_verified", true)
             json.put("name", data.name)
                 .put("kind", data.kind.name)
-                .put("population", data.population ?: JSONObject.NULL)
                 .put("area_sq_km", data.areaSquareKilometers)
                 .put("geometry", JSONObject(data.geometryJson))
+            // Missing and JSON-null population have the same read semantics.
+            data.population?.let { json.put("population", it) }
         }
         return json
     }
@@ -336,7 +356,7 @@ object PlaceOverlayCache {
             }
             if (!json.optBoolean("found", false)) {
                 val fetchedAt = json.optLong("fetched_at", 0L)
-                if (fetchedAt <= 0L || System.currentTimeMillis() - fetchedAt > NEGATIVE_CACHE_MS) {
+                if (fetchedAt <= 0L || System.currentTimeMillis() - fetchedAt !in 0L..NEGATIVE_CACHE_MS) {
                     forgetCacheFile(file)
                     PlaceOverlayCacheResult(false, null)
                 } else PlaceOverlayCacheResult(true, null)
@@ -379,6 +399,7 @@ object PlaceOverlayCache {
     ): Boolean = synchronized(mutationLock) {
         if (expectedGeneration != null && generation.get() != expectedGeneration) return@synchronized false
         val target = file(context, place)
+        reclaimOldStateCache(context, place, target)
         // A generic refresh must not replace a verified town polygon. Ask
         // the cache reader to enforce that in its single decode; previously the
         // large gzip polygon was decompressed and parsed twice on this path.
@@ -403,6 +424,7 @@ object PlaceOverlayCache {
         clearRetiredCaches(context)
         File(context.applicationContext.filesDir, DIRECTORY).deleteRecursively()
         File(context.applicationContext.filesDir, TOWN_DIRECTORY).deleteRecursively()
+        File(context.applicationContext.filesDir, STATE_DIRECTORY).deleteRecursively()
         File(context.applicationContext.filesDir, US_OFFICIAL_DIRECTORY).deleteRecursively()
         Unit
     }
@@ -417,7 +439,11 @@ object PlaceOverlayCache {
             hex[i * 2] = HEX_DIGITS[byte ushr 4]
             hex[i * 2 + 1] = HEX_DIGITS[byte and 0x0f]
         }
-        val directory = if (place.kind == PlaceKind.TOWN) TOWN_DIRECTORY else DIRECTORY
+        val directory = when (place.kind) {
+            PlaceKind.TOWN -> TOWN_DIRECTORY
+            PlaceKind.STATE -> STATE_DIRECTORY
+            PlaceKind.COUNTRY -> DIRECTORY
+        }
         return File(File(context.applicationContext.filesDir, directory), "${String(hex)}.json")
     }
 }
@@ -441,7 +467,7 @@ class PlaceOverlayClient(
         throttle(base)
         val threshold = when (place.kind) {
             PlaceKind.COUNTRY -> "0.02"
-            PlaceKind.STATE -> "0.005"
+            PlaceKind.STATE -> "0"
             PlaceKind.TOWN -> "0"
         }
         val url = Uri.parse("$base/search").buildUpon()
@@ -505,7 +531,7 @@ class PlaceOverlayClient(
             requestMethod = "GET"
             setRequestProperty(
                 "User-Agent",
-                "RoadConquest/${BuildConfig.VERSION_NAME} (+https://github.com/AntnyGamer/RoadConquest-Beta)"
+                "RoadConquest/${BuildConfig.VERSION_NAME} (+https://github.com/AntnyGamer/Road-Conquest)"
             )
             setRequestProperty("Accept", "application/json, text/plain;q=0.9")
         }
@@ -615,6 +641,7 @@ class PlaceOverlayClient(
                 throw IOException("Invalid place overlay response", error)
             }
             var best: JSONObject? = null
+            var bestArea = 0.0
             var bestScore = Int.MIN_VALUE
             for (i in 0 until results.length()) {
                 val candidate = results.optJSONObject(i) ?: continue
@@ -675,7 +702,10 @@ class PlaceOverlayClient(
                 ) continue
                 val score = score(place, candidate)
                 if (score > bestScore) {
+                    val area = areaSquareKilometers(geometry)
+                    if (!area.isFinite() || area <= 0.0) continue
                     best = candidate
+                    bestArea = area
                     bestScore = score
                 }
             }
@@ -686,15 +716,13 @@ class PlaceOverlayClient(
             }
             val selected = best?.takeIf { bestScore >= minimumScore } ?: return null
             val geometry = selected.getJSONObject("geojson")
-            val area = areaSquareKilometers(geometry)
-            if (!area.isFinite() || area <= 0.0) return null
             val extra = selected.optJSONObject("extratags")
             return PlaceOverlayData(
                 key = place.key,
                 name = place.displayName,
                 kind = place.kind,
                 population = parsePopulation(extra?.optString("population")),
-                areaSquareKilometers = area,
+                areaSquareKilometers = bestArea,
                 geometryJson = geometry.toString()
             )
         }

@@ -152,7 +152,6 @@ including on a cold start. The first database-backed request coalesces initializ
 expired-state cleanup; subsequent active requests check cleanup at a one-hour interval.
 There is no idle cleanup timer. Existing expiry checks still reject expired sessions/devices/
 evidence immediately; physical cleanup resumes on the next database-backed request.
-See [measured server optimizations](PERFORMANCE.md).
 The runtime bundle never includes a pepper,
 database password or signing key.
 

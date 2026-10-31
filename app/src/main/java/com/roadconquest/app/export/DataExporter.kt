@@ -22,7 +22,8 @@ object DataExporter {
     /** Restore takes this before historyLock, matching the ordinary export lock order. */
     internal fun <T> withSnapshotLock(block: () -> T): T = synchronized(snapshotLock) { block() }
 
-    fun writeZip(context: Context, repository: TrackingRepository, output: OutputStream): Unit =
+    fun writeZip(context: Context, repository: TrackingRepository, output: OutputStream,
+                 zipComment: String? = null): Unit =
         synchronized(snapshotLock) {
             // A killed process cannot execute the previous export's finally block. Remove any
             // orphaned private SQLite snapshot before copying current history into a new one.
@@ -33,6 +34,7 @@ object DataExporter {
                     repository.copyExportSnapshot(snapshot)
                     val summary = TrackingRepository.summaryOf(snapshot)
                     BoundedZipOutputStream(output.buffered()).use { zip ->
+                        if (zipComment != null) zip.setComment(zipComment)
                         val points = writeTrackPoints(snapshot, zip)
                         writeSkippedDrivingFixes(snapshot, zip)
                         val roadCount = writeRoads(snapshot, zip)

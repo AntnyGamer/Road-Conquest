@@ -84,3 +84,10 @@ If all of the above pass on the target Android device and firmware, that provide
 - Interrupt an export (for example by killing the app during export), reopen Road Conquest, then
   delete device data. Confirm no private `roadconquest-export-*` snapshot remains in app cache;
   user-saved ZIP exports remain the user's responsibility.
+
+### Additional map and display preferences
+
+- Under Map & appearance, confirm the town-medal switch hides and restores markers without changing earned medals or town-completion percentages.
+- Enable car following, drive with good GPS and confirm the camera follows live fixes. Drag or zoom the map to pause following; tap the center button to resume. With following off, live location must not recenter a manually moved map.
+- Change distance units from Automatic to Miles and Kilometers; confirm driving, trip and achievement labels update while actual stored meters and milestones stay unchanged, including after restarting the app.
+- Under Tracking, enable Keep screen awake while the map is open; verify Android screen timeout is prevented on the foreground map and returns to normal in Settings, other activities, and after minimizing the app.

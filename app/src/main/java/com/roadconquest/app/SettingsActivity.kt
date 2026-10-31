@@ -12,7 +12,6 @@ import android.content.pm.PackageManager
 import android.location.LocationManager
 import android.os.Build
 import android.os.Bundle
-import android.text.InputType
 import android.text.SpannableString
 import android.text.Spanned
 import android.text.style.TextAppearanceSpan
@@ -32,7 +31,7 @@ import com.roadconquest.app.account.AccountStore
 import com.roadconquest.app.data.LocalDataReset
 import com.roadconquest.app.data.TrackingRepository
 import com.roadconquest.app.export.DataImporter
-import com.roadconquest.app.export.PassphraseBackup
+import com.roadconquest.app.export.ExportOnlyBackup
 import com.roadconquest.app.util.Prefs
 import com.roadconquest.app.util.Appearance
 import com.roadconquest.app.util.UiTheme
@@ -60,7 +59,9 @@ class SettingsActivity : Activity() {
             R.id.friendNotificationsSwitch to R.string.friend_notifications_detail,
             R.id.friendForumPostsSwitch to R.string.friend_posts_detail,
             R.id.weeklyRemindersSwitch to R.string.weekly_reminders_detail,
-            R.id.crashReportingSwitch to R.string.crash_reporting_detail
+            R.id.crashReportingSwitch to R.string.crash_reporting_detail,
+            R.id.leaderboardPrivacySwitch to R.string.leaderboard_privacy_detail,
+            R.id.verifyDrivesSwitch to R.string.verify_drives_detail
         )
         for ((id, detail) in descriptions) {
             findViewById<Switch>(id).apply {
@@ -147,12 +148,10 @@ class SettingsActivity : Activity() {
     @Volatile private var summaryGeneration = 0
     @Volatile private var accountRefreshGeneration = 0
     private var appliedGoldUi = false
-    private var pendingExportUsesPassword = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         setTheme(Appearance.themeRes(this))
         super.onCreate(savedInstanceState)
-        pendingExportUsesPassword = savedInstanceState?.getBoolean("pending_export_password") == true
         appliedGoldUi = Prefs.isGoldUiEnabled(this)
         WindowCompat.enableEdgeToEdge(window)
         val lightSystemBars = !Appearance.isDark(this)
@@ -196,6 +195,10 @@ class SettingsActivity : Activity() {
         findViewById<TextView>(R.id.appVersionText).text =
             getString(R.string.app_version, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE)
 
+        findViewById<Switch>(R.id.keepScreenAwakeSwitch).apply {
+            isChecked = Prefs.keepMapScreenAwake(this@SettingsActivity)
+            setOnCheckedChangeListener { _, checked -> Prefs.setKeepMapScreenAwake(this@SettingsActivity, checked) }
+        }
         manualOnlySwitch.isChecked = Prefs.isManualOnly(this)
         manualOnlySwitch.isEnabled = !Prefs.isDeviceDataDeletionPending(this)
         manualOnlySwitch.setOnCheckedChangeListener { _, checked ->
@@ -274,28 +277,21 @@ class SettingsActivity : Activity() {
 
         deleteDeviceDataButton.setOnClickListener { showDeleteDeviceDataDialog() }
 
-        findViewById<Button>(R.id.exportButton).setOnClickListener {
-            AlertDialog.Builder(this).setTitle("Export progress")
-                .setItems(arrayOf(
-                    "Private backup (works with GitHub and Play builds)",
-                    "Google Play-verified ZIP (Play installs only)"
-                )) { _, selected ->
-                    pendingExportUsesPassword = selected == 0
-                    val extension = if (pendingExportUsesPassword) ".rcbackup" else ".zip"
-                    val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-                        addCategory(Intent.CATEGORY_OPENABLE)
-                        type = if (pendingExportUsesPassword) "application/octet-stream" else "application/zip"
-                        putExtra(Intent.EXTRA_TITLE, "RoadConquest-data-${Instant.now().toString().take(10)}$extension")
-                    }
-                    try {
-                        startActivityForResult(intent, REQUEST_EXPORT)
-                    } catch (_: ActivityNotFoundException) {
-                        pendingExportUsesPassword = false
-                        Toast.makeText(this, "Android's file picker is unavailable on this device.", Toast.LENGTH_LONG).show()
-                    }
-                }.show()
-        }
+        findViewById<Button>(R.id.exportButton).setOnClickListener { beginExport() }
 
+    }
+
+    private fun beginExport() {
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "application/zip"
+            putExtra(Intent.EXTRA_TITLE, "RoadConquest-data-${Instant.now().toString().take(10)}-export-only.zip")
+        }
+        try {
+            startActivityForResult(intent, REQUEST_EXPORT)
+        } catch (_: ActivityNotFoundException) {
+            Toast.makeText(this, "Android's file picker is unavailable on this device.", Toast.LENGTH_LONG).show()
+        }
     }
 
     override fun onResume() {
@@ -332,7 +328,6 @@ class SettingsActivity : Activity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         navigation.save(outState)
-        outState.putBoolean("pending_export_password", pendingExportUsesPassword)
         super.onSaveInstanceState(outState)
     }
 
@@ -344,75 +339,22 @@ class SettingsActivity : Activity() {
     @android.annotation.SuppressLint("GestureBackNavigation")
     override fun onBackPressed() { handleSettingsBack() }
 
-    private fun requestPrivateExport(uri: Uri) {
-        val padding = (16 * resources.displayMetrics.density).toInt()
-        val layout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(padding, padding / 2, padding, 0)
-        }
-        layout.addView(TextView(this).apply {
-            text = "Choose a passphrase of at least 12 characters and keep it safe. " +
-                "This encrypts your entire location history offline. You will need the passphrase to restore on any device."
-        })
-        fun passwordField(hint: String) = EditText(this).apply {
-            this.hint = hint
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-            layout.addView(this)
-        }
-        val password = passwordField("Passphrase (12+ characters)")
-        val confirm = passwordField("Confirm passphrase")
-        val warning = TextView(this).apply { layout.addView(this) }
-        var exportStarted = false
-        val dialog = AlertDialog.Builder(this).setTitle("Encrypt private backup")
-            .setView(layout).setNegativeButton("Cancel", null)
-            .setPositiveButton("Export", null).create()
-        // Android creates the destination before the passphrase dialog. Back,
-        // outside-tap and explicit Cancel must all clean up the empty file.
-        dialog.setOnDismissListener {
-            if (!exportStarted) runCatching { contentResolver.delete(uri, null, null) }
-        }
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val first = password.text.toString()
-                val second = confirm.text.toString()
-                if (first.length !in 12..256 || first != second) {
-                    warning.text = if (first.length !in 12..256) "Use between 12 and 256 characters."
-                        else "Passphrases do not match."
-                    return@setOnClickListener
-                }
-                val secret = first.toCharArray()
-                password.text.clear()
-                confirm.text.clear()
-                exportStarted = true
-                dialog.dismiss()
-                writeExport(uri, secret)
-            }
-        }
-        dialog.show()
-    }
-
     @Deprecated("Used for a simple Storage Access Framework export on minSdk 31")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode != REQUEST_EXPORT) return
-        val encrypted = pendingExportUsesPassword
-        pendingExportUsesPassword = false
         if (resultCode != RESULT_OK) return
         val uri = data?.data ?: return
-        if (encrypted) requestPrivateExport(uri) else writeExport(uri, null)
+        // No second dialog after Android creates the destination document.
+        writeExport(uri)
     }
 
-    private fun writeExport(uri: Uri, password: CharArray?) {
+    private fun writeExport(uri: Uri) {
         Thread {
-            val result = try {
-                runCatching {
-                    contentResolver.openOutputStream(uri, "w")?.use { output ->
-                        if (password != null) PassphraseBackup.writePortable(this, repository, output, password)
-                        else com.roadconquest.app.export.BackupProtection.writePortable(this, repository, output)
-                    } ?: error("Could not open export destination")
-                }
-            } finally {
-                password?.fill(0.toChar())
+            val result = runCatching {
+                contentResolver.openOutputStream(uri, "w")?.use { output ->
+                    ExportOnlyBackup.write(this, repository, output)
+                } ?: error("Could not open export destination")
             }
             var cleanupFailed = false
             if (result.isSuccess) {
@@ -438,7 +380,7 @@ class SettingsActivity : Activity() {
                 if (isDestroyed) return@runOnUiThread
                 result.fold(
                     onSuccess = {
-                        Toast.makeText(this, "Road Conquest data exported", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, "Export-only ZIP saved. Keep it private.", Toast.LENGTH_LONG).show()
                         refreshSummary()
                     },
                     onFailure = { error ->
@@ -569,6 +511,29 @@ class SettingsActivity : Activity() {
     }
 
     private fun setupAppearance() {
+        findViewById<Switch>(R.id.showTownMedalsSwitch).apply {
+            isChecked = Prefs.showTownMedals(this@SettingsActivity)
+            setOnCheckedChangeListener { _, checked -> Prefs.setShowTownMedals(this@SettingsActivity, checked) }
+        }
+        findViewById<Switch>(R.id.autoFollowCarSwitch).apply {
+            isChecked = Prefs.isAutoFollowCar(this@SettingsActivity)
+            setOnCheckedChangeListener { _, checked -> Prefs.setAutoFollowCar(this@SettingsActivity, checked) }
+        }
+        val unitsButton = findViewById<Button>(R.id.distanceUnitsButton)
+        fun showDistanceUnits() {
+            unitsButton.text = "Distance units: ${Prefs.distanceUnits(this).label}"
+        }
+        showDistanceUnits()
+        unitsButton.setOnClickListener {
+            val modes = com.roadconquest.app.util.DistanceUnitPreference.entries
+            AlertDialog.Builder(this).setTitle("Distance units")
+                .setSingleChoiceItems(Array(modes.size) { modes[it].label }, modes.indexOf(Prefs.distanceUnits(this))) { dialog, index ->
+                    Prefs.setDistanceUnits(this, modes[index])
+                    showDistanceUnits()
+                    refreshSummary()
+                    dialog.dismiss()
+                }.setNegativeButton("Cancel", null).show()
+        }
         findViewById<Switch>(R.id.fogSwitch).apply {
             isChecked = Prefs.isFogEnabled(this@SettingsActivity)
             setOnCheckedChangeListener { _, enabled -> Prefs.setFogEnabled(this@SettingsActivity, enabled) }
@@ -775,7 +740,7 @@ class SettingsActivity : Activity() {
                         val backupDate = if (lastBackup > 0L) java.text.DateFormat.getDateTimeInstance()
                             .format(java.util.Date(lastBackup)) else null
                         findViewById<TextView>(R.id.backupStatusText).text =
-                            "Last successful backup: " + (backupDate ?: "Never")
+                            "Last successful export: " + (backupDate ?: "Never")
                         summaryText.text = buildString {
                             append(StatsText.settingsOverview(this@SettingsActivity, summary, progression))
                             append("\n\nTRACKING\n")
@@ -784,7 +749,7 @@ class SettingsActivity : Activity() {
                             append("Background permission: $background")
                             append("\n\nDATA & BACKUP\n")
                             append("Last successful progress export: ")
-                            append(backupDate ?: "Never (consider exporting a backup)")
+                            append(backupDate ?: "Never (consider exporting an archive)")
                         }
                     },
                     onFailure = { error ->

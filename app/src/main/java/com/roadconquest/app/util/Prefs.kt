@@ -45,6 +45,31 @@ object Prefs {
         prefs(context).edit().putString("place_overlay_mode", mode.name).apply()
     }
 
+    fun showTownMedals(context: Context): Boolean = prefs(context).getBoolean("show_town_medals", true)
+    fun setShowTownMedals(context: Context, show: Boolean) {
+        prefs(context).edit().putBoolean("show_town_medals", show).apply()
+    }
+
+    fun isAutoFollowCar(context: Context): Boolean = prefs(context).getBoolean("auto_follow_car", false)
+    fun setAutoFollowCar(context: Context, follow: Boolean) {
+        prefs(context).edit().putBoolean("auto_follow_car", follow).apply()
+    }
+
+    fun keepMapScreenAwake(context: Context): Boolean = prefs(context).getBoolean("keep_map_screen_awake", false)
+    fun setKeepMapScreenAwake(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean("keep_map_screen_awake", enabled).apply()
+    }
+
+    fun distanceUnits(context: Context): DistanceUnitPreference =
+        DistanceUnitPreference.entries.firstOrNull {
+            it.name == prefs(context).getString("distance_units", null)
+        } ?: DistanceUnitPreference.AUTOMATIC
+
+    fun setDistanceUnits(context: Context, value: DistanceUnitPreference) {
+        prefs(context).edit().putString("distance_units", value.name).apply()
+        MeasurementUnits.configure(value)
+    }
+
     fun isFogEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_FOG_ENABLED, true)
 
     fun setFogEnabled(context: Context, enabled: Boolean) {

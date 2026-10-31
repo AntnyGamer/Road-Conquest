@@ -1,6 +1,7 @@
 package com.roadconquest.app.services
 
 import android.content.Context
+import android.os.SystemClock
 import com.roadconquest.app.BuildConfig
 import org.json.JSONObject
 import java.net.URI
@@ -38,6 +39,7 @@ object ServiceConfig {
         val now = System.currentTimeMillis()
         val fetched = prefs.getLong("fetched", 0)
         val age = now - fetched
+        val elapsed = SystemClock.elapsedRealtime()
         val cached = cachedValues(prefs.getString("json", null), age)
         // Expired or corrupt remote controls revert to safe defaults. Notify
         // existing map renderers as well, or they may remain on a fallback
@@ -46,8 +48,9 @@ object ServiceConfig {
             values = cached
             listeners.forEach { it() }
         }
-        if (refreshing || now < nextAttempt || age in 0..21_600_000 || BuildConfig.MAP_GATEWAY_URL.isBlank()) return
-        nextAttempt = now + 900_000
+        // Wall-clock rollback must not postpone the next retry for hours or days.
+        if (refreshing || elapsed < nextAttempt || age in 0..21_600_000 || BuildConfig.MAP_GATEWAY_URL.isBlank()) return
+        nextAttempt = elapsed + 900_000
         refreshing = true
         executor.execute {
             try {

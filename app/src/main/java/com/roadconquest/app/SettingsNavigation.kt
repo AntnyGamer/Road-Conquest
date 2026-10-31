@@ -19,10 +19,11 @@ import java.util.Locale
 
 /** Category navigation changes visibility only: all existing controls retain their bindings. */
 internal class SettingsNavigation(private val activity: Activity, state: Bundle?) {
+    companion object { private val WORD_SEPARATOR = Regex("\\s+") }
     private data class Section(val id: Int, val title: String, val detail: String, val icon: Int, val keywords: String)
     private val sections = listOf(
-        Section(R.id.trackingSettingsCard, "Tracking", "Location, battery and tracking behavior", R.drawable.ic_my_location, "gps automatic manual enable permission device exit confirmation"),
-        Section(R.id.mapSettingsCard, "Map & appearance", "Map styles, light and dark mode, fog", R.drawable.ic_map_day, "theme satellite night streets minimal phone"),
+        Section(R.id.trackingSettingsCard, "Tracking", "Location, battery and tracking behavior", R.drawable.ic_my_location, "gps automatic manual enable permission device exit confirmation screen awake display"),
+        Section(R.id.mapSettingsCard, "Map & appearance", "Map styles, medals, following, distance units and fog", R.drawable.ic_map_day, "theme satellite night streets minimal phone medals badges follow car center miles kilometers units"),
         Section(R.id.accountSettingsCard, "Account & community", "Sign-in, profile and the community forum", R.drawable.ic_privacy, "login password username friends leaderboard verify scoring"),
         Section(R.id.privacySettingsCard, "Notifications & privacy", "Friend alerts, weekly reminders and privacy", R.drawable.ic_notifications, "crash reporting diagnostics policy data sharing posts"),
         Section(R.id.backupSettingsCard, "Backups & data", "Export, restore and manage saved progress", R.drawable.ic_export, "zip rcbackup encrypted passphrase import delete reset phone transfer"),
@@ -69,14 +70,17 @@ internal class SettingsNavigation(private val activity: Activity, state: Bundle?
 
     private fun render() {
         val query = search.text.toString().trim().lowercase(Locale.ROOT)
-        val words = query.split(Regex("\\s+")).filter(String::isNotBlank)
+        val searching = query.isNotEmpty()
+        val words = if (searching) query.split(WORD_SEPARATOR).filter(String::isNotBlank) else emptyList()
         val chosen = sections.firstOrNull { it.id == selected }
         val home = chosen == null && query.isEmpty()
         categories.visibility = if (home) View.VISIBLE else View.GONE
         var matches = 0
         for (section in sections) {
-            val haystack = "${section.title} ${section.detail} ${section.keywords} ${contentText(activity.findViewById(section.id))}".lowercase(Locale.ROOT)
-            val visible = if (query.isNotEmpty()) words.all { it in haystack } else section == chosen
+            val visible = if (searching) {
+                val haystack = "${section.title} ${section.detail} ${section.keywords} ${contentText(activity.findViewById(section.id))}".lowercase(Locale.ROOT)
+                words.all { it in haystack }
+            } else section == chosen
             activity.findViewById<View>(section.id).visibility = if (visible) View.VISIBLE else View.GONE
             if (visible) matches++
         }

@@ -3,6 +3,7 @@ package com.roadconquest.app
 import android.app.AlertDialog
 import android.content.res.Configuration
 import android.graphics.Color
+import android.view.View
 import android.view.ContextThemeWrapper
 import android.widget.Button
 import android.widget.Switch
@@ -97,6 +98,40 @@ class AppearanceTest {
         } finally { controller.pause().stop().destroy() }
     }
 
+    @Test fun mapPreferencesStayInTheirSettingsCategoriesAndPersist() {
+        val controller = Robolectric.buildActivity(SettingsActivity::class.java).create().start().resume()
+        try {
+            val activity = controller.get()
+            assertTrue(Prefs.showTownMedals(activity))
+            assertFalse(Prefs.isAutoFollowCar(activity))
+            assertFalse(Prefs.keepMapScreenAwake(activity))
+            val medals = activity.findViewById<Switch>(R.id.showTownMedalsSwitch)
+            val follow = activity.findViewById<Switch>(R.id.autoFollowCarSwitch)
+            val wake = activity.findViewById<Switch>(R.id.keepScreenAwakeSwitch)
+            medals.performClick()
+            follow.performClick()
+            wake.performClick()
+            assertFalse(Prefs.showTownMedals(activity))
+            assertTrue(Prefs.isAutoFollowCar(activity))
+            assertTrue(Prefs.keepMapScreenAwake(activity))
+            activity.findViewById<Button>(R.id.distanceUnitsButton).performClick()
+            val dialog = ShadowAlertDialog.getLatestAlertDialog()
+            dialog.listView.performItemClick(dialog.listView.getChildAt(2), 2, 2)
+            assertEquals(com.roadconquest.app.util.DistanceUnitPreference.KILOMETERS, Prefs.distanceUnits(activity))
+            assertTrue(activity.findViewById<Button>(R.id.distanceUnitsButton).text.contains("Kilometers"))
+            val mapCategory = activity.findViewById<android.widget.LinearLayout>(R.id.mapSettingsCard)
+            val trackingCategory = activity.findViewById<android.widget.LinearLayout>(R.id.trackingSettingsCard)
+            assertNotNull(mapCategory.findViewById<View>(R.id.showTownMedalsSwitch))
+            assertNotNull(mapCategory.findViewById<View>(R.id.autoFollowCarSwitch))
+            assertNotNull(mapCategory.findViewById<View>(R.id.distanceUnitsButton))
+            assertNotNull(trackingCategory.findViewById<View>(R.id.keepScreenAwakeSwitch))
+        } finally {
+            com.roadconquest.app.util.MeasurementUnits.configure(
+                com.roadconquest.app.util.DistanceUnitPreference.AUTOMATIC)
+            controller.pause().stop().destroy()
+        }
+    }
+
     @Test fun mapAndSettingsStatsHaveClearDistinctCategoriesWithoutChangingTotals() {
         val context = ContextThemeWrapper(
             Appearance.wrap(RuntimeEnvironment.getApplication()), R.style.Theme_RoadConquest
@@ -112,6 +147,7 @@ class AppearanceTest {
         val progression = com.roadconquest.app.data.ProgressionSnapshot(
             balance = 1240L, lifetimeEarned = 1240L, pointsSpent = 0L,
             rewardedRoads = 12L, towns = 3L, states = 2L, countries = 1L,
+            exploredTowns = 4L, exploredStates = 3L, exploredCountries = 2L,
             adsWatched = 0L, lowestBatteryPercent = 101,
             purchasedItems = emptySet(), rewardedAchievements = emptySet(),
             tilesUnlocked = 18L
@@ -120,7 +156,10 @@ class AppearanceTest {
         assertTrue(details, details.indexOf("DRIVING") < details.indexOf("EXPLORATION"))
         assertTrue(details, details.indexOf("EXPLORATION") < details.indexOf("PROGRESSION"))
         assertTrue(details, details.contains("18 map tiles"))
-        assertTrue(details, details.contains("3 towns"))
+        assertTrue(details, details.contains("4 towns"))
+        assertTrue(details, details.contains("3 states/regions"))
+        assertTrue(details, details.contains("2 countries"))
+        assertTrue(StatsText.settingsOverview(context, summary, progression.copy(exploredCountries = 1L)).contains("1 country"))
         assertTrue(details, details.contains("1,240 points"))
     }
 
@@ -163,7 +202,7 @@ class AppearanceTest {
             activity.findViewById<Button>(R.id.githubButton).performClick()
             val github = shadowOf(activity).nextStartedActivity
             assertEquals(android.content.Intent.ACTION_VIEW, github.action)
-            assertEquals("https://github.com/AntnyGamer/RoadConquest-Beta", github.data.toString())
+            assertEquals("https://github.com/AntnyGamer/Road-Conquest", github.data.toString())
             assertTrue(github.hasCategory(android.content.Intent.CATEGORY_BROWSABLE))
             activity.findViewById<Button>(R.id.supportDeveloperButton).performClick()
             val support = shadowOf(activity).nextStartedActivity

@@ -24,7 +24,7 @@ import org.robolectric.annotation.Config
 @Config(sdk = [31], manifest = Config.NONE, shadows = [PosixAtomicFileShadow::class])
 class PlaceOverlayTest {
     private fun assertCacheAccountingMatchesDisk(context: android.content.Context) {
-        val files = listOf("place-overlays-v3", "place-overlays-v5-world-admin", "place-overlays-us-census-v1")
+        val files = listOf("place-overlays-v3", "place-overlays-v5-world-admin", "place-overlays-v4-states-full", "place-overlays-us-census-v1")
             .flatMap { File(context.filesDir, it).listFiles().orEmpty().toList() }
             .filter { it.isFile && it.name.endsWith(".json") }
         val owner = PlaceOverlayCache
@@ -46,7 +46,7 @@ class PlaceOverlayTest {
             val hash = MessageDigest.getInstance("SHA-256")
                 .digest("${empty.kind.name}|${empty.key}".toByteArray(Charsets.UTF_8))
                 .joinToString("") { "%02x".format(Locale.US, it.toInt() and 0xff) }
-            val file = File(File(context.filesDir, "place-overlays-v3"), "$hash.json")
+            val file = File(File(context.filesDir, "place-overlays-v4-states-full"), "$hash.json")
             file.writeText("")
             PlaceOverlayCache.trimForTest(context, Long.MAX_VALUE, Int.MAX_VALUE)
             assertCacheAccountingMatchesDisk(context)
@@ -65,13 +65,75 @@ class PlaceOverlayTest {
             val data = PlaceOverlayData(place.key, place.displayName, place.kind, null, 1.0,
                 """{"type":"Polygon","coordinates":[[[0,0],[2,0],[2,2],[0,2],[0,0]]]}""")
             assertTrue(PlaceOverlayCache.write(context, place, data))
-            val target = File(context.filesDir, "place-overlays-v3").listFiles()!!.single { it.name.endsWith(".json") }
+            val target = File(context.filesDir, "place-overlays-v4-states-full").listFiles()!!.single { it.name.endsWith(".json") }
             val undeletable = object : File(target.path) { override fun delete(): Boolean = false }
             PlaceOverlayCache.javaClass.getDeclaredMethod("forgetCacheFile", File::class.java)
                 .apply { isAccessible = true }.invoke(PlaceOverlayCache, undeletable)
             assertTrue(target.isFile)
             assertCacheAccountingMatchesDisk(context)
             assertEquals(data.geometryJson, PlaceOverlayCache.read(context, place).data?.geometryJson)
+        } finally { PlaceOverlayCache.clear(context) }
+    }
+
+    @Test fun interruptedBoundaryCacheWritesDoNotLeavePermanentNewFiles() {
+        val context = RuntimeEnvironment.getApplication()
+        PlaceOverlayCache.clear(context)
+        try {
+            val place = PlaceDiscovery(PlaceKind.COUNTRY, "us", "United States", "", "", 1L, 40.0, -74.0)
+            val polygon = """{"type":"Polygon","coordinates":[[[-75,39],[-73,39],[-73,41],[-75,41],[-75,39]]]}"""
+            assertTrue(PlaceOverlayCache.write(context, place,
+                PlaceOverlayData(place.key, place.displayName, place.kind, null, 100.0, polygon)))
+            val directory = File(context.filesDir, "place-overlays-v3")
+            val leftover = File(directory, "interrupted.json.new")
+            leftover.writeText("abandoned write".repeat(500))
+            val recovery = File(directory, "unrelated.json.bak")
+            recovery.writeText("previous committed data")
+            PlaceOverlayCache.trimForTest(context, Long.MAX_VALUE, Int.MAX_VALUE)
+            assertFalse("An unfinished AtomicFile write is never a valid cache", leftover.exists())
+            assertTrue("A .bak may be the last committed version", recovery.exists())
+            assertEquals(polygon, PlaceOverlayCache.read(context, place).data?.geometryJson)
+            assertCacheAccountingMatchesDisk(context)
+        } finally { PlaceOverlayCache.clear(context) }
+    }
+
+    @Test fun legacyStateCacheIsReclaimedWithoutDeletingCountryOrNewStateData() {
+        val context = RuntimeEnvironment.getApplication()
+        PlaceOverlayCache.clear(context)
+        try {
+            val state = PlaceDiscovery(PlaceKind.STATE, "us|nj", "New Jersey", "", "United States", 1L, 40.0, -74.0)
+            val country = state.copy(kind = PlaceKind.COUNTRY, key = "us", displayName = "United States")
+            val polygon = """{"type":"Polygon","coordinates":[[[-75,39],[-73,39],[-73,41],[-75,41],[-75,39]]]}"""
+            val countryData = PlaceOverlayData(country.key, country.displayName, country.kind, null, 100.0, polygon)
+            val stateData = PlaceOverlayData(state.key, state.displayName, state.kind, null, 20.0, polygon)
+            assertTrue(PlaceOverlayCache.write(context, country, countryData))
+            assertTrue(PlaceOverlayCache.write(context, state, stateData))
+            val legacyName = MessageDigest.getInstance("SHA-256")
+                .digest("${state.kind.name}|${state.key}".toByteArray(Charsets.UTF_8))
+                .joinToString("") { "%02x".format(Locale.US, it.toInt() and 0xff) } + ".json"
+            val legacyState = File(File(context.filesDir, "place-overlays-v3"), legacyName)
+            legacyState.writeText("obsolete state polygon")
+            PlaceOverlayCache.trimForTest(context, Long.MAX_VALUE, Int.MAX_VALUE)
+            assertCacheAccountingMatchesDisk(context)
+            assertEquals(polygon, PlaceOverlayCache.read(context, state).data?.geometryJson)
+            assertFalse("Old state data is no longer read and must not consume disk", legacyState.exists())
+            assertEquals(polygon, PlaceOverlayCache.read(context, country).data?.geometryJson)
+            assertCacheAccountingMatchesDisk(context)
+
+            // A new state can be fetched directly without first calling read().
+            val other = state.copy(key = "us|pa", displayName = "Pennsylvania")
+            val otherHash = MessageDigest.getInstance("SHA-256")
+                .digest("${other.kind.name}|${other.key}".toByteArray(Charsets.UTF_8))
+                .joinToString("") { "%02x".format(Locale.US, it.toInt() and 0xff) } + ".json"
+            val otherLegacy = File(File(context.filesDir, "place-overlays-v3"), otherHash)
+            otherLegacy.writeText("old, unreadable state data")
+            PlaceOverlayCache.trimForTest(context, Long.MAX_VALUE, Int.MAX_VALUE)
+            assertCacheAccountingMatchesDisk(context)
+            assertTrue(PlaceOverlayCache.write(context, other,
+                stateData.copy(key = other.key, name = other.displayName)))
+            assertFalse("Writing a new state must also reclaim its old copy", otherLegacy.exists())
+            assertEquals(polygon, PlaceOverlayCache.read(context, other).data?.geometryJson)
+            assertEquals(polygon, PlaceOverlayCache.read(context, country).data?.geometryJson)
+            assertCacheAccountingMatchesDisk(context)
         } finally { PlaceOverlayCache.clear(context) }
     }
 
@@ -140,6 +202,14 @@ class PlaceOverlayTest {
         assertEquals(331_000_000L, data.population)
         assertTrue(data.areaSquareKilometers > 8_000.0)
         assertEquals("Polygon", JSONObject(data.geometryJson).getString("type"))
+        // A matching but zero-area provider result must not mask a later valid polygon.
+        val valid = JSONArray(body).getJSONObject(0)
+        val collapsed = JSONObject(valid.toString()).put("geojson", JSONObject(
+            """{"type":"Polygon","coordinates":[[[-75,39],[-75,39],[-75,39]]]}"""))
+        assertNull(PlaceOverlayClient.parseResponse(place, JSONArray().put(collapsed).toString()))
+        val recovered = PlaceOverlayClient.parseResponse(place, JSONArray().put(collapsed).put(valid).toString())
+        assertNotNull(recovered)
+        assertEquals(data.areaSquareKilometers, recovered!!.areaSquareKilometers, 0.0)
     }
 
     @Test fun malformedWorldwideResponseTriggersRetryButEmptyArrayDoesNot() {
@@ -338,6 +408,27 @@ class PlaceOverlayTest {
         } finally { PlaceOverlayCache.clear(context) }
     }
 
+    @Test fun successfulCacheOmitsOnlyUnusedMetadataAndRoundTripsUnknownPopulation() {
+        val context = RuntimeEnvironment.getApplication()
+        PlaceOverlayCache.clear(context)
+        try {
+            val place = PlaceDiscovery(PlaceKind.COUNTRY, "zz", "Example", "", "", 1L, 0.5, 0.5)
+            val geometry = """{"type":"Polygon","coordinates":[[[0,0],[1,0],[1,1],[0,1],[0,0]]]}"""
+            val data = PlaceOverlayData(place.key, place.displayName, place.kind, null, 1.0, geometry)
+            assertTrue(PlaceOverlayCache.write(context, place, data))
+            val file = File(context.filesDir, "place-overlays-v3").listFiles()!!.single { it.name.endsWith(".json") }
+            fun saved() = java.util.zip.GZIPInputStream(file.inputStream()).bufferedReader().use {
+                JSONObject(it.readText())
+            }
+            assertFalse(saved().has("population"))
+            assertFalse(saved().has("fetched_at"))
+            assertNull(PlaceOverlayCache.read(context, place).data?.population)
+            assertTrue(PlaceOverlayCache.write(context, place, data.copy(population = 123)))
+            assertEquals(123L, saved().getLong("population"))
+            assertEquals(123L, PlaceOverlayCache.read(context, place).data?.population)
+        } finally { PlaceOverlayCache.clear(context) }
+    }
+
     @Test fun boundaryCacheIsCompressedAndStillReadsPreviousPlainJson() {
         val context = RuntimeEnvironment.getApplication()
         val place = PlaceDiscovery(
@@ -356,6 +447,12 @@ class PlaceOverlayTest {
             val magic = file.inputStream().use { byteArrayOf(it.read().toByte(), it.read().toByte()) }
             assertEquals(0x1f, magic[0].toInt() and 0xff)
             assertEquals(0x8b, magic[1].toInt() and 0xff)
+            val saved = java.util.zip.GZIPInputStream(file.inputStream()).bufferedReader().use {
+                JSONObject(it.readText())
+            }
+            assertTrue(saved.getBoolean("found"))
+            assertFalse("Successful polygons do not need the negative-cache expiry timestamp",
+                saved.has("fetched_at"))
             assertEquals(JSONObject(data.geometryJson).toString(),
                 PlaceOverlayCache.readVerifiedForDiscovery(context, place)?.geometryJson)
 
@@ -426,6 +523,32 @@ class PlaceOverlayTest {
         } finally {
             PlaceOverlayCache.clear(context)
         }
+    }
+
+    @Test fun futureDatedNegativeCacheCannotBlockBoundaryRetries() {
+        val context = RuntimeEnvironment.getApplication()
+        val place = PlaceDiscovery(PlaceKind.COUNTRY, "zz", "Example", "", "", 1L, 1.0, 1.0)
+        PlaceOverlayCache.clear(context)
+        try {
+            val digest = MessageDigest.getInstance("SHA-256")
+                .digest("${place.kind.name}|${place.key}".toByteArray(Charsets.UTF_8))
+                .joinToString("") { "%02x".format(Locale.US, it.toInt() and 0xff) }
+            val directory = File(context.filesDir, "place-overlays-v3")
+            assertTrue(directory.mkdirs() || directory.isDirectory)
+            val file = File(directory, "$digest.json")
+            file.writeText(JSONObject().put("found", false)
+                .put("fetched_at", System.currentTimeMillis() + 86_400_000L).toString())
+            assertFalse(PlaceOverlayCache.read(context, place).cached)
+            assertFalse(file.exists())
+            assertTrue(PlaceOverlayCache.write(context, place, null))
+            val negative = java.util.zip.GZIPInputStream(file.inputStream()).bufferedReader().use {
+                JSONObject(it.readText())
+            }
+            assertFalse(negative.getBoolean("found"))
+            assertTrue("Negative entries still require their expiry timestamp", negative.has("fetched_at"))
+            assertTrue("Fresh negative cache still prevents duplicate requests",
+                PlaceOverlayCache.read(context, place).cached)
+        } finally { PlaceOverlayCache.clear(context) }
     }
 
     @Test fun staleFetchCannotRecreateOverlayCacheAfterDeletion() {

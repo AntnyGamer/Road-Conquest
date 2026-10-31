@@ -19,7 +19,7 @@ for (endpoint in listOf(mapGatewayUrl).filter { it.isNotBlank() }) {
     }
 }
 val placeOverlayConfigUrl = providers.gradleProperty("ROADCONQUEST_PLACE_OVERLAY_CONFIG_URL").getOrElse(
-    "https://raw.githubusercontent.com/AntnyGamer/RoadConquest-Beta/main/OVERLAY_PROVIDER.txt"
+    "https://raw.githubusercontent.com/AntnyGamer/Road-Conquest/main/OVERLAY_PROVIDER.txt"
 )
 // Explicit opt-in for an internal Play build; ordinary builds remain hidden.
 val leaderboardsVisible = providers.gradleProperty("ROADCONQUEST_LEADERBOARDS_VISIBLE")
@@ -33,8 +33,8 @@ android {
         applicationId = "com.roadconquest.app"
         minSdk = 31
         targetSdk = 37
-        versionCode = 95
-        versionName = "1.0"
+        versionCode = 96
+        versionName = "1.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         testInstrumentationRunnerArguments["timeout_msec"] = "120000"
         val escapedAccountApiUrl = accountApiUrl.replace("\\", "\\\\").replace("\"", "\\\"")

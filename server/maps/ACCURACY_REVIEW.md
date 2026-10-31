@@ -80,7 +80,7 @@ to obtain these savings.
 
 ## Full resource follow-up review
 
-The subsequent [resource review](../RESOURCE_REVIEW.md) also rechecks all fourteen
+A subsequent historical resource review (available in repository history) rechecked all fourteen
 source invariants against the same starting commit. Its eight changes cover
 accounting metadata, duplicate exploration writes, unchanged encrypted account
 refreshes, boundary-cache retention/cleanup, obsolete overlay work, row-buffer

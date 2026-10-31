@@ -47,6 +47,33 @@ class BackupProtectionTest {
             .put("signature", BackupProtection.encode(signature))
     }
 
+
+    @Test fun passwordFreeExportIsReadableOfflineButCannotBeRestored() {
+        val repository = TrackingRepository(context)
+        repository.insertLocation(android.location.Location("gps").apply {
+            latitude = 40.0
+            longitude = -74.0
+            accuracy = 5f
+            time = 1_000_000L
+        })
+        val bytes = java.io.ByteArrayOutputStream().also { ExportOnlyBackup.write(context, repository, it) }
+            .toByteArray()
+        val file = File.createTempFile("export-only-", ".zip", context.cacheDir)
+        try {
+            file.writeBytes(bytes)
+            assertTrue(ExportOnlyBackup.isExportOnly(file))
+            ZipFile(file).use { zip ->
+                assertNotNull(zip.getEntry("metadata.json"))
+                assertNotNull(zip.getEntry("track_points.csv"))
+            }
+            val rejected = assertThrows(IllegalArgumentException::class.java) {
+                bytes.inputStream().use { DataImporter.prepare(context, it).close() }
+            }
+            assertTrue(rejected.message.orEmpty().contains("export-only"))
+            assertEquals(1L, repository.getSummary().trackPointCount)
+        } finally { file.delete() }
+    }
+
     @Test fun signatureBytesMustFitTheRestoreLimitBeforeTheArchiveIsChanged() {
         val file = raw()
         try {

@@ -1,3 +1,36 @@
+# Road Conquest 1.1
+
+## Changes since 1.0
+
+- **Less unnecessary SQLite work:** Rendering a viewport with fewer than two saved road fragments skips loading road-visit windows, which cannot produce a junction in that case. The geometry-indexed junction search runs locally.
+- **Verified-geometry junction display:** Junction-guessing and GPS checks remain active; the live map only draws an estimated connection if an already-saved, matching road centerline supports its full path. Unverified diagonal and V-shaped extrapolations are hidden, not saved or credited. Existing road records, points and history are preserved, and no additional network calls are made. Missing centerline coverage can leave an honest gap until the road is matched again.
+- **Password-free, export-only ZIPs:** New exports write a readable ZIP directly to Android's document picker without Play verification or a passphrase. These are explicitly archive-only and cannot be imported back into Road Conquest. The removed second dialog no longer creates the cancelled-flow zero-byte file. A failed or interrupted active file write may still leave an incomplete file if Android's provider refuses deletion. Older authenticated restore formats remain unchanged.
+- **More balanced new earnings:** New roads earn 2 points, towns 35, states or regions 150, and countries 500. Weekly challenges and future achievement milestones award fewer points. Existing balances, earned ledger entries, purchases and already-owned achievements are preserved.
+- **Starting-place statistics:** The first verified starting town, state/region and country now appear as explored in Settings → Your progress. They do not give starting-place points or count toward earned milestones.
+- **Clearer choices:** Backup export formats and map-overlay options use separated tappable buttons; the Explore Nearby action is visually distinct. Town medal icons occupy less map space.
+- **Boundary display:** State and region overlays request unsimplified geometry where supported, refresh old render caches, and partition overlapping neighboring snapshots for display. Source polygons and rewards are not rewritten; inconsistent upstream boundaries may remain.
+- **Map settings:** Optional town medals, automatic car following and display-only distance units. Tracking gains an optional keep-screen-awake toggle; controls include concise descriptions.
+- **Reduced avoidable UI work:** Opening settings or switching categories without a search no longer builds search text by recursively reading all controls. Search still examines live settings text when a query exists, and its whitespace matching is unchanged.
+- **More robust worldwide region fallback:** A malformed unrelated entry in a geoBoundaries dataset no longer hides a valid matching region. Exact names, containment checks and ambiguous-match rejection remain enforced.
+- **Valid polygon fallback:** A high-ranked zero-area worldwide boundary no longer hides a valid lower-ranked polygon; geoBoundaries also ignores invalid zero-area features when checking for ambiguous duplicates. Existing name, containment and score checks remain intact.
+- **Avoided matching allocations:** When no previously driven road is recognized, normal and approach-window matching reuse the pending-ID set rather than allocating an empty derived set. Acceptance thresholds and network request decisions are unchanged.
+- **Clock-safe boundary cache:** A negative cached place lookup with a future timestamp is invalidated after device clock changes instead of suppressing retries indefinitely; fresh negative results still retain their bounded cache window.
+- **Date-line overlay safety:** Region polygons spanning the International Date Line bypass planar overlap clipping, and world-spanning viewport bounds no longer hide date-line towns. This conservatively retains source geometry instead of inventing a wrong clipped boundary.
+- **Country fallback metadata:** A valid geoBoundaries country polygon no longer requires region-only `shapeName` metadata. State and region overlays still enforce exact matching names and reject genuinely ambiguous geometry.
+- **Clock-stable provider refresh:** The optional provider-switch configuration uses Android's monotonic elapsed clock for its in-process retry deadline, preventing a phone clock rollback from delaying retries beyond their intended interval. Expiry of saved configuration still uses the wall clock.
+- **Smaller cached boundary metadata:** New successful boundary-cache entries omit the unused fetch timestamp and omit the population field when unknown. Negative cache entries still retain their timestamp and 15-minute expiry; positive caches with known population and older cache files remain compatible. The saving per file is small and depends on the cached polygons.
+- **Reclaimed orphan boundary-cache storage:** When a state is read or newly written, delete only its unused previous-resolution state polygon from the shared legacy state/country directory, retaining current full-resolution states and countries. The existing cache scan also deletes abandoned `.json.new` writes after process death; committed and recoverable `.bak` files remain protected. Savings depend on whether those leftovers exist.
+- **Less empty map work:** State/country overlays and town overlays with medals disabled reuse the existing empty badge collection rather than allocating and serializing an unused one.
+- **Current overlay configuration location:** Read the public overlay-provider configuration from the canonical Road-Conquest repository without relying on a legacy repository redirect.
+- **Smaller fallback parser allocation:** LocationIQ's NoMatch/NoSegment check uses two direct comparisons instead of allocating a temporary set. This does not change matching confidence, GPS evidence, requests, or fallback behavior.
+- **Test infrastructure:** Existing SQLite test fixtures batch independent inserts, reuse selected connections, and avoid repeated immutable fixture/regex creation. The server CI job caches verified npm downloads while still running `npm ci`.
+
+**Version:** Android versionName **1.1**, versionCode **96**, Android 12+ (API 31 minimum). No local database migration or account protocol change is introduced by these release changes.
+
+**Compatibility and verification:** Existing backup formats, purchases, stored progress and scoring rules for already-earned rewards remain intact. The code-level reductions above are expected to save avoidable allocations or work; no measured whole-app startup, battery or server-cost improvement is claimed. Release publishing, signing and device checks must finish in CI before this version is considered published.
+
+---
+
 # Road Conquest 1.0
 
 ## What's new since Beta 68
@@ -116,7 +149,7 @@ The GitHub workflow publishes the signed APK, Play upload AAB, tested account fu
 - **Older PR review:** Preserve the forum/tutorial improvements already present from newer code and the restored map artwork from PR #116. Include PR #118's real foreground Back-key dispatch for native tutorial/exit regression tests; keep all assertions and device coverage.
 - **Compatibility:** Android 12+, versionCode **89**, versionName **1.0-beta.63**. Same package, permanent signing identity, local database/backup format, saved progress, account data and purchases.
 
-The GitHub workflow publishes the signed APK, Play upload AAB, tested account function, source archive, mapping and checksums only after its required checks pass. Upload to Google Play and deployment of the account function/map gateway remain separate operations. The forum query optimization is included in the account-function artifact and takes effect on a separately deployed backend. A separately deployed verified-driving service must permit version code 89 before accepting this build's verified submissions; updating the documented allowlist does not change live settings. Private-export analysis and synthetic regression fixtures do not establish parity with live provider replies. See `server/SERVER_USAGE_AUDIT_20261025.md` for the resource measurements and tradeoffs.
+The GitHub workflow publishes the signed APK, Play upload AAB, tested account function, source archive, mapping and checksums only after its required checks pass. Upload to Google Play and deployment of the account function/map gateway remain separate operations. The forum query optimization is included in the account-function artifact and takes effect on a separately deployed backend. A separately deployed verified-driving service must permit version code 89 before accepting this build's verified submissions; updating the documented allowlist does not change live settings. Private-export analysis and synthetic regression fixtures do not establish parity with live provider replies.
 
 ---
 
@@ -135,7 +168,7 @@ The GitHub workflow publishes the signed APK, Play upload AAB, tested account fu
 - **GIF and local performance:** Share simultaneous downloads of the same verified GIF, stop cancelled views before network I/O after waiting, and avoid redundant byte copies, geometry comparisons, temporary ID lists, fog projections and municipality string construction. Failed GIF loads remain retryable and closing the screen clears its bounded cache.
 - **Compatibility:** Android 12+, versionCode **88**, versionName **1.0-beta.62**. No change to the package ID, upload key, saved progress, account data or backup format.
 
-The GitHub release workflow publishes signed APK and Play upload AAB files, the tested account function, source archive, deobfuscation mapping and checksums after its required checks succeed. Google Play upload and deployment of the account function/map gateway are separate steps. Existing Forum Plus purchase setup remains unchanged. Separately deployed verified-driving services must allow version code 88 before accepting verified submissions. Editing the documentation does not change live backend configuration. See `server/SERVER_USAGE_AUDIT_20261025.md` for the complete change inventory, regression evidence and bounded tradeoffs.
+The GitHub release workflow publishes signed APK and Play upload AAB files, the tested account function, source archive, deobfuscation mapping and checksums after its required checks succeed. Google Play upload and deployment of the account function/map gateway are separate steps. Existing Forum Plus purchase setup remains unchanged. Separately deployed verified-driving services must allow version code 88 before accepting verified submissions. Editing the documentation does not change live backend configuration.
 
 ---
 

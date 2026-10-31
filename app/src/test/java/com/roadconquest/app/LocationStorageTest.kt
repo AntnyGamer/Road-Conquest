@@ -21,10 +21,22 @@ import java.util.concurrent.TimeUnit
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31, 37], manifest = Config.NONE)
 class LocationStorageTest {
+    private fun clearLocationTables(repo: TrackingRepository) {
+        val db = repo.readableDatabase()
+        db.beginTransaction()
+        try {
+            for (table in listOf("track_points", "roads", "explored_places", "explored_grid"))
+                db.execSQL("DELETE FROM $table")
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
     @Test fun walkingCallbacksSaveExplorationWithoutDrivingHistory() {
         val context = RuntimeEnvironment.getApplication()
         val repo = TrackingRepository(context)
-        for (table in listOf("track_points", "roads", "explored_places", "explored_grid")) repo.readableDatabase().execSQL("DELETE FROM $table")
+        clearLocationTables(repo)
         val controller = Robolectric.buildService(TrackingService::class.java)
         val service = controller.get()
         fun field(name: String) = TrackingService::class.java.getDeclaredField(name).apply { isAccessible = true }
@@ -54,9 +66,7 @@ class LocationStorageTest {
     @Test fun stationaryGpsScatterDoesNotUnlockFogOrGenerateDrivingHistory() {
         val app = RuntimeEnvironment.getApplication()
         val repo = TrackingRepository(app)
-        for (table in listOf("track_points", "roads", "explored_places", "explored_grid")) {
-            repo.readableDatabase().execSQL("DELETE FROM $table")
-        }
+        clearLocationTables(repo)
         val controller = Robolectric.buildService(TrackingService::class.java)
         val service = controller.get()
         fun field(name: String) = TrackingService::class.java.getDeclaredField(name).apply {
@@ -92,9 +102,7 @@ class LocationStorageTest {
         val app = RuntimeEnvironment.getApplication()
         val repo = TrackingRepository(app)
         for (speedAndAccuracy in listOf(1.4f to 5f, 5f to 10f)) {
-            for (table in listOf("track_points", "roads", "explored_places", "explored_grid")) {
-                repo.readableDatabase().execSQL("DELETE FROM $table")
-            }
+            clearLocationTables(repo)
             val controller = Robolectric.buildService(TrackingService::class.java)
             val service = controller.get()
             fun field(name: String) = TrackingService::class.java.getDeclaredField(name).apply { isAccessible = true }
@@ -137,9 +145,7 @@ class LocationStorageTest {
     @Test fun normalThreeSecondStationaryScatterStillUnlocksNothing() {
         val app = RuntimeEnvironment.getApplication()
         val repo = TrackingRepository(app)
-        for (table in listOf("track_points", "roads", "explored_places", "explored_grid")) {
-            repo.readableDatabase().execSQL("DELETE FROM $table")
-        }
+        clearLocationTables(repo)
         val controller = Robolectric.buildService(TrackingService::class.java)
         val service = controller.get()
         fun field(name: String) = TrackingService::class.java.getDeclaredField(name).apply { isAccessible = true }

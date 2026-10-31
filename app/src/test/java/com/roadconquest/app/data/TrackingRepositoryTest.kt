@@ -19,10 +19,15 @@ class TrackingRepositoryTest {
     @Before fun setup() {
         val context: Context = RuntimeEnvironment.getApplication()
         repository = TrackingRepository(context)
-        repository.readableDatabase().execSQL("DELETE FROM track_points")
-        repository.readableDatabase().execSQL("DELETE FROM skipped_driving_fixes")
-        repository.readableDatabase().execSQL("DELETE FROM road_visits")
-        repository.readableDatabase().execSQL("DELETE FROM roads")
+        val db = repository.readableDatabase()
+        db.beginTransaction()
+        try {
+            for (table in listOf("track_points", "skipped_driving_fixes", "road_visits", "roads"))
+                db.execSQL("DELETE FROM $table")
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
     }
 
     private fun point(time: Long, lat: Double = 40.0, lon: Double = -74.0, speed: Float = 5f): Long =

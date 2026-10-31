@@ -33,7 +33,7 @@ def request(layer, place, state, envelope, is_point=False):
     for attempt in range(3):
         try:
             headers = {
-                "User-Agent": "RoadConquest-Beta-CI/1.0 (+https://github.com/AntnyGamer/RoadConquest-Beta)",
+                "User-Agent": "RoadConquest-Beta-CI/1.0 (+https://github.com/AntnyGamer/Road-Conquest)",
                 "Accept": "application/geo+json, application/json",
             }
             with urllib.request.urlopen(

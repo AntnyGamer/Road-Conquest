@@ -14,9 +14,9 @@ import kotlin.math.ln
 import kotlin.math.tan
 
 enum class PlaceKind(val points: Long) {
-    TOWN(100L),
-    STATE(500L),
-    COUNTRY(1_500L)
+    TOWN(35L),
+    STATE(150L),
+    COUNTRY(500L)
 }
 
 data class PlaceDiscovery(
@@ -66,7 +66,10 @@ data class ProgressionSnapshot(
     val rewardedAchievementPoints: Map<String, Long> = emptyMap(),
     val bronzeTowns: Long = 0L,
     val silverTowns: Long = 0L,
-    val goldTowns: Long = 0L
+    val goldTowns: Long = 0L,
+    val exploredTowns: Long = towns,
+    val exploredStates: Long = states,
+    val exploredCountries: Long = countries
 )
 
 enum class PurchaseResult { PURCHASED, OWNED, INSUFFICIENT_POINTS }
@@ -603,19 +606,19 @@ class ProgressionRepository(context: Context) {
         }
 
         val counts = mutableMapOf<PlaceKind, Long>()
-        // Baseline places stay in visited_places for overlays, but only rewarded discoveries
-        // count toward progress totals and achievements.
+        val explored = mutableMapOf<PlaceKind, Long>()
+        // Include starting places in exploration, not points or achievements.
         db.rawQuery(
-            """SELECT v.kind, COUNT(*)
-               FROM visited_places v
-               JOIN progression_rewards r
+            """SELECT v.kind, COUNT(*), COUNT(r.reward_key)
+               FROM visited_places v LEFT JOIN progression_rewards r
                  ON r.reward_key = 'place:' || lower(v.kind) || ':' || v.place_key
                GROUP BY v.kind""",
             null
         ).use { cursor ->
             while (cursor.moveToNext()) {
                 PlaceKind.entries.firstOrNull { it.name == cursor.getString(0) }?.let {
-                    counts[it] = cursor.getLong(1)
+                    explored[it] = cursor.getLong(1)
+                    counts[it] = cursor.getLong(2)
                 }
             }
         }
@@ -671,6 +674,9 @@ class ProgressionRepository(context: Context) {
             towns = counts[PlaceKind.TOWN] ?: 0L,
             states = counts[PlaceKind.STATE] ?: 0L,
             countries = counts[PlaceKind.COUNTRY] ?: 0L,
+            exploredTowns = explored[PlaceKind.TOWN] ?: 0L,
+            exploredStates = explored[PlaceKind.STATE] ?: 0L,
+            exploredCountries = explored[PlaceKind.COUNTRY] ?: 0L,
             adsWatched = counters[COUNTER_ADS_WATCHED] ?: 0L,
             lowestBatteryPercent = (counters[COUNTER_LOWEST_BATTERY] ?: 101L)
                 .toInt().coerceIn(0, 101),
@@ -1063,7 +1069,7 @@ class ProgressionRepository(context: Context) {
     }
 
     companion object {
-        const val POINTS_PER_ROAD = 5L
+        const val POINTS_PER_ROAD = 2L
         private val MUNICIPALITY_WHITESPACE_RE = Regex("\\s+")
         private val MUNICIPALITY_TYPES = listOf("township", "borough", "municipality", "village", "town", "city")
         // CASE preserves the original kind order and stops at the first missing

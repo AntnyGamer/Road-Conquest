@@ -14,6 +14,39 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31], manifest = Config.NONE)
 class TownOverlayPartitionTest {
+    @Test fun dateLineRegionsSkipPlanarOverlapClipping() {
+        val ordinary = town("Ordinary region", "ordinary", 100.0,
+            square(-76.0, 39.0, -74.0, 41.0)).copy(kind = PlaceKind.STATE)
+        val crossing = town("Date-line region", "date-line", 100.0,
+            """{"type":"Polygon","coordinates":[[[179,60],[-179,60],[-179,62],[179,62],[179,60]]]}""")
+            .copy(kind = PlaceKind.STATE)
+        assertTrue(TownOverlayPartition.safeForPlanarRegionPartition(listOf(ordinary)))
+        assertFalse(TownOverlayPartition.safeForPlanarRegionPartition(listOf(ordinary, crossing)))
+        assertEquals("Wide bounds cannot cull date-line towns", null,
+            OverlayViewport.ofGeometry(crossing.geometryJson))
+        assertFalse(TownOverlayPartition.safeForPlanarRegionPartition(listOf(ordinary,
+            crossing.copy(geometryJson = "invalid"))))
+    }
+
+    @Test fun overlappingStateFillsArePartitionedWithoutInventingCoverage() {
+        val regions = listOf(
+            PlaceOverlayData("west", "West", PlaceKind.STATE, null, 4.0,
+                square(0.0, 0.0, 2.0, 2.0)),
+            PlaceOverlayData("east", "East", PlaceKind.STATE, null, 4.0,
+                square(1.0, 0.0, 3.0, 2.0))
+        )
+        val result = TownOverlayPartition.render(regions)
+        val features = JSONObject(result.fills).getJSONArray("features")
+        assertEquals(2, features.length())
+        fun coverage(lon: Double, lat: Double): Int = (0 until features.length()).count { index ->
+            PlaceGeometry.contains(features.getJSONObject(index).getJSONObject("geometry"), lat, lon)
+        }
+        assertEquals("Only one region may shade overlapping land", 1, coverage(1.5, 1.0))
+        assertEquals("West-only land stays visible", 1, coverage(0.5, 1.0))
+        assertEquals("East-only land stays visible", 1, coverage(2.5, 1.0))
+        assertEquals("Outside the source regions stays uncovered", 0, coverage(4.0, 1.0))
+    }
+
     @Test fun freshlyEncodedFeatureKeepsExactSerializedGeometryAndProperties() {
         val shapes = listOf(
             square(-74.0000000001, 40.0000000001, -73.9999999999, 40.0000000002),

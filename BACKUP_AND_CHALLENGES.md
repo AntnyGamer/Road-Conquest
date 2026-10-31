@@ -5,31 +5,23 @@ Settings → **Import and restore progress** accepts authenticated Road Conquest
 literal apostrophes; legacy format 9 could not distinguish an apostrophe before a formula
 from its spreadsheet-protection prefix. Format 11 preserves the first-unlock timestamps for new mile tiles. Format 12 also preserves compressed driving fixes. Older formats retain explored tiles but may have no reliable historical tile-unlock dates or compressed fixes.
 
-Settings now offers two portable backup choices:
+Settings exports a **password-free, export-only .zip** on GitHub and Play builds.
+It contains the original CSV tables and metadata, including readable GPS history.
+Keep the exported ZIP private. It is deliberately unsigned and **cannot be imported
+back into Road Conquest**, even if it contains valid data. Export does not require
+Google Play, internet, a passphrase, or a signing service.
 
-- **Private encrypted .rcbackup (GitHub or Google Play):** Requires a user-supplied passphrase of
-  at least 12 characters. AES-256-GCM authenticates and encrypts the complete ZIP including GPS
-  history; PBKDF2-HMAC-SHA256 (310,000 iterations, random 16-byte salt) derives the encryption
-  key and each export uses a random 12-byte nonce. This works offline on either installation type.
-  Keep your passphrase: it cannot be reset and is never stored in the app. Altered files and wrong
-  passphrases are rejected before restoring any data. Opening these files in a normal ZIP program
-  will not work; import them using Road Conquest.
-- **Google Play-verified .zip:** Requires internet and an official licensed Google Play installation
-  that passes app/device verification. The server signs the ZIP fingerprint; backup contents and
-  GPS history are not sent to the signing service. Trusted verification keys are fetched via HTTPS
-  and cached for offline restore. The signing service must be configured separately; see
-  [server setup](server/README.md#protected-local-backups).
-
-Both paths then use the same strict ZIP schema, CRC and data validation before confirmation.
-Older unsigned exports remain rejected. Neither import path grants verified scoring or restored
-weekly goal credit.
+The separate legacy restore feature still supports earlier encrypted `.rcbackup`
+files when their original passphrase is supplied, and older Play-signed ZIPs
+when their signatures can be verified. This is backward compatibility, not a
+password prompt in the new export flow.
 
 The importer validates archive entries, CRCs, exact CSV columns, UTF-8, coordinates,
 geometry, timestamps, unique keys, road references, row counts, mileage and the points
 ledger before showing a replacement confirmation. It parses quoted names and multiline
 fields, uses bounded streaming into a private staging database, rejects duplicate or
 unexpected/path-traversal entries, and caps compressed and expanded data at 512 MiB.
-Export enforces the same expanded-data limit and includes the signature in its file-size cap.
+Export enforces the same expanded-data limit without requesting an archive signature.
 
 Before replacement, one private recovery ZIP is saved on the phone. **Restore progress
 from before last import** can recover it offline on the same installation (the current state is
@@ -41,10 +33,10 @@ VIP ownership, permissions or upload old GPS for leaderboard credit. Google Play
 VIP separately. Delete local data removes the private recovery backup and its authentication key.
 
 **Goals → Weekly challenges and friends** shows four stacking local goals in this branch:
-five newly unlocked roads (75 points), 25 newly unlocked roads (250 points),
-one newly rewarded town (75 points), and three newly rewarded towns (300 points).
-A player can earn up to 700 weekly-goal points. The original 25-road and three-town
-goal IDs and payouts remain unchanged; only the two starter milestones are new.
+five newly unlocked roads (20 points), 25 newly unlocked roads (70 points),
+one newly rewarded town (25 points), and three newly rewarded towns (80 points).
+A player can earn up to 195 weekly-goal points. Goal IDs and previously awarded
+points are preserved; the lower payouts apply to future claims.
 Old-road sections, excluded road groups and the zero-point starting town do not count.
 Restored roads, GPS fixes and place discoveries also remain ineligible, including discoveries
 resolved later by matching, backfill or geocoding. Fresh live driving remains eligible.
@@ -60,7 +52,7 @@ and backups are never used as verified evidence. Hidden profiles stay out of ran
 Local goals award points independently of verified friend standings; no winner prize is
 advertised or awarded by friend rankings.
 
-The current beta temporarily hides public and friend leaderboards, leaderboard privacy
+The standard build currently hides public and friend leaderboards, leaderboard privacy
 controls and verified-drive sharing with `FeatureFlags.LEADERBOARDS_VISIBLE = false`.
 No verification evidence is collected or uploaded while hidden. Local weekly goals and
 friend management remain available; the ranking implementation and existing scores are

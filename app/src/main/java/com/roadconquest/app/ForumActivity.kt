@@ -313,7 +313,7 @@ class ForumActivity : Activity() {
         PopupMenu(this,anchor).apply {
             menu.add("Community rules").setOnMenuItemClickListener { rules(); true }
             menu.add("Help or appeal").setOnMenuItemClickListener {
-                runCatching { startActivity(Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://github.com/AntnyGamer/RoadConquest-Beta/issues"))) }
+                runCatching { startActivity(Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://github.com/AntnyGamer/Road-Conquest/issues"))) }
                     .onFailure { message("Open the Road Conquest GitHub Issues page for help.") }; true
             }
             if (sessionToken() != null) {

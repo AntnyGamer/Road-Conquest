@@ -58,29 +58,33 @@ class GeoBoundariesClient(private val loadJson: (String, Int) -> JSONObject = ::
             val features = data.getJSONArray("features")
             val expectedName = place.displayName.trim()
             var geometry: JSONObject? = null
+            var selectedArea = 0.0
             for (i in 0 until features.length()) {
-                val feature = features.getJSONObject(i)
-                val name = feature.getJSONObject("properties").optString("shapeName").trim()
-                if (place.kind != PlaceKind.COUNTRY && !name.equals(expectedName, ignoreCase = true)) continue
+                val feature = features.optJSONObject(i) ?: continue
+                if (place.kind != PlaceKind.COUNTRY &&
+                    feature.optJSONObject("properties")?.optString("shapeName")?.trim()
+                        ?.equals(expectedName, ignoreCase = true) != true
+                ) continue
                 val candidate = feature.optJSONObject("geometry") ?: continue
                 val type = candidate.optString("type")
                 if ((type != "Polygon" && type != "MultiPolygon") ||
                     (containment && !PlaceGeometry.contains(candidate, place.latitude, place.longitude))
                 ) continue
-                if (geometry != null) return null // Still reject ambiguous multiple matches.
+                val area = PlaceOverlayClient.areaSquareKilometers(candidate)
+                if (!area.isFinite() || area <= 0.0) continue
+                if (geometry != null) return null // Still reject ambiguous valid matches.
                 geometry = candidate
+                selectedArea = area
             }
             val selected = geometry ?: return null
-            val area = PlaceOverlayClient.areaSquareKilometers(selected)
-            if (!area.isFinite() || area <= 0) return null
-            return PlaceOverlayData(place.key, place.displayName, place.kind, null, area, selected.toString())
+            return PlaceOverlayData(place.key, place.displayName, place.kind, null, selectedArea, selected.toString())
         }
         private fun readJson(raw: String, limit: Int): JSONObject {
             var url = raw
             repeat(4) {
                 val connection = (URL(url).openConnection() as HttpURLConnection).apply {
                     instanceFollowRedirects = false; connectTimeout = 8000; readTimeout = 15000
-                    setRequestProperty("User-Agent", "RoadConquest (+https://github.com/AntnyGamer/RoadConquest-Beta)")
+                    setRequestProperty("User-Agent", "RoadConquest (+https://github.com/AntnyGamer/Road-Conquest)")
                     setRequestProperty("Accept", "application/geo+json, application/json")
                 }
                 try {

@@ -46,6 +46,38 @@ class FogOverlayTest {
             lats.min(), lats.max(), lons.min(), lons.max())
     }
 
+
+    @Test fun liveMapDoesNotDrawExtrapolatedJunctionBendsWithoutRealRoadShape() {
+        val incoming = junctionRoad("Approach", 1_000_000L,
+            -74.096758 to 39.967769, -74.096682 to 39.967903, -74.096632 to 39.967990)
+        val outgoing = junctionRoad("Exit", 1_008_000L,
+            -74.096525 to 39.968062, -74.096446 to 39.968034, -74.096312 to 39.967987)
+        assertEquals(2, OverlayRoads.prepare(listOf(incoming, outgoing)).starts.size)
+        val verified = OverlayRoads.prepare(listOf(incoming, outgoing),
+            requireMatchedConnectorGeometry = true)
+        assertEquals("The guess is retained, but unsupported geometry is not drawn", 3, verified.starts.size)
+        assertEquals(12, verified.coordinates.size)
+    }
+
+    @Test fun liveMapKeepsJunctionGuessingWhenAnotherMatchedRoadProvidesItsTrueCurve() {
+        val incoming = junctionRoad("Approach", 1_000_000L,
+            -74.096758 to 39.967769, -74.096682 to 39.967903, -74.096632 to 39.967990)
+        val outgoing = junctionRoad("Exit", 1_008_000L,
+            -74.096525 to 39.968062, -74.096446 to 39.968034, -74.096312 to 39.967987)
+        // One independently matched curve passes close to both broken endpoints,
+        // but is not itself snapped onto either endpoint (more than 1 m away).
+        val donor = junctionRoad("Approach", 500_000L,
+            -74.096615 to 39.967985, -74.096570 to 39.968045,
+            -74.096508 to 39.968062)
+        val roads = listOf(incoming, outgoing, donor)
+        val overlay = OverlayRoads.prepare(roads, requireMatchedConnectorGeometry = true)
+        assertEquals("The guessed turn is joined through saved curved geometry", 3, overlay.starts.size)
+        val withoutDonor = OverlayRoads.prepare(listOf(incoming, outgoing),
+            requireMatchedConnectorGeometry = true)
+        assertEquals("Without the matched curve, leave the gap", 3, withoutDonor.starts.size)
+        assertTrue(overlay.coordinates.size > withoutDonor.coordinates.size + 6)
+    }
+
     @Test fun confirmedFlandersToColonialTurnVisuallyJoinsWithoutInventingRoadHistory() {
         // Translated coordinates derived from the geometry of a recorded broken turn.
         val incoming = junctionRoad("approach", 1_000_000L,

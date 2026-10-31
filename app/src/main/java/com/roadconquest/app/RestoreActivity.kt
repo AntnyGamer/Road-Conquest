@@ -65,7 +65,7 @@ class RestoreActivity : Activity() {
             setPadding(0, 0, 0, (12 * dp).toInt())
         })
         root.addView(TextView(this).apply {
-            text = "Choose a Road Conquest backup to restore trips, roads, distance, fog, discoveries, points and garage items.\n\nPrivate .rcbackup files work offline on GitHub or Play builds and require their export passphrase. Google Play-verified .zip files require saved verification keys or internet. Altered and unsigned files are rejected.\n\nYour current progress is backed up. Tracking and verified sharing remain off afterward. Restored history does not earn weekly challenge credit or change verified rankings.\n\nSign in and restore Google Play VIP separately."
+            text = "Choose a Road Conquest backup to restore trips, roads, distance, fog, discoveries, points and garage items.\n\nNew password-free export-only ZIPs are for archiving or viewing outside Road Conquest and cannot be restored here. Older encrypted .rcbackup files still require their original passphrase. Older Google Play-verified ZIPs require saved verification keys or internet. Altered and unsigned files are rejected.\n\nYour current progress is backed up. Tracking and verified sharing remain off afterward. Restored history does not earn weekly challenge credit or change verified rankings.\n\nSign in and restore Google Play VIP separately."
             textSize = 15f
             setTextColor(Appearance.color(this@RestoreActivity, R.attr.rcTextSecondary))
             setBackgroundResource(R.drawable.settings_card_background)

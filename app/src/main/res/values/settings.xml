@@ -19,4 +19,6 @@
     <string name="weekly_reminders_detail">Reminds you on Mondays around 6 PM. Requires notification permission.</string>
     <string name="crash_reporting_title">Share crash reports with Firebase</string>
     <string name="crash_reporting_detail">Optional crash and device diagnostics. Does not include saved routes or account details.</string>
+    <string name="leaderboard_privacy_detail">Choose whether your profile appears in public rankings.</string>
+    <string name="verify_drives_detail">When enabled, sends live GPS and integrity data to verify scores.</string>
 </resources>
