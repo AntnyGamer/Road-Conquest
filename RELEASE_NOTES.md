@@ -11,6 +11,9 @@
 - **Boundary display:** State and region overlays request unsimplified geometry where supported, refresh old render caches, and partition overlapping neighboring snapshots for display. Source polygons and rewards are not rewritten; inconsistent upstream boundaries may remain.
 - **Map settings:** Optional town medals, automatic car following and display-only distance units. Tracking gains an optional keep-screen-awake toggle; controls include concise descriptions.
 - **Reduced avoidable UI work:** Opening settings or switching categories without a search no longer builds search text by recursively reading all controls. Search still examines live settings text when a query exists, and its whitespace matching is unchanged.
+- **More robust worldwide region fallback:** A malformed unrelated entry in a geoBoundaries dataset no longer hides a valid matching region. Exact names, containment checks and ambiguous-match rejection remain enforced.
+- **Less empty map work:** State/country overlays and town overlays with medals disabled reuse the existing empty badge collection rather than allocating and serializing an unused one.
+- **Current overlay configuration location:** Read the public overlay-provider configuration from the canonical Road-Conquest repository without relying on a legacy repository redirect.
 - **Smaller fallback parser allocation:** LocationIQ's NoMatch/NoSegment check uses two direct comparisons instead of allocating a temporary set. This does not change matching confidence, GPS evidence, requests, or fallback behavior.
 - **Test infrastructure:** Existing SQLite test fixtures batch independent inserts, reuse selected connections, and avoid repeated immutable fixture/regex creation. The server CI job caches verified npm downloads while still running `npm ci`.
 
