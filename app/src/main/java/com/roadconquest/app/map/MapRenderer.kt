@@ -1183,18 +1183,21 @@ class MapRenderer(
                     ?: return@publish false
                 val boundarySource = style.getSource(overlayBoundarySourceId(mode)) as? GeoJsonSource
                     ?: return@publish false
-                val badgeSource = style.getSource(TOWN_BADGE_SOURCE_ID) as? GeoJsonSource
-                    ?: return@publish false
-                for (place in snapshot) place.completion?.let { progress ->
-                    val id = TownCompletion.imageId(progress)
-                    if (id !in townBadgeImages) {
-                        val image = TownCompletion.badge(progress)
-                        townBadgeImages[id] = image
-                        style.addImage(id, image)
+                if (kind == PlaceKind.TOWN) {
+                    val badgeSource = style.getSource(TOWN_BADGE_SOURCE_ID) as? GeoJsonSource
+                        ?: return@publish false
+                    // Partitioned-away towns have no marker to display.
+                    for (place in badgePlaces) place.completion?.let { progress ->
+                        val id = TownCompletion.imageId(progress)
+                        if (id !in townBadgeImages) {
+                            val image = TownCompletion.badge(progress)
+                            townBadgeImages[id] = image
+                            style.addImage(id, image)
+                        }
                     }
+                    installTownBadgeLayer(style)
+                    badgeSource.setGeoJson(badges)
                 }
-                installTownBadgeLayer(style)
-                badgeSource.setGeoJson(badges)
                 fillSource.setGeoJson(fillFeatures)
                 boundarySource.setGeoJson(boundaries)
                 true
