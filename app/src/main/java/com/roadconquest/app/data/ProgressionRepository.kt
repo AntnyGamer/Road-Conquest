@@ -181,8 +181,10 @@ class ProgressionRepository(context: Context) {
         require(limit in 1..10_000)
         if (!isCurrentHistory()) return@synchronized 0
         val db = dbHelper.writableDatabase
-        // Do not recover places from a previous profile or an unresolved baseline.
-        val baselineTime = placeHistoryStartTime(db) ?: return@synchronized 0
+        // Only scan fixes after this profile's saved starting location.
+        val baselineTime = startingLocation()?.recordedAt ?: return@synchronized 0
+        if (!db.rawQuery("SELECT 1 FROM visited_places LIMIT 1", null).use { it.moveToFirst() })
+            return@synchronized 0
 
         var inserted = 0
         var remaining = limit
@@ -243,24 +245,8 @@ class ProgressionRepository(context: Context) {
                WHERE counter_key IN (?, ?) AND value = 1""",
             arrayOf(COUNTER_PLACE_BACKFILL_NEXT_ID, COUNTER_SKIPPED_PLACE_BACKFILL_NEXT_ID)
         ).use { it.moveToFirst() && it.getInt(0) == 2 }
-        !completed && placeHistoryStartTime(db) != null
-    }
-
-    /** The earliest trusted timestamp in this progression history. */
-    private fun placeHistoryStartTime(db: SQLiteDatabase): Long? {
-        val baseline = startingLocation()
-        if (baseline != null) {
-            return baseline.recordedAt.takeIf {
-                db.rawQuery("SELECT 1 FROM visited_places LIMIT 1", null).use { rows -> rows.moveToFirst() }
-            }
-        }
-        // Older builds saved verified visits before zero-point baseline markers existed.
-        // Start at their earliest confirmed visit, not the start of all GPS storage:
-        // earlier raw fixes may belong to a progression reset and must not earn places.
-        return db.rawQuery(
-            "SELECT MIN(first_visited_at) FROM visited_places WHERE first_visited_at > 0",
-            null
-        ).use { rows -> if (rows.moveToFirst() && !rows.isNull(0)) rows.getLong(0) else null }
+        !completed && startingLocation() != null &&
+            db.rawQuery("SELECT 1 FROM visited_places LIMIT 1", null).use { it.moveToFirst() }
     }
 
     /** V2 keys cannot collide with old 2 km keys while pending old visits resolve. */
