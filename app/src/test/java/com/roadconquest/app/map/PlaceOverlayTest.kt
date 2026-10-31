@@ -408,6 +408,27 @@ class PlaceOverlayTest {
         } finally { PlaceOverlayCache.clear(context) }
     }
 
+    @Test fun successfulCacheOmitsOnlyUnusedMetadataAndRoundTripsUnknownPopulation() {
+        val context = RuntimeEnvironment.getApplication()
+        PlaceOverlayCache.clear(context)
+        try {
+            val place = PlaceDiscovery(PlaceKind.COUNTRY, "zz", "Example", "", "", 1L, 0.5, 0.5)
+            val geometry = """{"type":"Polygon","coordinates":[[[0,0],[1,0],[1,1],[0,1],[0,0]]]}"""
+            val data = PlaceOverlayData(place.key, place.displayName, place.kind, null, 1.0, geometry)
+            assertTrue(PlaceOverlayCache.write(context, place, data))
+            val file = File(context.filesDir, "place-overlays-v3").listFiles()!!.single { it.name.endsWith(".json") }
+            fun saved() = java.util.zip.GZIPInputStream(file.inputStream()).bufferedReader().use {
+                JSONObject(it.readText())
+            }
+            assertFalse(saved().has("population"))
+            assertFalse(saved().has("fetched_at"))
+            assertNull(PlaceOverlayCache.read(context, place).data?.population)
+            assertTrue(PlaceOverlayCache.write(context, place, data.copy(population = 123)))
+            assertEquals(123L, saved().getLong("population"))
+            assertEquals(123L, PlaceOverlayCache.read(context, place).data?.population)
+        } finally { PlaceOverlayCache.clear(context) }
+    }
+
     @Test fun boundaryCacheIsCompressedAndStillReadsPreviousPlainJson() {
         val context = RuntimeEnvironment.getApplication()
         val place = PlaceDiscovery(
