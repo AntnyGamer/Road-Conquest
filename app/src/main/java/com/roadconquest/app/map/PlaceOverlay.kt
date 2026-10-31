@@ -337,7 +337,7 @@ object PlaceOverlayCache {
             }
             if (!json.optBoolean("found", false)) {
                 val fetchedAt = json.optLong("fetched_at", 0L)
-                if (fetchedAt <= 0L || System.currentTimeMillis() - fetchedAt > NEGATIVE_CACHE_MS) {
+                if (fetchedAt <= 0L || System.currentTimeMillis() - fetchedAt !in 0L..NEGATIVE_CACHE_MS) {
                     forgetCacheFile(file)
                     PlaceOverlayCacheResult(false, null)
                 } else PlaceOverlayCacheResult(true, null)
