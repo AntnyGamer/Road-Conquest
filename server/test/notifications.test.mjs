@@ -9,6 +9,7 @@ import { createFriends } from '../src/friends.mjs';
 // The checked-in schema is immutable during these tests; reuse its decoded text.
 let schemaPromise;
 const readSchema = () => schemaPromise ??= readFile(new URL('../schema.sql', import.meta.url), 'utf8');
+const registration = (fid, binding) => ({fid, binding, friend_requests: true, friend_posts: false});
 
 test('notification decryption authenticates old ciphertext without copying its 100-byte plaintext', async () => {
   const pepper = 'local-notification-buffer-test-pepper';
@@ -212,7 +213,7 @@ test('notification tokens are encrypted, session-scoped, bounded, revoked and re
     const sent = [];
     const notifications = createNotifications(pool, { pepper: 'test-pepper', sender: async (...values) => { sent.push(values); return 'sent'; } });
     const token = 'c' + 'a'.repeat(21); const binding = randomUUID();
-    await notifications.register(users[1], { fid: token, binding });
+    await notifications.register(users[1], registration(token, binding));
     const stored = (await pool.query('SELECT * FROM notification_devices')).rows[0];
     assert.equal(stored.encrypted_token.includes(Buffer.from(token)), false);
     const friends = createFriends(pool, target => notifications.friendRequest(target));
@@ -221,14 +222,14 @@ test('notification tokens are encrypted, session-scoped, bounded, revoked and re
     assert.deepEqual(sent, [[token, binding]]); // New requests only, after commit.
     await notifications.remove(users[0]);
     assert.equal((await pool.query('SELECT count(*) FROM notification_devices')).rows[0].count, '1');
-    await assert.rejects(notifications.register(users[1], { fid: 'bad', binding }), /Invalid/);
+    await assert.rejects(notifications.register(users[1], registration('bad', binding)), /Invalid/);
     await notifications.remove(users[1]);
     await notifications.friendRequest(users[1].id); assert.equal(sent.length, 1);
-    await notifications.register(users[1], { fid: token, binding });
+    await notifications.register(users[1], registration(token, binding));
     await pool.query('DELETE FROM sessions WHERE token_hash=$1', [users[1].session_hash]);
     assert.equal((await pool.query('SELECT count(*) FROM notification_devices')).rows[0].count, '0');
-    await assert.rejects(notifications.register(users[1], { fid: token, binding }), /Authentication/);
-    await notifications.register(users[0], { fid: token, binding });
+    await assert.rejects(notifications.register(users[1], registration(token, binding)), /Authentication/);
+    await notifications.register(users[0], registration(token, binding));
     await pool.query('DELETE FROM users WHERE id=$1', [users[0].id]);
     assert.equal((await pool.query('SELECT count(*) FROM notification_devices')).rows[0].count, '0');
   } finally { await pool.end(); }
@@ -248,22 +249,22 @@ test('device refresh, FID replacement and ownership transfer keep fresh encrypte
     const sent = [];
     const service = createNotifications(pool, { pepper: 'refresh-only-test-pepper', sender: async (...args) => { sent.push(args); return 'sent'; } });
     const first = 'c' + 'x'.repeat(21), second = 'd' + 'y'.repeat(21), binding = randomUUID();
-    await service.register(users[0], { fid: first, binding: randomUUID() });
+    await service.register(users[0], registration(first, randomUUID()));
     await pool.query("UPDATE notification_devices SET updated_at=CURRENT_TIMESTAMP-INTERVAL '29 days'");
-    await service.register(users[0], { fid: first, binding });
+    await service.register(users[0], registration(first, binding));
     assert.equal((await pool.query("SELECT count(*) FROM notification_devices WHERE updated_at>CURRENT_TIMESTAMP-INTERVAL '1 minute' AND binding=$1", [binding])).rows[0].count, '1');
     await service.friendRequest(users[0].id);
     assert.deepEqual(sent.pop(), [first,binding]);
-    await service.register(users[0], { fid: second, binding });
+    await service.register(users[0], registration(second, binding));
     assert.equal((await pool.query('SELECT count(*) FROM notification_devices')).rows[0].count, '1');
     await service.friendRequest(users[0].id);
     assert.deepEqual(sent.pop(), [second,binding]);
     // A caller cannot use another user's session to remove or replace its device.
-    await assert.rejects(service.register({ ...users[1], session_hash: users[0].session_hash }, { fid: first, binding }), /Authentication/);
+    await assert.rejects(service.register({ ...users[1], session_hash: users[0].session_hash }, registration(first, binding)), /Authentication/);
     await service.friendRequest(users[0].id);
     assert.deepEqual(sent.pop(), [second,binding]);
     const nextBinding = randomUUID();
-    await service.register(users[1], { fid: second, binding: nextBinding });
+    await service.register(users[1], registration(second, nextBinding));
     assert.equal((await pool.query('SELECT count(*) FROM notification_devices')).rows[0].count, '1');
     await service.friendRequest(users[0].id);
     assert.equal(sent.length, 0);
@@ -290,7 +291,7 @@ test('push delivery keeps event/device caps, expiry and no-device accounting in 
     for(let i=0;i<8;i++){
       const user={id:users[0].id,session_hash:randomBytes(32)},fid=randomBytes(16).toString('base64url');fids.push(fid);
       await pool.query("INSERT INTO sessions(token_hash,user_id,expires_at) VALUES ($1,$2,CURRENT_TIMESTAMP+INTERVAL '1 day')",[user.session_hash,user.id]);
-      await service.register(user,{fid,binding:randomUUID()});
+      await service.register(user,registration(fid, randomUUID()));
       if(i===6)await pool.query("UPDATE sessions SET created_at=CURRENT_TIMESTAMP-INTERVAL '2 days',expires_at=CURRENT_TIMESTAMP-INTERVAL '1 day' WHERE token_hash=$1",[user.session_hash]);
       if(i===7)await pool.query("UPDATE notification_devices SET updated_at=CURRENT_TIMESTAMP-INTERVAL '31 days' WHERE session_hash=$1",[user.session_hash]);
     }
@@ -322,10 +323,10 @@ test('an invalid-token reply cannot delete a registration refreshed while delive
     const fid=randomBytes(16).toString('base64url'),binding=randomUUID();let refreshed=false;
     const service=createNotifications(pool,{pepper:'race-only-pepper',sender:async(token)=>{
       assert.equal(token,fid);
-      if(!refreshed){refreshed=true;await service.register(user,{fid,binding});}
+      if(!refreshed){refreshed=true;await service.register(user,registration(fid, binding));}
       return 'unregistered';
     }});
-    await service.register(user,{fid,binding:randomUUID()});
+    await service.register(user,registration(fid, randomUUID()));
     await service.friendRequest(user.id);
     assert.equal((await pool.query('SELECT binding FROM notification_devices')).rows[0].binding,binding);
     await service.friendRequest(user.id);
