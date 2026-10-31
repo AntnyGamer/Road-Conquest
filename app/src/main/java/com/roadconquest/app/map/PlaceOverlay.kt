@@ -279,19 +279,10 @@ object PlaceOverlayCache {
 
     fun generation(): Long = generation.get()
 
-    /** The former state cache shared a directory with still-valid country polygons. */
-    private fun reclaimOldStateCache(context: Context, place: PlaceDiscovery, target: File) {
-        if (place.kind != PlaceKind.STATE) return
-        val obsolete = File(File(context.applicationContext.filesDir, DIRECTORY), target.name)
-        if (obsolete.isFile || File(obsolete.path + ".bak").isFile ||
-            File(obsolete.path + ".new").isFile) forgetCacheFile(obsolete)
-    }
-
     fun read(context: Context, place: PlaceDiscovery): PlaceOverlayCacheResult =
         synchronized(mutationLock) {
             initialTrim(context)
             val target = file(context, place)
-            reclaimOldStateCache(context, place, target)
             readCacheFile(target, place)
         }
 
