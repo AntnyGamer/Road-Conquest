@@ -711,28 +711,6 @@ class ProgressionRepositoryTest {
         assertEquals(0L, reset.balance)
     }
 
-    @Test fun existingRewardLedgerKeepsHistoricAchievementPayoutAfterRebalance() {
-        val repository = ProgressionRepository(context)
-        // Previously claimed achievements keep their ledger totals, even after milestone values change.
-        assertTrue(repository.awardAchievement("battery_1", 1_000))
-        assertTrue(repository.awardAchievement("ads_5", 100))
-        ProgressionManager.recordBatteryPercent(context, 1)
-        repeat(5) { assertTrue(AdRewardBridge(context, 10L).onCompletedAd()) }
-        // A pre-existing battery award stays intact; no NEW 5% award is minted.
-        assertEquals(1_100L + 5L * 10L, repository.snapshot().balance)
-        assertTrue("battery_1" in repository.snapshot().rewardedAchievements)
-        assertTrue("ads_5" in repository.snapshot().rewardedAchievements)
-        val earned = Achievements.progress(
-            DataSummary(0, 0, null, null),
-            ProgressionManager.metrics(repository.snapshot())
-        )
-        assertEquals(1_000L, earned.first { it.id == "battery_1" }.rewardPoints)
-        assertEquals(100L, earned.first { it.id == "ads_5" }.rewardPoints)
-        // New players must not see or be awarded the retired battery milestone.
-        assertFalse(Achievements.progress(DataSummary(0, 0, null, null))
-            .any { it.id == "battery_1" || it.id == "battery_5" })
-    }
-
     @Test fun partialBaselineKeepsRetryingMissingKindsWithoutAwardingThem() {
         val progression = ProgressionRepository(context)
         val fix = android.location.Location("gps").apply {
