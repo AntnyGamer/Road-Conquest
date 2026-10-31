@@ -224,83 +224,7 @@ class AppDatabase private constructor(context: Context) :
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        if (oldVersion !in 10..15 || newVersion !in 11..16 || newVersion <= oldVersion) {
-            error("Database upgrade $oldVersion -> $newVersion is unsupported")
-        }
-        if (oldVersion == 10) {
-            createExplorationGridTable(db)
-            // SQLiteOpenHelper wraps this upgrade in a transaction. If backfilling fails,
-            // the original data and version remain intact for a safe retry, never erased.
-            // Use both previously visible 50 m places and accepted raw driving fixes:
-            // some historical drives have raw points but no corresponding saved places.
-            val insert = db.compileStatement(
-                "INSERT OR IGNORE INTO explored_grid (grid_row, grid_col, latitude, longitude) VALUES (?, ?, ?, ?)"
-            )
-            try {
-                db.rawQuery(
-                    "SELECT latitude, longitude FROM explored_places UNION ALL " +
-                        "SELECT latitude, longitude FROM track_points " +
-                        "WHERE accuracy_m BETWEEN 0.01 AND 25",
-                    null
-                ).use { cursor ->
-                    while (cursor.moveToNext()) {
-                        val tile = FogGrid.cell(cursor.getDouble(0), cursor.getDouble(1)) ?: continue
-                        val center = FogGrid.center(tile)
-                        insert.bindLong(1, tile.row.toLong())
-                        insert.bindLong(2, tile.column.toLong())
-                        insert.bindDouble(3, center.first)
-                        insert.bindDouble(4, center.second)
-                        insert.executeInsert()
-                        insert.clearBindings()
-                    }
-                }
-            } finally {
-                insert.close()
-            }
-        }
-        // Existing exploration tiles have no trustworthy first-unlock date.
-        // Keep them unlocked with timestamp zero rather than inventing history.
-        if (oldVersion in 11..13 && newVersion >= 14) {
-            db.execSQL("ALTER TABLE explored_grid ADD COLUMN first_unlocked_at INTEGER NOT NULL DEFAULT 0")
-            db.execSQL("CREATE INDEX IF NOT EXISTS idx_explored_grid_first_unlocked ON explored_grid(first_unlocked_at)")
-        }
-        if (oldVersion < 12 && newVersion >= 12) {
-            // Older releases marked inferred traversal counts as mathematically exact.
-            // Preserve every visit and road, but display historic counts as estimates.
-            db.execSQL("UPDATE roads SET drive_count_exact = 0")
-        }
-        if (oldVersion < 15 && newVersion >= 15) {
-            // Accepted GPS evidence discarded by network sampling stays on device.
-            // Never changes the existing match queue, mileage or online request count.
-            createDiscardedDrivingFixesTable(db)
-        }
-        if (oldVersion < 16 && newVersion >= 16) {
-            for (table in listOf("track_points", "roads", "visited_places", "place_candidates")) {
-                db.execSQL("ALTER TABLE $table ADD COLUMN weekly_eligible INTEGER NOT NULL DEFAULT 1 CHECK(weekly_eligible IN (0,1))")
-            }
-            if (oldVersion >= 15) db.execSQL("ALTER TABLE skipped_driving_fixes ADD COLUMN weekly_eligible INTEGER NOT NULL DEFAULT 1 CHECK(weekly_eligible IN (0,1))")
-        }
-        if (oldVersion < 13 && newVersion >= 13) {
-            pruneHistoricalFogDrift(db)
-            // Once-only correction for candidates collected by old versions from
-            // stationary GPS wander and grid-center guesses. Keep the zero-point
-            // baseline; preserve other candidates only when a timestamped accurate
-            // accepted driving track sample supports the same physical position.
-            db.execSQL(
-                """DELETE FROM place_candidates
-                   WHERE NOT (cell_x = -9223372036854775808 AND cell_y = -9223372036854775808)
-                   AND NOT EXISTS (
-                     SELECT 1 FROM track_points t
-                     WHERE t.timestamp_ms BETWEEN place_candidates.first_seen_at - 10000
-                                               AND place_candidates.first_seen_at + 10000
-                       AND t.accuracy_m BETWEEN 0.01 AND 25
-                       -- Accepted driving fixes need not expose measured speed.
-                       -- The service can accept reliable inferred displacement.
-                       AND ABS(t.latitude - place_candidates.latitude) < 0.00027
-                       AND ABS(t.longitude - place_candidates.longitude) < 0.00036
-                   )"""
-            )
-        }
+        error("Unsupported database upgrade $oldVersion -> $newVersion")
     }
 
     private fun createDiscardedDrivingFixesTable(db: SQLiteDatabase) {
@@ -325,44 +249,6 @@ class AppDatabase private constructor(context: Context) :
      * recorded drive OR actual 50-m exploration. Genuine walking must remain.
      * Roads and raw driving history are untouched.
      */
-    private fun pruneHistoricalFogDrift(db: SQLiteDatabase) {
-        val oldCells = HashSet<Long>()
-        db.rawQuery("SELECT grid_row, grid_col FROM explored_grid", null).use { cursor ->
-            while (cursor.moveToNext()) {
-                val key = (cursor.getLong(0) shl 32) or (cursor.getLong(1) and 0xffff_ffffL)
-                oldCells.add(key)
-            }
-        }
-        if (oldCells.isEmpty()) return
-        // Include both recorded driving and walking-only exploration evidence;
-        // an old tile survives if either source contains its physical position.
-        for (query in listOf(
-            "SELECT latitude, longitude FROM track_points WHERE accuracy_m BETWEEN 0.01 AND 25",
-            "SELECT latitude, longitude FROM explored_places"
-        )) {
-            if (oldCells.isEmpty()) break
-            db.rawQuery(query, null).use { cursor ->
-                while (cursor.moveToNext() && oldCells.isNotEmpty()) {
-                    val tile = FogGrid.cell(cursor.getDouble(0), cursor.getDouble(1)) ?: continue
-                    oldCells.remove(tile.key)
-                }
-            }
-        }
-        val delete = db.compileStatement(
-            "DELETE FROM explored_grid WHERE grid_row = ? AND grid_col = ?"
-        )
-        try {
-            for (key in oldCells) {
-                delete.bindLong(1, key shr 32)
-                delete.bindLong(2, key.toInt().toLong())
-                delete.executeUpdateDelete()
-                delete.clearBindings()
-            }
-        } finally {
-            delete.close()
-        }
-    }
-
     companion object {
         private const val DB_NAME = "roadconquest.db"
         private const val DB_VERSION = 16
