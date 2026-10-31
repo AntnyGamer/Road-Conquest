@@ -1,5 +1,7 @@
 package com.roadconquest.app
 
+import com.roadconquest.app.util.DistanceUnitPreference
+import com.roadconquest.app.util.Prefs
 import com.roadconquest.app.util.MeasurementUnits
 import com.roadconquest.app.util.StatsText
 import org.junit.Assert.*
@@ -36,6 +38,35 @@ class MeasurementUnitsTest {
         val german = MeasurementUnits(Locale.GERMANY)
         assertEquals("1,6 km", german.longDistance(1609.344))
         assertEquals("1,6 km", german.tileSpan)
+    }
+
+    @Test fun unitOverridePersistsAndChangesDisplayOnly() {
+        val context = org.robolectric.RuntimeEnvironment.getApplication<android.app.Application>()
+        context.getSharedPreferences("roadconquest_preferences", 0).edit().remove("distance_units").commit()
+        val original = Locale.getDefault()
+        try {
+            Locale.setDefault(Locale.US)
+            MeasurementUnits.configure(DistanceUnitPreference.AUTOMATIC)
+            assertEquals(DistanceUnitPreference.AUTOMATIC, Prefs.distanceUnits(context))
+            val automatic = MeasurementUnits.current()
+            assertEquals("1.0 mi", automatic.longDistance(1609.344))
+            Prefs.setDistanceUnits(context, DistanceUnitPreference.KILOMETERS)
+            val metric = MeasurementUnits.current()
+            assertNotSame(automatic, metric)
+            assertEquals("1.6 km", metric.longDistance(1609.344))
+            assertEquals("2.6 km²", metric.area(2.589988110336))
+            assertEquals("16.1 / 16.1 km", metric.distanceProgress(10 * 1609.344, 10 * 1609.344))
+            assertEquals(DistanceUnitPreference.KILOMETERS, Prefs.distanceUnits(context))
+            Prefs.setDistanceUnits(context, DistanceUnitPreference.MILES)
+            assertEquals("1.0 mi", MeasurementUnits.current().longDistance(1609.344))
+            Locale.setDefault(Locale.CANADA)
+            assertEquals("1.0 mi", MeasurementUnits.current().longDistance(1609.344))
+            Prefs.setDistanceUnits(context, DistanceUnitPreference.AUTOMATIC)
+            assertEquals("1.6 km", MeasurementUnits.current().longDistance(1609.344))
+        } finally {
+            Locale.setDefault(original)
+            Prefs.setDistanceUnits(context, DistanceUnitPreference.AUTOMATIC)
+        }
     }
 
     @Test fun cachedSnapshotChangesWithLocaleAndShortUsDrivesNeverRoundToZeroMiles() {

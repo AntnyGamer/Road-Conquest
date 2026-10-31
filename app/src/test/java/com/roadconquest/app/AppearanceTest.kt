@@ -3,6 +3,7 @@ package com.roadconquest.app
 import android.app.AlertDialog
 import android.content.res.Configuration
 import android.graphics.Color
+import android.view.View
 import android.view.ContextThemeWrapper
 import android.widget.Button
 import android.widget.Switch
@@ -95,6 +96,40 @@ class AppearanceTest {
             assertTrue(Prefs.isTourHandled(activity))
             assertTrue(Prefs.isManualOnly(activity))
         } finally { controller.pause().stop().destroy() }
+    }
+
+    @Test fun mapPreferencesStayInTheirSettingsCategoriesAndPersist() {
+        val controller = Robolectric.buildActivity(SettingsActivity::class.java).create().start().resume()
+        try {
+            val activity = controller.get()
+            assertTrue(Prefs.showTownMedals(activity))
+            assertFalse(Prefs.isAutoFollowCar(activity))
+            assertFalse(Prefs.keepMapScreenAwake(activity))
+            val medals = activity.findViewById<Switch>(R.id.showTownMedalsSwitch)
+            val follow = activity.findViewById<Switch>(R.id.autoFollowCarSwitch)
+            val wake = activity.findViewById<Switch>(R.id.keepScreenAwakeSwitch)
+            medals.performClick()
+            follow.performClick()
+            wake.performClick()
+            assertFalse(Prefs.showTownMedals(activity))
+            assertTrue(Prefs.isAutoFollowCar(activity))
+            assertTrue(Prefs.keepMapScreenAwake(activity))
+            activity.findViewById<Button>(R.id.distanceUnitsButton).performClick()
+            val dialog = ShadowAlertDialog.getLatestAlertDialog()
+            dialog.listView.performItemClick(dialog.listView.getChildAt(2), 2, 2)
+            assertEquals(com.roadconquest.app.util.DistanceUnitPreference.KILOMETERS, Prefs.distanceUnits(activity))
+            assertTrue(activity.findViewById<Button>(R.id.distanceUnitsButton).text.contains("Kilometers"))
+            val mapCategory = activity.findViewById<android.widget.LinearLayout>(R.id.mapSettingsCard)
+            val trackingCategory = activity.findViewById<android.widget.LinearLayout>(R.id.trackingSettingsCard)
+            assertNotNull(mapCategory.findViewById<View>(R.id.showTownMedalsSwitch))
+            assertNotNull(mapCategory.findViewById<View>(R.id.autoFollowCarSwitch))
+            assertNotNull(mapCategory.findViewById<View>(R.id.distanceUnitsButton))
+            assertNotNull(trackingCategory.findViewById<View>(R.id.keepScreenAwakeSwitch))
+        } finally {
+            com.roadconquest.app.util.MeasurementUnits.configure(
+                com.roadconquest.app.util.DistanceUnitPreference.AUTOMATIC)
+            controller.pause().stop().destroy()
+        }
     }
 
     @Test fun mapAndSettingsStatsHaveClearDistinctCategoriesWithoutChangingTotals() {
