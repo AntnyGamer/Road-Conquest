@@ -404,7 +404,6 @@ object PlaceOverlayCache {
         initialTrimDone = false
         cacheBytes = 0L
         cacheFiles = 0
-        clearRetiredCaches(context)
         File(context.applicationContext.filesDir, DIRECTORY).deleteRecursively()
         File(context.applicationContext.filesDir, TOWN_DIRECTORY).deleteRecursively()
         File(context.applicationContext.filesDir, STATE_DIRECTORY).deleteRecursively()
