@@ -17,7 +17,7 @@
     <string name="tour_demo_hint">Preview only. No location needed.</string>
     <string name="tour_demo_revealed">Two more squares revealed. This preview does not save progress.</string>
     <string name="tour_tracking_title">Track your drives</string>
-    <string name="tour_tracking_body">Allow Precise location to record roads. Tracking starts automatically by default; switch to manual tracking in Settings if you prefer.\n\nSet up while parked. Stop tracking from the notification.</string>
+    <string name="tour_tracking_body">Allow Precise location to record roads. Automatic tracking is the default; switch to manual tracking in Settings if you prefer.\n\nSet up while parked. Stop tracking from the notification.</string>
     <string name="tour_layers_title">Explore nearby</string>
     <string name="tour_layers_body">Open Layers → Explore nearby to see visited tiles around you. You can also highlight towns, states or regions, and countries.\n\nTap the location button to recenter the map.</string>
     <string name="tour_progress_title">Trips, badges and goals</string>
