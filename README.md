@@ -51,8 +51,8 @@ Android 12 or newer is required. Download the signed APK from Releases for direc
 The GitHub APK uses the permanent upload key and updates compatible GitHub-installed betas.
 For an app installed through Google Play, update through Play instead: Play uses its separate
 app-signing key. Do not uninstall or clear app data to work around a signature error.
-Export a progress backup before changing installation channels.
-For Google Play, download the **signed** `RoadConquest-<version>.aab` from the [GitHub Releases](https://github.com/AntnyGamer/RoadConquest-Beta/releases) page, not the unsigned intermediate from GitHub Actions. The Actions artifact is named `android-build-inputs-unsigned` and contains `app-release-UNSIGNED-DO-NOT-UPLOAD.aab`, which Google Play cannot accept. Each release also includes the Android Studio project and SHA-256 checksums.
+Do not change installation channels without a compatible restorable backup. The new 1.1 password-free ZIP is an export-only archive and cannot be imported; previously authenticated restore formats remain supported.
+For Google Play, download the **signed** `RoadConquest-<version>.aab` from the [GitHub Releases](https://github.com/AntnyGamer/Road-Conquest/releases) page, not the unsigned intermediate from GitHub Actions. The Actions artifact is named `android-build-inputs-unsigned` and contains `app-release-UNSIGNED-DO-NOT-UPLOAD.aab`, which Google Play cannot accept. Each release also includes the Android Studio project and SHA-256 checksums.
 
 If Play still reports an invalid signature for the **signed release** bundle, compare the SHA-256 fingerprint under Play Console → Test and release → App integrity → **Upload key certificate** (not the separate Google Play **App signing key certificate**) with the release upload key:
 
@@ -64,12 +64,12 @@ Grant Precise location. For automatic background tracking, choose Allow all the 
 location settings and allow background battery use. Settings includes shortcuts to the relevant
 Android screens. Allow notifications to see the tracking notification and its Stop tracking control.
 
-The new release builds **1.0** with Android application ID
-`com.roadconquest.app` and internal version code **95**. Beta 68 used code 94, Beta 67 used code 93, Beta 66 used code 92, Beta 65 used code 91,
+The current release builds **1.1** with Android application ID
+`com.roadconquest.app` and internal version code **96**. Release 1.0 used code 95; Beta 68 used code 94, Beta 67 used code 93, Beta 66 used code 92, Beta 65 used code 91,
 Beta 64 used code 90, Beta 63 used code 89 and Beta 62 used code 88.
 Google Play permanently reserves uploaded version codes, including drafts and
-testing tracks. Before uploading a **signed 1.0 release bundle**, confirm
-that code 95 is still available in Play Console. The unsigned CI bundle cannot be uploaded.
+testing tracks. Before uploading a **signed 1.1 release bundle**, confirm
+that code 96 is still available in Play Console. The unsigned CI bundle cannot be uploaded.
 Do not confuse a locally tested development build with an already-published signed release.
 The app shows its exact version in Settings → Help & about. Treat the application ID as permanent once
 the Google Play listing is created; changing it later would create a different app.
