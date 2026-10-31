@@ -156,7 +156,14 @@ object PlaceOverlayCache {
         val files = listOf(DIRECTORY, TOWN_DIRECTORY, STATE_DIRECTORY, US_OFFICIAL_DIRECTORY)
             .flatMap { name ->
                 File(context.applicationContext.filesDir, name).listFiles().orEmpty()
-                    .filter { it.isFile && it.name.endsWith(".json") }
+                    .filter { entry ->
+                        // AtomicFile's .new is an uncommitted write, never a valid cache.
+                        // Under mutationLock no writer can still be using it.
+                        if (entry.isFile && entry.name.endsWith(".json.new")) {
+                            entry.delete()
+                            false
+                        } else entry.isFile && entry.name.endsWith(".json")
+                    }
             }
         var bytes = files.sumOf { it.length() }
         var count = files.size
