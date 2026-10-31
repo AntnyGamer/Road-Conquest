@@ -61,8 +61,10 @@ class GeoBoundariesClient(private val loadJson: (String, Int) -> JSONObject = ::
             var selectedArea = 0.0
             for (i in 0 until features.length()) {
                 val feature = features.optJSONObject(i) ?: continue
-                val name = feature.optJSONObject("properties")?.optString("shapeName")?.trim() ?: continue
-                if (place.kind != PlaceKind.COUNTRY && !name.equals(expectedName, ignoreCase = true)) continue
+                if (place.kind != PlaceKind.COUNTRY &&
+                    feature.optJSONObject("properties")?.optString("shapeName")?.trim()
+                        ?.equals(expectedName, ignoreCase = true) != true
+                ) continue
                 val candidate = feature.optJSONObject("geometry") ?: continue
                 val type = candidate.optString("type")
                 if ((type != "Polygon" && type != "MultiPolygon") ||
