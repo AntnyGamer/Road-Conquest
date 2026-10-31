@@ -6,6 +6,10 @@ import pg from 'pg';
 import { createFcmSender, createNotifications } from '../src/notifications.mjs';
 import { createFriends } from '../src/friends.mjs';
 
+// The checked-in schema is immutable during these tests; reuse its decoded text.
+let schemaPromise;
+const readSchema = () => schemaPromise ??= readFile(new URL('../schema.sql', import.meta.url), 'utf8');
+
 test('notification decryption authenticates old ciphertext without copying its 100-byte plaintext', async () => {
   const pepper = 'local-notification-buffer-test-pepper';
   const key = createHmac('sha256', pepper).update('roadconquest-fcm-token-encryption-v1').digest();
@@ -197,7 +201,7 @@ test('oversized push error bodies stop before reads and cannot revoke registrati
 test('notification tokens are encrypted, session-scoped, bounded, revoked and removed with accounts', { skip: !process.env.DATABASE_URL }, async () => {
   const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
   try {
-    await pool.query(await readFile(new URL('../schema.sql', import.meta.url), 'utf8'));
+    await pool.query(await readSchema());
     await pool.query('TRUNCATE users CASCADE');
     const users = (await pool.query(`INSERT INTO users(username_display,username_key,password_salt,password_hash)
       VALUES ('Pushone','pushone',$1,$2),('Pushtwo','pushtwo',$1,$2) RETURNING id`, [Buffer.alloc(16), Buffer.alloc(64)])).rows;
@@ -233,7 +237,7 @@ test('notification tokens are encrypted, session-scoped, bounded, revoked and re
 test('device refresh, FID replacement and ownership transfer keep fresh encrypted session bindings', { skip: !process.env.DATABASE_URL }, async () => {
   const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
   try {
-    await pool.query(await readFile(new URL('../schema.sql', import.meta.url), 'utf8'));
+    await pool.query(await readSchema());
     await pool.query('TRUNCATE users CASCADE');
     const users = (await pool.query(`INSERT INTO users(username_display,username_key,password_salt,password_hash)
       VALUES ('Refreshone','refreshone',$1,$2),('Refreshtwo','refreshtwo',$1,$2) RETURNING id`, [Buffer.alloc(16), Buffer.alloc(64)])).rows;
@@ -273,7 +277,7 @@ test('device refresh, FID replacement and ownership transfer keep fresh encrypte
 test('push delivery keeps event/device caps, expiry and no-device accounting in one query', {skip:!process.env.DATABASE_URL},async()=>{
   const pool=new pg.Pool({connectionString:process.env.DATABASE_URL});
   try{
-    await pool.query(await readFile(new URL('../schema.sql',import.meta.url),'utf8'));
+    await pool.query(await readSchema());
     await pool.query('TRUNCATE users,auth_rate_limits CASCADE');
     const users=(await pool.query(`INSERT INTO users(username_display,username_key,password_salt,password_hash)
       VALUES ('Gated','gated',$1,$2),('Empty','empty',$1,$2) RETURNING id`,[Buffer.alloc(16),Buffer.alloc(64)])).rows;
@@ -309,7 +313,7 @@ test('push delivery keeps event/device caps, expiry and no-device accounting in 
 test('an invalid-token reply cannot delete a registration refreshed while delivery was in flight',{skip:!process.env.DATABASE_URL},async()=>{
   const pool=new pg.Pool({connectionString:process.env.DATABASE_URL});
   try{
-    await pool.query(await readFile(new URL('../schema.sql',import.meta.url),'utf8'));
+    await pool.query(await readSchema());
     await pool.query('TRUNCATE users CASCADE');
     const user=(await pool.query(`INSERT INTO users(username_display,username_key,password_salt,password_hash)
       VALUES ('Racing','racing',$1,$2) RETURNING id`,[Buffer.alloc(16),Buffer.alloc(64)])).rows[0];
@@ -332,7 +336,7 @@ test('an invalid-token reply cannot delete a registration refreshed while delive
 test('forum post alerts are sampled, consent aware, blocked and capped at one per recipient per seven days', { skip: !process.env.DATABASE_URL }, async () => {
   const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
   try {
-    await pool.query(await readFile(new URL('../schema.sql', import.meta.url), 'utf8'));
+    await pool.query(await readSchema());
     await pool.query(await readFile(new URL('../forum-schema.sql', import.meta.url), 'utf8'));
     await pool.query('TRUNCATE users CASCADE');
     const users = (await pool.query(`INSERT INTO users(username_display,username_key,password_salt,password_hash)

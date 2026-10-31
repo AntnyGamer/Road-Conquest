@@ -5,10 +5,14 @@ import { readFile } from "node:fs/promises";
 import { createFriends } from "../src/friends.mjs";
 import { createCompetition } from "../src/competition.mjs";
 
+// The checked-in schema is immutable during these tests; reuse its decoded text.
+let schemaPromise;
+const readSchema = () => schemaPromise ??= readFile(new URL('../schema.sql', import.meta.url), 'utf8');
+
 test("friend status compaction preserves accepted priority, both ID orientations and username order",{skip:!process.env.DATABASE_URL},async()=>{
   const pool=new pg.Pool({connectionString:process.env.DATABASE_URL});
   try{
-    await pool.query(await readFile(new URL('../schema.sql',import.meta.url),'utf8'));
+    await pool.query(await readSchema());
     await pool.query('TRUNCATE users CASCADE');
     const users=(await pool.query(`INSERT INTO users(username_display,username_key,password_salt,password_hash)
       SELECT 'Status_'||g,'status_'||g,$1,$2 FROM generate_series(0,5) g ORDER BY g RETURNING id`,[Buffer.alloc(16),Buffer.alloc(64)])).rows;
@@ -27,7 +31,7 @@ test("friend status compaction preserves accepted priority, both ID orientations
 test("repeated incoming acceptance is idempotent without rewriting an accepted friendship", { skip: !process.env.DATABASE_URL }, async () => {
   const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
   try {
-    await pool.query(await readFile(new URL('../schema.sql', import.meta.url), 'utf8'));
+    await pool.query(await readSchema());
     await pool.query('TRUNCATE users CASCADE');
     const users = (await pool.query(`INSERT INTO users(username_display,username_key,password_salt,password_hash)
       SELECT 'Accept_'||g,'accept_'||g,$1,$2 FROM generate_series(0,2) g ORDER BY g RETURNING id,username_display`,
@@ -59,7 +63,7 @@ test("repeated incoming acceptance is idempotent without rewriting an accepted f
 test("concurrent requests preserve both users' fifty-relationship cap and notify only once", { skip: !process.env.DATABASE_URL }, async () => {
   const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
   try {
-    await pool.query(await readFile(new URL('../schema.sql', import.meta.url), 'utf8'));
+    await pool.query(await readSchema());
     await pool.query('TRUNCATE users CASCADE');
     const users = (await pool.query(`INSERT INTO users(username_display,username_key,password_salt,password_hash)
       SELECT 'Cap_'||lpad(g::text,3,'0'),'cap_'||lpad(g::text,3,'0'),$1,$2
@@ -97,7 +101,7 @@ test("friend consent, private weekly scores, ties, removal, username changes and
   const dataset = "fog-grid-v1";
   const dataVersion = "2026-10-01T00:00:00Z";
   try {
-    await pool.query(await readFile(new URL("../schema.sql", import.meta.url), "utf8"));
+    await pool.query(await readSchema());
     await pool.query("TRUNCATE users,road_catalogs CASCADE");
     const [alpha, beta, outsider] = (await pool.query(`INSERT INTO users(username_display,username_key,password_salt,password_hash)
       VALUES ('Alpha','alpha',$1,$2),('Beta','beta',$1,$2),('Outsider','outsider',$1,$2) RETURNING id`, [Buffer.alloc(16), Buffer.alloc(64)])).rows;

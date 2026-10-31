@@ -4,10 +4,14 @@ import { readFile } from 'node:fs/promises';
 import pg from 'pg';
 import { LOGIN_LIMIT_SQL, LOGIN_WITH_USER_SQL, RATE_LIMIT_SESSION_SQL, RATE_LIMIT_PROFILE_SQL, RATE_LIMIT_LOGOUT_SQL } from '../src/rate-limits.mjs';
 
+// The checked-in schema is immutable during these tests; reuse its decoded text.
+let schemaPromise;
+const readSchema = () => schemaPromise ??= readFile(new URL('../schema.sql', import.meta.url), 'utf8');
+
 test('paired login budgets preserve short circuit counts, saturation and independent window resets', { skip: !process.env.DATABASE_URL }, async () => {
   const pool = new pg.Pool({ connectionString:process.env.DATABASE_URL });
   try {
-    await pool.query(await readFile(new URL('../schema.sql',import.meta.url),'utf8'));
+    await pool.query(await readSchema());
     await pool.query('TRUNCATE auth_rate_limits');
     const args=['login-ip',Buffer.alloc(32,1),900000,2,'login-user',Buffer.alloc(32,2),900000,1];
     const reserve=async()=> (await pool.query(LOGIN_LIMIT_SQL,args)).rows[0].allowed;
@@ -33,7 +37,7 @@ test('paired login budgets preserve short circuit counts, saturation and indepen
 test('concurrent paired reservations cannot exceed the shared username cap', { skip: !process.env.DATABASE_URL }, async () => {
   const pool=new pg.Pool({ connectionString:process.env.DATABASE_URL,max:5 });
   try {
-    await pool.query(await readFile(new URL('../schema.sql',import.meta.url),'utf8'));
+    await pool.query(await readSchema());
     await pool.query('TRUNCATE auth_rate_limits');
     const attempts=await Promise.all(Array.from({length:100},(_,i)=>pool.query(LOGIN_LIMIT_SQL,
       ['login-ip',Buffer.alloc(32,10+i%10),900000,20,'login-user',Buffer.alloc(32,3),900000,8])));
@@ -46,7 +50,7 @@ test('concurrent paired reservations cannot exceed the shared username cap', { s
 test('one-round-trip login lookup preserves both budgets and hides denied account data', { skip: !process.env.DATABASE_URL }, async () => {
   const pool=new pg.Pool({ connectionString:process.env.DATABASE_URL });
   try {
-    await pool.query(await readFile(new URL('../schema.sql',import.meta.url),'utf8'));
+    await pool.query(await readSchema());
     await pool.query('TRUNCATE users,auth_rate_limits CASCADE');
     const salt=Buffer.alloc(16,7),hash=Buffer.alloc(64,9);
     await pool.query("INSERT INTO users(username_display,username_key,password_salt,password_hash) VALUES ('Driver','driver',$1,$2)",[salt,hash]);
@@ -73,7 +77,7 @@ test('one-round-trip login lookup preserves both budgets and hides denied accoun
 test('single-query session and IP budget preserve expiry, denial and window accounting', { skip: !process.env.DATABASE_URL }, async () => {
   const pool=new pg.Pool({connectionString:process.env.DATABASE_URL});
   try {
-    await pool.query(await readFile(new URL('../schema.sql',import.meta.url),'utf8'));
+    await pool.query(await readSchema());
     await pool.query('TRUNCATE auth_rate_limits, sessions, users CASCADE');
     const user=(await pool.query(`INSERT INTO users(username_display,username_key,password_salt,password_hash)
       VALUES ('SessionUser','sessionuser',$1,$2) RETURNING id`,[Buffer.alloc(16),Buffer.alloc(64)])).rows[0];
@@ -100,7 +104,7 @@ test('single-query session and IP budget preserve expiry, denial and window acco
 test('profile reads and logout revocations share bounded single-statement IP budgets', { skip: !process.env.DATABASE_URL }, async () => {
   const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
   try {
-    await pool.query(await readFile(new URL('../schema.sql', import.meta.url), 'utf8'));
+    await pool.query(await readSchema());
     await pool.query('TRUNCATE auth_rate_limits, sessions, users CASCADE');
     const { rows: [user] } = await pool.query(`INSERT INTO users(username_display,username_key,password_salt,password_hash)
       VALUES ('BudgetDriver','budgetdriver',$1,$2) RETURNING id`, [Buffer.alloc(16), Buffer.alloc(64)]);

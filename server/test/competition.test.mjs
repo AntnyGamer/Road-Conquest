@@ -11,10 +11,14 @@ const legacyDataset = "a".repeat(64);
 const dataVersion = "2026-10-01T00:00:00Z";
 const config = { dataset, dataVersion, cloudProject: "123456789", checkpointKey: "K".repeat(43) };
 
+// The checked-in schema is immutable during these tests; reuse its decoded text.
+let schemaPromise;
+const readSchema = () => schemaPromise ??= readFile(new URL('../schema.sql', import.meta.url), 'utf8');
+
 test("top fifty ranks preserve ties across the cutoff and exclude hidden or ineligible accounts before limiting", { skip: !connectionString }, async () => {
   const pool = new pg.Pool({ connectionString });
   try {
-    await pool.query(await readFile(new URL('../schema.sql', import.meta.url), 'utf8'));
+    await pool.query(await readSchema());
     await pool.query('TRUNCATE users CASCADE');
     await pool.query(`INSERT INTO users(username_display,username_key,password_salt,password_hash,leaderboard_visible,leaderboard_eligible)
       SELECT 'Rank_'||lpad(g::text,3,'0'),'rank_'||lpad(g::text,3,'0'),$1,$2,g>2,g<>3
@@ -71,7 +75,7 @@ function fixes() {
 test("batch preflight shares one read while retaining retry, eligibility and late-commit checks", { skip: !connectionString }, async () => {
   const pool = new pg.Pool({ connectionString });
   try {
-    await pool.query(await readFile(new URL('../schema.sql', import.meta.url), 'utf8'));
+    await pool.query(await readSchema());
     await pool.query('TRUNCATE users CASCADE');
     const user = (await pool.query(`INSERT INTO users(username_display,username_key,password_salt,password_hash)
       VALUES ('Preflight','preflight',$1,$2) RETURNING id`, [Buffer.alloc(16), Buffer.alloc(64)])).rows[0];
@@ -149,7 +153,7 @@ test("batch preflight shares one read while retaining retry, eligibility and lat
 test("empty derived-cell batches skip the empty insert but retain attestation, continuity, receipts and rollback", { skip: !connectionString }, async () => {
   const pool = new pg.Pool({ connectionString });
   try {
-    await pool.query(await readFile(new URL('../schema.sql', import.meta.url), 'utf8'));
+    await pool.query(await readSchema());
     await pool.query('TRUNCATE users CASCADE');
     const user = (await pool.query(`INSERT INTO users(username_display,username_key,password_salt,password_hash)
       VALUES ('EmptyCells','emptycells',$1,$2) RETURNING id`, [Buffer.alloc(16), Buffer.alloc(64)])).rows[0];
@@ -207,7 +211,7 @@ test("empty derived-cell batches skip the empty insert but retain attestation, c
 test("a weekly write failure rolls back new cells, totals, checkpoint, sequence and receipt together", { skip: !connectionString }, async () => {
   const pool = new pg.Pool({ connectionString });
   try {
-    await pool.query(await readFile(new URL('../schema.sql', import.meta.url), 'utf8'));
+    await pool.query(await readSchema());
     await pool.query('TRUNCATE users CASCADE');
     const user = (await pool.query(`INSERT INTO users(username_display,username_key,password_salt,password_hash)
       VALUES ('Rollback','rollback',$1,$2) RETURNING id`, [Buffer.alloc(16),Buffer.alloc(64)])).rows[0];
@@ -236,7 +240,7 @@ test("a weekly write failure rolls back new cells, totals, checkpoint, sequence 
 test("real PostgreSQL protects simultaneous scoring, retries, derived cells, privacy, ties and account boundaries", { skip: !connectionString }, async () => {
   const pool = new pg.Pool({ connectionString });
   try {
-    await pool.query(await readFile(new URL("../schema.sql", import.meta.url), "utf8"));
+    await pool.query(await readSchema());
     await pool.query("TRUNCATE users, road_catalogs CASCADE");
     await pool.query("INSERT INTO road_catalogs(dataset,data_version) VALUES ($1,$2)", [legacyDataset, dataVersion]);
     const users = await pool.query(`INSERT INTO users(username_display,username_key,password_salt,password_hash)
