@@ -60,7 +60,9 @@ class SettingsActivity : Activity() {
             R.id.friendNotificationsSwitch to R.string.friend_notifications_detail,
             R.id.friendForumPostsSwitch to R.string.friend_posts_detail,
             R.id.weeklyRemindersSwitch to R.string.weekly_reminders_detail,
-            R.id.crashReportingSwitch to R.string.crash_reporting_detail
+            R.id.crashReportingSwitch to R.string.crash_reporting_detail,
+            R.id.leaderboardPrivacySwitch to R.string.leaderboard_privacy_detail,
+            R.id.verifyDrivesSwitch to R.string.verify_drives_detail
         )
         for ((id, detail) in descriptions) {
             findViewById<Switch>(id).apply {
