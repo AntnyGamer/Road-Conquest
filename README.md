@@ -17,7 +17,7 @@ Android 12 or newer is required. Download the signed APK from Releases for direc
 The GitHub APK uses the permanent upload key and updates compatible GitHub-installed betas.
 For an app installed through Google Play, update through Play instead: Play uses its separate
 app-signing key. Do not uninstall or clear app data to work around a signature error.
-Do not change installation channels without a compatible restorable backup. Password-free ZIP exports are archive-only and cannot be imported; authenticated backups in the current format can be restored.
+Do not change installation channels without a compatible restorable backup. Use a private encrypted .rcbackup to move progress between GitHub and Play installations; readable export-only ZIPs cannot be restored. Google Play-verified ZIPs are available only to eligible Play installations with a working backup-signing service.
 For Google Play, download the **signed** `RoadConquest-<version>.aab` from the [GitHub Releases](https://github.com/AntnyGamer/Road-Conquest/releases) page, not the unsigned intermediate from GitHub Actions. The Actions artifact is named `android-build-inputs-unsigned` and contains `app-release-UNSIGNED-DO-NOT-UPLOAD.aab`, which Google Play cannot accept. Each release also includes the Android Studio project and SHA-256 checksums.
 
 If Play still reports an invalid signature for the **signed release** bundle, compare the SHA-256 fingerprint under Play Console → Test and release → App integrity → **Upload key certificate** (not the separate Google Play **App signing key certificate**) with the release upload key:
@@ -74,13 +74,14 @@ Release 1.0 uses Android application ID `com.roadconquest.app`, internal version
 - Browse achievements by **Road Conquest**, **Mileage**, **Exploration**, and **Ad Rewards**. Retired low-battery Bonus challenges and their empty category are no longer shown.
   Optional rewarded ads in the Garage grant the displayed points only after confirmed completion, and count toward ad milestones.
 - Use automatic tracking or control it manually. Stop tracking from the foreground notification.
-- Export driving history, road geometry, explored places, place discoveries, point awards,
-  purchases and progression counters from Settings as a readable, password-free
-  **export-only .zip** on GitHub and Play installations. The archive can be inspected
-  externally but **cannot be imported or restored into Road Conquest**; it contains
-  sensitive GPS history, so store it privately. Current-format authenticated
-  backups can be restored separately. The Settings summary shows
-  when a complete export was last made. Tile first-unlock times are included in backups.
+- Back up full progress from Settings in two restorable formats: a private encrypted
+  **.rcbackup** (offline on GitHub and Play builds; save its passphrase) or a
+  **Google Play-verified .zip** (requires a licensed Play install, internet and
+  the backup-signing service). An optional readable, password-free **export-only .zip**
+  is for external inspection and **cannot** be restored into Road Conquest.
+  All exports contain sensitive GPS history: store them privately. The Settings
+  summary shows the date of the last completed export. Tile first-unlock times
+  are included in restorable backups.
 - Create an optional account, change your username and manage leaderboard visibility. There are exactly two destructive account/data actions in the app: Account → Delete account removes the cloud account while keeping saved device history and requires the current account password; Settings → Backups & data → Delete local data removes all local Road Conquest data while keeping the cloud account and leaderboard scores and requires typing the exact local confirmation phrase. Local full-data deletion works while signed out, stops tracking, disables verified-drive sharing and removes private interrupted-export snapshots.
 
 Map drawing and viewport refresh timers stop while the map activity is hidden. Returning reloads
