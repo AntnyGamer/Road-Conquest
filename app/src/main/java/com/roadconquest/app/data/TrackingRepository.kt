@@ -135,6 +135,11 @@ class TrackingRepository(context: Context) {
     fun getExploredGridInBounds(north: Double, east: Double, south: Double, west: Double): DoubleArray =
         exploredCoordinatesInBounds("explored_grid", north, east, south, west)
 
+    internal fun exploredGridState(): Pair<Long, Long> = synchronized(dbHelper.historyLock) {
+        dbHelper.historyGeneration to dbHelper.readableDatabase.rawQuery("SELECT COUNT(*) FROM explored_grid", null)
+            .use { check(it.moveToFirst()); it.getLong(0) }
+    }
+
     /**
      * Recover the final compressed point when Android killed tracking without onDestroy.
      * Every skipped fix already survived in SQLite; this promotes only the missing

@@ -80,6 +80,13 @@ class FogGridTest {
         assertNull(FogGrid.cell(39.0, Double.POSITIVE_INFINITY))
         assertNull(FogGrid.cell(92.0, -75.0))
         assertTrue(FogGrid.visitedCorners(doubleArrayOf(Double.NaN, 0.0, 90.1, 20.0)).isEmpty())
+        for (latitude in listOf(-90.0, -85.051, 0.0, 40.0, 85.051, 90.0)) {
+            for (longitude in listOf(-180.0, -179.999, -74.0, 179.999, 180.0)) {
+                val corners = DoubleArray(8)
+                FogGrid.writeCorners(requireNotNull(FogGrid.cell(latitude, longitude)), corners, 0)
+                assertArrayEquals(FogGrid.corners(latitude, longitude), corners, 0.0)
+            }
+        }
     }
 
     @Test fun worldCopyProjectionCopiesOnlyWhenNeededAndPreservesEveryBitAndInput() {

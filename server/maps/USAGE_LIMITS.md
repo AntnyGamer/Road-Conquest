@@ -1,5 +1,7 @@
 # Driving allowance audit — October 19, 2026
 
+**October 30 reliability update:** Interrupted driving uploads now return the normal private JSON error before any configuration, budget or upstream work. Oversized uploads remain HTTP 413 even when cancelling their body stream fails. Reader locks are released in every path. Limits, provider budgets and scoring are unchanged. Activating this server-side fix requires separately deploying the updated maps Worker.
+
 The first capacity target is **whole paid matching work avoided**. Reducing SQL
 reads or HMAC operations helps hosting headroom, but cannot multiply provider
 credits. Ordinary personal driving keeps GPS/history on the phone and uses the

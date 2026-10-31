@@ -13,7 +13,10 @@ data class AchievementMetrics(
     val rewardedRoads: Long = 0L,
     val tilesUnlocked: Long = 0L,
     val rewardedAchievements: Set<String> = emptySet(),
-    val rewardedAchievementPoints: Map<String, Long> = emptyMap()
+    val rewardedAchievementPoints: Map<String, Long> = emptyMap(),
+    val bronzeTowns: Long = 0L,
+    val silverTowns: Long = 0L,
+    val goldTowns: Long = 0L
 )
 
 enum class AchievementCategory(val label: String) {
@@ -21,6 +24,7 @@ enum class AchievementCategory(val label: String) {
     TILES("Map Tiles"),
     DISTANCE("Distance"),
     PLACES("Exploration"),
+    TOWNS("Town Badges"),
     ADS("Ad Rewards"),
     EXTRA("Bonus")
 }
@@ -111,7 +115,38 @@ object Achievements {
             AchievementProgress("ads_10", "Ad Regular", "Watch 10 ads", AchievementCategory.ADS, metrics.adsWatched.toDouble(), 10.0, "ads", 200),
             AchievementProgress("ads_25", "Ad Supporter", "Watch 25 ads", AchievementCategory.ADS, metrics.adsWatched.toDouble(), 25.0, "ads", 500),
             AchievementProgress("ads_50", "Ad Veteran", "Watch 50 ads", AchievementCategory.ADS, metrics.adsWatched.toDouble(), 50.0, "ads", 1_000),
-            AchievementProgress("ads_100", "Ad Legend", "Watch 100 ads", AchievementCategory.ADS, metrics.adsWatched.toDouble(), 100.0, "ads", 2_500)
+            AchievementProgress("ads_100", "Ad Legend", "Watch 100 ads", AchievementCategory.ADS, metrics.adsWatched.toDouble(), 100.0, "ads", 2_500),
+
+            AchievementProgress("roads_25", "Neighborhood Scout", "Unlock 25 roads", AchievementCategory.ROADS, roads, 25.0, "roads", 150),
+            AchievementProgress("roads_50", "Street Seeker", "Unlock 50 roads", AchievementCategory.ROADS, roads, 50.0, "roads", 225),
+            AchievementProgress("roads_500", "Street Scholar", "Unlock 500 roads", AchievementCategory.ROADS, roads, 500.0, "roads", 850),
+            AchievementProgress("roads_750", "Route Ranger", "Unlock 750 roads", AchievementCategory.ROADS, roads, 750.0, "roads", 1100),
+            AchievementProgress("roads_1500", "Beyond Familiar Roads", "Unlock 1,500 roads", AchievementCategory.ROADS, roads, 1500.0, "roads", 1800),
+            AchievementProgress("roads_25000", "Road Atlas", "Unlock 25,000 roads", AchievementCategory.ROADS, roads, 25000.0, "roads", 10000),
+            AchievementProgress("tiles_5", "Beyond the Block", "Explore 5 unique map tiles", AchievementCategory.TILES, metrics.tilesUnlocked.toDouble(), 5.0, "tiles", 100),
+            AchievementProgress("tiles_75", "Horizon Hunter", "Explore 75 unique map tiles", AchievementCategory.TILES, metrics.tilesUnlocked.toDouble(), 75.0, "tiles", 600),
+            AchievementProgress("tiles_1500", "Open Horizons", "Explore 1,500 unique map tiles", AchievementCategory.TILES, metrics.tilesUnlocked.toDouble(), 1500.0, "tiles", 3750),
+            AchievementProgress("tiles_10000", "Continental Cartographer", "Explore 10,000 unique map tiles", AchievementCategory.TILES, metrics.tilesUnlocked.toDouble(), 10000.0, "tiles", 12000),
+            AchievementProgress("miles_25", "Getting Rolling", "Travel 25 miles", AchievementCategory.DISTANCE, miles, 25.0, "mi", 175),
+            AchievementProgress("miles_50", "Finding Your Way", "Travel 50 miles", AchievementCategory.DISTANCE, miles, 50.0, "mi", 250),
+            AchievementProgress("miles_500", "Cruising Along", "Travel 500 miles", AchievementCategory.DISTANCE, miles, 500.0, "mi", 1000),
+            AchievementProgress("miles_750", "Further Afield", "Travel 750 miles", AchievementCategory.DISTANCE, miles, 750.0, "mi", 1400),
+            AchievementProgress("miles_25000", "Around the Odometer", "Travel 25,000 miles", AchievementCategory.DISTANCE, miles, 25000.0, "mi", 10000),
+            AchievementProgress("miles_50000", "Lifetime Adventurer", "Travel 50,000 miles", AchievementCategory.DISTANCE, miles, 50000.0, "mi", 15000),
+            AchievementProgress("towns_10", "Town Trailblazer", "Visit 10 different towns", AchievementCategory.PLACES, metrics.towns.toDouble(), 10.0, "towns", 350),
+            AchievementProgress("towns_1000", "A Thousand Welcome Signs", "Visit 1,000 different towns", AchievementCategory.PLACES, metrics.towns.toDouble(), 1000.0, "towns", 8000),
+            AchievementProgress("states_5", "Regional Rambler", "Visit 5 different states or regions", AchievementCategory.PLACES, metrics.states.toDouble(), 5.0, "states", 750),
+            AchievementProgress("countries_3", "Beyond Borders", "Visit 3 different countries", AchievementCategory.PLACES, metrics.countries.toDouble(), 3.0, "countries", 1100),
+            AchievementProgress("town_bronze_1", "Making Your Mark", "Earn bronze or better in 1 town (25% explored)", AchievementCategory.TOWNS, metrics.bronzeTowns.toDouble(), 1.0, "towns", 200),
+            AchievementProgress("town_bronze_5", "Neighborhood Navigator", "Earn bronze or better in 5 towns", AchievementCategory.TOWNS, metrics.bronzeTowns.toDouble(), 5.0, "towns", 600),
+            AchievementProgress("town_bronze_25", "Bronze Atlas", "Earn bronze or better in 25 towns", AchievementCategory.TOWNS, metrics.bronzeTowns.toDouble(), 25.0, "towns", 2000),
+            AchievementProgress("town_silver_1", "Halfway Home", "Earn silver or better in 1 town (50% explored)", AchievementCategory.TOWNS, metrics.silverTowns.toDouble(), 1.0, "towns", 400),
+            AchievementProgress("town_silver_5", "Silver Surveyor", "Earn silver or better in 5 towns", AchievementCategory.TOWNS, metrics.silverTowns.toDouble(), 5.0, "towns", 1000),
+            AchievementProgress("town_silver_25", "Silver Atlas", "Earn silver or better in 25 towns", AchievementCategory.TOWNS, metrics.silverTowns.toDouble(), 25.0, "towns", 3000),
+            AchievementProgress("town_gold_1", "Town Conqueror", "Fully explore 1 town (100%)", AchievementCategory.TOWNS, metrics.goldTowns.toDouble(), 1.0, "towns", 750),
+            AchievementProgress("town_gold_5", "Golden Collection", "Fully explore 5 towns", AchievementCategory.TOWNS, metrics.goldTowns.toDouble(), 5.0, "towns", 2000),
+            AchievementProgress("town_gold_10", "Golden Atlas", "Fully explore 10 towns", AchievementCategory.TOWNS, metrics.goldTowns.toDouble(), 10.0, "towns", 3500),
+            AchievementProgress("town_gold_25", "Master of Towns", "Fully explore 25 towns", AchievementCategory.TOWNS, metrics.goldTowns.toDouble(), 25.0, "towns", 6000),
         ).asSequence().filter { item ->
             // Retire low-battery challenges for NEW players: don't encourage
             // running a GPS tracker until a phone is about to power off.

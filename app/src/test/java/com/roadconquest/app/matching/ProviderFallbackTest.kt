@@ -27,6 +27,74 @@ class ProviderFallbackTest {
         override fun match(points: List<TrackPoint>): MatchResult? { calls++; return response }
         override fun rateLimitRemainingMs() = cooldown
     }
+
+    @Test fun cancelledMatchingCannotStartOrFallThroughToAnotherProvider() {
+        val first = Fake(unavailable = true)
+        val backup = Fake()
+        Thread.currentThread().interrupt()
+        try {
+            assertThrows(InterruptedException::class.java) { FallbackRoadMatcher(listOf(first, backup)).match(points) }
+        } finally { Thread.interrupted() }
+        assertEquals(0, first.calls)
+        assertEquals(0, backup.calls)
+        val interruptedPrimary = object : RoadMatcher {
+            override val unavailable = true
+            override fun rateLimitRemainingMs() = 0L
+            override fun match(points: List<TrackPoint>): MatchResult? {
+                Thread.currentThread().interrupt()
+                return null
+            }
+        }
+        try {
+            assertThrows(InterruptedException::class.java) {
+                FallbackRoadMatcher(listOf(interruptedPrimary, backup)).match(points)
+            }
+            assertTrue(Thread.currentThread().isInterrupted)
+        } finally { Thread.interrupted() }
+        assertEquals("A cancelled primary must not spend a backup request", 0, backup.calls)
+    }
+
+    @Test fun cancellingAProviderResponseDoesNotPenalizeItsHealth() {
+        for (primary in listOf(true, false)) MockWebServer().use { server ->
+            val received = java.util.concurrent.CountDownLatch(1)
+            val respond = java.util.concurrent.CountDownLatch(1)
+            server.dispatcher = object : okhttp3.mockwebserver.Dispatcher() {
+                override fun dispatch(request: okhttp3.mockwebserver.RecordedRequest): MockResponse {
+                    received.countDown()
+                    check(respond.await(5, java.util.concurrent.TimeUnit.SECONDS))
+                    return MockResponse().setBody("{}").setHeader("Content-Type", "application/json")
+                }
+            }
+            server.start()
+            val health = ProviderHealth()
+            val origin = server.url("/").toString()
+            val provider: RoadMatcher = if (primary) GeoapifyMatcher(origin, health) else LocationIqMatcher(origin, health)
+            Thread.currentThread().interrupt()
+            try { assertThrows(InterruptedException::class.java) { provider.match(points) } }
+            finally { Thread.interrupted() }
+            assertEquals(0, server.requestCount)
+            val failure = java.util.concurrent.atomic.AtomicReference<Throwable>()
+            val worker = Thread {
+                try { provider.match(points) }
+                catch (error: Throwable) { failure.set(error) }
+            }.apply { isDaemon = true; start() }
+            try {
+                assertTrue(received.await(5, java.util.concurrent.TimeUnit.SECONDS))
+                worker.interrupt()
+                respond.countDown()
+                worker.join(5_000)
+                assertFalse("Cancelled provider read must finish", worker.isAlive)
+                assertTrue(failure.get() is InterruptedException)
+                assertEquals("Cancellation is not a provider outage", 0L, provider.rateLimitRemainingMs())
+                assertFalse(provider.unavailable)
+            } finally {
+                respond.countDown()
+                worker.interrupt()
+                worker.join(5_000)
+            }
+        }
+    }
+
     @Test fun invalidGeoapifyCoordinatesNeverThrowOrUseNetwork() {
         MockWebServer().use { server ->
             server.start()

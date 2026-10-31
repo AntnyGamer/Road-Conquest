@@ -24,6 +24,34 @@ class BoundedInputTest {
         override fun close() { closed = true; super.close() }
     }
 
+    @Test fun cancelledReadDoesNotConsumeAnyMoreResponseBytes() {
+        val input = object : InputStream() {
+            override fun read(): Int = error("Cancelled work must not read the response")
+        }
+        Thread.currentThread().interrupt()
+        try {
+            assertThrows(InterruptedException::class.java) { decode(input, 4096) }
+            assertTrue(Thread.currentThread().isInterrupted)
+        } finally { Thread.interrupted() }
+    }
+
+    @Test fun cancellationDuringTheFinalReadIsNotReturnedAsASuccessfulResponse() {
+        var reads = 0
+        val input = object : InputStream() {
+            override fun read(): Int = error("Bulk reads expected")
+            override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+                reads++
+                Thread.currentThread().interrupt()
+                return -1
+            }
+        }
+        try {
+            assertThrows(InterruptedException::class.java) { decode(input, 4096) }
+            assertEquals(1, reads)
+            assertTrue(Thread.currentThread().isInterrupted)
+        } finally { Thread.interrupted() }
+    }
+
     @Test fun completeDecodedStringsMatchForUnicodeMalformedAndEveryBytePair() {
         val allPairs = ByteArray(131_072) { if (it % 2 == 0) (it / 512).toByte() else (it / 2).toByte() }
         val samples = listOf(byteArrayOf(), "ASCII\u0000驾驶🚙é".toByteArray(), ByteArray(256) { it.toByte() }, allPairs,

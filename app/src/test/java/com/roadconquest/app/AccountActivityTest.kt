@@ -282,6 +282,35 @@ class AccountActivityTest {
         }
     }
 
+    @Test fun fullUnicodePasswordsFitSignInConfirmationAndReauthenticationFields() {
+        val controller = Robolectric.buildActivity(AccountActivity::class.java).create()
+        try {
+            val activity = controller.get()
+            val unicodePassword = "\uD83D\uDE00".repeat(128)
+            for (id in listOf(R.id.accountPassword, R.id.accountConfirmPassword)) {
+                val field = activity.findViewById<EditText>(id)
+                for (value in listOf("x".repeat(128), unicodePassword)) {
+                    field.setText(value)
+                    assertEquals("Valid passwords must not be silently shortened", value, field.text.toString())
+                }
+            }
+            val reauthenticate = AccountActivity::class.java.getDeclaredMethod("passwordField")
+                .apply { isAccessible = true }.invoke(activity) as EditText
+            reauthenticate.setText(unicodePassword)
+            assertEquals(unicodePassword, reauthenticate.text.toString())
+
+            // The larger widget capacity must not weaken the actual character
+            // policy or send an invalid password to the account service.
+            activity.findViewById<EditText>(R.id.accountUsername).setText("UnicodeDriver")
+            activity.findViewById<EditText>(R.id.accountPassword).setText("x".repeat(129))
+            activity.findViewById<EditText>(R.id.accountConfirmPassword).setText("x".repeat(129))
+            AccountActivity::class.java.getDeclaredMethod("authenticate", java.lang.Boolean.TYPE)
+                .apply { isAccessible = true }.invoke(activity, true)
+            assertEquals("Password must be 8-128 characters.",
+                activity.findViewById<TextView>(R.id.accountStatusText).text.toString())
+        } finally { controller.destroy() }
+    }
+
     @Test fun passwordEyesToggleVisibilityWithoutClearingText() {
         AccountClient.endpointOverrideForTests = "https://example.com"
         val controller = Robolectric.buildActivity(AccountActivity::class.java).create().start().resume()

@@ -37,7 +37,9 @@ data class PlaceOverlayInfo(
     val name: String,
     val kind: PlaceKind,
     val population: Long?,
-    val areaSquareKilometers: Double
+    val areaSquareKilometers: Double,
+    val completionPercent: Int? = null,
+    val completionMedal: String? = null
 )
 
 data class PlaceOverlayData(
@@ -46,7 +48,8 @@ data class PlaceOverlayData(
     val kind: PlaceKind,
     val population: Long?,
     val areaSquareKilometers: Double,
-    val geometryJson: String
+    val geometryJson: String,
+    val completion: TownCompletionProgress? = null
 ) {
     fun featureJson(): JSONObject = featureJsonFromGeometry(JSONObject(geometryJson))
 
@@ -62,7 +65,13 @@ data class PlaceOverlayData(
             .put("overlay_name", name)
             .put("overlay_kind", kind.name)
             .put("area_sq_km", areaSquareKilometers)
-            .also { properties -> population?.let { properties.put("population", it) } })
+            .also { properties ->
+                population?.let { properties.put("population", it) }
+                completion?.let {
+                    properties.put("completion_percent", it.percent)
+                    properties.put("completion_medal", it.medal.label)
+                }
+            })
         .put("geometry", geometry)
 }
 
@@ -127,6 +136,8 @@ object PlaceOverlayCache {
     private const val NEGATIVE_CACHE_MS = 15L * 60L * 1000L
     private const val HEX_DIGITS = "0123456789abcdef"
     private val generation = AtomicLong()
+    private val contentRevision = AtomicLong()
+    internal fun contentRevision(): Long = contentRevision.get()
     private val mutationLock = Any()
     private const val CACHE_BUDGET_BYTES = 128L * 1024L * 1024L
     private const val CACHE_BUDGET_FILES = 6_000
@@ -209,6 +220,7 @@ object PlaceOverlayCache {
             writer.flush()
             gzip.finish()
             file.finishWrite(stream)
+            contentRevision.incrementAndGet()
             cacheBytes += target.length() - oldBytes
             if (!existed) cacheFiles++
             // Counting writes avoids walking thousands of cached files after
@@ -384,6 +396,7 @@ object PlaceOverlayCache {
 
     fun clear(context: Context) = synchronized(mutationLock) {
         generation.incrementAndGet()
+        contentRevision.incrementAndGet()
         initialTrimDone = false
         cacheBytes = 0L
         cacheFiles = 0

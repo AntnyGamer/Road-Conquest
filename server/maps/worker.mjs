@@ -84,13 +84,24 @@ export function createMapsGateway(fetchUpstream = fetch, { wait = waitForSlot, u
       let raw = '';
       let length = 0;
       const decoder = new TextDecoder();
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        length += value.byteLength;
-        if (length > 32_768) { await reader.cancel(); return json({ error: 'Request too large' }, 413); }
-        raw += decoder.decode(value, { stream: true });
-      }
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          length += value.byteLength;
+          if (length > 32_768) {
+            // A disconnect during cancellation must not replace our bounded 413
+            // response with an uncaught Worker error.
+            await reader.cancel().catch(() => {});
+            return json({ error: 'Request too large' }, 413);
+          }
+          raw += decoder.decode(value, { stream: true });
+        }
+      } catch {
+        // Upload failures occur before the accounting/upstream try block below.
+        // Keep the normal private error contract without reserving any allowance.
+        return unavailable(request.signal.aborted);
+      } finally { reader.releaseLock(); }
       raw += decoder.decode();
       try { payload = JSON.parse(raw); } catch { return json({ error: 'Invalid JSON' }, 400); }
       const seconds = waypointSeconds(payload);

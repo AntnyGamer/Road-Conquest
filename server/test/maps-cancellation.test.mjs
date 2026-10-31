@@ -111,6 +111,45 @@ test('cancellation during a configuration refresh stops before signing or reserv
   assert.deepEqual(s.count, { sql: 0, config: 1, bindings: 0, budget: 0, upstream: 0 });
 });
 
+test('a broken driving upload returns private JSON without spending provider allowance', async t => {
+  const s = fixture(t);
+  const stream = new ReadableStream({ pull(c) { c.error(new Error('private trace upload disconnected')); } },
+    { highWaterMark: 0 });
+  const req = new Request('https://maps.example/v1/mapmatching', { method: 'POST',
+    headers: { 'CF-Connecting-IP': '192.0.2.1' }, body: stream, duplex: 'half' });
+  const response = await s.gateway.fetch(req, s.env);
+  assert.equal(response.status, 503);
+  assert.equal(response.headers.get('Cache-Control'), 'no-store');
+  assert.deepEqual(await response.json(), { error: 'Map service temporarily unavailable' });
+  assert.deepEqual(s.count, { sql: 0, config: 0, bindings: 0, budget: 0, upstream: 0 });
+  assert.equal(req.body.locked, false);
+});
+
+test('an aborted body reader error follows the same cancellation contract', async t => {
+  const s = fixture(t), controller = new AbortController();
+  const stream = new ReadableStream({ pull(c) {
+    controller.abort(); c.error(new DOMException('Synthetic aborted upload', 'AbortError'));
+  } }, { highWaterMark: 0 });
+  const req = new Request('https://maps.example/v1/mapmatching', { method: 'POST',
+    headers: { 'CF-Connecting-IP': '192.0.2.1' }, body: stream, duplex: 'half', signal: controller.signal });
+  await cancelled(await s.gateway.fetch(req, s.env));
+  assert.equal(s.count.budget, 0);
+  assert.equal(req.body.locked, false);
+});
+
+test('an oversized upload stays 413 even when closing its stream fails', async t => {
+  const s = fixture(t);
+  const stream = new ReadableStream({
+    pull(c) { c.enqueue(new Uint8Array(32_769)); },
+    cancel() { throw new Error('Synthetic connection closed'); }
+  }, { highWaterMark: 0 });
+  const req = new Request('https://maps.example/v1/mapmatching', { method: 'POST',
+    headers: { 'CF-Connecting-IP': '192.0.2.1' }, body: stream, duplex: 'half' });
+  assert.equal((await s.gateway.fetch(req, s.env)).status, 413);
+  assert.equal(s.count.budget, 0);
+  assert.equal(req.body.locked, false);
+});
+
 test('a burst of abandoned tiles cannot occupy the queue needed by live matching', async t => {
   const s = fixture(t), controller = new AbortController(); controller.abort();
   for (let i = 0; i < 100; i++) {

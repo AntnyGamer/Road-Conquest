@@ -63,10 +63,15 @@ data class ProgressionSnapshot(
     /** Unique one-mile fog tiles stored in explored_grid; separate from leaderboard cells. */
     val tilesUnlocked: Long = 0L,
     /** Actual previously awarded amounts; historical milestones may have different pricing. */
-    val rewardedAchievementPoints: Map<String, Long> = emptyMap()
+    val rewardedAchievementPoints: Map<String, Long> = emptyMap(),
+    val bronzeTowns: Long = 0L,
+    val silverTowns: Long = 0L,
+    val goldTowns: Long = 0L
 )
 
 enum class PurchaseResult { PURCHASED, OWNED, INSUFFICIENT_POINTS }
+
+internal data class TownCompletionUpdate(val tier: Int, val changed: Boolean)
 
 class ProgressionRepository(context: Context) {
     private val appContext = context.applicationContext
@@ -564,6 +569,18 @@ class ProgressionRepository(context: Context) {
         arrayOf(itemId)
     ).use { it.moveToFirst() }
 
+    /** Durable earned town tiers use the existing backed-up counter ledger. */
+    internal fun recordTownCompletion(key: String, tier: Int, expectedGeneration: Long): TownCompletionUpdate =
+        synchronized(dbHelper.historyLock) {
+            if (!isCurrentHistory(expectedGeneration)) return@synchronized TownCompletionUpdate(0, false)
+            val db = dbHelper.writableDatabase
+            val counterKey = "town_completion_v1:$key"
+            val previous = counter(db, counterKey).toInt().coerceIn(0, 3)
+            val earned = maxOf(previous, tier.coerceIn(0, 3))
+            if (earned > previous) putCounter(db, counterKey, earned.toLong())
+            TownCompletionUpdate(earned, earned > previous)
+        }
+
     fun snapshot(): ProgressionSnapshot = synchronized(dbHelper.historyLock) {
         val db = dbHelper.readableDatabase
         val earned = db.rawQuery("SELECT COALESCE(SUM(points), 0) FROM progression_rewards", null)
@@ -637,7 +654,15 @@ class ProgressionRepository(context: Context) {
         val tilesUnlocked = db.rawQuery("SELECT COUNT(*) FROM explored_grid", null)
             .use { check(it.moveToFirst()); it.getLong(0) }
 
+        val medals = db.rawQuery("""SELECT
+            COALESCE(SUM(CASE WHEN value >= 1 THEN 1 ELSE 0 END),0),
+            COALESCE(SUM(CASE WHEN value >= 2 THEN 1 ELSE 0 END),0),
+            COALESCE(SUM(CASE WHEN value >= 3 THEN 1 ELSE 0 END),0)
+            FROM progression_counters WHERE counter_key GLOB 'town_completion_v1:*'""", null)
+            .use { check(it.moveToFirst()); longArrayOf(it.getLong(0), it.getLong(1), it.getLong(2)) }
+
         ProgressionSnapshot(
+            bronzeTowns = medals[0], silverTowns = medals[1], goldTowns = medals[2],
             tilesUnlocked = tilesUnlocked,
             balance = (earned - spent).coerceAtLeast(0L),
             lifetimeEarned = earned,

@@ -9,6 +9,8 @@ import java.security.SecureRandom
 import javax.crypto.Cipher
 import javax.crypto.CipherInputStream
 import javax.crypto.CipherOutputStream
+import javax.crypto.BadPaddingException
+import javax.crypto.IllegalBlockSizeException
 import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.PBEKeySpec
@@ -104,6 +106,7 @@ object PassphraseBackup {
         withEncryptedOutput(output, password) { encrypted -> plain.copyTo(encrypted, 32 * 1024) }
 
     internal fun decrypt(encrypted: File, destination: File, password: CharArray) {
+        check(!Thread.currentThread().isInterrupted) { "Import cancelled" }
         require(password.isNotEmpty() && password.size <= MAX_PASSWORD_LENGTH) { "Enter a valid backup passphrase." }
         require(encrypted.length() <= DataImporter.MAX_BYTES) { "Backup exceeds 512 MB" }
         encrypted.inputStream().buffered().use { input ->
@@ -117,11 +120,24 @@ object PassphraseBackup {
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.DECRYPT_MODE, key(password, salt), GCMParameterSpec(128, nonce))
             try {
-                CipherInputStream(input, cipher).use { plain ->
+                // AEAD providers may consume many ciphertext blocks before returning
+                // the first plaintext block. Check cancellation on that input too.
+                val cancellable = object : java.io.FilterInputStream(input) {
+                    override fun read(): Int {
+                        check(!Thread.currentThread().isInterrupted) { "Import cancelled" }
+                        return super.read()
+                    }
+                    override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+                        check(!Thread.currentThread().isInterrupted) { "Import cancelled" }
+                        return super.read(buffer, offset, length)
+                    }
+                }
+                CipherInputStream(cancellable, cipher).use { plain ->
                     destination.outputStream().use { output ->
                         val buffer = ByteArray(32 * 1024)
                         var size = 0L
                         while (true) {
+                            check(!Thread.currentThread().isInterrupted) { "Import cancelled" }
                             val count = plain.read(buffer)
                             if (count < 0) break
                             size += count
@@ -132,7 +148,17 @@ object PassphraseBackup {
                 }
             } catch (e: java.io.IOException) {
                 destination.delete()
-                throw IllegalArgumentException("Incorrect passphrase or altered backup.", e)
+                // CipherInputStream wraps authentication/final-block failures in
+                // IOException. A full disk or failed output file is an I/O error
+                // too, and must retain its actual cause instead of blaming the key.
+                if (e.cause is BadPaddingException || e.cause is IllegalBlockSizeException) {
+                    throw IllegalArgumentException("Incorrect passphrase or altered backup.", e)
+                }
+                throw e
+            } catch (e: Exception) {
+                // Cancellation and size-limit failures must also remove partial plaintext.
+                destination.delete()
+                throw e
             }
         }
     }

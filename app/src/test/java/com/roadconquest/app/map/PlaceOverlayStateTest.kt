@@ -18,6 +18,36 @@ class PlaceOverlayStateTest {
     private val second = """{"type":"Polygon","coordinates":[[[-75.6948,55.7051],[-75.6848,55.7051],[-75.6848,55.7151],[-75.6948,55.7151],[-75.6948,55.7051]]]}"""
     private fun place(json: String = first) = PlaceOverlayData("same-key", "Town", PlaceKind.TOWN, null, 1.0, json)
 
+    @Test fun unchangedLargeTownSnapshotsDoNotRepeatCoverageQueriesOnPan() {
+        val cache = TownCompletionSnapshotCache()
+        val data = List(1_000) { place().copy(key = "town-$it") }
+        var calculations = 0
+        val calculate: (PlaceOverlayData) -> PlaceOverlayData = { item ->
+            calculations++
+            item.copy(completion = TownCompletionProgress(50, TownMedal.SILVER, 40.0, -74.0))
+        }
+        val first = cache.decorate(data, 1L to 20L, 4L, calculate)
+        assertEquals(1_000, calculations)
+        repeat(10) { assertSame(first, cache.decorate(data.toList(), 1L to 20L, 4L, calculate)) }
+        assertEquals("Ten unchanged pans must make no new coverage queries", 1_000, calculations)
+        cache.decorate(data, 1L to 21L, 4L, calculate)
+        assertEquals(2_000, calculations)
+        cache.decorate(data, 2L to 21L, 4L, calculate)
+        assertEquals(3_000, calculations)
+        cache.decorate(data, 2L to 21L, 5L, calculate)
+        assertEquals(4_000, calculations)
+    }
+
+    @Test fun coverageSnapshotCacheDoesNotConfuseSameHashDifferentBoundaries() {
+        val cache = TownCompletionSnapshotCache()
+        assertEquals(first.hashCode(), second.hashCode())
+        var calculations = 0
+        val calculate: (PlaceOverlayData) -> PlaceOverlayData = { calculations++; it }
+        cache.decorate(listOf(place(first)), 1L to 20L, 1L, calculate)
+        cache.decorate(listOf(place(second)), 1L to 20L, 1L, calculate)
+        assertEquals(2, calculations)
+    }
+
     @Test fun validDistantPolygonsWithTheSameHashMustPublishDifferentBoundaries() {
         assertEquals(997868208, first.hashCode())
         assertEquals(first.hashCode(), second.hashCode())

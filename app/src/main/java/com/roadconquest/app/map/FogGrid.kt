@@ -110,7 +110,8 @@ internal object FogGrid {
         return shifted ?: corners
     }
 
-    private fun writeCorners(cell: Cell, output: DoubleArray, i: Int) {
+    /** Fill caller-owned storage when the cell is already known. */
+    fun writeCorners(cell: Cell, output: DoubleArray, i: Int) {
         val north = (-90.0 + (cell.row + 1) * LATITUDE_STEP).coerceAtMost(MAX_MERCATOR_LATITUDE)
         val south = (-90.0 + cell.row * LATITUDE_STEP).coerceAtLeast(-MAX_MERCATOR_LATITUDE)
         val west = -180.0 + cell.column * longitudeStep

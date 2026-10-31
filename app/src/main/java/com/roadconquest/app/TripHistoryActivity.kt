@@ -36,11 +36,10 @@ import com.roadconquest.app.util.Prefs
 import com.roadconquest.app.util.StatsText
 import com.roadconquest.app.map.BaseMapProviders
 import com.roadconquest.app.map.MapMode
+import com.roadconquest.app.map.tripReplayBounds
 import com.roadconquest.app.services.ServiceConfig
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraUpdateFactory
-import org.maplibre.android.geometry.LatLng
-import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
@@ -89,7 +88,7 @@ class TripHistoryActivity : Activity() {
     private var gpxButton: Button? = null
     private var tripList: LinearLayout? = null
     private var displayedVip: Boolean? = null
-    private var tripListGeneration = 0
+    @Volatile private var tripListGeneration = 0
     private var shownHistoryGeneration = -1L
     private var listedThroughPointId = -1L
     private var historyCheckGeneration = 0
@@ -367,6 +366,7 @@ class TripHistoryActivity : Activity() {
         })
         val formatter = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT)
         worker.execute {
+            if (listGeneration != tripListGeneration) return@execute
             val result = runCatching {
                 val history = TripHistoryRepository(applicationContext)
                 // Capture before scanning: a concurrent append must not be marked as displayed.
@@ -660,10 +660,8 @@ class TripHistoryActivity : Activity() {
         }
         // No route is exposed on selection: the replay draws only the traversed prefix.
         showPosition(seek?.progress ?: 0)
-        val bounds = LatLngBounds.Builder()
-        points.forEach { bounds.include(LatLng(it.latitude, it.longitude)) }
         val expectedGeneration = generation
-        val tripBounds = bounds.build()
+        val tripBounds = tripReplayBounds(points)
         mapView?.post {
             if (!isDestroyed && mapReady && generation == expectedGeneration) {
                 map?.moveCamera(CameraUpdateFactory.newLatLngBounds(tripBounds, dp(26)))
@@ -756,6 +754,7 @@ class TripHistoryActivity : Activity() {
     }
     override fun onDestroy() {
         generation++
+        tripListGeneration++
         pauseReplay()
         BaseMapProviders.removeListener(providerListener)
         handler.removeCallbacksAndMessages(null)

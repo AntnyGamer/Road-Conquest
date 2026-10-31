@@ -42,12 +42,29 @@ class MapTourDeviceTest {
         fun pressSystemBack(scenario: ActivityScenario<MainActivity>) {
             // RESUMED does not guarantee window focus after recreation. Injecting Back
             // before the new window receives focus can send it to the outgoing window.
-            val deadline = SystemClock.elapsedRealtime() + 5_000L
+            // Android 15 CI recreation can resume before its window transition
+            // settles. Allow the native-map readiness window, retaining the
+            // actual focus requirement and real system Back-key assertions.
+            val deadline = SystemClock.elapsedRealtime() + 15_000L
             var focused = false
             do {
                 scenario.onActivity { focused = it.hasWindowFocus() }
                 if (!focused) SystemClock.sleep(25)
             } while (!focused && SystemClock.elapsedRealtime() < deadline)
+            if (!focused) {
+                val output = InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")
+                if (output != null) {
+                    val directory = java.io.File(output).apply { mkdirs() }
+                    instrumentation.uiAutomation.takeScreenshot()?.let { bitmap ->
+                        java.io.File(directory, "tour-focus-failure.png").outputStream().use {
+                            bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+                        }
+                    }
+                    android.os.ParcelFileDescriptor.AutoCloseInputStream(
+                        instrumentation.uiAutomation.executeShellCommand("dumpsys window windows")
+                    ).use { input -> java.io.File(directory, "tour-focus-windows.txt").writeBytes(input.readBytes()) }
+                }
+            }
             assertTrue("The map window must receive focus before sending system Back", focused)
             instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
         }

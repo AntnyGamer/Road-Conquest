@@ -6,8 +6,9 @@ import {
   timingSafeEqual
 } from "node:crypto";
 import { promisify } from "node:util";
+import { createPasswordWork } from "./password-work.mjs";
 
-const scrypt = promisify(scryptCallback);
+const derivePassword = createPasswordWork(promisify(scryptCallback));
 const USERNAME_RE = /^[A-Za-z0-9_]{3,24}$/u;
 const SCRYPT_OPTIONS = Object.freeze({ N: 2 ** 17, r: 8, p: 1, maxmem: 256 * 1024 * 1024 });
 const PASSWORD_MIN = 8;
@@ -55,7 +56,7 @@ function passwordInput(password, pepper) {
 export async function hashPassword(password, pepper = "") {
   if (!validatePassword(password)) throw new Error("invalid password");
   const salt = randomBytes(16);
-  const hash = await scrypt(passwordInput(password, pepper), salt, 64, SCRYPT_OPTIONS);
+  const hash = await derivePassword(passwordInput(password, pepper), salt, 64, SCRYPT_OPTIONS);
   return { salt, hash };
 }
 
@@ -63,7 +64,7 @@ export async function verifyPassword(password, salt, expectedHash, pepper = "") 
   if (typeof password !== "string" || !Buffer.isBuffer(salt) || salt.length !== 16 ||
       !Buffer.isBuffer(expectedHash) || expectedHash.length !== 64
   ) return false;
-  const actual = await scrypt(passwordInput(password, pepper), salt, 64, SCRYPT_OPTIONS);
+  const actual = await derivePassword(passwordInput(password, pepper), salt, 64, SCRYPT_OPTIONS);
   return timingSafeEqual(actual, expectedHash);
 }
 

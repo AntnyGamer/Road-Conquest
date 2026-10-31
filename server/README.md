@@ -28,6 +28,11 @@ ROADCONQUEST_ACCOUNT_API_URL=https://accounts.example.com
   timing differences and has PostgreSQL-backed per-IP plus per-username attempt limits. In
   production those rate-limit identifiers are HMACed before storage so the database does not keep
   raw IP addresses or reversible low-entropy username keys.
+- Password hashing and verification share a per-instance limit of two active scrypt operations
+  and eight waiting callers. Overflow returns HTTP 503 so a burst cannot allocate an unbounded
+  password-work queue or fill the shared thread pool with 128 MiB derivations. Queue order is
+  preserved through successful and failed work. Busy requests may wait or retry; hash parameters,
+  stored credentials, dummy verification and PostgreSQL attempt limits are unchanged.
 - Session tokens contain 256 bits of randomness. Only SHA-256 hashes of session tokens are stored
   in PostgreSQL. The Android client encrypts its token with Android Keystore AES-GCM.
 - The Android client rejects non-HTTPS account endpoints. `android:allowBackup="false"` keeps app
@@ -106,6 +111,15 @@ malformed delivery errors return unavailable rather than removing a device regis
 Null or empty OAuth credentials are rejected before purchase, Integrity or push requests,
 and a later attempt can refresh authorization. GIF-provider timeouts, throttling and
 server errors return a retryable 503, while invalid links remain 400 responses.
+
+Identical overlapping forum submissions on one instance share their active receipt/profile
+checks before moderation. At most 32 checks are retained; overflow follows the ordinary
+read path. Entries are removed after success or failure, so later retries fetch fresh
+receipts and penalties. Keys include the account, submission ID and content hash. This
+reduces duplicate database reads without caching authorization or changing per-request
+authentication, rate budgets, moderation or locked transaction checks. Separate instances
+still rely on the database for idempotency. Deploy the account function to activate this
+optimization; no schema migration is needed.
 
 ## Free Neon deployment
 

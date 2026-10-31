@@ -43,6 +43,7 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
   const codec = purchaseCodec(pepper);
   const admins = new Set(adminIds.map(String));
   const pendingPosts = new Map();
+  const pendingPostChecks = new Map();
   const pendingWebhooks = new Map();
   const binding = id => forumAccountBinding(pepper, id);
 
@@ -99,6 +100,29 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
     if (rows[0] && rows[0].content_hash !== input.contentHash) throw new EvidenceError('This submission ID was already used for another post.', 409);
     return rows[0];
   }
+  async function postCheck(user, input, key) {
+    if (pendingPostChecks.has(key)) return pendingPostChecks.get(key);
+    const task = (async () => {
+      // Identical requests can arrive before moderation begins. Share their
+      // read-only checks too, including the current receipt/profile projection.
+      const prior = await existing(pool, user.id, input, true);
+      if (prior) return { prior, state: prior.violations != null ? prior : await profile(pool, user.id) };
+      if (!moderate) throw new EvidenceError('Community posting is temporarily unavailable.', 503);
+      const state = await profile(pool, user.id);
+      // Another instance may have committed between the receipt and profile
+      // reads. Return that receipt before enforcing its new penalty/cooldown.
+      if (blocked(state) || (state.next_post_at && new Date(state.next_post_at).getTime() > Date.now())) {
+        const completed = await existing(pool, user.id, input);
+        if (completed) return { prior: completed, state };
+      }
+      return { state };
+    })();
+    // Keep only active work, never a cached authorization/ownership verdict.
+    // Overflow follows the ordinary path without rejecting committed retries.
+    if (pendingPostChecks.size >= 32) return task;
+    pendingPostChecks.set(key, task);
+    try { return await task; } finally { pendingPostChecks.delete(key); }
+  }
   function enforcePurchase(userId, current, prior) {
     if (prior && String(prior.user_id) !== String(userId)) throw new EvidenceError('Purchase belongs to another account.', 403);
     if (!prior && current.banned) throw new EvidenceError('New Forum Plus purchases are unavailable for banned accounts.', 403);
@@ -153,18 +177,8 @@ export function createForum(pool, { pepper, moderate, verifyPurchase, verifyWebh
       const accountPrefix = user.id + ':';
       const key = accountPrefix + input.requestId + ':' + input.contentHash;
       if (pendingPosts.has(key)) return pendingPosts.get(key);
-      // Committed retries need the receipt and current penalties, not a new
-      // moderation call. Read both together, preserving native timestamp types.
-      const prior = await existing(pool, user.id, input, true);
-      if (prior) return postResult(prior, prior.violations != null ? prior : await profile(pool, user.id));
-      if (!moderate) throw new EvidenceError('Community posting is temporarily unavailable.', 503);
-      const state = await profile(pool, user.id);
-      // The first lookup can precede another instance's commit while this profile
-      // read follows it. Return that receipt before enforcing its new penalty/cooldown.
-      if (blocked(state) || (state.next_post_at && new Date(state.next_post_at).getTime() > Date.now())) {
-        const completed = await existing(pool, user.id, input);
-        if (completed) return postResult(completed,state);
-      }
+      const { prior, state } = await postCheck(user, input, key);
+      if (prior) return postResult(prior, state);
       enforce(state);
       enforceCooldown(state);
       if (input.gifUrl && !state.plus_active) throw new EvidenceError('Forum Plus is required to attach GIFs.', 403);

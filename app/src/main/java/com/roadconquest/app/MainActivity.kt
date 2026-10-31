@@ -44,6 +44,7 @@ import com.roadconquest.app.export.DataImporter
 import com.roadconquest.app.map.MapRenderer
 import com.roadconquest.app.map.FogBitmapRenderer
 import com.roadconquest.app.map.PlaceOverlayInfo
+import com.roadconquest.app.map.MapMode
 import com.roadconquest.app.map.PlaceOverlayMode
 import com.roadconquest.app.map.PlacePopulationLookup
 import com.roadconquest.app.progression.ProgressionManager
@@ -244,11 +245,7 @@ class MainActivity : Activity() {
         appliedGoldUi = Prefs.isGoldUiEnabled(this)
         mapWasCentered = savedInstanceState?.getBoolean(STATE_MAP_CENTERED) ?: false
         WindowCompat.enableEdgeToEdge(window)
-        WindowCompat.getInsetsController(window, window.decorView).apply {
-            isAppearanceLightStatusBars = false
-            // Transparent system bars sit over the dark fog, including in light UI mode.
-            isAppearanceLightNavigationBars = false
-        }
+        updateSystemBarContrast()
         MapLibre.getInstance(this)
         setContentView(R.layout.activity_main)
         pendingTourStep = savedInstanceState?.getInt(STATE_TOUR_STEP, -1)?.takeIf { it >= 0 }
@@ -412,6 +409,7 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        updateSystemBarContrast()
         com.roadconquest.app.notifications.OptionalNotifications.initialize(this)
         if (!repository.isHistoryCurrent()) {
             recreatingForAppearance = true
@@ -460,6 +458,16 @@ class MainActivity : Activity() {
             return
         }
         continueAfterTour()
+    }
+
+    private fun updateSystemBarContrast() {
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            // The top bar is over the map; the bottom bar is over the themed
+            // control panel. Fog-off daytime maps need dark top icons too.
+            isAppearanceLightStatusBars = !Prefs.isFogEnabled(this@MainActivity) &&
+                Prefs.mapMode(this@MainActivity) in listOf(MapMode.STREETS, MapMode.MINIMAL)
+            isAppearanceLightNavigationBars = !Appearance.isDark(this@MainActivity)
+        }
     }
 
     private fun continueAfterTour() {
@@ -1007,6 +1015,10 @@ class MainActivity : Activity() {
         var firstVisited = "Loading…"
         var lastVisited = "Loading…"
         val area = MeasurementUnits.current().area(info.areaSquareKilometers)
+        val completion = info.completionPercent?.let {
+            "\n\nExplored: $it% of town area\nBadge: ${info.completionMedal}\n" +
+                "Bronze 25% · Silver 50% · Gold 100%\nBased on unlocked map tiles inside the town boundary."
+        }.orEmpty()
         val dialog = AlertDialog.Builder(this)
             .setTitle(info.name)
             .setMessage("")
@@ -1017,7 +1029,7 @@ class MainActivity : Activity() {
         fun updateDialog() {
             val heading = if (populationSource == "2020 Census") "Population (2020 Census)"
                 else "Population"
-            dialog.setMessage("$type\n$heading: $population\nArea: $area\nFirst visited: $firstVisited\nLast visited: $lastVisited")
+            dialog.setMessage("$type\n$heading: $population\nArea: $area\nFirst visited: $firstVisited\nLast visited: $lastVisited$completion")
         }
         updateDialog()
         summaryExecutor.execute {

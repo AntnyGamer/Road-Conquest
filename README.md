@@ -1,4 +1,4 @@
-# Road Conquest 1.0 Beta 67
+# Road Conquest 1.0
 
 Road Conquest remembers the roads you drive and the places you visit, revealing them through a
 cloud-textured fog map.
@@ -6,6 +6,8 @@ cloud-textured fog map.
 [Download the Android app](https://github.com/AntnyGamer/RoadConquest-Beta/releases) ·
 [Source and issues](https://github.com/AntnyGamer/RoadConquest-Beta) ·
 [GNU AGPL v3 license](LICENSE)
+
+Version 1.0 adds town completion medals, 30 achievements, searchable settings, and further reliability and performance improvements. Bronze unlocks at 25%, silver at 50%, and gold at 100% of town area explored through map tiles. See [release notes](RELEASE_NOTES.md) and [town completion details](TOWN_COMPLETION.md).
 
 Beta 67 aligns the walking marker with driving capture, completes a final matching pass when tracking stops, restores VIP reliably, respects provider recovery delays, refreshes Trips after background drives, and resumes notification-paused tracking from secondary screens. The deployed account service accepts Play version codes 90 and newer. See [release notes](RELEASE_NOTES.md).
 
@@ -60,21 +62,23 @@ Grant Precise location. For automatic background tracking, choose Allow all the 
 location settings and allow background battery use. Settings includes shortcuts to the relevant
 Android screens. Allow notifications to see the tracking notification and its Stop tracking control.
 
-The new release builds **Beta 67** with Android application ID
-`com.roadconquest.app` and internal version code **93**. Beta 66 used code 92, Beta 65 used code 91,
+The new release builds **1.0** with Android application ID
+`com.roadconquest.app` and internal version code **95**. Beta 68 used code 94, Beta 67 used code 93, Beta 66 used code 92, Beta 65 used code 91,
 Beta 64 used code 90, Beta 63 used code 89 and Beta 62 used code 88.
 Google Play permanently reserves uploaded version codes, including drafts and
-testing tracks. Before uploading a **signed Beta 67 release bundle**, confirm
-that code 93 is still available in Play Console. The unsigned CI bundle cannot be uploaded.
+testing tracks. Before uploading a **signed 1.0 release bundle**, confirm
+that code 95 is still available in Play Console. The unsigned CI bundle cannot be uploaded.
 Do not confuse a locally tested development build with an already-published signed release.
-The app shows its exact version in Settings → About. Treat the application ID as permanent once
+The app shows its exact version in Settings → Help & about. Treat the application ID as permanent once
 the Google Play listing is created; changing it later would create a different app.
 
 ## Explore
 
+- Town overlays now show exploration percentages and bronze (25%), silver (50%), or gold (100%) badges. Completion uses the part of unlocked map tiles inside each town's original boundary. Earn 30 additional achievements, including a new Town Badges category. [Town completion details](TOWN_COMPLETION.md).
+- Settings opens to seven searchable categories, including a dedicated Backups & data section. Search by a category or control name; Back returns to the category list before leaving Settings.
 - The first-use Quick tour previews a discovery without location access, then highlights the real
   tracking, Layers, Trips/Badges/Goals, Garage and Settings controls. Skip it or replay it from
-  Settings → Quick tour. The optional Back-to-exit prompt explains whether tracking remains on;
+  Settings → Help & about → Quick tour. The optional Back-to-exit prompt explains whether tracking remains on;
   Settings can turn this prompt off or back on. Leaving the map does not stop the tracking service.
 - Recorded driving appears while matching is pending; confirmed road geometry then refines it.
 - A tightly bounded, GPS-supported connector can close a short split between differently named
@@ -112,7 +116,7 @@ the Google Play listing is created; changing it later would create a different a
   require the same passphrase when restoring on another device. The Settings summary shows
   when a complete backup export was last made. New map-tile first-unlock times are saved and
   exported starting with this branch; older tiles keep unknown discovery dates rather than invented timestamps.
-- Create an optional account, change your username and manage leaderboard visibility. There are exactly two destructive account/data actions in the app: Account → Delete account removes the cloud account while keeping saved device history and requires the current account password; Settings → Data and privacy → Delete local data removes all local Road Conquest data while keeping the cloud account and leaderboard scores and requires typing the exact local confirmation phrase. Local full-data deletion works while signed out, stops tracking, disables verified-drive sharing and removes private interrupted-export snapshots.
+- Create an optional account, change your username and manage leaderboard visibility. There are exactly two destructive account/data actions in the app: Account → Delete account removes the cloud account while keeping saved device history and requires the current account password; Settings → Backups & data → Delete local data removes all local Road Conquest data while keeping the cloud account and leaderboard scores and requires typing the exact local confirmation phrase. Local full-data deletion works while signed out, stops tracking, disables verified-drive sharing and removes private interrupted-export snapshots.
 
 Map drawing and viewport refresh timers stop while the map activity is hidden. Returning reloads
 roads changed during background tracking; GPS sampling and saved driving history are unaffected.
@@ -139,8 +143,8 @@ OSM-way or matcher-fragment count.
 
 ## Accounts and leaderboards
 
-This beta hides public and friend rankings, visibility controls and live verified-drive
-sharing through `FeatureFlags.LEADERBOARDS_VISIBLE = false`. No verification evidence is
+This release keeps public and friend rankings, visibility controls and live verified-drive
+sharing hidden through `FeatureFlags.LEADERBOARDS_VISIBLE = false`. No verification evidence is
 collected or uploaded while hidden. Local weekly goals and friend management remain available.
 The retained competition implementation requires production verification infrastructure
 before it can be enabled.
@@ -319,7 +323,7 @@ Satellite detail varies by area.
 Geoapify street tiles and geoBoundaries country/region datasets provide the documented backups.
 Crashlytics is optional, initializes only after consent in Settings, and does not include Analytics.
 
-Settings → Licenses and map credits contains the app license and provider notices. Third-party
+Settings → Help & about → Licenses and map credits contains the app license and provider notices. Third-party
 styles, map data, imagery and dependencies retain their own licenses and service terms. See
 [NOTICE](NOTICE) and the credits under `app/src/main/assets/`.
 

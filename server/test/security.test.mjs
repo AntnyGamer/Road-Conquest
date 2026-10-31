@@ -75,3 +75,19 @@ test("scrypt returns its owned 64-byte result without copying password hashes", 
   assert.equal(result.salt.length, 16);
   assert.equal(copies, 0);
 });
+
+test("hashing and verification share bounded password capacity and recover after overload", async () => {
+  const password = 'Synthetic overload test password';
+  const saved = await hashPassword(password);
+  const work = Array.from({ length: 10 }, (_, index) => index % 2
+    ? verifyPassword(password, saved.salt, saved.hash)
+    : hashPassword(password));
+  try {
+    await assert.rejects(hashPassword(password), error => error.status === 503);
+    await assert.rejects(verifyPassword(password, saved.salt, saved.hash), error => error.status === 503);
+  } finally {
+    const results = await Promise.all(work);
+    assert.ok(results.every((result, index) => index % 2 ? result === true : result.hash.length === 64));
+  }
+  assert.equal(await verifyPassword(password, saved.salt, saved.hash), true);
+});

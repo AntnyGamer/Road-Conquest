@@ -34,6 +34,9 @@ object ProgressionManager {
             repository.syncRoadRewards(summary.roadsUnlockedCount, expectedGeneration)
             snapshot = repository.snapshot()
         }
+        if (com.roadconquest.app.map.TownCompletionTracker.sync(context, snapshot, expectedGeneration)) {
+            snapshot = repository.snapshot()
+        }
         val achievements = Achievements.progress(context, summary, metrics(snapshot))
         var changed = false
         for (achievement in achievements) {
@@ -74,6 +77,7 @@ object ProgressionManager {
 
     fun resetLocalProgression(context: Context) {
         ProgressionRepository(context).clearProgression()
+        com.roadconquest.app.map.TownCompletionTracker.reset()
         Achievements.reset(context)
         PlaceOverlayCache.clear(context)
         com.roadconquest.app.util.Prefs.resetCosmetics(context)
@@ -180,6 +184,9 @@ object ProgressionManager {
     }
 
     fun metrics(snapshot: ProgressionSnapshot) = AchievementMetrics(
+        bronzeTowns = snapshot.bronzeTowns,
+        silverTowns = snapshot.silverTowns,
+        goldTowns = snapshot.goldTowns,
         towns = snapshot.towns,
         states = snapshot.states,
         countries = snapshot.countries,

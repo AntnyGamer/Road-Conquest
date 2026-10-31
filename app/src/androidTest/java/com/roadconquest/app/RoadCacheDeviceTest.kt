@@ -107,10 +107,16 @@ class RoadCacheDeviceTest {
                 awaitRoadCount(1, "Initial road cache loads")
                 fun awaitState(expected: Lifecycle.State) {
                     val deadline = SystemClock.elapsedRealtime() + 10_000L
-                    while (scenario.state != expected && SystemClock.elapsedRealtime() < deadline) {
+                    var observed: Lifecycle.State? = null
+                    while (SystemClock.elapsedRealtime() < deadline) {
+                        // ActivityScenario rejects intermediate framework stages
+                        // while moveToFront is still finishing. Keep polling for
+                        // the requested steady state, with the same timeout.
+                        observed = try { scenario.state } catch (_: NullPointerException) { null }
+                        if (observed == expected) break
                         SystemClock.sleep(50)
                     }
-                    assertEquals("The map must reach the requested lifecycle state", expected, scenario.state)
+                    assertEquals("The map must reach the requested lifecycle state", expected, observed)
                 }
                 // ActivityScenario stops via a separate EmptyActivity. Its delayed
                 // cleanup can resume our map on Android 15 before the stop waiter

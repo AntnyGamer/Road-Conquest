@@ -30,7 +30,7 @@ class AchievementsActivity : Activity() {
     private val executor = Executors.newSingleThreadExecutor()
     private var achievements: List<AchievementProgress> = emptyList()
     private var selectedCategory = AchievementCategory.ROADS
-    private var loadGeneration = 0
+    @Volatile private var loadGeneration = 0
     private val categoryButtons = linkedMapOf<AchievementCategory, Button>()
 
     private companion object { const val PROGRESS_MAX = 1000 }
@@ -42,6 +42,9 @@ class AchievementsActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         setTheme(Appearance.themeRes(this))
         super.onCreate(savedInstanceState)
+        selectedCategory = savedInstanceState?.getString("achievement_category")?.let { saved ->
+            AchievementCategory.entries.firstOrNull { it.name == saved }
+        } ?: AchievementCategory.ROADS
         WindowCompat.enableEdgeToEdge(window)
         val lightSystemBars = !Appearance.isDark(this)
         WindowCompat.getInsetsController(window, window.decorView).apply {
@@ -72,6 +75,7 @@ class AchievementsActivity : Activity() {
                 AchievementCategory.TILES to findViewById(R.id.achievementTilesButton),
                 AchievementCategory.DISTANCE to findViewById(R.id.achievementDistanceButton),
                 AchievementCategory.PLACES to findViewById(R.id.achievementPlacesButton),
+                AchievementCategory.TOWNS to findViewById(R.id.achievementTownsButton),
                 AchievementCategory.ADS to findViewById(R.id.achievementAdsButton),
                 AchievementCategory.EXTRA to findViewById(R.id.achievementExtraButton)
             )
@@ -89,6 +93,7 @@ class AchievementsActivity : Activity() {
     private fun refreshAchievements() {
         val expected = ++loadGeneration
         executor.execute {
+            if (expected != loadGeneration) return@execute
             val result = runCatching {
                 val summary = TrackingRepository(this).getSummary()
                 val progression = ProgressionManager.sync(this, summary)
@@ -204,6 +209,11 @@ class AchievementsActivity : Activity() {
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density + 0.5f).toInt()
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString("achievement_category", selectedCategory.name)
+        super.onSaveInstanceState(outState)
+    }
 
     override fun onStart() {
         super.onStart()

@@ -1,3 +1,26 @@
+# Road Conquest 1.0
+
+## What's new since Beta 68
+
+- **Town completion medals:** Town overlays show a small explored percentage and a bronze badge at 25%, silver at 50%, or gold at **100%**. Completion measures the part of unlocked map tiles inside the original town boundary. Border tiles, holes, disconnected parts and visual overlaps do not inflate coverage. Earned tiers survive full backups.
+- **30 new achievements:** More road, tile, mileage and place milestones, plus ten achievements in the new Town Badges category. Existing awards and payouts remain owned. Achievement filters survive rotation.
+- **Searchable settings:** Seven categories with a dedicated Backups & data section, last-backup status, control-label search, and Back navigation to the category list. Navigation survives rotation and theme changes.
+- **Faster local calculations:** Prepared polygon checks avoid unnecessary intersections, visible town results are reused on unchanged pans, geometry caching is bounded, and town backfill reuses existing tile totals without rereading unchanged progression. Completed, unchanged backfill skips repository setup, and trip replay collects camera bounds in one pass instead of four. Coverage reuses each validated tile, computes polygon centers once, and rejects out-of-bounds tile envelopes before allocating polygons.
+- **Fewer unnecessary requests and reads:** Obsolete queued settings account reads, achievement loads and trip-list scans are skipped. Settings reuses one backup timestamp and formatted date for its two summaries. Interrupted GPS uploads fail through the private JSON contract before any provider allowance is used, and oversized uploads retain HTTP 413 even when cancellation fails.
+- **Restore cancellation:** Encrypted restores honor cancellation while reading ciphertext and plaintext and remove partial decrypted output on failure.
+- **Clearer restore errors:** Preserve file/storage errors when writing a decrypted backup instead of incorrectly reporting a wrong passphrase. Wrong-passphrase and altered-file checks still reject unauthenticated data and remove partial output.
+- **Readable system controls:** Navigation-bar icons follow the app's theme, and fog-off daytime maps use dark status-bar icons.
+- **Date-line trip replay:** Crossing from 179°E to 179°W keeps the replay camera near the trip instead of fitting almost the whole world.
+- **Cancelled matching:** Interrupted matching stops before starting another provider request, response reads honor cancellation, and cancellation does not impose a false provider cooldown.
+- **Less duplicate server work:** Overlapping copies of the same community submission share active receipt/profile checks as well as moderation. Completed and failed reads are never cached; account isolation, posting cooldowns and request limits remain enforced.
+- **Bounded password memory:** Account hashing and verification share two active operations and up to eight waiting callers per server instance. Busy bursts may wait or receive a retryable HTTP 503 rather than starting more memory-heavy work. Existing password strength, hashes and attempt limits stay the same.
+- **Unicode passwords:** Sign-in, confirmation, account-change/deletion fields and the web deletion form retain the full password range supported by the server, including emoji, instead of silently shortening longer Unicode passwords. The 8–128 code-point policy is unchanged.
+- **Stable release identity:** versionName **1.0**, versionCode **95**, Android 12+. The Android application ID and permanent signing identity stay the same, with no database migration.
+
+**Deployment and compatibility:** Town medals and UI improvements are local app changes. Activating the interrupted-upload gateway fix requires separately deploying the updated maps Worker; the database and password-memory improvements require deploying the updated account function. Neither needs a database migration. Existing tracking, backup formats, local weekly eligibility and verified scoring policies are retained. Public/friend competitive rankings remain hidden by the existing feature flag. GitHub publication and any Play upload remain gated on their required release checks.
+
+---
+
 # Road Conquest 1.0 Beta 68
 
 ## What's new since Beta 67
