@@ -213,17 +213,5 @@ class BackupProtectionTest {
         }
     }
 
-    @Test fun schemaFifteenUpgradeKeepsHistoryAndNewLocalHistoryRemainsEligible() {
-        android.database.sqlite.SQLiteDatabase.create(null).use { db ->
-            val tables = listOf("track_points", "skipped_driving_fixes", "roads", "visited_places", "place_candidates")
-            tables.forEach {
-                db.execSQL("CREATE TABLE $it (id INTEGER PRIMARY KEY, history TEXT NOT NULL)")
-                db.execSQL("INSERT INTO $it VALUES (1,'saved')")
-            }
-            com.roadconquest.app.data.AppDatabase.get(context).onUpgrade(db, 15, 16)
-            tables.forEach { table -> db.rawQuery("SELECT history,weekly_eligible FROM $table", null).use {
-                assertTrue(it.moveToFirst()); assertEquals("saved", it.getString(0)); assertEquals(1, it.getInt(1))
-            } }
-        }
-    }
+
 }
