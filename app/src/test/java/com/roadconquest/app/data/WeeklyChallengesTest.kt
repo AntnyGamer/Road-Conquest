@@ -14,11 +14,26 @@ import java.time.Instant
 @Config(sdk = [31, 37], manifest = Config.NONE)
 class WeeklyChallengesTest {
     private lateinit var context: Context
+    private lateinit var fixtureDb: android.database.sqlite.SQLiteDatabase
     private val monday = Instant.parse("2026-10-12T00:00:00Z").toEpochMilli()
-    @Before fun reset() { context = RuntimeEnvironment.getApplication(); TrackingRepository(context).clearHistory() }
+    @Before fun reset() {
+        context = RuntimeEnvironment.getApplication()
+        TrackingRepository(context).clearHistory()
+        fixtureDb = AppDatabase.get(context).writableDatabase
+    }
+
+    private fun batchRoads(block: () -> Unit) {
+        fixtureDb.beginTransaction()
+        try {
+            block()
+            fixtureDb.setTransactionSuccessful()
+        } finally {
+            fixtureDb.endTransaction()
+        }
+    }
 
     private fun road(id: String, group: String, time: Long) {
-        TrackingRepository(context).readableDatabase().execSQL(
+        fixtureDb.execSQL(
             "INSERT INTO roads(segment_id,name,geometry_json,first_unlocked_at,last_driven_at,road_group_id,min_lat,max_lat,min_lon,max_lon) VALUES (?, 'Road', '[[0,0],[0.001,0]]', ?, ?, ?, 0,0,0,0.001)",
             arrayOf(id, time, time, group))
     }
@@ -27,7 +42,7 @@ class WeeklyChallengesTest {
         road("old", "shared", monday - 1)
         road("newPart", "shared", monday + 10)
         road("excluded", "x2|motorway", monday + 10)
-        repeat(25) { road("r$it", "g$it", monday + 10) }
+        batchRoads { repeat(25) { road("r$it", "g$it", monday + 10) } }
         val repository = ProgressionRepository(context)
         repeat(3) { repository.recordPlace(PlaceDiscovery(PlaceKind.TOWN, "town$it", "Town $it", visitedAt = monday + 10, latitude = 0.0, longitude = 0.0)) }
         TrackingRepository(context).readableDatabase().execSQL("INSERT INTO visited_places(kind,place_key,display_name,parent_name,country_name,first_visited_at,latitude,longitude) VALUES ('TOWN','start','Start','','',?,0,0)", arrayOf(monday + 10))
@@ -48,7 +63,7 @@ class WeeklyChallengesTest {
     }
 
     @Test fun starterGoalsRewardAnOccasionalExplorerWithoutGrantingStretchBonuses() {
-        repeat(5) { road("short$it", "short-group$it", monday + 100) }
+        batchRoads { repeat(5) { road("short$it", "short-group$it", monday + 100) } }
         val repository = ProgressionRepository(context)
         repository.recordPlace(PlaceDiscovery(
             PlaceKind.TOWN, "week-starter", "Starter town",
@@ -64,7 +79,7 @@ class WeeklyChallengesTest {
     }
 
     @Test fun ownedRewardsDoNotAttemptAnotherInsertAndMissingRewardsStillEarnNormally() {
-        repeat(25) { road("repeat$it", "repeat-group$it", monday + 10) }
+        batchRoads { repeat(25) { road("repeat$it", "repeat-group$it", monday + 10) } }
         val db = AppDatabase.get(context).writableDatabase
         WeeklyChallenges.status(context, monday + 100)
         val points = ProgressionRepository(context).snapshot().balance
@@ -99,7 +114,7 @@ class WeeklyChallengesTest {
     }
 
     @Test fun delayedDiscoveriesCanFinishPreviousWeekWithoutInflatingCurrentProgress() {
-        repeat(25) { road("delayed$it", "g$it", monday - 1000) }
+        batchRoads { repeat(25) { road("delayed$it", "g$it", monday - 1000) } }
         val repository = ProgressionRepository(context)
         repeat(3) { repository.recordPlace(PlaceDiscovery(PlaceKind.TOWN, "late$it", "Late $it", visitedAt = monday - 1000, latitude = 0.0, longitude = 0.0)) }
         val before = repository.snapshot().balance

@@ -74,9 +74,15 @@ class TripHistoryRepositoryTest {
                 INSERT INTO track_points(latitude,longitude,accuracy_m,speed_mps,bearing_deg,timestamp_ms,distance_m)
                 SELECT 40,-74,3,8,90,?+x*?,0.5 FROM n""", arrayOf<Any>(count-1,start,interval))
         }
-        insert(20, 1_000_000, 1000)
-        insert(3, 10_000_000, 2_000_000) // Three singletons, each separated by a parked stop.
-        insert(20000, 100_000_000, 3000)
+        db.beginTransaction()
+        try {
+            insert(20, 1_000_000, 1000)
+            insert(3, 10_000_000, 2_000_000) // Three singletons, each separated by a parked stop.
+            insert(20000, 100_000_000, 3000)
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
         val history = TripHistoryRepository(context)
         val trips = history.recentTrips(2)
         assertEquals(listOf(20000, 20), trips.map { it.pointCount })
