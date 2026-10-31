@@ -32,6 +32,7 @@ import com.roadconquest.app.data.LocalDataReset
 import com.roadconquest.app.data.TrackingRepository
 import com.roadconquest.app.export.DataImporter
 import com.roadconquest.app.export.AccountBackup
+import com.roadconquest.app.export.ExportOnlyBackup
 import com.roadconquest.app.util.Prefs
 import com.roadconquest.app.util.Appearance
 import com.roadconquest.app.util.UiTheme
@@ -54,6 +55,8 @@ internal fun exportFailureDetails(error: Throwable, cleanupFailed: Boolean): Str
 }
 
 class SettingsActivity : Activity() {
+    private enum class ExportFormat { SECURE, READABLE }
+    private var pendingExportFormat: ExportFormat? = null
     private fun setupPrivacyDescriptions() {
         val descriptions = listOf(
             R.id.friendNotificationsSwitch to R.string.friend_notifications_detail,
@@ -152,6 +155,9 @@ class SettingsActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         setTheme(Appearance.themeRes(this))
         super.onCreate(savedInstanceState)
+        pendingExportFormat = savedInstanceState?.getString("pending_export_format")?.let {
+            runCatching { ExportFormat.valueOf(it) }.getOrNull()
+        }
         appliedGoldUi = Prefs.isGoldUiEnabled(this)
         WindowCompat.enableEdgeToEdge(window)
         val lightSystemBars = !Appearance.isDark(this)
@@ -282,22 +288,32 @@ class SettingsActivity : Activity() {
     }
 
     private fun beginExport() {
-        if (AccountStore.load(this) == null) {
-            AlertDialog.Builder(this).setTitle("Sign in to back up progress")
-                .setMessage("Secure backups work on Google Play and GitHub installations, but require a Road Conquest account and an internet connection. Sign in under Account & community first.")
-                .setPositiveButton("OK", null).show()
-            return
-        }
-        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
-            type = "application/octet-stream"
-            putExtra(Intent.EXTRA_TITLE, "RoadConquest-data-${Instant.now().toString().take(10)}.rcbackup")
-        }
-        try {
-            startActivityForResult(intent, REQUEST_EXPORT)
-        } catch (_: ActivityNotFoundException) {
-            Toast.makeText(this, "Android's file picker is unavailable on this device.", Toast.LENGTH_LONG).show()
-        }
+        AlertDialog.Builder(this).setTitle("Export progress")
+            .setItems(arrayOf(
+                "Secure backup (restorable on Play and GitHub)",
+                "Readable ZIP (for analysis, cannot restore)"
+            )) { _, selected ->
+                val format = ExportFormat.entries[selected]
+                if (format == ExportFormat.SECURE && AccountStore.load(this) == null) {
+                    AlertDialog.Builder(this).setTitle("Sign in to back up progress")
+                        .setMessage("Secure backups require your Road Conquest account and an internet connection. Sign in under Account & community first.")
+                        .setPositiveButton("OK", null).show()
+                    return@setItems
+                }
+                pendingExportFormat = format
+                val suffix = if (format == ExportFormat.SECURE) ".rcbackup" else "-readable.zip"
+                val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = if (format == ExportFormat.SECURE) "application/octet-stream" else "application/zip"
+                    putExtra(Intent.EXTRA_TITLE, "RoadConquest-data-${Instant.now().toString().take(10)}$suffix")
+                }
+                try {
+                    startActivityForResult(intent, REQUEST_EXPORT)
+                } catch (_: ActivityNotFoundException) {
+                    pendingExportFormat = null
+                    Toast.makeText(this, "Android's file picker is unavailable on this device.", Toast.LENGTH_LONG).show()
+                }
+            }.show()
     }
 
     override fun onResume() {
@@ -333,6 +349,7 @@ class SettingsActivity : Activity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString("pending_export_format", pendingExportFormat?.name)
         navigation.save(outState)
         super.onSaveInstanceState(outState)
     }
@@ -348,16 +365,21 @@ class SettingsActivity : Activity() {
     @Deprecated("Storage Access Framework document picker on minSdk 31")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != REQUEST_EXPORT || resultCode != RESULT_OK) return
-        data?.data?.let(::writeExport)
+        if (requestCode != REQUEST_EXPORT) return
+        val format = pendingExportFormat ?: return
+        pendingExportFormat = null
+        if (resultCode == RESULT_OK) data?.data?.let { writeExport(it, format) }
     }
 
-    private fun writeExport(uri: Uri) {
+    private fun writeExport(uri: Uri, format: ExportFormat) {
         Thread {
             val result = runCatching {
                 contentResolver.openOutputStream(uri, "w")?.use { output ->
-                    AccountBackup.writePortable(this, repository, output)
-                } ?: error("Could not open backup destination")
+                    when (format) {
+                        ExportFormat.SECURE -> AccountBackup.writePortable(this, repository, output)
+                        ExportFormat.READABLE -> ExportOnlyBackup.write(this, repository, output)
+                    }
+                } ?: error("Could not open export destination")
             }
             var cleanupFailed = false
             if (result.isSuccess) {
@@ -375,13 +397,16 @@ class SettingsActivity : Activity() {
                 if (isDestroyed) return@runOnUiThread
                 result.fold(
                     onSuccess = {
-                        Toast.makeText(this, "Secure backup saved. Sign into the same account to restore.", Toast.LENGTH_LONG).show()
+                        val message = if (format == ExportFormat.SECURE)
+                            "Secure backup saved. Sign in to the same account to restore."
+                        else "Readable ZIP saved. It cannot be restored and contains private location history."
+                        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
                         refreshSummary()
                     },
                     onFailure = { error ->
                         Log.e("RoadConquest", "Progress export failed", error)
                         AlertDialog.Builder(this)
-                            .setTitle("Backup failed")
+                            .setTitle("Export failed")
                             .setMessage(exportFailureDetails(error, cleanupFailed))
                             .setPositiveButton("OK", null).show()
                     }
