@@ -152,7 +152,7 @@ class AppearanceTest {
             balance = 1240L, lifetimeEarned = 1240L, pointsSpent = 0L,
             rewardedRoads = 12L, towns = 3L, states = 2L, countries = 1L,
             exploredTowns = 4L, exploredStates = 3L, exploredCountries = 2L,
-            adsWatched = 0L, lowestBatteryPercent = 101,
+            adsWatched = 0L,
             purchasedItems = emptySet(), rewardedAchievements = emptySet(),
             tilesUnlocked = 18L
         )
