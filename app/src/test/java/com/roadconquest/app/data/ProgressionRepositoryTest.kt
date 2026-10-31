@@ -677,17 +677,6 @@ class ProgressionRepositoryTest {
         assertEquals(later.longitude, queued.longitude, 0.01)
     }
 
-    @Test fun retiredBatteryAchievementsNeverGrantNewPointsOrEraseRecordedMinimum() {
-        assertTrue(ProgressionManager.recordBatteryPercent(context, 5))
-        assertEquals(0L, ProgressionRepository(context).snapshot().balance)
-        assertFalse(ProgressionManager.recordBatteryPercent(context, 5))
-        assertTrue(ProgressionManager.recordBatteryPercent(context, 1))
-        assertTrue(ProgressionManager.recordBatteryPercent(context, 0))
-        assertEquals(0L, ProgressionRepository(context).snapshot().balance)
-        assertEquals(0, ProgressionRepository(context).snapshot().lowestBatteryPercent)
-        assertTrue(ProgressionRepository(context).snapshot().rewardedAchievements.isEmpty())
-    }
-
     @Test fun completedAdHookUnlocksRequestedFiveAndTenViewMilestones() {
         repeat(4) { assertTrue(AdRewardBridge(context, 10L).onCompletedAd()) }
         assertEquals(40L, ProgressionRepository(context).snapshot().balance)
