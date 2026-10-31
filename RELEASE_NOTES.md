@@ -2,7 +2,7 @@
 
 ## Changes since version 1.1
 
-- **Recover more towns from older drives:** Revisit accurate saved GPS samples from both regular trip points and older compressed-out driving fixes. Each source has its own resumable cursor, with a shared bounded work limit. A town is still counted and shaded only after normal municipality verification; road lines alone do not establish a visit. Recovery depends on having retained usable GPS samples.
+- **Recover more towns from older drives:** Revisit accurate saved GPS samples from both regular trip points and older compressed-out driving fixes. Each source has its own resumable cursor, with a shared bounded work limit. Older histories without a starting-location marker use their first confirmed place visit as a conservative cutoff. A town is still counted and shaded only after normal municipality verification; road lines alone do not establish a visit. Recovery depends on having retained usable GPS samples.
 - **Map controls and settings:** Match the settings gear color to the other map controls, move Show fog to the top of Map & appearance, and use the standard selection dialog for map overlays with a separate Explore Nearby action.
 - **Harder town-badge achievements:** Bronze goals are now 5, 20 and 75 towns; silver goals are 3, 15 and 50; gold goals are 2, 8, 20 and 50. The combined possible reward for these ten achievements falls from 9,725 to 3,990 points. Already-earned achievements and payouts are retained.
 - **Less unnecessary local work:** Check both history-scan completion markers with one indexed query, avoid repeatedly saving completed cursors, and stop reading baseline/visited-place records after scanning finishes. Simplify Settings search by removing redundant filtering and condition checks.
