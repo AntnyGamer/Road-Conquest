@@ -4,15 +4,21 @@ Settings → **Import and restore progress** accepts authenticated Road Conquest
 the current CSV format (schema 12). It includes first-unlock timestamps for map tiles,
 compressed driving fixes, and reversible spreadsheet-safe text escaping.
 
-Settings exports a **password-free, export-only .zip** on GitHub and Play builds.
-It contains the original CSV tables and metadata, including readable GPS history.
-Keep the exported ZIP private. It is deliberately unsigned and **cannot be imported
-back into Road Conquest**, even if it contains valid data. Export does not require
-Google Play, internet, a passphrase, or a signing service.
+Settings → **Export progress** offers three formats:
 
-The restore flow accepts current-format encrypted `.rcbackup` archives with their
-passphrase and current-format Play-signed ZIPs with valid signatures. These
-are separate from the export-only ZIPs.
+- **Google Play-verified .zip:** a restorable backup signed after Play Integrity
+  validation. Requires an eligible Google Play installation, network access and
+  a configured backup-signing service.
+- **Private encrypted .rcbackup:** restorable offline on both GitHub and Play
+  installations using a passphrase of 12–256 characters. Keep the passphrase;
+  losing it prevents restore.
+- **Readable export-only .zip:** an unsigned password-free archive for external
+  inspection. It contains CSV tables, metadata and readable GPS history but
+  **cannot be imported back into Road Conquest**.
+
+Keep every export private. The restore flow accepts current-format encrypted
+`.rcbackup` files with their passphrase and current-format Play-signed ZIPs
+with valid signatures. It rejects the unsigned export-only ZIPs.
 
 The importer validates archive entries, CRCs, exact CSV columns, UTF-8, coordinates,
 geometry, timestamps, unique keys, road references, row counts, mileage and the points
@@ -55,7 +61,7 @@ No verification evidence is collected or uploaded while hidden. Local weekly goa
 friend management remain available; the ranking implementation and existing scores are
 retained for a later enabled build.
 
-Free trip history covers 100 recent drives with basic distance, duration, newly matched roads, newly rewarded towns, dated new map tiles and pending GPS matching counts. VIP extends browsing to 500 drives and enables sharing text summaries and user-selected GPX files. GPX offers a privacy-first option that omits the first and last two minutes, or a deliberate full-route export. Free full-progress ZIP export/restore remains available to everyone.
+Free trip history covers 100 recent drives with basic distance, duration, newly matched roads, newly rewarded towns, dated new map tiles and pending GPS matching counts. VIP extends browsing to 500 drives and enables sharing text summaries and user-selected GPX files. GPX offers a privacy-first option that omits the first and last two minutes, or a deliberate full-route export. Free authenticated progress backup and restore remain available to everyone.
 
 Trip replay respects raw GPS gaps even when the displayed route is downsampled. A trip
 selected before data deletion/restore cannot replay unrelated replacement history.
