@@ -41,10 +41,10 @@ VIP ownership, permissions or upload old GPS for leaderboard credit. Google Play
 VIP separately. Delete local data removes the private recovery backup and its authentication key.
 
 **Goals → Weekly challenges and friends** shows four stacking local goals in this branch:
-five newly unlocked roads (75 points), 25 newly unlocked roads (250 points),
-one newly rewarded town (75 points), and three newly rewarded towns (300 points).
-A player can earn up to 700 weekly-goal points. The original 25-road and three-town
-goal IDs and payouts remain unchanged; only the two starter milestones are new.
+five newly unlocked roads (20 points), 25 newly unlocked roads (70 points),
+one newly rewarded town (25 points), and three newly rewarded towns (80 points).
+A player can earn up to 195 weekly-goal points. Goal IDs and previously awarded
+points are preserved; the lower payouts apply to future claims.
 Old-road sections, excluded road groups and the zero-point starting town do not count.
 Restored roads, GPS fixes and place discoveries also remain ineligible, including discoveries
 resolved later by matching, backfill or geocoding. Fresh live driving remains eligible.

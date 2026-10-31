@@ -6,8 +6,6 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.view.View
-import android.graphics.Color
-import android.util.TypedValue
 
 /** Clearly separated, tappable choices instead of plain dialog list rows. */
 internal fun showActionChoices(

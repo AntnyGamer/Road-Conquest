@@ -94,8 +94,10 @@ the Google Play listing is created; changing it later would create a different a
   permanently clears fog across that entire tile, with a gradual 1,500-foot fade beyond
   its edges. Good location fixes can unlock tiles while walking or stopped too, without
   adding driving miles. Existing exploration history remains visible in the new grid.
-- Earn points from newly unlocked roads, achievements and first visits to towns, states/regions
-  and countries. The compact map stats distinguish **Driving** miles/roads from **Exploration**
+- Earn 2 points per newly unlocked road, 35 per new town, 150 per state/region,
+  and 500 per country, plus smaller achievement and weekly bonuses. Starting places
+  count toward exploration totals but earn no points or achievements. Previous
+  point awards and purchased cosmetics remain intact. The compact map stats distinguish **Driving** miles/roads from **Exploration**
   tiles. Tap the labeled **Garage · ⚔ points** chip to open the shop. The bottom bar keeps
   three primary destinations—**Trips**, **Badges** and **Goals**—without a duplicate Garage
   button. Settings organizes detailed totals into Driving, Exploration, Progression,

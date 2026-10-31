@@ -39,6 +39,7 @@ Sources checked October 19: [Geoapify credits](https://www.geoapify.com/pricing-
 [Play Integrity limits](https://developer.android.com/google/play/integrity/setup#increase-daily).
 Published allowances are not a readout of the project's actual remaining usage.
 Other applications/services using the same accounts consume their allowances.
+See [the region and road-matching accuracy review](ACCURACY_REVIEW.md) for validation limits.
 
 The October quota improvements reduce first-day metered SQL
 reads from 68,814 to 37,622 and writes from 45,624 to 44,814 for the same 6,400
