@@ -141,7 +141,6 @@ class DataImporterTest {
         val progression = ProgressionRepository(context)
         progression.recordPlace(PlaceDiscovery(PlaceKind.TOWN, "us|nj|town", "Town", visitedAt = 1_000_000, latitude = 40.0, longitude = -74.0))
         progression.recordPlaceCandidate(fix(1_005_000))
-        progression.recordBatteryPercent(5)
         progression.syncRoadRewards(1)
         progression.awardAchievement("roads_100", 350)
         val original = export()
@@ -237,7 +236,6 @@ class DataImporterTest {
             source + ("road_visits.csv" to "segment_id,started_at_utc,ended_at_utc\nmissing,1970-01-01T00:00:01Z,1970-01-01T00:00:02Z\n"),
             source + ("progression_counters.csv" to "counter_key,value\nrewarded_roads,-1\n"),
             source + ("progression_counters.csv" to "counter_key,value\nads_watched,9223372036854775807\n"),
-            source + ("progression_counters.csv" to "counter_key,value\nlowest_battery_percent,4294967296\n")
         )
         invalid.forEach { candidate ->
             assertTrue(runCatching { prepareFixture(context, ByteArrayInputStream(repack(candidate))).use { } }.isFailure)
