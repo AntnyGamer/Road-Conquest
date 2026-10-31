@@ -140,6 +140,14 @@ class PlaceOverlayTest {
         assertEquals(331_000_000L, data.population)
         assertTrue(data.areaSquareKilometers > 8_000.0)
         assertEquals("Polygon", JSONObject(data.geometryJson).getString("type"))
+        // A matching but zero-area provider result must not mask a later valid polygon.
+        val valid = JSONArray(body).getJSONObject(0)
+        val collapsed = JSONObject(valid.toString()).put("geojson", JSONObject(
+            """{"type":"Polygon","coordinates":[[[-75,39],[-75,39],[-75,39]]]}"""))
+        assertNull(PlaceOverlayClient.parseResponse(place, JSONArray().put(collapsed).toString()))
+        val recovered = PlaceOverlayClient.parseResponse(place, JSONArray().put(collapsed).put(valid).toString())
+        assertNotNull(recovered)
+        assertEquals(data.areaSquareKilometers, recovered!!.areaSquareKilometers, 0.0)
     }
 
     @Test fun malformedWorldwideResponseTriggersRetryButEmptyArrayDoesNot() {
