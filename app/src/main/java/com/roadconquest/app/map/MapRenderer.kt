@@ -947,8 +947,9 @@ class MapRenderer(
                 val roads = roadQuery?.roads?.let { saved ->
                     // Optional historical evidence must never prevent normal roads from
                     // rendering if reading the extra visit table fails.
-                    val visits = runCatching { repository.getVisitWindowsForRoads(saved) }
-                        .getOrDefault(emptyMap())
+                    val visits = if (saved.size < 2) emptyMap() else
+                        runCatching { repository.getVisitWindowsForRoads(saved) }
+                            .getOrDefault(emptyMap())
                     OverlayRoads.prepare(saved, visits,
                         repository::hasRecordedDrivingAcrossGap,
                         repository::hasRecordedDrivingThroughTurn,
