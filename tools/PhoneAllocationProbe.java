@@ -13,7 +13,7 @@ public class PhoneAllocationProbe {
         (com.sun.management.ThreadMXBean) ManagementFactory.getThreadMXBean();
     static volatile Object sink;
     static AchievementMetrics metrics(long value, Set<String> owned, Map<String, Long> points) {
-        return new AchievementMetrics(value, value, value, value, 101, value, value, owned, points);
+        return new AchievementMetrics(value, value, value, value, value, value, owned, points, 0L, 0L, 0L);
     }
     static DataSummary summary(long value) {
         return new DataSummary(0, 0, null, null, value * 1609.344, value, -1);
@@ -43,7 +43,7 @@ public class PhoneAllocationProbe {
                 metrics(100_000, owned, Map.of()))));
         }
         signatures.add(digest(Achievements.INSTANCE.progress(summary(0), metrics(0,
-            Set.of("battery_5", "battery_1", "unknown-ledger-id"), Map.of("battery_5", 7L, "battery_1", 999L)))));
+            Set.of("unknown-ledger-id"), Map.of("unknown-ledger-id", 999L)))));
         System.out.println("{\"compatibility_cases\":" + signatures.size() + ",\"sha256\":\"" + digest(signatures) + "\"}");
         for (long value : new long[]{100_000, 0}) {
             var current = summary(value);
