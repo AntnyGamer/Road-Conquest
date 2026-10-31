@@ -275,7 +275,15 @@ object PlaceOverlayCache {
     fun read(context: Context, place: PlaceDiscovery): PlaceOverlayCacheResult =
         synchronized(mutationLock) {
             initialTrim(context)
-            readCacheFile(file(context, place), place)
+            val target = file(context, place)
+            if (place.kind == PlaceKind.STATE) {
+                // The pre-full-resolution state cache lived alongside countries in v3.
+                // Its key is now unreadable by design; reclaim only that exact old file.
+                val obsolete = File(File(context.applicationContext.filesDir, DIRECTORY), target.name)
+                if (obsolete.isFile || File(obsolete.path + ".bak").isFile ||
+                    File(obsolete.path + ".new").isFile) forgetCacheFile(obsolete)
+            }
+            readCacheFile(target, place)
         }
 
     /** Census municipalities for all 50 states are cached separately from OSM. */
