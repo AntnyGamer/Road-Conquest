@@ -157,6 +157,9 @@ class MapProviderTest {
         assertNull(GeoBoundariesClient.parse(state.copy(displayName="Wrong Region"), data, true))
         assertNull(GeoBoundariesClient.parse(state.copy(latitude=5.0), data, true))
         assertNull(GeoBoundariesClient.parse(state.copy(kind=PlaceKind.TOWN), data, true))
+        val collapsed = JSONObject("""{"properties":{"shapeName":"Test Region"},"geometry":{"type":"Polygon","coordinates":[[[1,1],[1,1],[1,1]]]}}""")
+        data.getJSONArray("features").put(collapsed)
+        assertNotNull("Zero-area features are not ambiguous regions", GeoBoundariesClient.parse(state, data, true))
         data.getJSONArray("features").put(data.getJSONArray("features").getJSONObject(0))
         assertNull(GeoBoundariesClient.parse(state, data, true))
         // Malformed unrelated features must not hide one valid provider region.
