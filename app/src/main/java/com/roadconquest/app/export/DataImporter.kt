@@ -387,9 +387,6 @@ object DataImporter {
             "progression_counters" -> {
                 nonempty("counter_key")
                 require(v.getAsLong("value") in 0..1_000_000_000_000_000L) { "Invalid progression counter" }
-                if (v.getAsString("counter_key") == "lowest_battery_percent") {
-                    require(v.getAsLong("value") in 0..100) { "Invalid battery counter" }
-                }
             }
         }
     }
