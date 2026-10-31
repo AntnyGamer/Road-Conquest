@@ -320,10 +320,11 @@ object PlaceOverlayCache {
 
     // The normal and authoritative U.S. overlay caches share the same JSON format.
     private fun overlayCacheJson(data: PlaceOverlayData?, verified: Boolean = false): JSONObject {
-        val json = JSONObject()
-            .put("found", data != null)
-            .put("fetched_at", System.currentTimeMillis())
-        if (data != null) {
+        val json = JSONObject().put("found", data != null)
+        // Only negative lookups expire. Successful polygon entries are kept by
+        // the LRU budget and never read fetched_at, so do not persist that field.
+        if (data == null) json.put("fetched_at", System.currentTimeMillis())
+        else {
             if (verified) json.put("discovery_verified", true)
             json.put("name", data.name)
                 .put("kind", data.kind.name)
