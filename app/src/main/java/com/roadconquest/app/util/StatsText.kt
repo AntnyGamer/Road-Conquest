@@ -31,7 +31,7 @@ object StatsText {
             append(format(context, summary))
             append("\n\nEXPLORATION\n")
             append(String.format(Locale.getDefault(), "%,d map tiles • %,d towns\n%,d states/regions • %,d countries",
-                progress.tilesUnlocked, progress.towns, progress.states, progress.countries))
+                progress.tilesUnlocked, progress.exploredTowns, progress.exploredStates, progress.exploredCountries))
             append("\n\nPROGRESSION\n")
             append(String.format(Locale.getDefault(), "⚔ %,d points", progress.balance))
         }

@@ -66,13 +66,13 @@ object WeeklyChallenges {
                         check(cursor.moveToFirst())
                         cursor.getLong(0) to cursor.getLong(1)
                     }
-                    // Preserve every challenge ID and payout. Batch the ownership
+                    // Preserve challenge IDs and historical payouts. Batch the ownership
                     // lookup: one indexed SQLite query per week instead of one per goal.
                     val challenges = listOf(
-                        WeeklyChallenge("roads_5", "Unlock 5 new roads", roads, 5, 75, false),
-                        WeeklyChallenge("roads", "Unlock 25 new roads", roads, 25, 250, false),
-                        WeeklyChallenge("towns_1", "Explore 1 new town", towns, 1, 75, false),
-                        WeeklyChallenge("towns", "Explore 3 new towns", towns, 3, 300, false)
+                        WeeklyChallenge("roads_5", "Unlock 5 new roads", roads, 5, 20, false),
+                        WeeklyChallenge("roads", "Unlock 25 new roads", roads, 25, 70, false),
+                        WeeklyChallenge("towns_1", "Explore 1 new town", towns, 1, 25, false),
+                        WeeklyChallenge("towns", "Explore 3 new towns", towns, 3, 80, false)
                     )
                     val keys = Array(challenges.size) { "weekly:$week:${challenges[it].id}" }
                     val rewarded = HashSet<String>(challenges.size)
