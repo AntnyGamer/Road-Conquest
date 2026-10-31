@@ -238,9 +238,13 @@ class ProgressionRepository(context: Context) {
         if (!db.rawQuery("SELECT 1 FROM visited_places LIMIT 1", null).use { it.moveToFirst() }) {
             return@synchronized false
         }
-        // A missing cursor means no historical scan has started; 1 means fully scanned.
-        counterOrNull(db, COUNTER_PLACE_BACKFILL_NEXT_ID) != 1L ||
-            counterOrNull(db, COUNTER_SKIPPED_PLACE_BACKFILL_NEXT_ID) != 1L
+        // One indexed query replaces two independent lookups. Both history
+        // sources must reach their completed cursor before the scan is finished.
+        db.rawQuery(
+            """SELECT COUNT(*) FROM progression_counters
+               WHERE counter_key IN (?, ?) AND value = 1""",
+            arrayOf(COUNTER_PLACE_BACKFILL_NEXT_ID, COUNTER_SKIPPED_PLACE_BACKFILL_NEXT_ID)
+        ).use { it.moveToFirst() && it.getInt(0) != 2 }
     }
 
     /** V2 keys cannot collide with old 2 km keys while pending old visits resolve. */
