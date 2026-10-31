@@ -25,8 +25,7 @@ enum class AchievementCategory(val label: String) {
     DISTANCE("Distance"),
     PLACES("Exploration"),
     TOWNS("Town Badges"),
-    ADS("Ad Rewards"),
-    EXTRA("Bonus")
+    ADS("Ad Rewards")
 }
 
 data class AchievementProgress(
@@ -63,8 +62,6 @@ object Achievements {
     fun progress(summary: DataSummary, metrics: AchievementMetrics = AchievementMetrics()): List<AchievementProgress> {
         val miles = summary.distanceMeters / METERS_PER_MILE
         val roads = maxOf(summary.roadsUnlockedCount, metrics.rewardedRoads).toDouble()
-        val battery5 = if (metrics.lowestBatteryPercent <= 5) 1.0 else 0.0
-        val battery1 = if (metrics.lowestBatteryPercent <= 1) 1.0 else 0.0
         return listOf(
             AchievementProgress("roads_10", "Newbie Explorer", "Unlock 10 roads", AchievementCategory.ROADS, roads, 10.0, "roads", 50),
             AchievementProgress("roads_100", "Casual Explorer", "Unlock 100 roads", AchievementCategory.ROADS, roads, 100.0, "roads", 175),
@@ -108,9 +105,6 @@ object Achievements {
 
             AchievementProgress("countries_25", "Global Pathfinder", "Visit 25 different countries", AchievementCategory.PLACES, metrics.countries.toDouble(), 25.0, "countries", 3500),
 
-            AchievementProgress("battery_5", "Running on Fumes", "Use Road Conquest with 5% battery or less", AchievementCategory.EXTRA, battery5, 1.0, "complete", 150),
-            AchievementProgress("battery_1", "Last Percent", "Use Road Conquest with 1% battery or less", AchievementCategory.EXTRA, battery1, 1.0, "complete", 350),
-
             AchievementProgress("ads_5", "Ad Starter", "Watch 5 ads", AchievementCategory.ADS, metrics.adsWatched.toDouble(), 5.0, "ads", 50),
             AchievementProgress("ads_10", "Ad Regular", "Watch 10 ads", AchievementCategory.ADS, metrics.adsWatched.toDouble(), 10.0, "ads", 100),
             AchievementProgress("ads_25", "Ad Supporter", "Watch 25 ads", AchievementCategory.ADS, metrics.adsWatched.toDouble(), 25.0, "ads", 250),
@@ -147,13 +141,7 @@ object Achievements {
             AchievementProgress("town_gold_5", "Golden Collection", "Fully explore 8 towns", AchievementCategory.TOWNS, metrics.goldTowns.toDouble(), 8.0, "towns", 400),
             AchievementProgress("town_gold_10", "Golden Atlas", "Fully explore 20 towns", AchievementCategory.TOWNS, metrics.goldTowns.toDouble(), 20.0, "towns", 750),
             AchievementProgress("town_gold_25", "Master of Towns", "Fully explore 50 towns", AchievementCategory.TOWNS, metrics.goldTowns.toDouble(), 50.0, "towns", 1250),
-        ).asSequence().filter { item ->
-            // Retire low-battery challenges for NEW players: don't encourage
-            // running a GPS tracker until a phone is about to power off.
-            // Preserve the completed cards and exact historic payouts.
-            (item.id != "battery_5" && item.id != "battery_1") ||
-                item.id in metrics.rewardedAchievements
-        }.map { item ->
+        ).map { item ->
             // Road/place deduplication can reduce current totals. The durable
             // reward ledger preserves earned milestones across full restores.
             if (item.id in metrics.rewardedAchievements) {
