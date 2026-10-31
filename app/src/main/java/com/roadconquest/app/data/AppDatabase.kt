@@ -243,12 +243,6 @@ class AppDatabase private constructor(context: Context) :
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_skipped_driving_time ON skipped_driving_fixes(timestamp_ms)")
     }
 
-    /**
-     * Older builds unlocked mile tiles from every seemingly accurate fix, even
-     * while parked. Discard only tiles with NO persisted evidence of either a
-     * recorded drive OR actual 50-m exploration. Genuine walking must remain.
-     * Roads and raw driving history are untouched.
-     */
     companion object {
         private const val DB_NAME = "roadconquest.db"
         private const val DB_VERSION = 16
