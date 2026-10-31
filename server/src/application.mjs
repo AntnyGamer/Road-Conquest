@@ -59,7 +59,7 @@ const PRIVACY_HTML = `<!doctype html>
 <h2>Security and choices</h2>
 <p>Network account traffic uses HTTPS. You can use Road Conquest without an account, hide yourself from leaderboards, leave verified-drive sharing off, use manual tracking, export your data, delete only your cloud account, or delete all local Road Conquest data while keeping your account.</p>
 <h2>Privacy inquiries</h2>
-<p>For privacy questions, use the Road Conquest project's <a href="https://github.com/AntnyGamer/RoadConquest-Beta/issues">GitHub Issues page</a>. Do not post passwords, precise location history, session tokens, or other sensitive information in a public issue.</p>
+<p>For privacy questions, use the Road Conquest project's <a href="https://github.com/AntnyGamer/Road-Conquest/issues">GitHub Issues page</a>. Do not post passwords, precise location history, session tokens, or other sensitive information in a public issue.</p>
 <p><a href="/delete-account">Delete a Road Conquest account</a></p></body></html>`;
 
 const DELETE_ACCOUNT_HTML = `<!doctype html>
