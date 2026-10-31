@@ -1,3 +1,22 @@
+# Road Conquest 1.1
+
+## Changes since 1.0
+
+- **More balanced new earnings:** New roads earn 2 points, towns 35, states or regions 150, and countries 500. Weekly challenges and future achievement milestones award fewer points. Existing balances, earned ledger entries, purchases and already-owned achievements are preserved.
+- **Starting-place statistics:** The first verified starting town, state/region and country now appear as explored in Settings → Your progress. They do not give starting-place points or count toward earned milestones.
+- **Clearer choices:** Backup export formats and map-overlay options use separated tappable buttons; the Explore Nearby action is visually distinct. Town medal icons occupy less map space.
+- **Boundary display:** State and region overlays request unsimplified geometry where supported, refresh old render caches, and partition overlapping neighboring snapshots for display. Source polygons and rewards are not rewritten; inconsistent upstream boundaries may remain.
+- **Map settings:** Optional town medals, automatic car following and display-only distance units. Tracking gains an optional keep-screen-awake toggle; controls include concise descriptions.
+- **Reduced avoidable UI work:** Opening settings or switching categories without a search no longer builds search text by recursively reading all controls. Search still examines live settings text when a query exists, and its whitespace matching is unchanged.
+- **Smaller fallback parser allocation:** LocationIQ's NoMatch/NoSegment check uses two direct comparisons instead of allocating a temporary set. This does not change matching confidence, GPS evidence, requests, or fallback behavior.
+- **Test infrastructure:** Existing SQLite test fixtures batch independent inserts, reuse selected connections, and avoid repeated immutable fixture/regex creation. The server CI job caches verified npm downloads while still running `npm ci`.
+
+**Version:** Android versionName **1.1**, versionCode **96**, Android 12+ (API 31 minimum). No local database migration or account protocol change is introduced by these release changes.
+
+**Compatibility and verification:** Existing backup formats, purchases, stored progress and scoring rules for already-earned rewards remain intact. The code-level reductions above are expected to save avoidable allocations or work; no measured whole-app startup, battery or server-cost improvement is claimed. Release publishing, signing and device checks must finish in CI before this version is considered published.
+
+---
+
 # Road Conquest 1.0
 
 ## What's new since Beta 68

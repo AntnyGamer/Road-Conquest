@@ -19,6 +19,7 @@ import java.util.Locale
 
 /** Category navigation changes visibility only: all existing controls retain their bindings. */
 internal class SettingsNavigation(private val activity: Activity, state: Bundle?) {
+    companion object { private val WORD_SEPARATOR = Regex("\\s+") }
     private data class Section(val id: Int, val title: String, val detail: String, val icon: Int, val keywords: String)
     private val sections = listOf(
         Section(R.id.trackingSettingsCard, "Tracking", "Location, battery and tracking behavior", R.drawable.ic_my_location, "gps automatic manual enable permission device exit confirmation screen awake display"),
@@ -69,14 +70,17 @@ internal class SettingsNavigation(private val activity: Activity, state: Bundle?
 
     private fun render() {
         val query = search.text.toString().trim().lowercase(Locale.ROOT)
-        val words = query.split(Regex("\\s+")).filter(String::isNotBlank)
+        val searching = query.isNotEmpty()
+        val words = if (searching) query.split(WORD_SEPARATOR).filter(String::isNotBlank) else emptyList()
         val chosen = sections.firstOrNull { it.id == selected }
         val home = chosen == null && query.isEmpty()
         categories.visibility = if (home) View.VISIBLE else View.GONE
         var matches = 0
         for (section in sections) {
-            val haystack = "${section.title} ${section.detail} ${section.keywords} ${contentText(activity.findViewById(section.id))}".lowercase(Locale.ROOT)
-            val visible = if (query.isNotEmpty()) words.all { it in haystack } else section == chosen
+            val visible = if (searching) {
+                val haystack = "${section.title} ${section.detail} ${section.keywords} ${contentText(activity.findViewById(section.id))}".lowercase(Locale.ROOT)
+                words.all { it in haystack }
+            } else section == chosen
             activity.findViewById<View>(section.id).visibility = if (visible) View.VISIBLE else View.GONE
             if (visible) matches++
         }

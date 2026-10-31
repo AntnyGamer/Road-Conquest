@@ -1,13 +1,15 @@
-# Road Conquest 1.0
+# Road Conquest 1.1
 
 Road Conquest remembers the roads you drive and the places you visit, revealing them through a
 cloud-textured fog map.
 
-[Download the Android app](https://github.com/AntnyGamer/RoadConquest-Beta/releases) ·
-[Source and issues](https://github.com/AntnyGamer/RoadConquest-Beta) ·
+[Download the Android app](https://github.com/AntnyGamer/Road-Conquest/releases) ·
+[Source and issues](https://github.com/AntnyGamer/Road-Conquest) ·
 [GNU AGPL v3 license](LICENSE)
 
-Version 1.0 adds town completion medals, 30 achievements, searchable settings, and further reliability and performance improvements. Bronze unlocks at 25%, silver at 50%, and gold at 100% of town area explored through map tiles. See [release notes](RELEASE_NOTES.md) and [town completion details](TOWN_COMPLETION.md).
+Version 1.1 rebalances newly earned points, improves exploration statistics, boundary presentation and settings, and avoids unnecessary settings-screen work. See [release notes](RELEASE_NOTES.md).
+
+Version 1.0 added town completion medals, 30 achievements, searchable settings, and further reliability and performance improvements. Bronze unlocks at 25%, silver at 50%, and gold at 100% of town area explored through map tiles. See [release notes](RELEASE_NOTES.md) and [town completion details](TOWN_COMPLETION.md).
 
 Beta 67 aligns the walking marker with driving capture, completes a final matching pass when tracking stops, restores VIP reliably, respects provider recovery delays, refreshes Trips after background drives, and resumes notification-paused tracking from secondary screens. The deployed account service accepts Play version codes 90 and newer. See [release notes](RELEASE_NOTES.md).
 
