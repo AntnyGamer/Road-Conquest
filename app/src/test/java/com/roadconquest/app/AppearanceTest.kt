@@ -202,7 +202,7 @@ class AppearanceTest {
             activity.findViewById<Button>(R.id.githubButton).performClick()
             val github = shadowOf(activity).nextStartedActivity
             assertEquals(android.content.Intent.ACTION_VIEW, github.action)
-            assertEquals("https://github.com/AntnyGamer/RoadConquest-Beta", github.data.toString())
+            assertEquals("https://github.com/AntnyGamer/Road-Conquest", github.data.toString())
             assertTrue(github.hasCategory(android.content.Intent.CATEGORY_BROWSABLE))
             activity.findViewById<Button>(R.id.supportDeveloperButton).performClick()
             val support = shadowOf(activity).nextStartedActivity
