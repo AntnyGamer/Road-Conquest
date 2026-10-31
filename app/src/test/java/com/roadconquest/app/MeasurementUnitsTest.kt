@@ -41,7 +41,7 @@ class MeasurementUnitsTest {
     }
 
     @Test fun unitOverridePersistsAndChangesDisplayOnly() {
-        val context = org.robolectric.RuntimeEnvironment.getApplication<android.app.Application>()
+        val context = org.robolectric.RuntimeEnvironment.getApplication()
         context.getSharedPreferences("roadconquest_preferences", 0).edit().remove("distance_units").commit()
         val original = Locale.getDefault()
         try {
