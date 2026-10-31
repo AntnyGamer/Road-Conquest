@@ -103,11 +103,17 @@ class TripHistoryRepositoryTest {
         TrackingRepository(context).clearHistory()
         val db = AppDatabase.get(context).writableDatabase
         val times = listOf(1_000_000L, 1_020_000L, 1_060_000L, 1_080_000L, 1_100_000L)
-        times.forEachIndexed { index, time ->
-            db.execSQL(
-                "INSERT INTO track_points(latitude, longitude, accuracy_m, speed_mps, bearing_deg, timestamp_ms) VALUES (?,?,?,?,?,?)",
-                arrayOf<Any>(40.0, -74.0 + index * 0.001, 5.0, 10.0, 0.0, time)
-            )
+        db.beginTransaction()
+        try {
+            times.forEachIndexed { index, time ->
+                db.execSQL(
+                    "INSERT INTO track_points(latitude, longitude, accuracy_m, speed_mps, bearing_deg, timestamp_ms) VALUES (?,?,?,?,?,?)",
+                    arrayOf<Any>(40.0, -74.0 + index * 0.001, 5.0, 10.0, 0.0, time)
+                )
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
         }
 
         val history = TripHistoryRepository(context)
