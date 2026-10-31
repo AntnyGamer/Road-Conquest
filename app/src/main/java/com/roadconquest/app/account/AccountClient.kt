@@ -88,6 +88,18 @@ object AccountClient {
         if (it.optBoolean("available")) requireVerifiedPolicy(it)
     }
 
+    /** Account-bound portable backup key. The raw GPS archive is never uploaded. */
+    fun backupEncryptionKey(token: String): ByteArray {
+        val encoded = request("/v1/backups/account-key", "GET", null, token).getString("key")
+        require(encoded.matches(Regex("[A-Za-z0-9_-]{43}"))) { "Invalid backup key response." }
+        val key = android.util.Base64.decode(encoded, android.util.Base64.URL_SAFE or
+            android.util.Base64.NO_WRAP or android.util.Base64.NO_PADDING)
+        require(key.size == 32 && android.util.Base64.encodeToString(key,
+            android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP or
+                android.util.Base64.NO_PADDING) == encoded) { "Invalid backup key response." }
+        return key
+    }
+
     fun backupKeys(): JSONObject = request("/v1/backups", "GET", null, null)
 
     // A cold signer can make two sequential Google requests with 8-second limits.
