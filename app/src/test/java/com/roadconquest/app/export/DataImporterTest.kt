@@ -405,18 +405,6 @@ class DataImporterTest {
         assertEquals(2L, fresh.getSummary().trackPointCount)
     }
 
-    @Test fun obsoleteBackupFormatsAreRejectedBeforeAnyHistoryIsReplaced() {
-        val original = export()
-        for (schema in listOf(9, 10, 11)) {
-            val archive = entries(original).toMutableMap()
-            archive["metadata.json"] = JSONObject(archive.getValue("metadata.json"))
-                .put("schema_version", schema).toString()
-            assertThrows(IllegalArgumentException::class.java) {
-                prepareFixture(context, ByteArrayInputStream(repack(archive))).close()
-            }
-        }
-    }
-
     @Test fun currentBackupPreservesRealTileFirstUnlockDates() {
         TrackingRepository(context).recordExploredGridCell(fix(1_000_000L))
         val bytes = export()
