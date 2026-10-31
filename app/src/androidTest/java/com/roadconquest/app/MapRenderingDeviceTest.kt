@@ -584,19 +584,30 @@ class MapRenderingDeviceTest {
         Prefs.setBackgroundPromptShown(app, true)
         Prefs.setTrackingPaused(app, false)
         val manager = app.getSystemService(NotificationManager::class.java)
-        fun awaitState(message: String, predicate: () -> Boolean) {
-            val deadline = SystemClock.elapsedRealtime() + 10_000L
+        fun awaitState(message: String, timeoutMs: Long = 10_000L, predicate: () -> Boolean) {
+            val deadline = SystemClock.elapsedRealtime() + timeoutMs
             while (SystemClock.elapsedRealtime() < deadline && !predicate()) SystemClock.sleep(50)
             assertTrue("$message (paused=${Prefs.isTrackingPaused(app)}, running=${TrackingService.isRunning}, " +
                 "notifications=${manager.activeNotifications.map { it.id }})", predicate())
         }
+        fun stopFromNotification() {
+            var action: android.app.PendingIntent? = null
+            // Service.onCreate returning does not mean Android has published its
+            // foreground notification yet, especially on a rapid stop/restart.
+            // Capture the action from the same snapshot that satisfies the wait.
+            awaitState("Tracking notification Stop action appears", 15_000L) {
+                if (action == null && TrackingService.isRunning) {
+                    action = manager.activeNotifications.firstOrNull { it.id == 4101 }
+                        ?.notification?.actions?.singleOrNull()?.actionIntent
+                }
+                action != null
+            }
+            checkNotNull(action).send()
+        }
         try {
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
                 scenario.onActivity { ContextCompat.startForegroundService(it, Intent(it, TrackingService::class.java)) }
-                awaitState("Tracking notification appears") {
-                    TrackingService.isRunning && manager.activeNotifications.any { it.id == 4101 }
-                }
-                manager.activeNotifications.single { it.id == 4101 }.notification.actions.single().actionIntent.send()
+                stopFromNotification()
                 awaitState("Stop action removes the service and notification") {
                     Prefs.isTrackingPaused(app) && !TrackingService.isRunning &&
                         manager.activeNotifications.none { it.id == 4101 }
@@ -614,7 +625,7 @@ class MapRenderingDeviceTest {
                     !Prefs.isTrackingPaused(app) && TrackingService.isRunning
                 }
             }
-            manager.activeNotifications.single { it.id == 4101 }.notification.actions.single().actionIntent.send()
+            stopFromNotification()
             awaitState("Tracking stops before reopening Garage") { Prefs.isTrackingPaused(app) && !TrackingService.isRunning }
             ActivityScenario.launch(ShopActivity::class.java).use {
                 awaitState("Garage also resumes a notification-paused session") {
