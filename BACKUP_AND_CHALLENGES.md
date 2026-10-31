@@ -4,28 +4,32 @@ Settings → **Import and restore progress** accepts authenticated Road Conquest
 the current CSV format (schema 12). It includes first-unlock timestamps for map tiles,
 compressed driving fixes, and reversible spreadsheet-safe text escaping.
 
-Settings → **Export progress** offers three formats:
+Settings → **Export progress** creates one portable **.rcbackup** on both
+Google Play and GitHub installations. An existing Road Conquest account and
+internet connection are required. The account service sends a stable per-account
+256-bit encryption key over HTTPS; the backup and GPS history never leave the
+phone except for the user-selected export file. AES-256-GCM encrypts the file and
+detects changes to its contents. No additional backup password is required.
 
-- **Google Play-verified .zip:** a restorable backup signed after Play Integrity
-  validation. Requires an eligible Google Play installation, network access and
-  a configured backup-signing service.
-- **Private encrypted .rcbackup:** restorable offline on both GitHub and Play
-  installations using a passphrase of 12–256 characters. Keep the passphrase;
-  losing it prevents restore.
-- **Readable export-only .zip:** an unsigned password-free archive for external
-  inspection. It contains CSV tables, metadata and readable GPS history but
-  **cannot be imported back into Road Conquest**.
+To restore on any compatible installation, sign in to the **same account** and
+select the .rcbackup. A different account, an altered file or a corrupted GCM
+authentication tag is rejected before data replacement. Do not delete the
+account or rotate the account service's password-pepper secret while backups
+still need to be restored; those changes make account-key recovery impossible.
+Protect account sessions: anyone who obtains the key by authenticating as the
+owner can decrypt and re-encrypt files. No local export is evidence of verified
+GPS driving; restored progress never earns fresh verified leaderboard credit.
 
-Keep every export private. The restore flow accepts current-format encrypted
-`.rcbackup` files with their passphrase and current-format Play-signed ZIPs
-with valid signatures. It rejects the unsigned export-only ZIPs.
+The importer continues to recognize already-created, valid Play-signed ZIPs and
+older password-encrypted .rcbackup files, but Settings no longer creates either
+format. It continues to reject readable export-only ZIPs; those are not backups.
 
 The importer validates archive entries, CRCs, exact CSV columns, UTF-8, coordinates,
 geometry, timestamps, unique keys, road references, row counts, mileage and the points
 ledger before showing a replacement confirmation. It parses quoted names and multiline
 fields, uses bounded streaming into a private staging database, rejects duplicate or
 unexpected/path-traversal entries, and caps compressed and expanded data at 512 MiB.
-Export enforces the same expanded-data limit without requesting an archive signature.
+Export enforces the same expanded-data limit and authenticates its encrypted contents with AES-GCM.
 
 Before replacement, one private recovery ZIP is saved on the phone. **Restore progress
 from before last import** can recover it offline on the same installation (the current state is
