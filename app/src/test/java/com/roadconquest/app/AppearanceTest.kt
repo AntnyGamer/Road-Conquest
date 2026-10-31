@@ -112,6 +112,7 @@ class AppearanceTest {
         val progression = com.roadconquest.app.data.ProgressionSnapshot(
             balance = 1240L, lifetimeEarned = 1240L, pointsSpent = 0L,
             rewardedRoads = 12L, towns = 3L, states = 2L, countries = 1L,
+            exploredTowns = 4L, exploredStates = 3L, exploredCountries = 2L,
             adsWatched = 0L, lowestBatteryPercent = 101,
             purchasedItems = emptySet(), rewardedAchievements = emptySet(),
             tilesUnlocked = 18L
@@ -120,7 +121,9 @@ class AppearanceTest {
         assertTrue(details, details.indexOf("DRIVING") < details.indexOf("EXPLORATION"))
         assertTrue(details, details.indexOf("EXPLORATION") < details.indexOf("PROGRESSION"))
         assertTrue(details, details.contains("18 map tiles"))
-        assertTrue(details, details.contains("3 towns"))
+        assertTrue(details, details.contains("4 towns"))
+        assertTrue(details, details.contains("3 states/regions"))
+        assertTrue(details, details.contains("2 countries"))
         assertTrue(details, details.contains("1,240 points"))
     }
 

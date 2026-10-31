@@ -24,7 +24,7 @@ import org.robolectric.annotation.Config
 @Config(sdk = [31], manifest = Config.NONE, shadows = [PosixAtomicFileShadow::class])
 class PlaceOverlayTest {
     private fun assertCacheAccountingMatchesDisk(context: android.content.Context) {
-        val files = listOf("place-overlays-v3", "place-overlays-v5-world-admin", "place-overlays-us-census-v1")
+        val files = listOf("place-overlays-v3", "place-overlays-v5-world-admin", "place-overlays-v4-states-full", "place-overlays-us-census-v1")
             .flatMap { File(context.filesDir, it).listFiles().orEmpty().toList() }
             .filter { it.isFile && it.name.endsWith(".json") }
         val owner = PlaceOverlayCache
@@ -46,7 +46,7 @@ class PlaceOverlayTest {
             val hash = MessageDigest.getInstance("SHA-256")
                 .digest("${empty.kind.name}|${empty.key}".toByteArray(Charsets.UTF_8))
                 .joinToString("") { "%02x".format(Locale.US, it.toInt() and 0xff) }
-            val file = File(File(context.filesDir, "place-overlays-v3"), "$hash.json")
+            val file = File(File(context.filesDir, "place-overlays-v4-states-full"), "$hash.json")
             file.writeText("")
             PlaceOverlayCache.trimForTest(context, Long.MAX_VALUE, Int.MAX_VALUE)
             assertCacheAccountingMatchesDisk(context)
@@ -65,7 +65,7 @@ class PlaceOverlayTest {
             val data = PlaceOverlayData(place.key, place.displayName, place.kind, null, 1.0,
                 """{"type":"Polygon","coordinates":[[[0,0],[2,0],[2,2],[0,2],[0,0]]]}""")
             assertTrue(PlaceOverlayCache.write(context, place, data))
-            val target = File(context.filesDir, "place-overlays-v3").listFiles()!!.single { it.name.endsWith(".json") }
+            val target = File(context.filesDir, "place-overlays-v4-states-full").listFiles()!!.single { it.name.endsWith(".json") }
             val undeletable = object : File(target.path) { override fun delete(): Boolean = false }
             PlaceOverlayCache.javaClass.getDeclaredMethod("forgetCacheFile", File::class.java)
                 .apply { isAccessible = true }.invoke(PlaceOverlayCache, undeletable)

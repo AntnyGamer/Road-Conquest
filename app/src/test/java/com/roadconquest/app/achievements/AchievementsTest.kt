@@ -13,6 +13,17 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31, 37], manifest = Config.NONE)
 class AchievementsTest {
+    @Test fun rebalancedMilestonesPreserveAlreadyGrantedAmounts() {
+        val summary = DataSummary(0, 0, null, null, roadsUnlockedCount = 10)
+        val fresh = Achievements.progress(summary).first { it.id == "roads_10" }
+        assertEquals(50L, fresh.rewardPoints)
+        val saved = Achievements.progress(summary, AchievementMetrics(
+            rewardedAchievements = setOf("roads_10"),
+            rewardedAchievementPoints = mapOf("roads_10" to 100L)
+        )).first { it.id == "roads_10" }
+        assertEquals(100L, saved.rewardPoints)
+    }
+
     @Test fun milestonesReflectLocalRoadAndMileageProgress() {
         val summary = DataSummary(
             trackPointCount = 0,

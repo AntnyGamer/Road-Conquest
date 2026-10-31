@@ -103,7 +103,7 @@ class ProgressionResourceTest {
             assertEquals(1, repository.resolveCandidate(candidate.copy(cellX = 123, cellY = 456),
                 listOf(discoveries().last().copy(key = "ca|ontario|other", displayName = "Other", latitude = 44.0))))
         })
-        assertEquals(100L, repository.snapshot().balance)
+        assertEquals(35L, repository.snapshot().balance)
     }
 
     @Test fun municipalNamesMatchOriginalIncludingOverlappingAndTruncatedKinds() {

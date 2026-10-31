@@ -53,16 +53,16 @@ class ProgressionRepositoryTest {
     @Test fun roadAndAchievementPointsAreIdempotentAndNeverRetract() {
         val progression = ProgressionRepository(context)
         progression.syncRoadRewards(10)
-        assertEquals(50L, progression.snapshot().balance)
+        assertEquals(20L, progression.snapshot().balance)
 
         progression.syncRoadRewards(10)
         progression.syncRoadRewards(8)
-        assertEquals(50L, progression.snapshot().balance)
+        assertEquals(20L, progression.snapshot().balance)
         assertEquals(10L, progression.snapshot().rewardedRoads)
 
         assertTrue(progression.awardAchievement("test", 100))
         assertFalse(progression.awardAchievement("test", 100))
-        assertEquals(150L, progression.snapshot().balance)
+        assertEquals(120L, progression.snapshot().balance)
     }
 
     @Test fun municipalityNameAliasesCannotRewardTheSameTownTwice() {
@@ -80,7 +80,7 @@ class ProgressionRepositoryTest {
         assertTrue(progression.recordPlace(first))
         assertFalse(progression.recordPlace(alias))
         assertEquals(1L, progression.snapshot().towns)
-        assertEquals(100L, progression.snapshot().balance)
+        assertEquals(35L, progression.snapshot().balance)
         assertEquals(1, progression.visitedPlaces(PlaceKind.TOWN).size)
     }
 
@@ -162,11 +162,11 @@ class ProgressionRepositoryTest {
         )
         assertTrue(progression.recordPlace(first))
         assertTrue(progression.recordPlace(second))
-        assertEquals(200L, progression.snapshot().balance)
+        assertEquals(70L, progression.snapshot().balance)
         assertEquals(2L, progression.snapshot().towns)
         assertEquals(2, progression.visitedPlaces(PlaceKind.TOWN).size)
         assertFalse(progression.recordPlace(first.copy(visitedAt = 3_000L)))
-        assertEquals(200L, progression.snapshot().balance)
+        assertEquals(70L, progression.snapshot().balance)
     }
 
     @Test fun separateCensusGeoidsStaySeparateEvenWhenParentStateSpellingChanges() {
@@ -214,7 +214,7 @@ class ProgressionRepositoryTest {
             progression.recordPlace(sameTown))
         assertEquals(listOf(legacy.key),
             progression.visitedPlaces(PlaceKind.TOWN).map { it.key })
-        assertEquals(100L, progression.snapshot().balance)
+        assertEquals(35L, progression.snapshot().balance)
 
         val differentTown = sameTown.copy(
             key = "us|pennsylvania|census-4-4205678",
@@ -227,7 +227,7 @@ class ProgressionRepositoryTest {
         cache(differentTown, disjoint)
         assertTrue("New municipality must not be folded into nearby old same-name visit",
             progression.recordPlace(differentTown))
-        assertEquals(200L, progression.snapshot().balance)
+        assertEquals(70L, progression.snapshot().balance)
         assertEquals(2L, progression.snapshot().towns)
     }
 
@@ -239,14 +239,14 @@ class ProgressionRepositoryTest {
         )
         assertTrue(progression.recordPlace(town))
         assertFalse(progression.recordPlace(town))
-        assertEquals(100L, progression.snapshot().balance)
+        assertEquals(35L, progression.snapshot().balance)
         assertEquals(1L, progression.snapshot().towns)
 
-        assertEquals(PurchaseResult.INSUFFICIENT_POINTS, progression.purchase("too_expensive", 101))
-        assertEquals(PurchaseResult.PURCHASED, progression.purchase("affordable", 80))
-        assertEquals(PurchaseResult.OWNED, progression.purchase("affordable", 80))
-        assertEquals(20L, progression.snapshot().balance)
-        assertEquals(80L, progression.snapshot().pointsSpent)
+        assertEquals(PurchaseResult.INSUFFICIENT_POINTS, progression.purchase("too_expensive", 36))
+        assertEquals(PurchaseResult.PURCHASED, progression.purchase("affordable", 20))
+        assertEquals(PurchaseResult.OWNED, progression.purchase("affordable", 20))
+        assertEquals(15L, progression.snapshot().balance)
+        assertEquals(20L, progression.snapshot().pointsSpent)
     }
 
     @Test fun townsStatesAndCountriesKeepFirstAndLastVisitsWithoutRepeatPoints() {
@@ -303,7 +303,15 @@ class ProgressionRepositoryTest {
             assertEquals(PlaceVisitTimes(1_000L, 7_000L),
                 progression.placeVisitTimes(place.kind, place.key))
         }
-        assertEquals(0L, progression.snapshot().balance)
+        progression.snapshot().let {
+            assertEquals(0L, it.balance)
+            assertEquals(0L, it.towns)
+            assertEquals(0L, it.states)
+            assertEquals(0L, it.countries)
+            assertEquals(1L, it.exploredTowns)
+            assertEquals(1L, it.exploredStates)
+            assertEquals(1L, it.exploredCountries)
+        }
         assertEquals(1_000L, progression.startingLocation()?.recordedAt)
     }
 
@@ -356,7 +364,7 @@ class ProgressionRepositoryTest {
             )
         )
         progression.snapshot().let {
-            assertEquals(100L, it.balance)
+            assertEquals(35L, it.balance)
             assertEquals(1L, it.towns)
             assertEquals(0L, it.states)
             assertEquals(0L, it.countries)
@@ -613,7 +621,7 @@ class ProgressionRepositoryTest {
                 )
             )
         )
-        assertEquals(100L, progression.snapshot().balance)
+        assertEquals(35L, progression.snapshot().balance)
         assertEquals(1L, progression.snapshot().towns)
         progression.startingLocation()!!.let {
             assertEquals(startFix.latitude, it.latitude, 0.0)
@@ -686,12 +694,12 @@ class ProgressionRepositoryTest {
         val fifth = AdRewardBridge(context, 10L)
         assertTrue(fifth.onCompletedAd())
         assertFalse(fifth.onCompletedAd())
-        assertEquals(150L, ProgressionRepository(context).snapshot().balance)
+        assertEquals(100L, ProgressionRepository(context).snapshot().balance)
 
         repeat(5) { assertTrue(AdRewardBridge(context, 10L).onCompletedAd()) }
         val snapshot = ProgressionRepository(context).snapshot()
         assertEquals(10L, snapshot.adsWatched)
-        assertEquals(400L, snapshot.balance)
+        assertEquals(250L, snapshot.balance)
 
         val pending = AdRewardBridge(context, 10L)
         TrackingRepository(context).clearHistory()
@@ -825,7 +833,7 @@ class ProgressionRepositoryTest {
                 )
             )
         )
-        assertEquals(100L, progression.snapshot().balance)
+        assertEquals(35L, progression.snapshot().balance)
         assertEquals(1L, progression.snapshot().towns)
     }
 
@@ -943,13 +951,13 @@ class ProgressionRepositoryTest {
                 listOf(PlaceDiscovery(PlaceKind.TOWN, "us|nj|newtown", "Newtown",
                     "New Jersey", "United States", 5_000L, 39.96, -75.002))
             ))
-            assertEquals(100L, progression.snapshot().balance)
+            assertEquals(35L, progression.snapshot().balance)
             assertEquals(0, progression.resolveCandidate(
                 candidates.last(),
                 listOf(PlaceDiscovery(PlaceKind.TOWN, "us|nj|newtown", "Newtown",
                     "New Jersey", "United States", 3_000L, 39.96, -75.015))
             ))
-            assertEquals(100L, progression.snapshot().balance)
+            assertEquals(35L, progression.snapshot().balance)
         } finally {
             database.execSQL("DELETE FROM track_points")
         }
