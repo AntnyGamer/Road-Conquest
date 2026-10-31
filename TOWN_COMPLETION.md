@@ -14,6 +14,6 @@ Town-badge achievements now require 5/20/75 bronze towns, 3/15/50 silver towns, 
 
 Earned tiers remain owned if a later boundary correction changes the current percentage. Each town counts once per attained tier, with silver/gold towns also qualifying for lower-tier achievements. The existing reward ledger awards achievement points once. Town tier counters, earned achievements and their exact historical point awards travel through full backups and are removed by local-data deletion. They never grant verified or weekly driving credit.
 
-The 30 new achievements cover intermediate and long-term road, tile, distance and place milestones, including 10 town-medal achievements. Existing achievement IDs and payouts are preserved.
+The 30 new achievements cover intermediate and long-term road, tile, distance and place milestones, including 10 town-medal achievements. Achievement IDs and previously earned payouts are preserved; new town-badge rewards are lower.
 
 Settings now opens to seven searchable categories: Tracking; Map & appearance; Account & community; Notifications & privacy; Backups & data; Your progress; Help & about. Search includes individual control text. Back returns from a category or search to the settings home, then to the map. Navigation survives rotation and appearance changes. Existing export/restore and destructive-action confirmations remain in their original handlers.
