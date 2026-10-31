@@ -76,8 +76,7 @@ class AchievementsActivity : Activity() {
                 AchievementCategory.DISTANCE to findViewById(R.id.achievementDistanceButton),
                 AchievementCategory.PLACES to findViewById(R.id.achievementPlacesButton),
                 AchievementCategory.TOWNS to findViewById(R.id.achievementTownsButton),
-                AchievementCategory.ADS to findViewById(R.id.achievementAdsButton),
-                AchievementCategory.EXTRA to findViewById(R.id.achievementExtraButton)
+                AchievementCategory.ADS to findViewById(R.id.achievementAdsButton)
             )
         )
         categoryButtons.forEach { (category, button) ->
@@ -109,10 +108,6 @@ class AchievementsActivity : Activity() {
                         points.text = String.format(Locale.getDefault(), "⚔ %,d points", progression.balance)
                         text.visibility = android.view.View.GONE
                         this.achievements = achievements
-                        if (selectedCategory == AchievementCategory.EXTRA &&
-                            achievements.none { it.category == AchievementCategory.EXTRA }) {
-                            selectedCategory = AchievementCategory.ROADS
-                        }
                         renderCategory(list)
                     },
                     onFailure = {
@@ -148,10 +143,8 @@ class AchievementsActivity : Activity() {
             // VIP has no rewarded-ad offers: preserve earned ad milestones,
             // but do not show an empty page of impossible locked challenges.
             button.visibility = if (
-                (category == AchievementCategory.ADS && VipEntitlement.isActive(this) &&
-                    achievements.none { it.category == AchievementCategory.ADS && it.unlocked }) ||
-                (category == AchievementCategory.EXTRA &&
-                    achievements.none { it.category == AchievementCategory.EXTRA })
+                category == AchievementCategory.ADS && VipEntitlement.isActive(this) &&
+                achievements.none { it.category == AchievementCategory.ADS && it.unlocked }
             ) android.view.View.GONE else android.view.View.VISIBLE
         }
     }
