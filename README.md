@@ -78,10 +78,9 @@ Release 1.0 uses Android application ID `com.roadconquest.app`, internal version
   purchases and progression counters from Settings as a readable, password-free
   **export-only .zip** on GitHub and Play installations. The archive can be inspected
   externally but **cannot be imported or restored into Road Conquest**; it contains
-  sensitive GPS history, so store it privately. Older protected backups remain
-  restorable through the separate legacy import flow. The Settings summary shows
-  when a complete backup export was last made. New map-tile first-unlock times are saved and
-  exported starting with this branch; older tiles keep unknown discovery dates rather than invented timestamps.
+  sensitive GPS history, so store it privately. Current-format authenticated
+  backups can be restored separately. The Settings summary shows
+  when a complete export was last made. Tile first-unlock times are included in backups.
 - Create an optional account, change your username and manage leaderboard visibility. There are exactly two destructive account/data actions in the app: Account → Delete account removes the cloud account while keeping saved device history and requires the current account password; Settings → Backups & data → Delete local data removes all local Road Conquest data while keeping the cloud account and leaderboard scores and requires typing the exact local confirmation phrase. Local full-data deletion works while signed out, stops tracking, disables verified-drive sharing and removes private interrupted-export snapshots.
 
 Map drawing and viewport refresh timers stop while the map activity is hidden. Returning reloads
