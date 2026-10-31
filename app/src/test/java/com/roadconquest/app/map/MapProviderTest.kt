@@ -159,18 +159,16 @@ class MapProviderTest {
         assertNull(GeoBoundariesClient.parse(state.copy(kind=PlaceKind.TOWN), data, true))
         data.getJSONArray("features").put(data.getJSONArray("features").getJSONObject(0))
         assertNull(GeoBoundariesClient.parse(state, data, true))
-    }
-    @Test fun boundaryBackupSkipsMalformedEntriesWithoutWeakeningAmbiguityChecks() {
-        val state = PlaceDiscovery(PlaceKind.STATE, "gb|test region", "Test Region", "", "United Kingdom", 1L, 1.0, 1.0)
+        // Malformed unrelated features must not hide one valid provider region.
         val good = JSONObject("""{"properties":{"shapeName":"Test Region"},"geometry":{"type":"Polygon","coordinates":[[[0,0],[2,0],[2,2],[0,2],[0,0]]]}}""")
         val features = org.json.JSONArray().put(JSONObject.NULL)
             .put(JSONObject().put("geometry", good.getJSONObject("geometry")))
             .put(JSONObject().put("properties", good.getJSONObject("properties")))
             .put(good)
-        val data = JSONObject().put("type", "FeatureCollection").put("features", features)
-        assertNotNull(GeoBoundariesClient.parse(state, data, true))
+        val tolerantData = JSONObject().put("type", "FeatureCollection").put("features", features)
+        assertNotNull(GeoBoundariesClient.parse(state, tolerantData, true))
         features.put(good)
-        assertNull("Two real matches are still ambiguous", GeoBoundariesClient.parse(state, data, true))
+        assertNull("Two real matches are still ambiguous", GeoBoundariesClient.parse(state, tolerantData, true))
     }
     @Test fun boundaryDownloadCannotRedirectToArbitraryHostOrDataset() {
         assertTrue(GeoBoundariesClient.validDownload("https://github.com/wmgeolab/geoBoundaries/raw/abc/releaseData/gbOpen/USA/ADM1/file.geojson", "USA", "ADM1"))
