@@ -621,6 +621,7 @@ class PlaceOverlayClient(
                 throw IOException("Invalid place overlay response", error)
             }
             var best: JSONObject? = null
+            var bestArea = 0.0
             var bestScore = Int.MIN_VALUE
             for (i in 0 until results.length()) {
                 val candidate = results.optJSONObject(i) ?: continue
@@ -681,7 +682,10 @@ class PlaceOverlayClient(
                 ) continue
                 val score = score(place, candidate)
                 if (score > bestScore) {
+                    val area = areaSquareKilometers(geometry)
+                    if (!area.isFinite() || area <= 0.0) continue
                     best = candidate
+                    bestArea = area
                     bestScore = score
                 }
             }
@@ -692,15 +696,13 @@ class PlaceOverlayClient(
             }
             val selected = best?.takeIf { bestScore >= minimumScore } ?: return null
             val geometry = selected.getJSONObject("geojson")
-            val area = areaSquareKilometers(geometry)
-            if (!area.isFinite() || area <= 0.0) return null
             val extra = selected.optJSONObject("extratags")
             return PlaceOverlayData(
                 key = place.key,
                 name = place.displayName,
                 kind = place.kind,
                 population = parsePopulation(extra?.optString("population")),
-                areaSquareKilometers = area,
+                areaSquareKilometers = bestArea,
                 geometryJson = geometry.toString()
             )
         }
