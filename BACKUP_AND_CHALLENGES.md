@@ -4,7 +4,13 @@ Settings → **Import and restore progress** accepts authenticated Road Conquest
 the current CSV format (schema 12). It includes first-unlock timestamps for map tiles,
 compressed driving fixes, and reversible spreadsheet-safe text escaping.
 
-Settings → **Export progress** creates one portable **.rcbackup** on both
+Settings → **Export progress** offers exactly two manual formats:
+
+- **Secure backup (.rcbackup):** Restorable on Google Play and GitHub installations.
+- **Readable ZIP (export-only):** Unencrypted CSV/metadata for spreadsheet or ChatGPT
+  driving analysis. It cannot be restored into Road Conquest.
+
+The secure .rcbackup works on both
 Google Play and GitHub installations. An existing Road Conquest account and
 internet connection are required. The account service sends a stable per-account
 256-bit encryption key over HTTPS; the backup and GPS history never leave the
@@ -22,7 +28,11 @@ GPS driving; restored progress never earns fresh verified leaderboard credit.
 
 The importer continues to recognize already-created, valid Play-signed ZIPs and
 older password-encrypted .rcbackup files, but Settings no longer creates either
-format. It continues to reject readable export-only ZIPs; those are not backups.
+format. It rejects new readable export-only ZIPs; those are not backups.
+Neither export is uploaded to cloud storage automatically. The account service only
+provides the secure backup encryption key; export files stay wherever users save them.
+ChatGPT can analyze the CSV files inside a readable ZIP if the user uploads it,
+but results depend on data quality, missing GPS fixes and the model's file-processing limits.
 
 The importer validates archive entries, CRCs, exact CSV columns, UTF-8, coordinates,
 geometry, timestamps, unique keys, road references, row counts, mileage and the points
