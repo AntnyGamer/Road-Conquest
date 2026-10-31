@@ -275,27 +275,28 @@ class SettingsActivity : Activity() {
         deleteDeviceDataButton.setOnClickListener { showDeleteDeviceDataDialog() }
 
         findViewById<Button>(R.id.exportButton).setOnClickListener {
-            AlertDialog.Builder(this).setTitle("Export progress")
-                .setItems(arrayOf(
-                    "Private backup (works with GitHub and Play builds)",
-                    "Google Play-verified ZIP (Play installs only)"
-                )) { _, selected ->
-                    pendingExportUsesPassword = selected == 0
-                    val extension = if (pendingExportUsesPassword) ".rcbackup" else ".zip"
-                    val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-                        addCategory(Intent.CATEGORY_OPENABLE)
-                        type = if (pendingExportUsesPassword) "application/octet-stream" else "application/zip"
-                        putExtra(Intent.EXTRA_TITLE, "RoadConquest-data-${Instant.now().toString().take(10)}$extension")
-                    }
-                    try {
-                        startActivityForResult(intent, REQUEST_EXPORT)
-                    } catch (_: ActivityNotFoundException) {
-                        pendingExportUsesPassword = false
-                        Toast.makeText(this, "Android's file picker is unavailable on this device.", Toast.LENGTH_LONG).show()
-                    }
-                }.show()
+            showActionChoices(this, "Export progress", listOf(
+                "Private backup · GitHub or Play" to { beginExport(true) },
+                "Google Play-verified ZIP · Play only" to { beginExport(false) }
+            ))
         }
 
+    }
+
+    private fun beginExport(encrypted: Boolean) {
+        pendingExportUsesPassword = encrypted
+        val extension = if (encrypted) ".rcbackup" else ".zip"
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = if (encrypted) "application/octet-stream" else "application/zip"
+            putExtra(Intent.EXTRA_TITLE, "RoadConquest-data-${Instant.now().toString().take(10)}$extension")
+        }
+        try {
+            startActivityForResult(intent, REQUEST_EXPORT)
+        } catch (_: ActivityNotFoundException) {
+            pendingExportUsesPassword = false
+            Toast.makeText(this, "Android's file picker is unavailable on this device.", Toast.LENGTH_LONG).show()
+        }
     }
 
     override fun onResume() {

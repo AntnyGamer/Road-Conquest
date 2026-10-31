@@ -1059,7 +1059,7 @@ class MapRenderer(
         if (style.getLayer(TOWN_BADGE_LAYER_ID) != null) return
         val layer = SymbolLayer(TOWN_BADGE_LAYER_ID, TOWN_BADGE_SOURCE_ID)
             .withProperties(iconImage(Expression.get("icon")),
-                iconSize(0.65f), iconAllowOverlap(true), iconIgnorePlacement(true))
+                iconSize(0.30f), iconAllowOverlap(true), iconIgnorePlacement(true))
             .apply { minZoom = 7f }
         // Create the symbol layer only after its local artwork is registered.
         // Keep the live car above town badges when publishing after style load.
@@ -1121,8 +1121,12 @@ class MapRenderer(
         val other = if (officialUs.isNotEmpty()) {
             snapshot.filterNot { UnitedStatesMunicipalBoundaries.isUnitedStatesKey(it.key) }
         } else snapshot
-        val otherPartition = if (kind == com.roadconquest.app.data.PlaceKind.TOWN &&
-            other.isNotEmpty()
+        // Clip manageable neighboring region polygons in the display only.
+        // Original GPS evidence and cached source geometries remain unchanged.
+        val partitionRegions = kind == PlaceKind.STATE && snapshot.size in 2..15 &&
+            snapshot.sumOf { it.geometryJson.length } <= 1_000_000
+        val otherPartition = if ((kind == PlaceKind.TOWN && other.isNotEmpty()) ||
+            partitionRegions
         ) TownOverlayPartition.render(other) else null
         var badgePlaces = otherPartition?.shown ?: other
         val (fillFeatures, boundaries) = if (officialUs.isNotEmpty()) {

@@ -129,6 +129,7 @@ object PlaceOverlayCache {
     // outlines need the stricter verification rules.
     private const val DIRECTORY = "place-overlays-v3"
     private const val TOWN_DIRECTORY = "place-overlays-v5-world-admin"
+    private const val STATE_DIRECTORY = "place-overlays-v4-states-full"
     // All states use one Census cache, independent of the worldwide OSM cache.
     private const val US_OFFICIAL_DIRECTORY = "place-overlays-us-census-v1"
     // These formats were retired in Betas 9 and 37/38 and are never read now.
@@ -152,7 +153,7 @@ object PlaceOverlayCache {
     private fun trimCache(context: Context, keep: File? = null,
                           maxBytes: Long = CACHE_BUDGET_BYTES,
                           maxFiles: Int = CACHE_BUDGET_FILES) {
-        val files = listOf(DIRECTORY, TOWN_DIRECTORY, US_OFFICIAL_DIRECTORY)
+        val files = listOf(DIRECTORY, TOWN_DIRECTORY, STATE_DIRECTORY, US_OFFICIAL_DIRECTORY)
             .flatMap { name ->
                 File(context.applicationContext.filesDir, name).listFiles().orEmpty()
                     .filter { it.isFile && it.name.endsWith(".json") }
@@ -403,6 +404,7 @@ object PlaceOverlayCache {
         clearRetiredCaches(context)
         File(context.applicationContext.filesDir, DIRECTORY).deleteRecursively()
         File(context.applicationContext.filesDir, TOWN_DIRECTORY).deleteRecursively()
+        File(context.applicationContext.filesDir, STATE_DIRECTORY).deleteRecursively()
         File(context.applicationContext.filesDir, US_OFFICIAL_DIRECTORY).deleteRecursively()
         Unit
     }
@@ -417,7 +419,11 @@ object PlaceOverlayCache {
             hex[i * 2] = HEX_DIGITS[byte ushr 4]
             hex[i * 2 + 1] = HEX_DIGITS[byte and 0x0f]
         }
-        val directory = if (place.kind == PlaceKind.TOWN) TOWN_DIRECTORY else DIRECTORY
+        val directory = when (place.kind) {
+            PlaceKind.TOWN -> TOWN_DIRECTORY
+            PlaceKind.STATE -> STATE_DIRECTORY
+            PlaceKind.COUNTRY -> DIRECTORY
+        }
         return File(File(context.applicationContext.filesDir, directory), "${String(hex)}.json")
     }
 }
@@ -441,7 +447,7 @@ class PlaceOverlayClient(
         throttle(base)
         val threshold = when (place.kind) {
             PlaceKind.COUNTRY -> "0.02"
-            PlaceKind.STATE -> "0.005"
+            PlaceKind.STATE -> "0"
             PlaceKind.TOWN -> "0"
         }
         val url = Uri.parse("$base/search").buildUpon()
