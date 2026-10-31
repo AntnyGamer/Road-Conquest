@@ -199,11 +199,14 @@ class ProgressionRepository(context: Context) {
                 "skipped_driving_fixes" to COUNTER_SKIPPED_PLACE_BACKFILL_NEXT_ID
             )) {
                 if (remaining == 0) break
-                val nextId = counterOrNull(db, counterKey)
+                val savedNextId = counterOrNull(db, counterKey)
+                val nextId = savedNextId
                     ?: db.rawQuery("SELECT COALESCE(MAX(id), 0) + 1 FROM $table", null)
                         .use { it.moveToFirst(); it.getLong(0) }
                 if (nextId <= 1L) {
-                    putCounter(db, counterKey, 1L)
+                    // Don't rewrite a completed cursor on every remaining batch
+                    // of the other GPS source.
+                    if (savedNextId != 1L) putCounter(db, counterKey, 1L)
                     continue
                 }
                 var next = nextId
