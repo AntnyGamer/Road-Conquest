@@ -740,7 +740,7 @@ class SettingsActivity : Activity() {
                         val backupDate = if (lastBackup > 0L) java.text.DateFormat.getDateTimeInstance()
                             .format(java.util.Date(lastBackup)) else null
                         findViewById<TextView>(R.id.backupStatusText).text =
-                            "Last successful backup: " + (backupDate ?: "Never")
+                            "Last successful export: " + (backupDate ?: "Never")
                         summaryText.text = buildString {
                             append(StatsText.settingsOverview(this@SettingsActivity, summary, progression))
                             append("\n\nTRACKING\n")
@@ -749,7 +749,7 @@ class SettingsActivity : Activity() {
                             append("Background permission: $background")
                             append("\n\nDATA & BACKUP\n")
                             append("Last successful progress export: ")
-                            append(backupDate ?: "Never (consider exporting a backup)")
+                            append(backupDate ?: "Never (consider exporting an archive)")
                         }
                     },
                     onFailure = { error ->
