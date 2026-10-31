@@ -83,9 +83,8 @@ export function createNotifications(pool, { pepper, sender, deliveryLimit, sampl
     configured: Boolean(sender),
     async register(user, body) {
       const fields = Object.keys(body).sort().join(',');
-      const legacy = fields === 'binding,fid';
-      if ((!legacy && fields !== 'binding,fid,friend_posts,friend_requests') ||
-          (!legacy && (typeof body.friend_posts !== 'boolean' || typeof body.friend_requests !== 'boolean')) ||
+      if (fields !== 'binding,fid,friend_posts,friend_requests' ||
+          typeof body.friend_posts !== 'boolean' || typeof body.friend_requests !== 'boolean' ||
           typeof body.fid !== 'string' || !FID.test(body.fid) || !BINDING.test(body.binding))
         throw new EvidenceError('Invalid notification registration.', 400);
       if (!sender) throw new EvidenceError('Notifications are unavailable.', 503);
@@ -109,7 +108,7 @@ export function createNotifications(pool, { pepper, sender, deliveryLimit, sampl
           friend_requests_enabled=EXCLUDED.friend_requests_enabled,
           friend_posts_enabled=EXCLUDED.friend_posts_enabled,updated_at=CURRENT_TIMESTAMP`,
           [tokenHash, user.session_hash, seal(body.fid), body.binding,
-            legacy ? true : body.friend_requests, legacy ? false : body.friend_posts]);
+            body.friend_requests, body.friend_posts]);
         await db.query('COMMIT');
       } catch (error) {
         await db.query('ROLLBACK');
