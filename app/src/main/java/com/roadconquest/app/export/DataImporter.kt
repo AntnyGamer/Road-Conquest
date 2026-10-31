@@ -99,7 +99,13 @@ object DataImporter {
                     output.write(buffer, 0, read)
                 }
             }
-            val verifiedZip = if (PassphraseBackup.isEncrypted(zipPath)) {
+            val verifiedZip = if (AccountBackup.isEncrypted(zipPath)) {
+                File.createTempFile(PREFIX, ".zip", context.cacheDir).also { decrypted ->
+                    decryptedZip = decrypted
+                    AccountBackup.decrypt(context, zipPath, decrypted)
+                }
+            } else if (PassphraseBackup.isEncrypted(zipPath)) {
+                // Existing encrypted backups remain restorable; new exports use only account protection.
                 val password = passphrase ?: throw PassphraseBackup.PassphraseRequiredException()
                 File.createTempFile(PREFIX, ".zip", context.cacheDir).also { decrypted ->
                     decryptedZip = decrypted
@@ -112,7 +118,7 @@ object DataImporter {
                 authenticate(zipPath)
                 zipPath
             }
-            // Both verified Play ZIPs and authenticated decrypted ZIPs receive
+            // Authenticated ZIPs and decrypted account backups receive
             // the identical bounded CSV/metadata checks and weekly-credit exclusions.
             ZipFile(verifiedZip).use { zip ->
                 // A valid backup has only the supported tables and metadata.
