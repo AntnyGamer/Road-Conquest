@@ -279,17 +279,19 @@ object PlaceOverlayCache {
 
     fun generation(): Long = generation.get()
 
+    /** The former state cache shared a directory with still-valid country polygons. */
+    private fun reclaimOldStateCache(context: Context, place: PlaceDiscovery, target: File) {
+        if (place.kind != PlaceKind.STATE) return
+        val obsolete = File(File(context.applicationContext.filesDir, DIRECTORY), target.name)
+        if (obsolete.isFile || File(obsolete.path + ".bak").isFile ||
+            File(obsolete.path + ".new").isFile) forgetCacheFile(obsolete)
+    }
+
     fun read(context: Context, place: PlaceDiscovery): PlaceOverlayCacheResult =
         synchronized(mutationLock) {
             initialTrim(context)
             val target = file(context, place)
-            if (place.kind == PlaceKind.STATE) {
-                // The pre-full-resolution state cache lived alongside countries in v3.
-                // Its key is now unreadable by design; reclaim only that exact old file.
-                val obsolete = File(File(context.applicationContext.filesDir, DIRECTORY), target.name)
-                if (obsolete.isFile || File(obsolete.path + ".bak").isFile ||
-                    File(obsolete.path + ".new").isFile) forgetCacheFile(obsolete)
-            }
+            reclaimOldStateCache(context, place, target)
             readCacheFile(target, place)
         }
 
@@ -395,6 +397,7 @@ object PlaceOverlayCache {
     ): Boolean = synchronized(mutationLock) {
         if (expectedGeneration != null && generation.get() != expectedGeneration) return@synchronized false
         val target = file(context, place)
+        reclaimOldStateCache(context, place, target)
         // A generic refresh must not replace a verified town polygon. Ask
         // the cache reader to enforce that in its single decode; previously the
         // large gzip polygon was decompressed and parsed twice on this path.
