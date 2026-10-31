@@ -30,7 +30,7 @@ class AchievementsActivity : Activity() {
     private val executor = Executors.newSingleThreadExecutor()
     private var achievements: List<AchievementProgress> = emptyList()
     private var selectedCategory = AchievementCategory.ROADS
-    private var loadGeneration = 0
+    @Volatile private var loadGeneration = 0
     private val categoryButtons = linkedMapOf<AchievementCategory, Button>()
 
     private companion object { const val PROGRESS_MAX = 1000 }
@@ -93,6 +93,7 @@ class AchievementsActivity : Activity() {
     private fun refreshAchievements() {
         val expected = ++loadGeneration
         executor.execute {
+            if (expected != loadGeneration) return@execute
             val result = runCatching {
                 val summary = TrackingRepository(this).getSummary()
                 val progression = ProgressionManager.sync(this, summary)

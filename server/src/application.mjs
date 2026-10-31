@@ -141,7 +141,7 @@ const dummy = { salt: randomBytes(16), hash: randomBytes(64) };
 function clientIp(req) {
   if (TRUST_PROXY) {
     const forwarded = req.headers["x-forwarded-for"];
-    if (typeof forwarded === "string" && forwarded.trim()) return forwarded.split(",")[0].trim();
+    if (typeof forwarded === "string" && forwarded.trim()) return forwarded.split(",", 1)[0].trim();
   }
   return req.socket.remoteAddress || "unknown";
 }

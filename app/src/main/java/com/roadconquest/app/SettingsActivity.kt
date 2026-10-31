@@ -772,21 +772,19 @@ class SettingsActivity : Activity() {
                     onSuccess = { (summary, progression) ->
                         val lastBackup = getSharedPreferences("roadconquest_export_history", MODE_PRIVATE)
                             .getLong("last_completed_at", 0L)
-                        findViewById<TextView>(R.id.backupStatusText).text = "Last successful backup: " +
-                            if (lastBackup <= 0L) "Never" else java.text.DateFormat.getDateTimeInstance()
-                                .format(java.util.Date(lastBackup))
+                        val backupDate = if (lastBackup > 0L) java.text.DateFormat.getDateTimeInstance()
+                            .format(java.util.Date(lastBackup)) else null
+                        findViewById<TextView>(R.id.backupStatusText).text =
+                            "Last successful backup: " + (backupDate ?: "Never")
                         summaryText.text = buildString {
                             append(StatsText.settingsOverview(this@SettingsActivity, summary, progression))
                             append("\n\nTRACKING\n")
                             append("Mode: $mode\n")
                             append("Precise location: $precise\n")
                             append("Background permission: $background")
-                            val lastExport = getSharedPreferences("roadconquest_export_history", MODE_PRIVATE)
-                                .getLong("last_completed_at", 0L)
                             append("\n\nDATA & BACKUP\n")
                             append("Last successful progress export: ")
-                            append(if (lastExport <= 0L) "Never (consider exporting a backup)"
-                                else java.text.DateFormat.getDateTimeInstance().format(java.util.Date(lastExport)))
+                            append(backupDate ?: "Never (consider exporting a backup)")
                         }
                     },
                     onFailure = { error ->

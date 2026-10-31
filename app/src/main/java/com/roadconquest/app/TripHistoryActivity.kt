@@ -88,7 +88,7 @@ class TripHistoryActivity : Activity() {
     private var gpxButton: Button? = null
     private var tripList: LinearLayout? = null
     private var displayedVip: Boolean? = null
-    private var tripListGeneration = 0
+    @Volatile private var tripListGeneration = 0
     private var shownHistoryGeneration = -1L
     private var listedThroughPointId = -1L
     private var historyCheckGeneration = 0
@@ -366,6 +366,7 @@ class TripHistoryActivity : Activity() {
         })
         val formatter = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT)
         worker.execute {
+            if (listGeneration != tripListGeneration) return@execute
             val result = runCatching {
                 val history = TripHistoryRepository(applicationContext)
                 // Capture before scanning: a concurrent append must not be marked as displayed.
@@ -753,6 +754,7 @@ class TripHistoryActivity : Activity() {
     }
     override fun onDestroy() {
         generation++
+        tripListGeneration++
         pauseReplay()
         BaseMapProviders.removeListener(providerListener)
         handler.removeCallbacksAndMessages(null)

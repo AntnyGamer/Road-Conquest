@@ -71,10 +71,12 @@ internal class TownCompletion {
         if (revision != null && shape.revision == revision) return shape.progress
         val geometry = shape.geometry
         var covered = 0.0
+        val corners = DoubleArray(8)
         for (index in 0 until geometry.numGeometries) {
             if (Thread.currentThread().isInterrupted) return null
             val polygon = geometry.getGeometryN(index)
             val bounds = polygon.envelopeInternal
+            val centerLongitude = bounds.centre().x
             val prepared = org.locationtech.jts.geom.prep.PreparedGeometryFactory.prepare(polygon)
             // Tile centers can lie just outside the town while their footprint overlaps it.
             val south = latitude(bounds.minY) - 0.02
@@ -87,12 +89,13 @@ internal class TownCompletion {
             for (i in 0 until samples.size - 1 step 2) {
                 val tile = FogGrid.cell(samples[i], samples[i + 1]) ?: continue
                 if (!seen.add(tile.key)) continue
-                val corners = FogGrid.corners(samples[i], samples[i + 1])
-                val tileWest = near(corners[1], bounds.centre().x)
+                FogGrid.writeCorners(tile, corners, 0)
+                val tileWest = near(corners[1], centerLongitude)
                 val tileEast = tileWest + (corners[3] - corners[1])
-                val tileShape = factory.toGeometry(org.locationtech.jts.geom.Envelope(
-                    tileWest, tileEast, sin(Math.toRadians(corners[4])), sin(Math.toRadians(corners[0]))))
-                if (bounds.intersects(tileShape.envelopeInternal)) {
+                val tileBounds = org.locationtech.jts.geom.Envelope(
+                    tileWest, tileEast, sin(Math.toRadians(corners[4])), sin(Math.toRadians(corners[0])))
+                if (bounds.intersects(tileBounds)) {
+                    val tileShape = factory.toGeometry(tileBounds)
                     covered += when {
                         prepared.covers(tileShape) -> tileShape.area
                         prepared.intersects(tileShape) -> polygon.intersection(tileShape).area
