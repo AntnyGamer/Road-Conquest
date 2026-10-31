@@ -121,6 +121,9 @@ class MapRenderer(
     private var appliedRoadColor = ""
     private var fogEnabled = Prefs.isFogEnabled(context)
     private var overlayMode = Prefs.placeOverlayMode(context)
+    @Volatile private var townMedalsEnabled = Prefs.showTownMedals(context)
+    private var autoFollowEnabled = Prefs.isAutoFollowCar(context)
+    private var followingCar = autoFollowEnabled
     private var nearbyExplorationRequested = false
     private var nearbyCenter: Pair<Double, Double>? = null
     private var nearbyExplorationRevision = 0
@@ -182,7 +185,8 @@ class MapRenderer(
     private val expireLocation = Runnable {
         if (!destroyed && liveLocation.current(SystemClock.elapsedRealtime()) == null) clearCurrentLocation()
     }
-    private val cameraMoveStartedListener = MapLibreMap.OnCameraMoveStartedListener {
+    private val cameraMoveStartedListener = MapLibreMap.OnCameraMoveStartedListener { reason ->
+        if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) followingCar = false
         if (!viewportActive) return@OnCameraMoveStartedListener
         // Native animations can advance before the next Java camera-move callback.
         // Cover the whole world before motion starts, not after a bitmap edge escapes.
@@ -245,6 +249,22 @@ class MapRenderer(
         val cameraPosition = map.cameraPosition
         updateFogCoverage(force = true, cameraPosition = cameraPosition)
         if (enabled) scheduleFogRender()
+    }
+
+    fun setTownMedalsEnabled(enabled: Boolean) {
+        if (destroyed || townMedalsEnabled == enabled) return
+        townMedalsEnabled = enabled
+        if (overlayMode == PlaceOverlayMode.TOWN) {
+            overlayPublication.reset()
+            refreshPlaceOverlays()
+        }
+    }
+
+    fun setAutoFollowEnabled(enabled: Boolean) {
+        if (destroyed || autoFollowEnabled == enabled) return
+        autoFollowEnabled = enabled
+        followingCar = enabled
+        if (enabled && viewportActive) centerOnCar(animated = false)
     }
 
     fun placeOverlayMode(): PlaceOverlayMode = overlayMode
@@ -710,6 +730,8 @@ class MapRenderer(
             // Initial centering must finish before the first fog/road viewport query.
             // Animating the startup camera loads an unnecessary intermediate area.
             centerOnCar(animated = false)
+        } else if (positionChanged && followingCar && viewportActive && currentVisual != null) {
+            map.moveCamera(CameraUpdateFactory.newLatLng(LatLng(currentVisual.latitude, currentVisual.longitude)))
         }
     }
 
@@ -719,6 +741,7 @@ class MapRenderer(
         if (destroyed) return false
         val fix = liveLocation.current(SystemClock.elapsedRealtime()) ?: return false
         centeredOnce = true
+        followingCar = autoFollowEnabled
         val currentCamera = map.cameraPosition
         val camera = CameraPosition.Builder(currentCamera)
             .target(LatLng(fix.latitude, fix.longitude))
@@ -1154,7 +1177,7 @@ class MapRenderer(
             otherPartition?.let { it.fills to it.outlines } ?: overlayFeatureCollections(snapshot)
         }
         val badgeFeatures = JSONArray()
-        if (kind == PlaceKind.TOWN) for (place in badgePlaces) {
+        if (kind == PlaceKind.TOWN && townMedalsEnabled) for (place in badgePlaces) {
             val progress = place.completion ?: continue
             // Completion always uses the original boundary. If a nested town
             // removed its center from the visual partition, place the marker
@@ -1187,7 +1210,7 @@ class MapRenderer(
                     val badgeSource = style.getSource(TOWN_BADGE_SOURCE_ID) as? GeoJsonSource
                         ?: return@publish false
                     // Partitioned-away towns have no marker to display.
-                    for (place in badgePlaces) place.completion?.let { progress ->
+                    if (townMedalsEnabled) for (place in badgePlaces) place.completion?.let { progress ->
                         val id = TownCompletion.imageId(progress)
                         if (id !in townBadgeImages) {
                             val image = TownCompletion.badge(progress)
@@ -1195,7 +1218,7 @@ class MapRenderer(
                             style.addImage(id, image)
                         }
                     }
-                    installTownBadgeLayer(style)
+                    if (townMedalsEnabled) installTownBadgeLayer(style)
                     badgeSource.setGeoJson(badges)
                 }
                 fillSource.setGeoJson(fillFeatures)

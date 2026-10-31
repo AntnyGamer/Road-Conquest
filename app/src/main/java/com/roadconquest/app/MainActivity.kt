@@ -429,8 +429,15 @@ class MainActivity : Activity() {
             return
         }
         resumed = true
+        if (Prefs.keepMapScreenAwake(this)) {
+            window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
         mapView.onResume()
         val overlayMode = Prefs.placeOverlayMode(this)
+        renderer?.setTownMedalsEnabled(Prefs.showTownMedals(this))
+        renderer?.setAutoFollowEnabled(Prefs.isAutoFollowCar(this))
         renderer?.setFogEnabled(Prefs.isFogEnabled(this))
         renderer?.setMapMode(Prefs.mapMode(this))
         val overlayModeChanged = renderer?.placeOverlayMode() != overlayMode
@@ -630,6 +637,7 @@ class MainActivity : Activity() {
         statsHandler.removeCallbacks(queuedPlaceResolution)
         statsRefreshScheduled = false
         stopPreviewLocation()
+        window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         mapView.onPause()
         super.onPause()
     }
