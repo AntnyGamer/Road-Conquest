@@ -58,7 +58,8 @@ internal object KnownRoadReuse {
         visits: List<KnownRoadVisit>, nearby: (TrackPoint) -> String?
     ): List<KnownRoadVisit> {
         if (points.size != 4) return visits
-        val remaining = pendingIds - visits.flatMapTo(HashSet()) { it.pointIds }
+        val remaining = if (visits.isEmpty()) pendingIds else
+            pendingIds - visits.flatMapTo(HashSet()) { it.pointIds }
         if (remaining.isEmpty()) return visits
         val context = repository.knownRoadApproach(points)
         return if (context.size == points.size) visits else visits + identify(context, remaining, nearby)
