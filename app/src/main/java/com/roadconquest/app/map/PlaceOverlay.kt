@@ -328,9 +328,10 @@ object PlaceOverlayCache {
             if (verified) json.put("discovery_verified", true)
             json.put("name", data.name)
                 .put("kind", data.kind.name)
-                .put("population", data.population ?: JSONObject.NULL)
                 .put("area_sq_km", data.areaSquareKilometers)
                 .put("geometry", JSONObject(data.geometryJson))
+            // Missing and JSON-null population have the same read semantics.
+            data.population?.let { json.put("population", it) }
         }
         return json
     }
