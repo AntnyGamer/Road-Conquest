@@ -75,6 +75,31 @@ class PlaceOverlayTest {
         } finally { PlaceOverlayCache.clear(context) }
     }
 
+    @Test fun legacyStateCacheIsReclaimedWithoutDeletingCountryOrNewStateData() {
+        val context = RuntimeEnvironment.getApplication()
+        PlaceOverlayCache.clear(context)
+        try {
+            val state = PlaceDiscovery(PlaceKind.STATE, "us|nj", "New Jersey", "", "United States", 1L, 40.0, -74.0)
+            val country = state.copy(kind = PlaceKind.COUNTRY, key = "us", displayName = "United States")
+            val polygon = """{"type":"Polygon","coordinates":[[[-75,39],[-73,39],[-73,41],[-75,41],[-75,39]]]}"""
+            val countryData = PlaceOverlayData(country.key, country.displayName, country.kind, null, 100.0, polygon)
+            val stateData = PlaceOverlayData(state.key, state.displayName, state.kind, null, 20.0, polygon)
+            assertTrue(PlaceOverlayCache.write(context, country, countryData))
+            assertTrue(PlaceOverlayCache.write(context, state, stateData))
+            val legacyName = MessageDigest.getInstance("SHA-256")
+                .digest("${state.kind.name}|${state.key}".toByteArray(Charsets.UTF_8))
+                .joinToString("") { "%02x".format(Locale.US, it.toInt() and 0xff) } + ".json"
+            val legacyState = File(File(context.filesDir, "place-overlays-v3"), legacyName)
+            legacyState.writeText("obsolete state polygon")
+            PlaceOverlayCache.trimForTest(context, Long.MAX_VALUE, Int.MAX_VALUE)
+            assertCacheAccountingMatchesDisk(context)
+            assertEquals(polygon, PlaceOverlayCache.read(context, state).data?.geometryJson)
+            assertFalse("Old state data is no longer read and must not consume disk", legacyState.exists())
+            assertEquals(polygon, PlaceOverlayCache.read(context, country).data?.geometryJson)
+            assertCacheAccountingMatchesDisk(context)
+        } finally { PlaceOverlayCache.clear(context) }
+    }
+
     @Test fun retiredBoundaryCachesAreReclaimedWithoutTouchingCurrentOrUnrelatedFiles() {
         val context = RuntimeEnvironment.getApplication()
         PlaceOverlayCache.clear(context)
