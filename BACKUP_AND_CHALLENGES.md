@@ -21,7 +21,7 @@ geometry, timestamps, unique keys, road references, row counts, mileage and the 
 ledger before showing a replacement confirmation. It parses quoted names and multiline
 fields, uses bounded streaming into a private staging database, rejects duplicate or
 unexpected/path-traversal entries, and caps compressed and expanded data at 512 MiB.
-Export enforces the same expanded-data limit and includes the signature in its file-size cap.
+Export enforces the same expanded-data limit without requesting an archive signature.
 
 Before replacement, one private recovery ZIP is saved on the phone. **Restore progress
 from before last import** can recover it offline on the same installation (the current state is
@@ -52,7 +52,7 @@ and backups are never used as verified evidence. Hidden profiles stay out of ran
 Local goals award points independently of verified friend standings; no winner prize is
 advertised or awarded by friend rankings.
 
-The current beta temporarily hides public and friend leaderboards, leaderboard privacy
+The standard build currently hides public and friend leaderboards, leaderboard privacy
 controls and verified-drive sharing with `FeatureFlags.LEADERBOARDS_VISIBLE = false`.
 No verification evidence is collected or uploaded while hidden. Local weekly goals and
 friend management remain available; the ranking implementation and existing scores are
