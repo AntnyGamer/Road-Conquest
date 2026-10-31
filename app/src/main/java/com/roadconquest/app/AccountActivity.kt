@@ -285,7 +285,9 @@ class AccountActivity : Activity() {
         inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
         isSingleLine = true
         isSaveEnabled = false
-        filters = arrayOf(android.text.InputFilter.LengthFilter(128))
+        // LengthFilter counts UTF-16 units; one allowed Unicode code point can
+        // occupy two. The server still enforces the 128-code-point maximum.
+        filters = arrayOf(android.text.InputFilter.LengthFilter(256))
     }
 
     private fun showUsernameDialog() {

@@ -79,7 +79,8 @@ test("signup/login/privacy/logout are server-enforced and duplicate usernames ar
     const deletionPage = await fetch(baseUrl + "/delete-account");
     assert.equal(deletionPage.status, 200);
     assert.match(deletionPage.headers.get("content-security-policy"), /default-src 'none'/u);
-    assert.match(await deletionPage.text(), /Delete Road Conquest Account/u);
+    const deletionHtml = await deletionPage.text();
+    assert.match(deletionHtml, /Delete Road Conquest Account/u);
     await pool.query("TRUNCATE auth_rate_limits, sessions, users RESTART IDENTITY CASCADE");
 
     const tooShort = await json(baseUrl, "/v1/signup", "POST", {
@@ -240,6 +241,27 @@ test("signup/login/privacy/logout are server-enforced and duplicate usernames ar
     assert.equal((await pool.query("SELECT count(*) FROM users WHERE id = $1", [owner])).rows[0].count, "0");
     assert.equal((await json(baseUrl, "/v1/me", "GET", undefined, second.payload.token)).payload.username, "OtherDriver");
     assert.equal((await json(baseUrl, "/v1/login", "POST", { username: "NewDriver", password })).status, 401);
+
+    // Forms must accommodate every password admitted by the code-point policy,
+    // including surrogate pairs, without changing the credential before login.
+    await pool.query("TRUNCATE auth_rate_limits");
+    const unicodePassword = '\u{1f600}'.repeat(128);
+    const passwordInput = deletionHtml.match(/<input\b[^>]*\bid="password"[^>]*>/u)?.[0];
+    assert.ok(passwordInput, 'Account deletion provides its password field');
+    const capacity = Number(passwordInput.match(/\bmaxlength="(\d+)"/u)?.[1]);
+    assert.ok(capacity >= unicodePassword.length, 'The web form must fit a valid 128-code-point password');
+    const unicodeCredentials = { username: 'UnicodeDriver', password: unicodePassword };
+    const unicodeSignup = await json(baseUrl, '/v1/signup', 'POST', unicodeCredentials);
+    assert.equal(unicodeSignup.status, 201);
+    assert.equal((await json(baseUrl, '/v1/login', 'POST', unicodeCredentials)).status, 200);
+    assert.equal((await json(baseUrl, '/v1/login', 'POST', {
+      ...unicodeCredentials, password: unicodePassword.slice(0, 128)
+    })).status, 401, 'The full credential, not its truncated UTF-16 prefix, must be verified');
+    assert.equal((await json(baseUrl, '/v1/reauth', 'POST', { password: unicodePassword }, unicodeSignup.payload.token)).status, 200);
+    assert.equal((await json(baseUrl, '/v1/account', 'DELETE', { password: unicodePassword }, unicodeSignup.payload.token)).status, 200);
+    for (const value of ['\u{1f600}'.repeat(7), '\u{1f600}'.repeat(129)]) {
+      assert.equal((await json(baseUrl, '/v1/signup', 'POST', { username: 'OutOfBounds', password: value })).status, 400);
+    }
   } finally {
     if (child.exitCode == null) {
       child.kill("SIGTERM");

@@ -69,7 +69,7 @@ const DELETE_ACCOUNT_HTML = `<!doctype html>
 <body><h1>Delete Road Conquest Account</h1>
 <p>This permanently deletes your Road Conquest cloud account, forum posts, reactions, reports, blocks and Forum Plus access, active sessions, leaderboard scores, visited-cell and legacy verified-road records, live runs, and verification receipts. Data stored only on a phone or in exported files must be deleted separately.</p>
 <form id="deleteForm"><label>Username<input id="username" autocomplete="username" required minlength="3" maxlength="24"></label>
-<label>Password<input id="password" type="password" autocomplete="current-password" required minlength="8" maxlength="128"></label>
+<label>Password<input id="password" type="password" autocomplete="current-password" required minlength="8" maxlength="256"></label>
 <button type="submit">Delete account permanently</button></form>
 <p id="status" role="status" aria-live="polite"></p><p><a href="/privacy">Privacy policy</a></p>
 <script>
