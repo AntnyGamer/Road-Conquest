@@ -236,18 +236,17 @@ class ProgressionRepository(context: Context) {
 
     /** Continue scanning old GPS even if the last bounded page added no new cells. */
     fun hasUnscannedPlaceHistory(): Boolean = synchronized(dbHelper.historyLock) {
-        if (!isCurrentHistory() || startingLocation() == null) return@synchronized false
+        if (!isCurrentHistory()) return@synchronized false
         val db = dbHelper.readableDatabase
-        if (!db.rawQuery("SELECT 1 FROM visited_places LIMIT 1", null).use { it.moveToFirst() }) {
-            return@synchronized false
-        }
-        // One indexed query replaces two independent lookups. Both history
-        // sources must reach their completed cursor before the scan is finished.
-        db.rawQuery(
+        // Once both sources finish, skip the extra baseline and visited-place
+        // queries on every foreground discovery pass.
+        val completed = db.rawQuery(
             """SELECT COUNT(*) FROM progression_counters
                WHERE counter_key IN (?, ?) AND value = 1""",
             arrayOf(COUNTER_PLACE_BACKFILL_NEXT_ID, COUNTER_SKIPPED_PLACE_BACKFILL_NEXT_ID)
-        ).use { it.moveToFirst() && it.getInt(0) != 2 }
+        ).use { it.moveToFirst() && it.getInt(0) == 2 }
+        !completed && startingLocation() != null &&
+            db.rawQuery("SELECT 1 FROM visited_places LIMIT 1", null).use { it.moveToFirst() }
     }
 
     /** V2 keys cannot collide with old 2 km keys while pending old visits resolve. */
