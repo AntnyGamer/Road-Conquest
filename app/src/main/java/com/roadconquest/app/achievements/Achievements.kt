@@ -9,7 +9,6 @@ data class AchievementMetrics(
     val states: Long = 0L,
     val countries: Long = 0L,
     val adsWatched: Long = 0L,
-    val lowestBatteryPercent: Int = 101,
     val rewardedRoads: Long = 0L,
     val tilesUnlocked: Long = 0L,
     val rewardedAchievements: Set<String> = emptySet(),
