@@ -7,7 +7,7 @@ cloud-textured fog map.
 [Source and issues](https://github.com/AntnyGamer/Road-Conquest) ·
 [GNU AGPL v3 license](LICENSE)
 
-**Release 1.0** updates the previous 1.1 build with improved recovery of historic town visits, cleaner map controls, harder and lower-reward town badges, and small local performance simplifications. See [current release notes](RELEASE_NOTES.md).
+**Release 1.0** updates the previous 1.1 build with improved recovery of historic town visits (including older histories without a saved starting-location marker), cleaner map controls, harder and lower-reward town badges, and small local performance simplifications. See [current release notes](RELEASE_NOTES.md).
 
 The previously published 1.0 build (code 95) introduced town completion medals, 30 achievements and searchable settings. Bronze unlocks at 25%, silver at 50%, and gold at 100% of town area explored through map tiles. See [town completion details](TOWN_COMPLETION.md).
 
