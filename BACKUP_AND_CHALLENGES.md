@@ -5,24 +5,16 @@ Settings → **Import and restore progress** accepts authenticated Road Conquest
 literal apostrophes; legacy format 9 could not distinguish an apostrophe before a formula
 from its spreadsheet-protection prefix. Format 11 preserves the first-unlock timestamps for new mile tiles. Format 12 also preserves compressed driving fixes. Older formats retain explored tiles but may have no reliable historical tile-unlock dates or compressed fixes.
 
-Settings now offers two portable backup choices:
+Settings exports a **password-free, export-only .zip** on GitHub and Play builds.
+It contains the original CSV tables and metadata, including readable GPS history.
+Keep the exported ZIP private. It is deliberately unsigned and **cannot be imported
+back into Road Conquest**, even if it contains valid data. Export does not require
+Google Play, internet, a passphrase, or a signing service.
 
-- **Private encrypted .rcbackup (GitHub or Google Play):** Requires a user-supplied passphrase of
-  at least 12 characters. AES-256-GCM authenticates and encrypts the complete ZIP including GPS
-  history; PBKDF2-HMAC-SHA256 (310,000 iterations, random 16-byte salt) derives the encryption
-  key and each export uses a random 12-byte nonce. This works offline on either installation type.
-  Keep your passphrase: it cannot be reset and is never stored in the app. Altered files and wrong
-  passphrases are rejected before restoring any data. Opening these files in a normal ZIP program
-  will not work; import them using Road Conquest.
-- **Google Play-verified .zip:** Requires internet and an official licensed Google Play installation
-  that passes app/device verification. The server signs the ZIP fingerprint; backup contents and
-  GPS history are not sent to the signing service. Trusted verification keys are fetched via HTTPS
-  and cached for offline restore. The signing service must be configured separately; see
-  [server setup](server/README.md#protected-local-backups).
-
-Both paths then use the same strict ZIP schema, CRC and data validation before confirmation.
-Older unsigned exports remain rejected. Neither import path grants verified scoring or restored
-weekly goal credit.
+The separate legacy restore feature still supports earlier encrypted `.rcbackup`
+files when their original passphrase is supplied, and older Play-signed ZIPs
+when their signatures can be verified. This is backward compatibility, not a
+password prompt in the new export flow.
 
 The importer validates archive entries, CRCs, exact CSV columns, UTF-8, coordinates,
 geometry, timestamps, unique keys, road references, row counts, mileage and the points

@@ -117,10 +117,11 @@ the Google Play listing is created; changing it later would create a different a
   Optional rewarded ads in the Garage grant the displayed points only after confirmed completion, and count toward ad milestones.
 - Use automatic tracking or control it manually. Stop tracking from the foreground notification.
 - Export driving history, road geometry, explored places, place discoveries, point awards,
-  purchases and progression counters from Settings. Select an offline, passphrase-encrypted
-  **.rcbackup** (supports GitHub and Play installs) or an official Google Play-verified **.zip**
-  (requires a licensed Play installation and configured signing backend). Private backups
-  require the same passphrase when restoring on another device. The Settings summary shows
+  purchases and progression counters from Settings as a readable, password-free
+  **export-only .zip** on GitHub and Play installations. The archive can be inspected
+  externally but **cannot be imported or restored into Road Conquest**; it contains
+  sensitive GPS history, so store it privately. Older protected backups remain
+  restorable through the separate legacy import flow. The Settings summary shows
   when a complete backup export was last made. New map-tile first-unlock times are saved and
   exported starting with this branch; older tiles keep unknown discovery dates rather than invented timestamps.
 - Create an optional account, change your username and manage leaderboard visibility. There are exactly two destructive account/data actions in the app: Account → Delete account removes the cloud account while keeping saved device history and requires the current account password; Settings → Backups & data → Delete local data removes all local Road Conquest data while keeping the cloud account and leaderboard scores and requires typing the exact local confirmation phrase. Local full-data deletion works while signed out, stops tracking, disables verified-drive sharing and removes private interrupted-export snapshots.
