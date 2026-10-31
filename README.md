@@ -74,16 +74,18 @@ Release 1.0 uses Android application ID `com.roadconquest.app`, internal version
 - Browse achievements by **Road Conquest**, **Mileage**, **Exploration**, and **Ad Rewards**. Retired low-battery Bonus challenges and their empty category are no longer shown.
   Optional rewarded ads in the Garage grant the displayed points only after confirmed completion, and count toward ad milestones.
 - Use automatic tracking or control it manually. Stop tracking from the foreground notification.
-- Export full progress as one **encrypted and tamper-detecting .rcbackup** from
-  Settings on either GitHub or Google Play installations. Sign in to a Road Conquest
-  account first; the service supplies a per-account encryption key over HTTPS
-  without uploading the archive or GPS. Restore requires the **same account**
-  and internet access, not a separate backup passphrase. Protect your account:
-  someone with access to its active session can obtain the backup key. Changing
-  the account-service secret can make existing backups unreadable, and deleting
-  the account permanently removes access to its backup key.
-  Exported progress never counts as newly verified leaderboard driving.
-  The Settings summary shows the last completed export.
+- **Export progress** offers exactly two choices on Google Play and GitHub installs:
+  **Secure backup (.rcbackup)** encrypts progress and authenticates changes. It can be
+  restored on another installation after signing into the same Road Conquest account
+  with internet access; no separate backup passphrase is required. The account
+  service supplies a per-account key over HTTPS but never receives the backup file
+  or GPS history. **Readable ZIP (export-only)** contains CSV history, road
+  geometries, discovered places and progression data so it can be opened in
+  spreadsheet tools or uploaded to ChatGPT for driving analysis. It cannot be
+  restored into Road Conquest. It is **not encrypted** and contains sensitive
+  location history: inspect and share it deliberately. Deleting your account
+  or changing the service's key-derivation secret makes secure backups unreadable.
+  Restored data does not grant new verified scores. Settings shows the last export.
 - Create an optional account, change your username and manage leaderboard visibility. There are exactly two destructive account/data actions in the app: Account → Delete account removes the cloud account while keeping saved device history and requires the current account password; Settings → Backups & data → Delete local data removes all local Road Conquest data while keeping the cloud account and leaderboard scores and requires typing the exact local confirmation phrase. Local full-data deletion works while signed out, stops tracking, disables verified-drive sharing and removes private interrupted-export snapshots.
 
 Map drawing and viewport refresh timers stop while the map activity is hidden. Returning reloads
