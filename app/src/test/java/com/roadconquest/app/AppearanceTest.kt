@@ -189,7 +189,7 @@ class AppearanceTest {
         try {
             val activity = controller.get()
             assertEquals(
-                "Version ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+                "Release ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
                 activity.findViewById<android.widget.TextView>(R.id.appVersionText).text.toString()
             )
             val mapButton = activity.findViewById<Button>(R.id.mapStyleButton)
