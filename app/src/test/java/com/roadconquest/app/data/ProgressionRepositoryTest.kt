@@ -1048,6 +1048,47 @@ class ProgressionRepositoryTest {
         }
     }
 
+    @Test fun mixedHistoricSourcesKeepTheirIndependentCursorsAndSharedPageLimit() {
+        val progression = ProgressionRepository(context)
+        val db = AppDatabase.get(context).writableDatabase
+        db.execSQL("DELETE FROM track_points")
+        db.execSQL("DELETE FROM skipped_driving_fixes")
+        val start = android.location.Location("gps").apply {
+            latitude = 40.0; longitude = -75.0; accuracy = 5f; time = 1_000L
+        }
+        progression.recordBaselineCandidate(start)
+        progression.resolveCandidate(progression.pendingPlaceCandidates(nowMillis = 2_000L).single(), listOf(
+            PlaceDiscovery(PlaceKind.COUNTRY, "us", "United States",
+                visitedAt = 1_000L, latitude = start.latitude, longitude = start.longitude)
+        ))
+        // A partially resolved baseline must not allow ordinary candidates yet.
+        val baselineStillPending = progression.pendingPlaceCandidates(nowMillis = Long.MAX_VALUE)
+        if (baselineStillPending.isNotEmpty()) {
+            progression.resolveCandidate(baselineStillPending.single(), listOf(
+                PlaceDiscovery(PlaceKind.STATE, "us|pennsylvania", "Pennsylvania",
+                    "United States", "United States", 1_000L, start.latitude, start.longitude),
+                PlaceDiscovery(PlaceKind.TOWN, "us|pennsylvania|home", "Home",
+                    "Pennsylvania", "United States", 1_000L, start.latitude, start.longitude)
+            ))
+        }
+        try {
+            db.execSQL("""INSERT INTO track_points(latitude,longitude,accuracy_m,
+                speed_mps,bearing_deg,timestamp_ms) VALUES (40.0,-75.1,5,10,0,2000)""")
+            db.execSQL("""INSERT INTO skipped_driving_fixes(latitude,longitude,accuracy_m,
+                speed_mps,bearing_deg,timestamp_ms) VALUES (40.0,-75.2,5,10,0,3000)""")
+            assertEquals(1, progression.backfillPlaceCandidates(1))
+            assertTrue(progression.hasUnscannedPlaceHistory())
+            assertEquals(1, progression.backfillPlaceCandidates(1))
+            assertEquals(2, progression.pendingPlaceCandidates(nowMillis = Long.MAX_VALUE).size)
+            assertEquals(0, progression.backfillPlaceCandidates(1))
+            assertFalse(progression.hasUnscannedPlaceHistory())
+            assertEquals(0L, progression.snapshot().balance)
+        } finally {
+            db.execSQL("DELETE FROM track_points")
+            db.execSQL("DELETE FROM skipped_driving_fixes")
+        }
+    }
+
     @Test fun separatedFixesInOneCellCanDiscoverTwoTownsWithoutUnboundedRequests() {
         val progression = ProgressionRepository(context)
         assertTrue(progression.recordPlace(PlaceDiscovery(
