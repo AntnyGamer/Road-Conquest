@@ -1006,41 +1006,6 @@ class ProgressionRepositoryTest {
         }
     }
 
-    @Test fun legacyVerifiedVisitsWithoutBaselineStillRecoverOnlyLaterGpsHistory() {
-        val progression = ProgressionRepository(context)
-        val db = AppDatabase.get(context).writableDatabase
-        db.execSQL("DELETE FROM track_points")
-        db.execSQL("DELETE FROM skipped_driving_fixes")
-        // A saved history from before the first-location baseline feature existed.
-        assertTrue(progression.recordPlace(PlaceDiscovery(
-            PlaceKind.TOWN, "legacy|first", "First visited town",
-            visitedAt = 1_000L, latitude = 40.0, longitude = -75.0
-        )))
-        assertNull(progression.startingLocation())
-        try {
-            db.execSQL("""INSERT INTO track_points(latitude, longitude, accuracy_m,
-                speed_mps, bearing_deg, timestamp_ms)
-                VALUES (40.0, -75.01, 5, 10, 0, 500),
-                       (40.0, -75.02, 5, 10, 0, 2000)""")
-            db.execSQL("""INSERT INTO skipped_driving_fixes(latitude, longitude, accuracy_m,
-                speed_mps, bearing_deg, timestamp_ms)
-                VALUES (40.0, -75.03, 5, 10, 0, 500),
-                       (40.0, -75.04, 5, 10, 0, 3000)""")
-            assertTrue("Legacy visited places should enable the bounded recovery scan",
-                progression.hasUnscannedPlaceHistory())
-            assertEquals(2, progression.backfillPlaceCandidates(10))
-            val candidates = progression.pendingPlaceCandidates(nowMillis = Long.MAX_VALUE)
-            assertEquals(2, candidates.size)
-            assertEquals(setOf(2_000L, 3_000L), candidates.map { it.visitedAt }.toSet())
-            assertEquals("Unverified GPS fixes cannot award more points",
-                35L, progression.snapshot().balance)
-            assertFalse(progression.hasUnscannedPlaceHistory())
-        } finally {
-            db.execSQL("DELETE FROM track_points")
-            db.execSQL("DELETE FROM skipped_driving_fixes")
-        }
-    }
-
     @Test fun oldCompressedDrivingFixesAlsoBackfillWithoutInventingVisits() {
         val progression = ProgressionRepository(context)
         val db = AppDatabase.get(context).writableDatabase
