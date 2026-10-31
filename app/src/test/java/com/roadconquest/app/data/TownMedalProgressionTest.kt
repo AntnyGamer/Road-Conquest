@@ -73,5 +73,16 @@ class TownMedalProgressionTest {
         assertTrue("Town achievements should be rewarded without opening overlays", "town_gold_1" in snapshot.rewardedAchievements)
         val balance = snapshot.balance
         assertEquals(balance, ProgressionManager.sync(context, tracking.getSummary()).balance)
+
+        // An idle backfill must resume for new towns, then again when a missing
+        // boundary arrives without changing the town count or explored tiles.
+        val laterPlace = place.copy(key = "later-offline-town", displayName = "Later Town")
+        progression.recordPlace(laterPlace)
+        assertEquals(1L, ProgressionManager.sync(context, tracking.getSummary()).goldTowns)
+        assertTrue(com.roadconquest.app.map.PlaceOverlayCache.write(context, laterPlace,
+            data.copy(key = laterPlace.key, name = laterPlace.displayName), verifiedForDiscovery = true))
+        val refreshed = ProgressionManager.sync(context, tracking.getSummary())
+        assertEquals(2L, refreshed.goldTowns)
+        assertEquals(refreshed.balance, ProgressionManager.sync(context, tracking.getSummary()).balance)
     }
 }

@@ -30,6 +30,7 @@ class TripReplayBoundsTest {
 
     @Test fun ordinaryAndWideRoutesKeepAllTheirPointsInsideTheCameraBounds() {
         for (points in listOf(
+            listOf(point(40.0, -74.0)),
             listOf(point(40.0, -74.0), point(41.0, -73.0)),
             listOf(point(10.0, -170.0), point(20.0, -20.0), point(30.0, 100.0)),
             listOf(point(0.0, -180.0), point(0.0, 180.0)),
