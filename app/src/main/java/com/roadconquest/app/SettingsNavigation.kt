@@ -26,7 +26,7 @@ internal class SettingsNavigation(private val activity: Activity, state: Bundle?
         Section(R.id.mapSettingsCard, "Map & appearance", "Map styles, medals, following, distance units and fog", R.drawable.ic_map_day, "theme satellite night streets minimal phone medals badges follow car center miles kilometers units"),
         Section(R.id.accountSettingsCard, "Account & community", "Sign-in, profile and the community forum", R.drawable.ic_privacy, "login password username friends leaderboard verify scoring"),
         Section(R.id.privacySettingsCard, "Notifications & privacy", "Friend alerts, weekly reminders and privacy", R.drawable.ic_notifications, "crash reporting diagnostics policy data sharing posts"),
-        Section(R.id.backupSettingsCard, "Backups & data", "Export, restore and manage saved progress", R.drawable.ic_export, "zip rcbackup encrypted passphrase import delete reset phone transfer"),
+        Section(R.id.backupSettingsCard, "Backups & data", "Export, restore and manage saved progress", R.drawable.ic_export, "zip rcbackup encrypted secure readable csv analysis import delete reset phone transfer"),
         Section(R.id.progressSettingsCard, "Your progress", "Achievements, town badges, trips and Garage", R.drawable.ic_nav_weekly, "statistics points shop cosmetics history goals friends bronze silver gold tiles"),
         Section(R.id.aboutSettingsCard, "Help & about", "Quick tour, app version, credits and support", R.drawable.ic_info, "github licenses developer coffee tutorial"))
     private val search = activity.findViewById<EditText>(R.id.settingsSearch)
