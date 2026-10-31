@@ -1006,6 +1006,48 @@ class ProgressionRepositoryTest {
         }
     }
 
+    @Test fun oldCompressedDrivingFixesAlsoBackfillWithoutInventingVisits() {
+        val progression = ProgressionRepository(context)
+        val db = AppDatabase.get(context).writableDatabase
+        db.execSQL("DELETE FROM track_points")
+        db.execSQL("DELETE FROM skipped_driving_fixes")
+        val baseline = android.location.Location("gps").apply {
+            latitude = 39.95; longitude = -75.0; accuracy = 5f; time = 1_000L
+        }
+        assertTrue(progression.recordBaselineCandidate(baseline))
+        progression.resolveCandidate(progression.pendingPlaceCandidates(nowMillis = 2_000L).single(), listOf(
+            PlaceDiscovery(PlaceKind.COUNTRY, "us", "United States",
+                visitedAt = 1_000L, latitude = baseline.latitude, longitude = baseline.longitude),
+            PlaceDiscovery(PlaceKind.STATE, "us|pennsylvania", "Pennsylvania",
+                "United States", "United States", 1_000L, baseline.latitude, baseline.longitude),
+            PlaceDiscovery(PlaceKind.TOWN, "us|pennsylvania|start", "Start",
+                "Pennsylvania", "United States", 1_000L, baseline.latitude, baseline.longitude)
+        ))
+        fun skipped(longitude: Double, time: Long, accuracy: Int) {
+            db.execSQL(
+                """INSERT INTO skipped_driving_fixes(latitude, longitude, accuracy_m, speed_mps,
+                    bearing_deg, timestamp_ms) VALUES (39.95, ?, ?, 10, 0, ?)""",
+                arrayOf(longitude, accuracy, time)
+            )
+        }
+        try {
+            skipped(-75.01, 500L, 5) // From an erased prior progression baseline.
+            skipped(-75.02, 2_000L, 5)
+            skipped(-75.03, 3_000L, 75) // Poor accuracy must not reveal a town.
+            skipped(-75.04, 4_000L, 5)
+            assertTrue(progression.hasUnscannedPlaceHistory())
+            assertEquals(2, progression.backfillPlaceCandidates(10))
+            val candidates = progression.pendingPlaceCandidates(nowMillis = 5_000L)
+            assertEquals(2, candidates.size)
+            assertTrue(candidates.all { it.visitedAt >= 2_000L })
+            assertEquals(0L, progression.snapshot().balance)
+            assertEquals(0, progression.backfillPlaceCandidates(10))
+            assertFalse(progression.hasUnscannedPlaceHistory())
+        } finally {
+            db.execSQL("DELETE FROM skipped_driving_fixes")
+        }
+    }
+
     @Test fun separatedFixesInOneCellCanDiscoverTwoTownsWithoutUnboundedRequests() {
         val progression = ProgressionRepository(context)
         assertTrue(progression.recordPlace(PlaceDiscovery(
