@@ -2,7 +2,6 @@ package com.roadconquest.app.data
 
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
-import com.roadconquest.app.map.FogGrid
 import android.database.sqlite.SQLiteOpenHelper
 
 class AppDatabase private constructor(context: Context) :
