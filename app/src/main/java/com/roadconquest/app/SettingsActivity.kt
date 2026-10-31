@@ -196,6 +196,10 @@ class SettingsActivity : Activity() {
         findViewById<TextView>(R.id.appVersionText).text =
             getString(R.string.app_version, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE)
 
+        findViewById<Switch>(R.id.keepScreenAwakeSwitch).apply {
+            isChecked = Prefs.keepMapScreenAwake(this@SettingsActivity)
+            setOnCheckedChangeListener { _, checked -> Prefs.setKeepMapScreenAwake(this@SettingsActivity, checked) }
+        }
         manualOnlySwitch.isChecked = Prefs.isManualOnly(this)
         manualOnlySwitch.isEnabled = !Prefs.isDeviceDataDeletionPending(this)
         manualOnlySwitch.setOnCheckedChangeListener { _, checked ->
@@ -570,6 +574,29 @@ class SettingsActivity : Activity() {
     }
 
     private fun setupAppearance() {
+        findViewById<Switch>(R.id.showTownMedalsSwitch).apply {
+            isChecked = Prefs.showTownMedals(this@SettingsActivity)
+            setOnCheckedChangeListener { _, checked -> Prefs.setShowTownMedals(this@SettingsActivity, checked) }
+        }
+        findViewById<Switch>(R.id.autoFollowCarSwitch).apply {
+            isChecked = Prefs.isAutoFollowCar(this@SettingsActivity)
+            setOnCheckedChangeListener { _, checked -> Prefs.setAutoFollowCar(this@SettingsActivity, checked) }
+        }
+        val unitsButton = findViewById<Button>(R.id.distanceUnitsButton)
+        fun showDistanceUnits() {
+            unitsButton.text = "Distance units: ${Prefs.distanceUnits(this).label}"
+        }
+        showDistanceUnits()
+        unitsButton.setOnClickListener {
+            val modes = com.roadconquest.app.util.DistanceUnitPreference.entries
+            AlertDialog.Builder(this).setTitle("Distance units")
+                .setSingleChoiceItems(Array(modes.size) { modes[it].label }, modes.indexOf(Prefs.distanceUnits(this))) { dialog, index ->
+                    Prefs.setDistanceUnits(this, modes[index])
+                    showDistanceUnits()
+                    refreshSummary()
+                    dialog.dismiss()
+                }.setNegativeButton("Cancel", null).show()
+        }
         findViewById<Switch>(R.id.fogSwitch).apply {
             isChecked = Prefs.isFogEnabled(this@SettingsActivity)
             setOnCheckedChangeListener { _, enabled -> Prefs.setFogEnabled(this@SettingsActivity, enabled) }

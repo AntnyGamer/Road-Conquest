@@ -21,8 +21,8 @@ import java.util.Locale
 internal class SettingsNavigation(private val activity: Activity, state: Bundle?) {
     private data class Section(val id: Int, val title: String, val detail: String, val icon: Int, val keywords: String)
     private val sections = listOf(
-        Section(R.id.trackingSettingsCard, "Tracking", "Location, battery and tracking behavior", R.drawable.ic_my_location, "gps automatic manual enable permission device exit confirmation"),
-        Section(R.id.mapSettingsCard, "Map & appearance", "Map styles, light and dark mode, fog", R.drawable.ic_map_day, "theme satellite night streets minimal phone"),
+        Section(R.id.trackingSettingsCard, "Tracking", "Location, battery and tracking behavior", R.drawable.ic_my_location, "gps automatic manual enable permission device exit confirmation screen awake display"),
+        Section(R.id.mapSettingsCard, "Map & appearance", "Map styles, medals, following, distance units and fog", R.drawable.ic_map_day, "theme satellite night streets minimal phone medals badges follow car center miles kilometers units"),
         Section(R.id.accountSettingsCard, "Account & community", "Sign-in, profile and the community forum", R.drawable.ic_privacy, "login password username friends leaderboard verify scoring"),
         Section(R.id.privacySettingsCard, "Notifications & privacy", "Friend alerts, weekly reminders and privacy", R.drawable.ic_notifications, "crash reporting diagnostics policy data sharing posts"),
         Section(R.id.backupSettingsCard, "Backups & data", "Export, restore and manage saved progress", R.drawable.ic_export, "zip rcbackup encrypted passphrase import delete reset phone transfer"),
