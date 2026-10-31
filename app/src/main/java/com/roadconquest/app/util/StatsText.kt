@@ -30,8 +30,11 @@ object StatsText {
             append("DRIVING\n")
             append(format(context, summary))
             append("\n\nEXPLORATION\n")
-            append(String.format(Locale.getDefault(), "%,d map tiles • %,d towns\n%,d states/regions • %,d countries",
-                progress.tilesUnlocked, progress.exploredTowns, progress.exploredStates, progress.exploredCountries))
+            append(String.format(Locale.getDefault(), "%,d map tiles • %,d %s\n%,d %s • %,d %s",
+                progress.tilesUnlocked, progress.exploredTowns,
+                if (progress.exploredTowns == 1L) "town" else "towns",
+                progress.exploredStates, if (progress.exploredStates == 1L) "state/region" else "states/regions",
+                progress.exploredCountries, if (progress.exploredCountries == 1L) "country" else "countries"))
             append("\n\nPROGRESSION\n")
             append(String.format(Locale.getDefault(), "⚔ %,d points", progress.balance))
         }

@@ -124,6 +124,7 @@ class AppearanceTest {
         assertTrue(details, details.contains("4 towns"))
         assertTrue(details, details.contains("3 states/regions"))
         assertTrue(details, details.contains("2 countries"))
+        assertTrue(StatsText.settingsOverview(context, summary, progression.copy(exploredCountries = 1L)).contains("1 country"))
         assertTrue(details, details.contains("1,240 points"))
     }
 
