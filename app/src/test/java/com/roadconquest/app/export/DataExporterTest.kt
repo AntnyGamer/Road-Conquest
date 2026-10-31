@@ -44,11 +44,15 @@ class DataExporterTest {
         val context = RuntimeEnvironment.getApplication()
         val repository = TrackingRepository(context)
         ProgressionRepository(context).clearProgression()
-        repository.readableDatabase().execSQL("DELETE FROM track_points")
-        repository.readableDatabase().execSQL("DELETE FROM skipped_driving_fixes")
-        repository.readableDatabase().execSQL("DELETE FROM roads")
-        repository.readableDatabase().execSQL("DELETE FROM explored_places")
-        repository.readableDatabase().execSQL("DELETE FROM explored_grid")
+        val db = repository.readableDatabase()
+        db.beginTransaction()
+        try {
+            for (table in listOf("track_points", "skipped_driving_fixes", "roads", "explored_places", "explored_grid"))
+                db.execSQL("DELETE FROM $table")
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
         repository.recordExploredPlace(Location("gps").apply {
             latitude = 40.01; longitude = -74.0; accuracy = 5f
         })

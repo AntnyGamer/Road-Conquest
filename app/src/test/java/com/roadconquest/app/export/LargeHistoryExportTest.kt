@@ -22,13 +22,14 @@ class LargeHistoryExportTest {
         db.execSQL("DELETE FROM roads")
         db.execSQL("DELETE FROM track_points")
         val count = 5_000
+        val namePadding = "x".repeat(640)
         db.beginTransaction()
         try {
             db.compileStatement("INSERT INTO roads(segment_id,name,geometry_json,first_unlocked_at,last_driven_at,drive_count,drive_count_exact,road_group_id,min_lat,max_lat,min_lon,max_lon) VALUES (?, ?, '[[-74,40],[-73.999,40]]', 1000, 2000, 1, 1, ?, 40, 40, -74, -73.999)").use { statement ->
                 repeat(count) { index ->
                     statement.bindString(1, "road-$index")
                     // Over 3 MB of names alone ensures the road cursor refills its window.
-                    statement.bindString(2, "Road $index " + "x".repeat(640))
+                    statement.bindString(2, "Road $index $namePadding")
                     statement.bindString(3, "road-$index")
                     statement.executeInsert()
                 }
