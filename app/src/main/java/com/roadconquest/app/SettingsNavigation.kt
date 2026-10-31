@@ -71,7 +71,7 @@ internal class SettingsNavigation(private val activity: Activity, state: Bundle?
     private fun render() {
         val query = search.text.toString().trim().lowercase(Locale.ROOT)
         val searching = query.isNotEmpty()
-        val words = if (searching) query.split(WORD_SEPARATOR).filter(String::isNotBlank) else emptyList()
+        val words = if (searching) query.split(WORD_SEPARATOR) else emptyList()
         val chosen = sections.firstOrNull { it.id == selected }
         val home = chosen == null && query.isEmpty()
         categories.visibility = if (home) View.VISIBLE else View.GONE
@@ -84,9 +84,9 @@ internal class SettingsNavigation(private val activity: Activity, state: Bundle?
             activity.findViewById<View>(section.id).visibility = if (visible) View.VISIBLE else View.GONE
             if (visible) matches++
         }
-        title.text = when { query.isNotEmpty() -> "Search results"; chosen != null -> chosen.title; else -> "Settings" }
+        title.text = when { searching -> "Search results"; chosen != null -> chosen.title; else -> "Settings" }
         subtitle.text = when {
-            query.isNotEmpty() -> "Matching categories for “${search.text.toString().trim()}”"
+            searching -> "Matching categories for “${search.text.toString().trim()}”"
             chosen != null -> chosen.detail
             else -> "Make Road Conquest yours. Choose a category or search below."
         }
