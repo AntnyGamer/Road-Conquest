@@ -14,6 +14,18 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31], manifest = Config.NONE)
 class TownOverlayPartitionTest {
+    @Test fun dateLineRegionsSkipPlanarOverlapClipping() {
+        val ordinary = town("Ordinary region", "ordinary", 100.0,
+            square(-76.0, 39.0, -74.0, 41.0)).copy(kind = PlaceKind.STATE)
+        val crossing = town("Date-line region", "date-line", 100.0,
+            """{"type":"Polygon","coordinates":[[[179,60],[-179,60],[-179,62],[179,62],[179,60]]]}""")
+            .copy(kind = PlaceKind.STATE)
+        assertTrue(TownOverlayPartition.safeForPlanarRegionPartition(listOf(ordinary)))
+        assertFalse(TownOverlayPartition.safeForPlanarRegionPartition(listOf(ordinary, crossing)))
+        assertFalse(TownOverlayPartition.safeForPlanarRegionPartition(listOf(ordinary,
+            crossing.copy(geometryJson = "invalid"))))
+    }
+
     @Test fun overlappingStateFillsArePartitionedWithoutInventingCoverage() {
         val regions = listOf(
             PlaceOverlayData("west", "West", PlaceKind.STATE, null, 4.0,
