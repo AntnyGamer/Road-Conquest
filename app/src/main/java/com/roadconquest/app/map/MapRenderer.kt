@@ -1178,21 +1178,23 @@ class MapRenderer(
         } else {
             otherPartition?.let { it.fills to it.outlines } ?: overlayFeatureCollections(snapshot)
         }
-        val badgeFeatures = JSONArray()
-        if (kind == PlaceKind.TOWN && townMedalsEnabled) for (place in badgePlaces) {
-            val progress = place.completion ?: continue
-            // Completion always uses the original boundary. If a nested town
-            // removed its center from the visual partition, place the marker
-            // inside the remaining visible town instead of over its neighbor.
-            val anchor = if (PlaceGeometry.contains(JSONObject(place.geometryJson), progress.latitude, progress.longitude)) {
-                progress.latitude to progress.longitude
-            } else townCompletion.anchor(place.geometryJson) ?: continue
-            badgeFeatures.put(JSONObject().put("type", "Feature")
-                .put("properties", JSONObject().put("icon", TownCompletion.imageId(progress)))
-                .put("geometry", JSONObject().put("type", "Point")
-                    .put("coordinates", JSONArray().put(anchor.second).put(anchor.first))))
-        }
-        val badges = JSONObject().put("type", "FeatureCollection").put("features", badgeFeatures).toString()
+        val badges = if (kind == PlaceKind.TOWN && townMedalsEnabled) {
+            val badgeFeatures = JSONArray()
+            for (place in badgePlaces) {
+                val progress = place.completion ?: continue
+                // Completion always uses the original boundary. If a nested town
+                // removed its center from the visual partition, place the marker
+                // inside the remaining visible town instead of over its neighbor.
+                val anchor = if (PlaceGeometry.contains(JSONObject(place.geometryJson), progress.latitude, progress.longitude)) {
+                    progress.latitude to progress.longitude
+                } else townCompletion.anchor(place.geometryJson) ?: continue
+                badgeFeatures.put(JSONObject().put("type", "Feature")
+                    .put("properties", JSONObject().put("icon", TownCompletion.imageId(progress)))
+                    .put("geometry", JSONObject().put("type", "Point")
+                        .put("coordinates", JSONArray().put(anchor.second).put(anchor.first))))
+            }
+            JSONObject().put("type", "FeatureCollection").put("features", badgeFeatures).toString()
+        } else emptyFeaturesJson
         mainHandler.post {
             if (destroyed || generation != overlayGeneration || overlayMode.kind != kind ||
                 expectedCacheGeneration != PlaceOverlayCache.generation()) return@post
