@@ -19,7 +19,7 @@ for (endpoint in listOf(mapGatewayUrl).filter { it.isNotBlank() }) {
     }
 }
 val placeOverlayConfigUrl = providers.gradleProperty("ROADCONQUEST_PLACE_OVERLAY_CONFIG_URL").getOrElse(
-    "https://raw.githubusercontent.com/AntnyGamer/RoadConquest-Beta/main/OVERLAY_PROVIDER.txt"
+    "https://raw.githubusercontent.com/AntnyGamer/Road-Conquest/main/OVERLAY_PROVIDER.txt"
 )
 // Explicit opt-in for an internal Play build; ordinary builds remain hidden.
 val leaderboardsVisible = providers.gradleProperty("ROADCONQUEST_LEADERBOARDS_VISIBLE")
