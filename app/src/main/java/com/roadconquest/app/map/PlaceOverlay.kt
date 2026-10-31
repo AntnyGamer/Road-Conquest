@@ -511,7 +511,7 @@ class PlaceOverlayClient(
             requestMethod = "GET"
             setRequestProperty(
                 "User-Agent",
-                "RoadConquest/${BuildConfig.VERSION_NAME} (+https://github.com/AntnyGamer/RoadConquest-Beta)"
+                "RoadConquest/${BuildConfig.VERSION_NAME} (+https://github.com/AntnyGamer/Road-Conquest)"
             )
             setRequestProperty("Accept", "application/json, text/plain;q=0.9")
         }
