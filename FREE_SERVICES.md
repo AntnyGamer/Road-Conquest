@@ -84,7 +84,7 @@ only `notification_devices`, its expiry index and table grants to the existing
 SELECT/INSERT/UPDATE/DELETE on this table; no schema or additional session write
 permission is needed. Test migrations on a Neon branch before production.
 
-Authenticated POST `/v1/notifications/device` takes `{fid,binding}`; DELETE
+Authenticated POST `/v1/notifications/device` takes `{fid,binding,friend_requests,friend_posts}`; DELETE
 revokes only that login session's registration. A new registration replaces that
 session's previous token and transfers any matching device token to the current
 session. Installation IDs are padded and AES-256-GCM encrypted with a domain-separated key derived

@@ -51,7 +51,9 @@ jobs:
             version="${REQUESTED_VERSION:-1.0-beta.20}"
           fi
           [[ "$version" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?(-beta(\.[0-9]+)?)?$ ]]
-          target=$(gh release view "v$version" --json targetCommitish --jq '.targetCommitish')
+          tag="v$version"
+          if [ "$version" = "1.0" ]; then tag="release-v$version"; fi
+          target=$(gh release view "$tag" --json targetCommitish --jq '.targetCommitish')
           if [ "$GITHUB_EVENT_NAME" = 'workflow_run' ] && [ "$target" != "$TESTED_COMMIT" ]; then
             echo '::notice::This source did not publish a new release; no repeated release drive is needed.'
             echo 'enabled=false' >> "$GITHUB_OUTPUT"
@@ -59,7 +61,7 @@ jobs:
           fi
           folder="$RUNNER_TEMP/published-drive"
           mkdir -p "$folder"
-          gh release download "v$version" --pattern "RoadConquest-$version.apk" --pattern "RoadConquest-$version-SHA256SUMS.txt" --dir "$folder"
+          gh release download "$tag" --pattern "RoadConquest-$version.apk" --pattern "RoadConquest-$version-SHA256SUMS.txt" --dir "$folder"
           awk -v name="RoadConquest-$version.apk" '$2 == name { print }' "$folder/RoadConquest-$version-SHA256SUMS.txt" > "$folder/apk-checksum.txt"
           test -s "$folder/apk-checksum.txt"
           (cd "$folder" && sha256sum -c apk-checksum.txt)

@@ -132,8 +132,6 @@ object PlaceOverlayCache {
     private const val STATE_DIRECTORY = "place-overlays-v4-states-full"
     // All states use one Census cache, independent of the worldwide OSM cache.
     private const val US_OFFICIAL_DIRECTORY = "place-overlays-us-census-v1"
-    // These formats were retired in Betas 9 and 37/38 and are never read now.
-    private val retiredDirectories = listOf("place-overlays-v2", "place-overlays-v4-towns")
     private const val NEGATIVE_CACHE_MS = 15L * 60L * 1000L
     private const val HEX_DIGITS = "0123456789abcdef"
     private val generation = AtomicLong()
@@ -201,14 +199,9 @@ object PlaceOverlayCache {
 
     private fun initialTrim(context: Context) {
         if (!initialTrimDone) {
-            clearRetiredCaches(context)
             trimCache(context)
             initialTrimDone = true
         }
-    }
-
-    private fun clearRetiredCaches(context: Context) {
-        for (name in retiredDirectories) File(context.applicationContext.filesDir, name).deleteRecursively()
     }
 
     private fun writeCacheFile(context: Context, target: File, json: JSONObject): Boolean {
@@ -279,19 +272,10 @@ object PlaceOverlayCache {
 
     fun generation(): Long = generation.get()
 
-    /** The former state cache shared a directory with still-valid country polygons. */
-    private fun reclaimOldStateCache(context: Context, place: PlaceDiscovery, target: File) {
-        if (place.kind != PlaceKind.STATE) return
-        val obsolete = File(File(context.applicationContext.filesDir, DIRECTORY), target.name)
-        if (obsolete.isFile || File(obsolete.path + ".bak").isFile ||
-            File(obsolete.path + ".new").isFile) forgetCacheFile(obsolete)
-    }
-
     fun read(context: Context, place: PlaceDiscovery): PlaceOverlayCacheResult =
         synchronized(mutationLock) {
             initialTrim(context)
             val target = file(context, place)
-            reclaimOldStateCache(context, place, target)
             readCacheFile(target, place)
         }
 
@@ -399,7 +383,6 @@ object PlaceOverlayCache {
     ): Boolean = synchronized(mutationLock) {
         if (expectedGeneration != null && generation.get() != expectedGeneration) return@synchronized false
         val target = file(context, place)
-        reclaimOldStateCache(context, place, target)
         // A generic refresh must not replace a verified town polygon. Ask
         // the cache reader to enforce that in its single decode; previously the
         // large gzip polygon was decompressed and parsed twice on this path.
@@ -421,7 +404,6 @@ object PlaceOverlayCache {
         initialTrimDone = false
         cacheBytes = 0L
         cacheFiles = 0
-        clearRetiredCaches(context)
         File(context.applicationContext.filesDir, DIRECTORY).deleteRecursively()
         File(context.applicationContext.filesDir, TOWN_DIRECTORY).deleteRecursively()
         File(context.applicationContext.filesDir, STATE_DIRECTORY).deleteRecursively()

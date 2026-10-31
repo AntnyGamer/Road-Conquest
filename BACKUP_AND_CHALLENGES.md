@@ -1,9 +1,8 @@
 # Progress restore and weekly challenges
 
-Settings → **Import and restore progress** accepts authenticated Road Conquest export ZIPs
-(formats 9 through 12). Format 10 makes spreadsheet-safe text escaping reversible, including
-literal apostrophes; legacy format 9 could not distinguish an apostrophe before a formula
-from its spreadsheet-protection prefix. Format 11 preserves the first-unlock timestamps for new mile tiles. Format 12 also preserves compressed driving fixes. Older formats retain explored tiles but may have no reliable historical tile-unlock dates or compressed fixes.
+Settings → **Import and restore progress** accepts authenticated Road Conquest backups using
+the current CSV format (schema 12). It includes first-unlock timestamps for map tiles,
+compressed driving fixes, and reversible spreadsheet-safe text escaping.
 
 Settings exports a **password-free, export-only .zip** on GitHub and Play builds.
 It contains the original CSV tables and metadata, including readable GPS history.
@@ -11,10 +10,9 @@ Keep the exported ZIP private. It is deliberately unsigned and **cannot be impor
 back into Road Conquest**, even if it contains valid data. Export does not require
 Google Play, internet, a passphrase, or a signing service.
 
-The separate legacy restore feature still supports earlier encrypted `.rcbackup`
-files when their original passphrase is supplied, and older Play-signed ZIPs
-when their signatures can be verified. This is backward compatibility, not a
-password prompt in the new export flow.
+The restore flow accepts current-format encrypted `.rcbackup` archives with their
+passphrase and current-format Play-signed ZIPs with valid signatures. These
+are separate from the export-only ZIPs.
 
 The importer validates archive entries, CRCs, exact CSV columns, UTF-8, coordinates,
 geometry, timestamps, unique keys, road references, row counts, mileage and the points
@@ -40,7 +38,6 @@ points are preserved; the lower payouts apply to future claims.
 Old-road sections, excluded road groups and the zero-point starting town do not count.
 Restored roads, GPS fixes and place discoveries also remain ineligible, including discoveries
 resolved later by matching, backfill or geocoding. Fresh live driving remains eligible.
-Pre-upgrade imports cannot be excluded retrospectively because older versions did not record their origin.
 The reward ledger survives export/restore. Weeks reset Monday at 00:00 UTC worldwide.
 The previous week has a one-week grace period for late road matching or town resolution.
 Local challenges run during ordinary progress refreshes, with no extra GPS fixes or timer.

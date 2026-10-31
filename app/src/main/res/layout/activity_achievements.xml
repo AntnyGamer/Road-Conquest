@@ -76,7 +76,6 @@
                 <Button style="@style/RoadConquest.FilterAction" android:id="@+id/achievementPlacesButton" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:text="Exploration" />
                 <Button style="@style/RoadConquest.FilterAction" android:id="@+id/achievementTownsButton" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:text="Town Badges" />
                 <Button style="@style/RoadConquest.FilterAction" android:id="@+id/achievementAdsButton" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:text="Ad Rewards" />
-                <Button style="@style/RoadConquest.FilterAction" android:id="@+id/achievementExtraButton" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:text="Bonus" />
             </LinearLayout>
         </HorizontalScrollView>
 

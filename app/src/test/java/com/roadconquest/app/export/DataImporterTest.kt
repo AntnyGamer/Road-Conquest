@@ -141,7 +141,6 @@ class DataImporterTest {
         val progression = ProgressionRepository(context)
         progression.recordPlace(PlaceDiscovery(PlaceKind.TOWN, "us|nj|town", "Town", visitedAt = 1_000_000, latitude = 40.0, longitude = -74.0))
         progression.recordPlaceCandidate(fix(1_005_000))
-        progression.recordBatteryPercent(5)
         progression.syncRoadRewards(1)
         progression.awardAchievement("roads_100", 350)
         val original = export()
@@ -237,7 +236,6 @@ class DataImporterTest {
             source + ("road_visits.csv" to "segment_id,started_at_utc,ended_at_utc\nmissing,1970-01-01T00:00:01Z,1970-01-01T00:00:02Z\n"),
             source + ("progression_counters.csv" to "counter_key,value\nrewarded_roads,-1\n"),
             source + ("progression_counters.csv" to "counter_key,value\nads_watched,9223372036854775807\n"),
-            source + ("progression_counters.csv" to "counter_key,value\nlowest_battery_percent,4294967296\n")
         )
         invalid.forEach { candidate ->
             assertTrue(runCatching { prepareFixture(context, ByteArrayInputStream(repack(candidate))).use { } }.isFailure)
@@ -403,38 +401,6 @@ class DataImporterTest {
         val fresh = TrackingRepository(context)
         assertEquals(originalId + 1, fresh.insertLocation(fix(1_005_000, -74.0001)))
         assertEquals(2L, fresh.getSummary().trackPointCount)
-    }
-
-    @Test fun acceptsLegacySchemaNineAndDecodesEscapedNegativeCandidateCoordinates() {
-        ProgressionRepository(context).recordPlaceCandidate(fix(1_000_000))
-        val values = entries(export()).toMutableMap()
-        values.remove("skipped_driving_fixes.csv")
-        values["metadata.json"] = JSONObject(values.getValue("metadata.json")).put("schema_version", 9).toString()
-        // Legacy schema-9 and schema-10 had four grid columns, before
-        // first-unlock times were introduced in format 11.
-        values["explored_grid.csv"] = values.getValue("explored_grid.csv")
-            .trimEnd('\n').lineSequence().joinToString("\n") { it.substringBeforeLast(',') } + "\n"
-        prepareFixture(context, ByteArrayInputStream(repack(values))).use { DataImporter.restore(context, it) }
-        assertEquals(values.getValue("place_candidates.csv"), entries(export()).getValue("place_candidates.csv"))
-    }
-
-    @Test fun importedFormatTenStillRestoresWithoutTileDiscoveryDates() {
-        val tracker = TrackingRepository(context)
-        tracker.recordExploredGridCell(fix(1_000_000L))
-        val values = entries(export()).toMutableMap()
-        values.remove("skipped_driving_fixes.csv")
-        values["metadata.json"] = JSONObject(values.getValue("metadata.json"))
-            .put("schema_version", 10).toString()
-        values["explored_grid.csv"] = values.getValue("explored_grid.csv")
-            .trimEnd('\n').lineSequence().joinToString("\n") { it.substringBeforeLast(',') } + "\n"
-        prepareFixture(context, ByteArrayInputStream(repack(values))).use {
-            DataImporter.restore(context, it)
-        }
-        val db = AppDatabase.get(context).readableDatabase
-        db.rawQuery("SELECT first_unlocked_at FROM explored_grid LIMIT 1", null).use {
-            assertTrue(it.moveToFirst())
-            assertEquals(0L, it.getLong(0))
-        }
     }
 
     @Test fun currentBackupPreservesRealTileFirstUnlockDates() {

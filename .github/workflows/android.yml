@@ -488,6 +488,8 @@ jobs:
             exit 0
           fi
           tag="v$version"
+          # This publicly labeled Release 1.0 follows historical v1.0 and v1.1 builds.
+          if [ "$version" = "1.0" ]; then tag="release-v$version"; fi
           if gh release view "$tag" >/dev/null 2>&1; then
             existing_target=$(gh release view "$tag" --json targetCommitish --jq '.targetCommitish')
             if [ "$existing_target" = "$GITHUB_SHA" ]; then exit 0; fi
@@ -579,5 +581,6 @@ jobs:
           if [[ "$version" == *-beta* ]]; then release_flags+=(--prerelease); fi
           release_title="${version/-beta./ Beta }"
           release_title="${release_title/-beta/ Beta}"
+          if [ "$version" = "1.0" ]; then release_title="Release $release_title"; fi
           gh release create "$tag" --target "$GITHUB_SHA" --title "Road Conquest $release_title" "${release_flags[@]}" \
             --notes-file "$out/Release-notes.md" "$out"/*.apk "$out"/*.aab "$out"/*.zip "$out"/*.mjs "$out"/*-mapping.txt "$out"/*SHA256SUMS.txt

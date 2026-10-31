@@ -36,7 +36,7 @@
     <string name="support_developer_url" translatable="false">https://buymeacoffee.com/antnygamer</string>
     <string name="support_developer_description">Optional support. No app features or rewards are included.</string>
     <string name="web_page_unavailable">No app could open this page. Open this address in a browser: %1$s</string>
-    <string name="app_version">Version %1$s (%2$d)</string>
+    <string name="app_version">Release %1$s (%2$d)</string>
     <string name="ad_banner_label">Advertisement</string>
     <string name="ad_reward_explanation">Optional: load an ad to see its reward before choosing to watch. Points are earned only after confirmed completion. Google may use device identifiers, ad interactions, diagnostics and your IP address.</string>
     <string name="ad_privacy_options">Ad privacy choices</string>

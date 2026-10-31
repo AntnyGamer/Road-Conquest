@@ -52,19 +52,6 @@ object ProgressionManager {
         return if (changed || weeklyChanged) repository.snapshot() else snapshot
     }
 
-    fun recordBatteryPercent(context: Context, percent: Int): Boolean {
-        val repository = ProgressionRepository(context)
-        val changed = repository.recordBatteryPercent(percent)
-        if (changed) {
-            val metrics = metrics(repository.snapshot())
-            Achievements.progress(DataSummary(0, 0, null, null), metrics)
-                .asSequence()
-                .filter { it.unlocked && it.id.startsWith("battery_") }
-                .forEach { repository.awardAchievement(it.id, it.rewardPoints) }
-        }
-        return changed
-    }
-
     fun recordCompletedAd(repository: ProgressionRepository, receiptId: String, points: Long): Boolean {
         if (!repository.recordCompletedAd(receiptId, points)) return false
         val metrics = metrics(repository.snapshot())
@@ -191,7 +178,6 @@ object ProgressionManager {
         states = snapshot.states,
         countries = snapshot.countries,
         adsWatched = snapshot.adsWatched,
-        lowestBatteryPercent = snapshot.lowestBatteryPercent,
         rewardedRoads = snapshot.rewardedRoads,
         tilesUnlocked = snapshot.tilesUnlocked,
         rewardedAchievements = snapshot.rewardedAchievements,

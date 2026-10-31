@@ -21,7 +21,7 @@ class CsvUtilTest {
 
     @Test fun newBackupEscapingPreservesLiteralApostrophesAndFormulaNames() {
         listOf("'=1+1", "'Main", "=1+1", "-74.0", "Main").forEach {
-            assertEquals(it, CsvUtil.unescape(CsvUtil.escape(it), 10))
+            assertEquals(it, CsvUtil.unescape(CsvUtil.escape(it)))
         }
         val reader = CsvReader(java.io.StringReader("name,value\n\"Main, \"\"North\"\"\nRoad\",5\n"))
         assertEquals(listOf("name", "value"), reader.next())
@@ -61,7 +61,7 @@ class CsvUtilTest {
         assertArrayEquals(original.toByteArray(Charsets.UTF_8), output.toString().toByteArray(Charsets.UTF_8))
         val reader = CsvReader(java.io.StringReader(output.toString()))
         rows.forEach { row ->
-            assertEquals(row, requireNotNull(reader.next()).map { CsvUtil.unescape(it, 12) })
+            assertEquals(row, requireNotNull(reader.next()).map { CsvUtil.unescape(it) })
         }
         assertEquals(null, reader.next())
         val empty = java.io.StringWriter()
@@ -92,7 +92,7 @@ class CsvUtilTest {
         assertEquals(geometry.length, largestWrite)
         assertTrue(largestWrite < expected.length)
         assertEquals(fields, requireNotNull(CsvReader(java.io.StringReader(output.toString())).next())
-            .map { CsvUtil.unescape(it, 12) })
+            .map { CsvUtil.unescape(it) })
     }
 
     @Test fun longArrayFastPathKeepsExactEscapingAcrossThresholdsAndFallbacks() {
@@ -116,7 +116,7 @@ class CsvUtilTest {
             CsvUtil.writeRow(output, listOf(field))
             assertEquals(CsvUtil.escape(field) + "\n", output.toString())
             assertEquals(listOf(field), requireNotNull(CsvReader(java.io.StringReader(output.toString())).next())
-                .map { CsvUtil.unescape(it, 12) })
+                .map { CsvUtil.unescape(it) })
         }
     }
 

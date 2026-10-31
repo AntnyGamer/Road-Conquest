@@ -40,9 +40,9 @@ object DataImporter {
     internal val operationLock = Any()
     const val ACTION_LOCAL_PROGRESS_RESTORED = "com.roadconquest.app.LOCAL_PROGRESS_RESTORED"
     private var temporaryFilesInitialized = false
-    private val legacyTables = listOf("track_points", "roads", "road_visits", "explored_places", "explored_grid",
-        "visited_places", "place_candidates", "progression_rewards", "progression_purchases", "progression_counters")
-    private val tables = legacyTables + "skipped_driving_fixes"
+    private val tables = listOf("track_points", "roads", "road_visits", "explored_places",
+        "explored_grid", "visited_places", "place_candidates", "progression_rewards",
+        "progression_purchases", "progression_counters", "skipped_driving_fixes")
 
     class Prepared internal constructor(
         internal val file: File,
@@ -163,12 +163,10 @@ object DataImporter {
                 }
                 var metadata = JSONObject()
                 readEntry("metadata.json") { metadata = JSONObject(Charsets.UTF_8.newDecoder().decode(java.nio.ByteBuffer.wrap(it.readBytes())).toString()) }
-                require(metadata.getString("app") == "Road Conquest" && metadata.getInt("schema_version") in 9..12) {
-                    "Unsupported backup format. Use a current Road Conquest export"
+                require(metadata.getString("app") == "Road Conquest" && metadata.getInt("schema_version") == 12) {
+                    "Unsupported backup format. Use a current Road Conquest backup"
                 }
-                val schema = metadata.getInt("schema_version")
-                val backupTables = if (schema >= 12) tables else legacyTables
-                val expected = backupTables.map { "$it.csv" }.toSet() + "metadata.json"
+                val expected = tables.map { "$it.csv" }.toSet() + "metadata.json"
                 require(entries.size == expected.size && names == expected) {
                     "Not a complete Road Conquest backup"
                 }
@@ -178,13 +176,12 @@ object DataImporter {
                     helper.onCreate(db)
                     db.beginTransaction()
                     try {
-                        for (table in backupTables) readEntry("$table.csv") { stream ->
+                        for (table in tables) readEntry("$table.csv") { stream ->
                             val decoder = Charsets.UTF_8.newDecoder().onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
                             val csv = CsvReader(java.io.InputStreamReader(stream, decoder).buffered(),
                                 if (table == "roads") 8_388_608 else 1_048_576)
                             val header = csv.next() ?: error("Missing $table header")
-                            val spec = if (schema < 11 && table == "explored_grid")
-                                legacyGridColumns else columns.getValue(table)
+                            val spec = columns.getValue(table)
                             require(header == spec.map { it.first }) { "Invalid $table columns" }
                             var rows = 0L
                             val row = ContentValues()
@@ -199,7 +196,7 @@ object DataImporter {
                                 // evidence may rebuild history but cannot mint weekly credit.
                                 if (importedHistory) row.put("weekly_eligible", 0)
                                 spec.forEachIndexed { index, (_, destination, type) ->
-                                    val field = CsvUtil.unescape(fields[index], schema)
+                                    val field = CsvUtil.unescape(fields[index])
                                     when (type) {
                                         's' -> { require(field.length <= 4096); row.put(destination, field) }
                                         't' -> row.put(destination, if (field.isEmpty()) 0L else Instant.parse(field).toEpochMilli().also {
@@ -390,9 +387,6 @@ object DataImporter {
             "progression_counters" -> {
                 nonempty("counter_key")
                 require(v.getAsLong("value") in 0..1_000_000_000_000_000L) { "Invalid progression counter" }
-                if (v.getAsString("counter_key") == "lowest_battery_percent") {
-                    require(v.getAsLong("value") in 0..100) { "Invalid battery counter" }
-                }
             }
         }
     }
@@ -400,9 +394,6 @@ object DataImporter {
     private fun spec(vararg definitions: String) = definitions.map { definition ->
         val parts = definition.split(':'); Triple(parts[0], parts[1], parts[2].single())
     }
-    private val legacyGridColumns = spec(
-        "row:grid_row:i", "column:grid_col:i", "latitude:latitude:d", "longitude:longitude:d"
-    )
     private val columns = mapOf(
         "skipped_driving_fixes" to spec("id:id:i", "latitude:latitude:d", "longitude:longitude:d",
             "accuracy_m:accuracy_m:d", "speed_mps:speed_mps:d", "bearing_deg:bearing_deg:d",

@@ -42,20 +42,6 @@ class ExploredPlacesTest {
         assertFalse(repository.recordExploredGridCell(fix(40.0, 181.0)))
     }
 
-    @Test fun mileGridBackfillPreservesLegacyExplorationAndExistingDrivePoints() {
-        assertTrue(repository.recordExploredPlace(fix(40.01, -74.0)))
-        repository.insertLocation(fix(40.03, -74.03).apply { time = 1000 })
-        assertTrue(repository.getExploredGridInBounds(41.0, -73.0, 39.0, -75.0).isEmpty())
-        val db = repository.readableDatabase()
-        AppDatabase.get(RuntimeEnvironment.getApplication()).onUpgrade(db, 10, 11)
-        assertEquals(4, repository.getExploredGridInBounds(41.0, -73.0, 39.0, -75.0).size)
-        // Backfill is idempotent, legacy points remain untouched.
-        AppDatabase.get(RuntimeEnvironment.getApplication()).onUpgrade(db, 10, 11)
-        assertEquals(4, repository.getExploredGridInBounds(41.0, -73.0, 39.0, -75.0).size)
-        assertEquals(2, repository.getExploredPlacesInBounds(41.0, -73.0, 39.0, -75.0).size)
-        assertEquals(1L, repository.getSummary().trackPointCount)
-    }
-
     @Test fun walkingPlacesPersistAndDeduplicateWithoutDrivingCredit() {
         assertTrue(repository.recordExploredPlace(fix()))
         assertFalse(repository.recordExploredPlace(fix()))

@@ -122,7 +122,6 @@ object DataExporter {
             .put("states_regions_visited", progression.states)
             .put("countries_visited", progression.countries)
             .put("ads_watched", progression.adsWatched)
-            .put("lowest_battery_percent", progression.lowestBatteryPercent ?: JSONObject.NULL)
             .put("pending_place_candidates", progression.pendingCandidates)
             .put("car_style", Prefs.carStyle(context))
             .put("car_color", Prefs.carColor(context))
@@ -282,7 +281,6 @@ object DataExporter {
         val states: Long,
         val countries: Long,
         val adsWatched: Long,
-        val lowestBatteryPercent: Int?,
         val pendingCandidates: Long
     )
 
@@ -378,7 +376,6 @@ object DataExporter {
         }
 
         var ads = 0L
-        var lowestBattery: Int? = null
         writeCsvEntry(zip, "progression_counters.csv") { writer ->
             writer.write("counter_key,value\n")
             database.query(
@@ -390,7 +387,6 @@ object DataExporter {
                     val key = cursor.getString(0)
                     val value = cursor.getLong(1)
                     if (key == "ads_watched") ads = value
-                    if (key == "lowest_battery_percent") lowestBattery = value.toInt()
                     writer.write(CsvUtil.escape(key) + "," + value + "\n")
                 }
             }
@@ -404,7 +400,6 @@ object DataExporter {
             states = states,
             countries = countries,
             adsWatched = ads,
-            lowestBatteryPercent = lowestBattery,
             pendingCandidates = pending
         )
     }

@@ -677,17 +677,6 @@ class ProgressionRepositoryTest {
         assertEquals(later.longitude, queued.longitude, 0.01)
     }
 
-    @Test fun retiredBatteryAchievementsNeverGrantNewPointsOrEraseRecordedMinimum() {
-        assertTrue(ProgressionManager.recordBatteryPercent(context, 5))
-        assertEquals(0L, ProgressionRepository(context).snapshot().balance)
-        assertFalse(ProgressionManager.recordBatteryPercent(context, 5))
-        assertTrue(ProgressionManager.recordBatteryPercent(context, 1))
-        assertTrue(ProgressionManager.recordBatteryPercent(context, 0))
-        assertEquals(0L, ProgressionRepository(context).snapshot().balance)
-        assertEquals(0, ProgressionRepository(context).snapshot().lowestBatteryPercent)
-        assertTrue(ProgressionRepository(context).snapshot().rewardedAchievements.isEmpty())
-    }
-
     @Test fun completedAdHookUnlocksRequestedFiveAndTenViewMilestones() {
         repeat(4) { assertTrue(AdRewardBridge(context, 10L).onCompletedAd()) }
         assertEquals(40L, ProgressionRepository(context).snapshot().balance)
@@ -709,28 +698,6 @@ class ProgressionRepositoryTest {
         val reset = ProgressionRepository(context).snapshot()
         assertEquals(0L, reset.adsWatched)
         assertEquals(0L, reset.balance)
-    }
-
-    @Test fun existingRewardLedgerKeepsHistoricAchievementPayoutAfterRebalance() {
-        val repository = ProgressionRepository(context)
-        // Previously claimed achievements keep their ledger totals, even after milestone values change.
-        assertTrue(repository.awardAchievement("battery_1", 1_000))
-        assertTrue(repository.awardAchievement("ads_5", 100))
-        ProgressionManager.recordBatteryPercent(context, 1)
-        repeat(5) { assertTrue(AdRewardBridge(context, 10L).onCompletedAd()) }
-        // A pre-existing battery award stays intact; no NEW 5% award is minted.
-        assertEquals(1_100L + 5L * 10L, repository.snapshot().balance)
-        assertTrue("battery_1" in repository.snapshot().rewardedAchievements)
-        assertTrue("ads_5" in repository.snapshot().rewardedAchievements)
-        val earned = Achievements.progress(
-            DataSummary(0, 0, null, null),
-            ProgressionManager.metrics(repository.snapshot())
-        )
-        assertEquals(1_000L, earned.first { it.id == "battery_1" }.rewardPoints)
-        assertEquals(100L, earned.first { it.id == "ads_5" }.rewardPoints)
-        // New players must not see or be awarded the retired battery milestone.
-        assertFalse(Achievements.progress(DataSummary(0, 0, null, null))
-            .any { it.id == "battery_1" || it.id == "battery_5" })
     }
 
     @Test fun partialBaselineKeepsRetryingMissingKindsWithoutAwardingThem() {
@@ -1003,6 +970,89 @@ class ProgressionRepositoryTest {
             assertFalse(progression.hasUnscannedPlaceHistory())
         } finally {
             database.execSQL("DELETE FROM track_points")
+        }
+    }
+
+    @Test fun oldCompressedDrivingFixesAlsoBackfillWithoutInventingVisits() {
+        val progression = ProgressionRepository(context)
+        val db = AppDatabase.get(context).writableDatabase
+        db.execSQL("DELETE FROM track_points")
+        db.execSQL("DELETE FROM skipped_driving_fixes")
+        val baseline = android.location.Location("gps").apply {
+            latitude = 39.95; longitude = -75.0; accuracy = 5f; time = 1_000L
+        }
+        assertTrue(progression.recordBaselineCandidate(baseline))
+        progression.resolveCandidate(progression.pendingPlaceCandidates(nowMillis = 2_000L).single(), listOf(
+            PlaceDiscovery(PlaceKind.COUNTRY, "us", "United States",
+                visitedAt = 1_000L, latitude = baseline.latitude, longitude = baseline.longitude),
+            PlaceDiscovery(PlaceKind.STATE, "us|pennsylvania", "Pennsylvania",
+                "United States", "United States", 1_000L, baseline.latitude, baseline.longitude),
+            PlaceDiscovery(PlaceKind.TOWN, "us|pennsylvania|start", "Start",
+                "Pennsylvania", "United States", 1_000L, baseline.latitude, baseline.longitude)
+        ))
+        fun skipped(longitude: Double, time: Long, accuracy: Int) {
+            db.execSQL(
+                """INSERT INTO skipped_driving_fixes(latitude, longitude, accuracy_m, speed_mps,
+                    bearing_deg, timestamp_ms) VALUES (39.95, ?, ?, 10, 0, ?)""",
+                arrayOf(longitude, accuracy, time)
+            )
+        }
+        try {
+            skipped(-75.01, 500L, 5) // From an erased prior progression baseline.
+            skipped(-75.02, 2_000L, 5)
+            skipped(-75.03, 3_000L, 75) // Poor accuracy must not reveal a town.
+            skipped(-75.04, 4_000L, 5)
+            assertTrue(progression.hasUnscannedPlaceHistory())
+            assertEquals(2, progression.backfillPlaceCandidates(10))
+            val candidates = progression.pendingPlaceCandidates(nowMillis = 5_000L)
+            assertEquals(2, candidates.size)
+            assertTrue(candidates.all { it.visitedAt >= 2_000L })
+            assertEquals(0L, progression.snapshot().balance)
+            assertEquals(0, progression.backfillPlaceCandidates(10))
+            assertFalse(progression.hasUnscannedPlaceHistory())
+        } finally {
+            db.execSQL("DELETE FROM skipped_driving_fixes")
+        }
+    }
+
+    @Test fun mixedHistoricSourcesKeepTheirIndependentCursorsAndSharedPageLimit() {
+        val progression = ProgressionRepository(context)
+        val db = AppDatabase.get(context).writableDatabase
+        db.execSQL("DELETE FROM track_points")
+        db.execSQL("DELETE FROM skipped_driving_fixes")
+        val start = android.location.Location("gps").apply {
+            latitude = 40.0; longitude = -75.0; accuracy = 5f; time = 1_000L
+        }
+        progression.recordBaselineCandidate(start)
+        progression.resolveCandidate(progression.pendingPlaceCandidates(nowMillis = 2_000L).single(), listOf(
+            PlaceDiscovery(PlaceKind.COUNTRY, "us", "United States",
+                visitedAt = 1_000L, latitude = start.latitude, longitude = start.longitude)
+        ))
+        // A partially resolved baseline must not allow ordinary candidates yet.
+        val baselineStillPending = progression.pendingPlaceCandidates(nowMillis = Long.MAX_VALUE)
+        if (baselineStillPending.isNotEmpty()) {
+            progression.resolveCandidate(baselineStillPending.single(), listOf(
+                PlaceDiscovery(PlaceKind.STATE, "us|pennsylvania", "Pennsylvania",
+                    "United States", "United States", 1_000L, start.latitude, start.longitude),
+                PlaceDiscovery(PlaceKind.TOWN, "us|pennsylvania|home", "Home",
+                    "Pennsylvania", "United States", 1_000L, start.latitude, start.longitude)
+            ))
+        }
+        try {
+            db.execSQL("""INSERT INTO track_points(latitude,longitude,accuracy_m,
+                speed_mps,bearing_deg,timestamp_ms) VALUES (40.0,-75.1,5,10,0,2000)""")
+            db.execSQL("""INSERT INTO skipped_driving_fixes(latitude,longitude,accuracy_m,
+                speed_mps,bearing_deg,timestamp_ms) VALUES (40.0,-75.2,5,10,0,3000)""")
+            assertEquals(1, progression.backfillPlaceCandidates(1))
+            assertTrue(progression.hasUnscannedPlaceHistory())
+            assertEquals(1, progression.backfillPlaceCandidates(1))
+            assertEquals(2, progression.pendingPlaceCandidates(nowMillis = Long.MAX_VALUE).size)
+            assertEquals(0, progression.backfillPlaceCandidates(1))
+            assertFalse(progression.hasUnscannedPlaceHistory())
+            assertEquals(0L, progression.snapshot().balance)
+        } finally {
+            db.execSQL("DELETE FROM track_points")
+            db.execSQL("DELETE FROM skipped_driving_fixes")
         }
     }
 

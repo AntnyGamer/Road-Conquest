@@ -32,6 +32,12 @@ class TownMedalProgressionTest {
         assertEquals(1L, snapshot.silverTowns)
         assertEquals(1L, snapshot.goldTowns)
         snapshot = ProgressionManager.sync(context, summary)
+        assertFalse("One gold town should not unlock the harder medal achievements",
+            snapshot.rewardedAchievements.any { it.startsWith("town_") })
+        repository.recordTownCompletion("town-c", 3, summary.historyGeneration)
+        repository.recordTownCompletion("town-d", 2, summary.historyGeneration)
+        repository.recordTownCompletion("town-e", 2, summary.historyGeneration)
+        snapshot = ProgressionManager.sync(context, summary)
         assertTrue(snapshot.rewardedAchievements.containsAll(listOf("town_bronze_1", "town_silver_1", "town_gold_1")))
         assertEquals(snapshot.balance, ProgressionManager.sync(context, summary).balance)
         TrackingRepository(context).clearHistory()
@@ -49,6 +55,26 @@ class TownMedalProgressionTest {
             .first { it.id == "roads_100" }
         assertTrue(preserved.unlocked)
         assertEquals(123L, preserved.rewardPoints)
+    }
+
+    @Test fun harderTownBadgeGoalsReduceNewAwardsWithoutChangingHistoricalPayouts() {
+        val badges = Achievements.progress(DataSummary(0,0,null,null))
+            .filter { it.category == com.roadconquest.app.achievements.AchievementCategory.TOWNS }
+        val goals = mapOf(
+            "town_bronze_1" to 5.0, "town_bronze_5" to 20.0, "town_bronze_25" to 75.0,
+            "town_silver_1" to 3.0, "town_silver_5" to 15.0, "town_silver_25" to 50.0,
+            "town_gold_1" to 2.0, "town_gold_5" to 8.0,
+            "town_gold_10" to 20.0, "town_gold_25" to 50.0
+        )
+        assertEquals(goals, badges.associate { it.id to it.goal })
+        assertEquals(3990L, badges.sumOf { it.rewardPoints })
+        val historic = Achievements.progress(DataSummary(0,0,null,null),
+            com.roadconquest.app.achievements.AchievementMetrics(
+                rewardedAchievements = setOf("town_gold_1"),
+                rewardedAchievementPoints = mapOf("town_gold_1" to 375L)))
+            .first { it.id == "town_gold_1" }
+        assertTrue(historic.unlocked)
+        assertEquals(375L, historic.rewardPoints)
     }
 
     @Test fun cachedTownCanEarnGoldWithoutOpeningTheTownOverlay() {
@@ -70,7 +96,8 @@ class TownMedalProgressionTest {
         com.roadconquest.app.map.TownCompletionTracker.reset()
         val snapshot = ProgressionManager.sync(context, tracking.getSummary())
         assertEquals(1L, snapshot.goldTowns)
-        assertTrue("Town achievements should be rewarded without opening overlays", "town_gold_1" in snapshot.rewardedAchievements)
+        assertFalse("A single completed town no longer earns the gold-count achievement",
+            "town_gold_1" in snapshot.rewardedAchievements)
         val balance = snapshot.balance
         assertEquals(balance, ProgressionManager.sync(context, tracking.getSummary()).balance)
 
@@ -83,6 +110,8 @@ class TownMedalProgressionTest {
             data.copy(key = laterPlace.key, name = laterPlace.displayName), verifiedForDiscovery = true))
         val refreshed = ProgressionManager.sync(context, tracking.getSummary())
         assertEquals(2L, refreshed.goldTowns)
+        assertTrue("Two cached gold towns earn the harder achievement without opening overlays",
+            "town_gold_1" in refreshed.rewardedAchievements)
         assertEquals(refreshed.balance, ProgressionManager.sync(context, tracking.getSummary()).balance)
     }
 }

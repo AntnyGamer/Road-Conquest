@@ -34,11 +34,7 @@ object Appearance {
         return if (value.resourceId != 0) context.getColor(value.resourceId) else value.data
     }
 
-    fun mapSettingsIconColor(context: Context): Int = color(context, when (Prefs.uiTheme(context)) {
-        UiTheme.LIGHT -> R.attr.rcTextPrimary
-        UiTheme.DARK -> R.attr.rcAccent
-        UiTheme.SYSTEM -> R.attr.rcTextSecondary
-    })
+    fun mapSettingsIconColor(context: Context): Int = color(context, R.attr.rcTextPrimary)
 
     fun mapStyleIcon(context: Context, mode: MapMode): Int = when (mode) {
         MapMode.STREETS -> if (isDark(context)) R.drawable.ic_map_streets_night else R.drawable.ic_map_day

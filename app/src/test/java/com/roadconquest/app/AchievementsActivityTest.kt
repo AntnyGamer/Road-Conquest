@@ -45,8 +45,7 @@ class AchievementsActivityTest {
                 AchievementCategory.TILES to R.id.achievementTilesButton,
                 AchievementCategory.DISTANCE to R.id.achievementDistanceButton,
                 AchievementCategory.PLACES to R.id.achievementPlacesButton,
-                AchievementCategory.ADS to R.id.achievementAdsButton,
-                AchievementCategory.EXTRA to R.id.achievementExtraButton
+                AchievementCategory.ADS to R.id.achievementAdsButton
             )
             val expectedRoadCount = all.count { it.category == AchievementCategory.ROADS }
             val deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5)
