@@ -118,6 +118,22 @@ class PlaceOverlayTest {
             assertFalse("Old state data is no longer read and must not consume disk", legacyState.exists())
             assertEquals(polygon, PlaceOverlayCache.read(context, country).data?.geometryJson)
             assertCacheAccountingMatchesDisk(context)
+
+            // A new state can be fetched directly without first calling read().
+            val other = state.copy(key = "us|pa", displayName = "Pennsylvania")
+            val otherHash = MessageDigest.getInstance("SHA-256")
+                .digest("${other.kind.name}|${other.key}".toByteArray(Charsets.UTF_8))
+                .joinToString("") { "%02x".format(Locale.US, it.toInt() and 0xff) } + ".json"
+            val otherLegacy = File(File(context.filesDir, "place-overlays-v3"), otherHash)
+            otherLegacy.writeText("old, unreadable state data")
+            PlaceOverlayCache.trimForTest(context, Long.MAX_VALUE, Int.MAX_VALUE)
+            assertCacheAccountingMatchesDisk(context)
+            assertTrue(PlaceOverlayCache.write(context, other,
+                stateData.copy(key = other.key, name = other.displayName)))
+            assertFalse("Writing a new state must also reclaim its old copy", otherLegacy.exists())
+            assertEquals(polygon, PlaceOverlayCache.read(context, other).data?.geometryJson)
+            assertEquals(polygon, PlaceOverlayCache.read(context, country).data?.geometryJson)
+            assertCacheAccountingMatchesDisk(context)
         } finally { PlaceOverlayCache.clear(context) }
     }
 
