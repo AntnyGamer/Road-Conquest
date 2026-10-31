@@ -12,7 +12,6 @@ import android.content.pm.PackageManager
 import android.location.LocationManager
 import android.os.Build
 import android.os.Bundle
-import android.text.InputType
 import android.text.SpannableString
 import android.text.Spanned
 import android.text.style.TextAppearanceSpan
@@ -32,9 +31,7 @@ import com.roadconquest.app.account.AccountStore
 import com.roadconquest.app.data.LocalDataReset
 import com.roadconquest.app.data.TrackingRepository
 import com.roadconquest.app.export.DataImporter
-import com.roadconquest.app.export.BackupProtection
-import com.roadconquest.app.export.PassphraseBackup
-import com.roadconquest.app.export.ExportOnlyBackup
+import com.roadconquest.app.export.AccountBackup
 import com.roadconquest.app.util.Prefs
 import com.roadconquest.app.util.Appearance
 import com.roadconquest.app.util.UiTheme
@@ -57,8 +54,6 @@ internal fun exportFailureDetails(error: Throwable, cleanupFailed: Boolean): Str
 }
 
 class SettingsActivity : Activity() {
-    private enum class ExportFormat { PLAY_VERIFIED, ENCRYPTED, ARCHIVE }
-    private var pendingExportFormat: ExportFormat? = null
     private fun setupPrivacyDescriptions() {
         val descriptions = listOf(
             R.id.friendNotificationsSwitch to R.string.friend_notifications_detail,
@@ -157,9 +152,6 @@ class SettingsActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         setTheme(Appearance.themeRes(this))
         super.onCreate(savedInstanceState)
-        pendingExportFormat = savedInstanceState?.getString("pending_export_format")?.let {
-            runCatching { ExportFormat.valueOf(it) }.getOrNull()
-        }
         appliedGoldUi = Prefs.isGoldUiEnabled(this)
         WindowCompat.enableEdgeToEdge(window)
         val lightSystemBars = !Appearance.isDark(this)
@@ -290,31 +282,22 @@ class SettingsActivity : Activity() {
     }
 
     private fun beginExport() {
-        AlertDialog.Builder(this).setTitle("Export progress")
-            .setItems(arrayOf(
-                "Google Play-verified backup (.zip, Play installs only)",
-                "Private encrypted backup (.rcbackup, works offline)",
-                "Readable archive (.zip, cannot restore)"
-            )) { _, selected ->
-                val format = ExportFormat.entries[selected]
-                pendingExportFormat = format
-                val filename = "RoadConquest-data-${Instant.now().toString().take(10)}" + when (format) {
-                    ExportFormat.ENCRYPTED -> ".rcbackup"
-                    ExportFormat.PLAY_VERIFIED -> ".zip"
-                    ExportFormat.ARCHIVE -> "-export-only.zip"
-                }
-                val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-                    addCategory(Intent.CATEGORY_OPENABLE)
-                    type = if (format == ExportFormat.ENCRYPTED) "application/octet-stream" else "application/zip"
-                    putExtra(Intent.EXTRA_TITLE, filename)
-                }
-                try {
-                    startActivityForResult(intent, REQUEST_EXPORT)
-                } catch (_: ActivityNotFoundException) {
-                    pendingExportFormat = null
-                    Toast.makeText(this, "Android's file picker is unavailable on this device.", Toast.LENGTH_LONG).show()
-                }
-            }.show()
+        if (AccountStore.load(this) == null) {
+            AlertDialog.Builder(this).setTitle("Sign in to back up progress")
+                .setMessage("Secure backups work on Google Play and GitHub installations, but require a Road Conquest account and an internet connection. Sign in under Account & community first.")
+                .setPositiveButton("OK", null).show()
+            return
+        }
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "application/octet-stream"
+            putExtra(Intent.EXTRA_TITLE, "RoadConquest-data-${Instant.now().toString().take(10)}.rcbackup")
+        }
+        try {
+            startActivityForResult(intent, REQUEST_EXPORT)
+        } catch (_: ActivityNotFoundException) {
+            Toast.makeText(this, "Android's file picker is unavailable on this device.", Toast.LENGTH_LONG).show()
+        }
     }
 
     override fun onResume() {
@@ -350,7 +333,6 @@ class SettingsActivity : Activity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
-        outState.putString("pending_export_format", pendingExportFormat?.name)
         navigation.save(outState)
         super.onSaveInstanceState(outState)
     }
@@ -363,87 +345,24 @@ class SettingsActivity : Activity() {
     @android.annotation.SuppressLint("GestureBackNavigation")
     override fun onBackPressed() { handleSettingsBack() }
 
-    private fun requestPrivateExport(uri: Uri) {
-        val padding = (16 * resources.displayMetrics.density).toInt()
-        val layout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(padding, padding / 2, padding, 0)
-        }
-        layout.addView(TextView(this).apply {
-            text = "Choose a passphrase of at least 12 characters and keep it safe. " +
-                "This encrypts your entire location history offline. You will need the passphrase to restore on any device."
-        })
-        fun passwordField(hint: String) = EditText(this).apply {
-            this.hint = hint
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-            layout.addView(this)
-        }
-        val password = passwordField("Passphrase (12+ characters)")
-        val confirm = passwordField("Confirm passphrase")
-        val warning = TextView(this).apply { layout.addView(this) }
-        var exportStarted = false
-        val dialog = AlertDialog.Builder(this).setTitle("Encrypt private backup")
-            .setView(layout).setNegativeButton("Cancel", null)
-            .setPositiveButton("Export", null).create()
-        // Android creates the destination before the passphrase dialog. Back,
-        // outside-tap and explicit Cancel must all clean up the empty file.
-        dialog.setOnDismissListener {
-            if (!exportStarted) runCatching { contentResolver.delete(uri, null, null) }
-        }
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val first = password.text.toString()
-                val second = confirm.text.toString()
-                if (first.length !in 12..256 || first != second) {
-                    warning.text = if (first.length !in 12..256) "Use between 12 and 256 characters."
-                        else "Passphrases do not match."
-                    return@setOnClickListener
-                }
-                val secret = first.toCharArray()
-                password.text.clear()
-                confirm.text.clear()
-                exportStarted = true
-                dialog.dismiss()
-                writeExport(uri, ExportFormat.ENCRYPTED, secret)
-            }
-        }
-        dialog.show()
-    }
-
     @Deprecated("Storage Access Framework document picker on minSdk 31")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != REQUEST_EXPORT) return
-        val format = pendingExportFormat ?: return
-        pendingExportFormat = null
-        if (resultCode != RESULT_OK) return
-        val uri = data?.data ?: return
-        if (format == ExportFormat.ENCRYPTED) requestPrivateExport(uri)
-        else writeExport(uri, format, null)
+        if (requestCode != REQUEST_EXPORT || resultCode != RESULT_OK) return
+        data?.data?.let(::writeExport)
     }
 
-    private fun writeExport(uri: Uri, format: ExportFormat, password: CharArray?) {
+    private fun writeExport(uri: Uri) {
         Thread {
-            val result = try {
-                runCatching {
-                    contentResolver.openOutputStream(uri, "w")?.use { output ->
-                        when (format) {
-                            ExportFormat.PLAY_VERIFIED -> BackupProtection.writePortable(this, repository, output)
-                            ExportFormat.ENCRYPTED -> PassphraseBackup.writePortable(
-                                this, repository, output, requireNotNull(password))
-                            ExportFormat.ARCHIVE -> ExportOnlyBackup.write(this, repository, output)
-                        }
-                    } ?: error("Could not open export destination")
-                }
-            } finally {
-                password?.fill(0.toChar())
+            val result = runCatching {
+                contentResolver.openOutputStream(uri, "w")?.use { output ->
+                    AccountBackup.writePortable(this, repository, output)
+                } ?: error("Could not open backup destination")
             }
             var cleanupFailed = false
             if (result.isSuccess) {
                 synchronized(DataImporter.operationLock) {
-                    if (repository.isHistoryCurrent() &&
-                        !Prefs.isDeviceDataDeletionPending(this)
-                    ) {
+                    if (repository.isHistoryCurrent() && !Prefs.isDeviceDataDeletionPending(this)) {
                         getSharedPreferences("roadconquest_export_history", MODE_PRIVATE)
                             .edit().putLong("last_completed_at", System.currentTimeMillis()).commit()
                     }
@@ -456,21 +375,15 @@ class SettingsActivity : Activity() {
                 if (isDestroyed) return@runOnUiThread
                 result.fold(
                     onSuccess = {
-                        val message = when (format) {
-                            ExportFormat.PLAY_VERIFIED -> "Google Play-verified backup saved. Keep it private."
-                            ExportFormat.ENCRYPTED -> "Encrypted backup saved. Keep your passphrase."
-                            ExportFormat.ARCHIVE -> "Readable archive saved. It cannot be restored."
-                        }
-                        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+                        Toast.makeText(this, "Secure backup saved. Sign into the same account to restore.", Toast.LENGTH_LONG).show()
                         refreshSummary()
                     },
                     onFailure = { error ->
                         Log.e("RoadConquest", "Progress export failed", error)
                         AlertDialog.Builder(this)
-                            .setTitle("Export failed")
+                            .setTitle("Backup failed")
                             .setMessage(exportFailureDetails(error, cleanupFailed))
-                            .setPositiveButton("OK", null)
-                            .show()
+                            .setPositiveButton("OK", null).show()
                     }
                 )
             }
