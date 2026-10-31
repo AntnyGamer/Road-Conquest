@@ -172,8 +172,8 @@ class ProgressionRepository(context: Context) {
     }
 
     /**
-     * Revisit accepted, persisted GPS fixes from releases where 2 km/center-based
-     * town sampling could miss an actual driven township. Process a bounded page
+     * Revisit persisted GPS fixes, including compressed-out straight-line samples,
+     * from releases where coarse town sampling could miss a municipality. Process a bounded page
      * per foreground discovery pass, newest first, with a durable cursor: no data
      * migration, no guesses from a road's drawn geometry, and no duplicate rewards.
      */
@@ -181,37 +181,49 @@ class ProgressionRepository(context: Context) {
         require(limit in 1..10_000)
         if (!isCurrentHistory()) return@synchronized 0
         val db = dbHelper.writableDatabase
-        // Replaying fixes from BEFORE a fresh/reset progression baseline would silently
-        // award already-erased towns. Only visits after this profile's exact live start count.
+        // Do not recover places from a previous profile or an unresolved baseline.
         val baselineTime = startingLocation()?.recordedAt ?: return@synchronized 0
-        if (!db.rawQuery("SELECT 1 FROM visited_places LIMIT 1", null).use { it.moveToFirst() }) {
-            // Wait until the zero-point places are resolved before queuing old GPS fixes.
+        if (!db.rawQuery("SELECT 1 FROM visited_places LIMIT 1", null).use { it.moveToFirst() })
             return@synchronized 0
-        }
-        val nextId = counterOrNull(db, COUNTER_PLACE_BACKFILL_NEXT_ID)
-            ?: db.rawQuery("SELECT COALESCE(MAX(id), 0) + 1 FROM track_points", null)
-                .use { it.moveToFirst(); it.getLong(0) }
-        if (nextId <= 1L) return@synchronized 0
+
         var inserted = 0
-        var next = nextId
-        var examined = 0
+        var remaining = limit
         db.beginTransaction()
         try {
-            db.rawQuery(
-                """SELECT id, latitude, longitude, timestamp_ms, weekly_eligible FROM track_points
-                   WHERE id < ? AND timestamp_ms >= ? AND accuracy_m BETWEEN 0.01 AND 25
-                   ORDER BY id DESC LIMIT ?""",
-                arrayOf(nextId.toString(), baselineTime.toString(), limit.toString())
-            ).use { cursor ->
-                while (cursor.moveToNext()) {
-                    examined++
-                    next = cursor.getLong(0)
-                    if (insertPlaceCandidate(db, cursor.getDouble(1), cursor.getDouble(2),
-                            cursor.getLong(3), cursor.getInt(4) == 1)) inserted++
+            // Older builds omitted some accepted straight-line fixes from track_points.
+            // Recover those genuine saved positions too, using independent durable
+            // cursors and the same total per-pass bound. Neither table implies a visit
+            // until the normal municipality verifier checks the original coordinate.
+            for ((table, counterKey) in listOf(
+                "track_points" to COUNTER_PLACE_BACKFILL_NEXT_ID,
+                "skipped_driving_fixes" to COUNTER_SKIPPED_PLACE_BACKFILL_NEXT_ID
+            )) {
+                if (remaining == 0) break
+                val nextId = counterOrNull(db, counterKey)
+                    ?: db.rawQuery("SELECT COALESCE(MAX(id), 0) + 1 FROM $table", null)
+                        .use { it.moveToFirst(); it.getLong(0) }
+                if (nextId <= 1L) {
+                    putCounter(db, counterKey, 1L)
+                    continue
                 }
+                var next = nextId
+                var examined = 0
+                db.rawQuery(
+                    """SELECT id, latitude, longitude, timestamp_ms, weekly_eligible FROM $table
+                       WHERE id < ? AND timestamp_ms >= ? AND accuracy_m BETWEEN 0.01 AND 25
+                       ORDER BY id DESC LIMIT ?""",
+                    arrayOf(nextId.toString(), baselineTime.toString(), remaining.toString())
+                ).use { cursor ->
+                    while (cursor.moveToNext()) {
+                        examined++
+                        next = cursor.getLong(0)
+                        if (insertPlaceCandidate(db, cursor.getDouble(1), cursor.getDouble(2),
+                                cursor.getLong(3), cursor.getInt(4) == 1)) inserted++
+                    }
+                }
+                putCounter(db, counterKey, if (examined == 0) 1L else next)
+                remaining -= examined
             }
-            // No eligible rows remain in the old history; stop scanning on later resumes.
-            putCounter(db, COUNTER_PLACE_BACKFILL_NEXT_ID, if (examined == 0) 1L else next)
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
@@ -227,7 +239,8 @@ class ProgressionRepository(context: Context) {
             return@synchronized false
         }
         // A missing cursor means no historical scan has started; 1 means fully scanned.
-        counterOrNull(db, COUNTER_PLACE_BACKFILL_NEXT_ID) != 1L
+        counterOrNull(db, COUNTER_PLACE_BACKFILL_NEXT_ID) != 1L ||
+            counterOrNull(db, COUNTER_SKIPPED_PLACE_BACKFILL_NEXT_ID) != 1L
     }
 
     /** V2 keys cannot collide with old 2 km keys while pending old visits resolve. */
@@ -1087,6 +1100,7 @@ class ProgressionRepository(context: Context) {
         private const val SECONDARY_CANDIDATE_OFFSET = 1_000_000_000L
         private const val SECONDARY_CANDIDATE_MIN_DISTANCE_M = 45f
         private const val COUNTER_PLACE_BACKFILL_NEXT_ID = "place_backfill_next_track_id_v3"
+        private const val COUNTER_SKIPPED_PLACE_BACKFILL_NEXT_ID = "place_backfill_next_skipped_id_v1"
         private const val BASELINE_RETRY_MS = 60_000L
         private const val BASELINE_RETRY_MAX_MS = 15 * 60_000L
         private const val BASELINE_PARTIAL_RESOLUTION_LIMIT = 3
