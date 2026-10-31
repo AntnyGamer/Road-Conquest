@@ -80,7 +80,7 @@ class GeoBoundariesClient(private val loadJson: (String, Int) -> JSONObject = ::
             repeat(4) {
                 val connection = (URL(url).openConnection() as HttpURLConnection).apply {
                     instanceFollowRedirects = false; connectTimeout = 8000; readTimeout = 15000
-                    setRequestProperty("User-Agent", "RoadConquest (+https://github.com/AntnyGamer/RoadConquest-Beta)")
+                    setRequestProperty("User-Agent", "RoadConquest (+https://github.com/AntnyGamer/Road-Conquest)")
                     setRequestProperty("Accept", "application/geo+json, application/json")
                 }
                 try {
