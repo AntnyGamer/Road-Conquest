@@ -3,7 +3,6 @@
 ## Changes since 1.0
 
 - **Verified-geometry junction display:** Junction-guessing and GPS checks remain active; the live map only draws an estimated connection if an already-saved, matching road centerline supports its full path. Unverified diagonal and V-shaped extrapolations are hidden, not saved or credited. Existing road records, points and history are preserved, and no additional network calls are made. Missing centerline coverage can leave an honest gap until the road is matched again.
-- **Junction guessing preserved:** Estimated intersection and gap-connector behavior remains enabled. Accurate centerline geometry for inferred connectors still requires a separate, verified matching improvement; no geometry-accuracy fix is claimed here.
 - **Backup cancellation:** The passphrase is now confirmed before Android creates a destination document, so dismissing that dialog cannot leave a newly created zero-byte file. Storage providers can still leave partial files on failures during an active write.
 - **More balanced new earnings:** New roads earn 2 points, towns 35, states or regions 150, and countries 500. Weekly challenges and future achievement milestones award fewer points. Existing balances, earned ledger entries, purchases and already-owned achievements are preserved.
 - **Starting-place statistics:** The first verified starting town, state/region and country now appear as explored in Settings → Your progress. They do not give starting-place points or count toward earned milestones.
