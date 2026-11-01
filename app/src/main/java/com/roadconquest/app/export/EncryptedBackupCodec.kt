@@ -26,14 +26,14 @@ internal object EncryptedBackupCodec {
 
     fun readHeader(input: InputStream): Header {
         val source = DataInputStream(input)
-        val prefix = ByteArray(magic.size).also(source::readFully)
+        val prefix = ByteArray(magic.size).also { source.readFully(it) }
         require(prefix.contentEquals(magic)) { "Not a secure Road Conquest backup." }
         val size = source.readUnsignedByte()
         require(size in 1..32) { "Invalid backup key identifier." }
-        val idBytes = ByteArray(size).also(source::readFully)
+        val idBytes = ByteArray(size).also { source.readFully(it) }
         val id = idBytes.toString(Charsets.US_ASCII)
         require(ID.matches(id)) { "Invalid backup key identifier." }
-        val nonce = ByteArray(NONCE_SIZE).also(source::readFully)
+        val nonce = ByteArray(NONCE_SIZE).also { source.readFully(it) }
         return Header(id, magic + byteArrayOf(size.toByte()) + idBytes, nonce)
     }
 
@@ -114,7 +114,7 @@ internal object EncryptedBackupCodec {
             check(!Thread.currentThread().isInterrupted) { "Restore cancelled." }
             val count = input.readInt() // EOF before the authenticated terminator is an error.
             require(count in 0..RECORD_SIZE) { "Invalid backup record size." }
-            val encrypted = ByteArray(count + TAG_SIZE).also(input::readFully)
+            val encrypted = ByteArray(count + TAG_SIZE).also { input.readFully(it) }
             val plaintext = crypt(Cipher.DECRYPT_MODE, key, header, sequence++, count).doFinal(encrypted)
             check(plaintext.size == count) { "Invalid decrypted backup record." }
             if (count == 0) {
