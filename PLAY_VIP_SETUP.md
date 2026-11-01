@@ -5,7 +5,7 @@ Road Conquest contains a one-time, non-consumable Google Play Billing purchase:
 - **Product ID:** `vip_lifetime`
 - **Type:** One-time product / in-app product; **buy** purchase option (not a subscription and not consumable)
 - **US price to configure in Play Console:** **$2.99 USD**; local prices and taxes are controlled by Google Play
-- **Benefits:** ad-free eligible screens; rewarded-ad offers hidden; Gold car, Gold roads and Golden Road Conquest UI/launcher icon available without points; plus access to up to 500 recent trips (100 free), text summary sharing and user-selected GPX export with endpoint privacy options. Basic trip history, animated replay, basic trip summaries and secure progress backup/restore and readable export-only ZIPs remain free
+- **Benefits:** ad-free eligible screens; rewarded-ad offers hidden; Gold car, Gold roads and Golden Road Conquest UI/launcher icon available without points; plus access to up to 500 recent trips (100 free), text summary sharing and user-selected GPX export with endpoint privacy options. Basic trip history, animated replay, trip summaries, secure backup/restore, and readable export-only ZIPs remain free
 - **Existing point purchases:** unchanged; VIP does not refund points already spent or grant free non-gold cosmetics
 - **Ownership:** attached to the purchaser's Google Play account, not the optional Road Conquest account
 
