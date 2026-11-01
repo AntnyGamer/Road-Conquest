@@ -152,7 +152,7 @@ Run the focused Android provider, geometry-validator and consent tests, Android 
 
 Crashlytics can receive real events only from an opted-in new build. The console initially shows setup until that SDK traffic arrives; a test passing locally is not proof of a received production crash. Before publishing a new app build, review the updated privacy disclosure and Play Data safety entries for Geoapify and opt-in Crashlytics. No new app release or Play upload is part of this work.
 
-### High-capacity driving and local matching (candidate branch)
+### High-capacity driving and local matching
 
 - Android retains full-frequency location callbacks for the live marker, fog, place discovery, and verification. For a clear, accurate, straight drive only, it saves at most one redundant GPS fix per 5.5 seconds; bends, inaccurate fixes, and other uncertain samples are retained.
 - Normal server matching runs on a seven-minute cadence with up to 200 GPS waypoints. Full batches cost two credits; the backup is paced proportionally to its 25-point request limit (52.5 seconds), still within a separate shared free allowance. The map already renders locally recorded pending routes while matching catches up. Small priority corner repairs still use their original ten-point window.
@@ -174,13 +174,13 @@ Crashlytics can receive real events only from an opted-in new build. The console
 - The tracking service now inspects eligible saved roads locally every **30 seconds**, including when the online matcher is on provider cooldown. It does not add web requests.
 - Geoapify matching is limited to **one attempt per seven minutes per running service**, with a proportional cadence for the smaller LocationIQ backup; global quotas still apply. Final flushes and retries respect the same online limiter; delayed online confirmation is expected.
 
-## Conservative no-extra-request map-matching seam recovery (draft PR #96)
+## Conservative no-extra-request map-matching seam recovery
 
 - Geoapify's local normalization now projects coordinates through the short longitude arc across ±180° instead of projecting a matching International Date Line crossing as an almost 360° jump. Interpolated snapped geometry stays beside the real Date Line, and all existing distance/speed/geometry validator gates still apply. Ordinary sub-180° route geometry is unchanged.
 - A provider step with `from_index == to_index` can now locate a snapped GPS waypoint exactly at its junction vertex **only within the existing strict 3-meter projection tolerance**. This prevents a genuine zero-length junction step from making adjoining validated approach/exit legs unmatchable. Zero-length steps never become invented road geometry; all multi-leg continuity, snap, detour, confidence and road-count filters stay in place.
 - Added deterministic tests for valid date-line road segments, zero-length junctions, and a snapped junction too far away to qualify. **No additional external provider calls or server quota changes.**
 
-## Salvage neighboring validated geometry when one provider leg is malformed (draft PR #96)
+## Salvaging valid geometry beside malformed provider legs
 
 - Both locally rejected geometry (`IllegalArgumentException`) and an invalid provider step object (`JSONException`) now use the SAME already-established per-leg rejection path. Properly validated sibling road legs still save; the invalid interval remains pending, and the no-valid-legs case retains its existing failure backoff.
 - The rejected interval remains explicitly blocked from inferred seam bridging. This is not a relaxed snap/road acceptance condition and does not cause any additional HTTP or provider requests. A focused turn test covers valid-before-malformed, no credit for the broken leg, and a malformed-only response.
