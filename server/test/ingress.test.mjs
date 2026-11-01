@@ -56,6 +56,33 @@ test("trusted Cloudflare IP gets the exact HMAC identity expected by Neon", asyn
   });
 });
 
+test("static public reads avoid identity signing but other requests keep rate-limit provenance", async () => {
+  const forwarded = [];
+  const proxy = createAccountIngress(async request => {
+    forwarded.push(request);
+    return Response.json({ ok: true });
+  }, () => now);
+  const headers = { "CF-Connecting-IP": "203.0.113.31",
+    "X-RoadConquest-Client-IP": "forged", "X-RoadConquest-Client-Signature": "forged" };
+  for (const path of ["/health/live", "/privacy", "/delete-account", "/v1/competition", "/v1/backups"]) {
+    await proxy(new Request("https://roadconquest.workers.dev" + path, { headers }), env);
+    const sent = forwarded.at(-1);
+    assert.equal(sent.headers.get("X-RoadConquest-Client-IP"), null, path);
+    assert.equal(sent.headers.get("X-RoadConquest-Client-Signature"), null, path);
+  }
+  for (const path of ["/v1/me", "/v1/leaderboard", "/v1/backups/account-key", "/v1/forum/posts"]) {
+    await proxy(new Request("https://roadconquest.workers.dev" + path, { headers }), env);
+    const sent = forwarded.at(-1);
+    assert.equal(sent.headers.get("X-RoadConquest-Client-IP"), "203.0.113.31", path);
+    assert.match(sent.headers.get("X-RoadConquest-Client-Signature"), /^[a-f0-9]{64}$/, path);
+  }
+  await proxy(new Request("https://roadconquest.workers.dev/v1/competition", {
+    method: "POST", headers, body: "{}"
+  }), env);
+  assert.equal(forwarded.at(-1).headers.get("X-RoadConquest-Client-IP"), "203.0.113.31",
+    "unknown methods must still use the normal signed ingress path");
+});
+
 test("no Cloudflare edge IP never forwards a forged signed client identity", async () => {
   let outgoing;
   const proxy = createAccountIngress(async request => {
