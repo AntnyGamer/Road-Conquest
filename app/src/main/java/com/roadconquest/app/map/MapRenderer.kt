@@ -1292,7 +1292,7 @@ class MapRenderer(
         val regional = LineLayer(REGIONAL_ROAD_LAYER_ID, ROAD_SOURCE_ID).withProperties(
             lineColor(color), lineOpacity(242f / 255f),
             lineWidth(Expression.interpolate(Expression.linear(), Expression.zoom(),
-                Expression.stop(6f, 2f), Expression.stop(9f, 2.75f))),
+                Expression.stop(5f, 1.5f), Expression.stop(6f, 2f), Expression.stop(9f, 2.75f))),
             lineCap(Property.LINE_CAP_SQUARE), lineJoin(Property.LINE_JOIN_ROUND)
         )
         regional.setMinZoom(FogBitmapRenderer.MIN_ROAD_ZOOM.toFloat())
