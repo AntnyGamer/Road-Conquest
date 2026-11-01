@@ -1,17 +1,20 @@
-# Road Conquest Release 1.0
+# Road Conquest 1.0.1
 
-## Changes since version 1.1
+Portable private backups, reliable discovery rewards, and cancellation fixes.
 
-- **Recover missed towns from saved drives:** Revisit accurate saved GPS positions, including compressed-out driving fixes, with resumable, bounded scanning after the recorded starting location. Towns are counted and shaded only after normal municipality verification; drawn roads alone do not prove a visit.
-- **Map controls and settings:** Match the settings gear color to the other map controls, move Show fog to the top of Map & appearance, and use the standard selection dialog for map overlays with a separate Explore Nearby action.
-- **Harder town-badge achievements:** Bronze goals are now 5, 20 and 75 towns; silver goals are 3, 15 and 50; gold goals are 2, 8, 20 and 50. The combined possible reward for these ten achievements falls from 9,725 to 3,990 points. Already-earned achievements and payouts are retained.
-- **Less unnecessary local work:** Check both history-scan completion markers with one indexed query, avoid repeatedly saving completed cursors, and stop reading baseline/visited-place records after scanning finishes. Simplify Settings search by removing redundant filtering and condition checks.
-- **Tests and cleanup:** Cover driving-fix recovery, scanning limits, town-badge goals, gear color and fog placement. Remove obsolete backup formats, pre-release database upgrades, notification registration variants, old boundary-cache cleanup, and the unused map-choice dialog helper.
+## Changes since Release 1.0
 
-**Build:** Android `versionName` **1.0**, `versionCode` **97**, Android 12+ (API 31). The application ID and signing identity are unchanged; this release introduces no database-schema migration.
+- **Portable private backups:** Create an encrypted `.rcbackup` file and restore it on Google Play or GitHub installations. Sign in to the same Road Conquest account and connect to the internet to back up or restore; no separate backup password is needed. Readable ZIP exports remain available for analysis and cannot be restored.
+- **Reliable starting-town rewards:** A town identified after repeated partial starting-location lookups now stays a zero-point starting place, including when it is recovered within the same discovery batch.
+- **Local-data deletion:** Deleting local data stops further requests from an old discovery batch and prevents its results from recreating cleared boundary caches. Cancelled lookups also stop the remaining batch instead of continuing after a provider delay.
+- **Delayed weekly rewards:** Older town visits and road matches now trigger the correct weekly evaluation even when the unique town or road total stays unchanged. This includes newly matched fragments of an existing road and the previous week's grace period.
+- **Map and matching efficiency:** Confirmed roads remain visible farther out on the map. Fog-edge rendering skips unnecessary work for fully covered or revealed pixels, and matching reuses unchanged response data without weakening GPS or geometry validation.
+- **Regression coverage:** Added tests for starting-town recovery, deletion and cancellation during lookup, Census fallback requests, and delayed town/road weekly rewards.
 
-**Release naming:** This is deliberately labeled **Release 1.0** as a public-release reset after the previously published 1.0 (code 95) and 1.1 (code 96) builds. It has a distinct GitHub tag, `release-v1.0`, so older releases are not overwritten.
+**Build:** Android `versionName` **1.0.1**, `versionCode` **98**, Android 12+ (API 31). The application ID and permanent signing identity are unchanged. SQLite schema 16 and backup CSV schema 12 remain unchanged.
 
-**Data formats:** Current SQLite schema 16 and authenticated backup schema 12 remain supported; older beta database upgrades and backup formats are no longer supported. Newly recovered town candidates may need normal Census requests; no additional GPS sampling or road-matching calls are introduced.
+**Release tag:** `v1.0.1`.
 
-**Distribution:** GitHub publishes signed artifacts only after required CI and device checks pass. Uploading the signed AAB to Google Play is a separate step; confirm versionCode 97 is unused in Play Console before uploading.
+**Data formats:** Supported restore formats and current export options are listed in [backup documentation](BACKUP_AND_CHALLENGES.md).
+
+**Distribution:** GitHub publishes the signed APK, signed Play upload AAB, Android Studio source archive, account-server bundle, R8 mapping and SHA-256 checksums only after required CI and device checks pass. The AAB includes full native debug symbols and the R8 mapping. Uploading the signed AAB to Google Play is a separate step; confirm version code 98 is unused in Play Console before uploading.

@@ -132,4 +132,66 @@ class WeeklyChallengesTest {
         road("new-road", "fresh-group", monday + 20)
         assertEquals(1L, WeeklyChallenges.status(context, monday + 100).challenges.first().progress)
     }
+
+    @Test fun delayedTownFirstVisitReevaluatesTheGraceWeekWithoutChangingTotals() {
+        val tracking = TrackingRepository(context)
+        val repository = ProgressionRepository(context)
+        val town = PlaceDiscovery(PlaceKind.TOWN, "late-town", "Late town",
+            visitedAt = monday + 100L, latitude = 40.0, longitude = -75.0)
+        assertTrue(repository.recordPlace(town))
+        val now = monday + 86_400_000L
+        val summary = tracking.getSummary()
+        val snapshot = repository.snapshot()
+        assertTrue(WeeklyChallenges.sync(context, summary, snapshot, now))
+        assertFalse(WeeklyChallenges.sync(context, summary, snapshot, now))
+        assertFalse(repository.recordPlace(town.copy(visitedAt = monday - 1_000L)))
+        assertEquals(snapshot.towns, repository.snapshot().towns)
+        assertTrue(WeeklyChallenges.sync(context, summary, repository.snapshot(), now + 1))
+        val key = "weekly:${monday - 7 * 86_400_000L}:towns_1"
+        fixtureDb.rawQuery("SELECT points FROM progression_rewards WHERE reward_key=?", arrayOf(key)).use {
+            assertTrue("The delayed Sunday visit must earn its grace-week reward", it.moveToFirst())
+            assertEquals(25L, it.getLong(0))
+        }
+        assertFalse(WeeklyChallenges.sync(context, summary, repository.snapshot(), now + 2))
+    }
+
+    @Test fun delayedRoadFirstVisitsReevaluateTheGraceWeekWithoutChangingTotals() {
+        val tracking = TrackingRepository(context)
+        fun matched(index: Int, time: Long) = MatchedRoad("Road $index",
+            "[[${-75.0 + index * .01},40.0],[${-74.999 + index * .01},40.0]]", time, time, 1.0)
+        tracking.upsertRoads((0..4).map { matched(it, monday + 100L) })
+        val repository = ProgressionRepository(context)
+        val summary = tracking.getSummary()
+        val now = monday + 86_400_000L
+        WeeklyChallenges.sync(context, summary, repository.snapshot(), now)
+        tracking.upsertRoads((0..4).map { matched(it, monday - 1_000L) })
+        assertEquals(summary.roadsUnlockedCount, tracking.getSummary().roadsUnlockedCount)
+        assertTrue(WeeklyChallenges.sync(context, tracking.getSummary(), repository.snapshot(), now + 1))
+        fixtureDb.rawQuery("SELECT points FROM progression_rewards WHERE reward_key=?",
+            arrayOf("weekly:${monday - 7 * 86_400_000L}:roads_5")).use {
+            assertTrue("Delayed Sunday roads must earn their grace-week reward", it.moveToFirst())
+            assertEquals(20L, it.getLong(0))
+        }
+        assertFalse(WeeklyChallenges.sync(context, tracking.getSummary(), repository.snapshot(), now + 2))
+    }
+
+    @Test fun delayedNewFragmentsReevaluateExistingRoadGroups() {
+        val tracking = TrackingRepository(context)
+        fun matched(index: Int, time: Long, offset: Double) = MatchedRoad("Road $index",
+            "[[${-75.0 + index * .01 + offset},40.0],[${-74.999 + index * .01 + offset},40.0]]",
+            time, time, 1.0)
+        tracking.upsertRoads((0..4).map { matched(it, monday + 100L, 0.0) })
+        val repository = ProgressionRepository(context)
+        val now = monday + 86_400_000L
+        WeeklyChallenges.sync(context, tracking.getSummary(), repository.snapshot(), now)
+        tracking.upsertRoads((0..4).map { matched(it, monday - 1_000L, .001) })
+        assertEquals(10L, tracking.getSummary().roadSegmentCount)
+        assertEquals(5L, tracking.getSummary().roadsUnlockedCount)
+        assertTrue(WeeklyChallenges.sync(context, tracking.getSummary(), repository.snapshot(), now + 1))
+        fixtureDb.rawQuery("SELECT points FROM progression_rewards WHERE reward_key=?",
+            arrayOf("weekly:${monday - 7 * 86_400_000L}:roads_5")).use {
+            assertTrue("An older connected fragment must count toward the correct week", it.moveToFirst())
+            assertEquals(20L, it.getLong(0))
+        }
+    }
 }

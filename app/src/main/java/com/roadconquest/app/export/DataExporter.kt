@@ -71,12 +71,13 @@ object DataExporter {
 
     private fun clearTemporarySnapshotsLocked(context: Context) {
         val cache = context.applicationContext.cacheDir
-        val snapshots = cache.listFiles().orEmpty()
-        snapshots.filter { it.name.startsWith(SNAPSHOT_PREFIX) && it.name.endsWith(SNAPSHOT_SUFFIX) }
-            .forEach { SQLiteDatabase.deleteDatabase(it) }
-        // deleteDatabase removes normal -wal/-shm files with the base DB. Sweep by prefix too
-        // in case process death happened between sidecar creation and the base-file flush.
-        snapshots.filter { it.name.startsWith(SNAPSHOT_PREFIX) }.forEach { it.delete() }
+        // Delete snapshot databases with their sidecars, then sweep any orphaned
+        // sidecars left by process death. Avoid creating two intermediate lists.
+        for (file in cache.listFiles().orEmpty()) {
+            if (!file.name.startsWith(SNAPSHOT_PREFIX)) continue
+            if (file.name.endsWith(SNAPSHOT_SUFFIX)) SQLiteDatabase.deleteDatabase(file)
+            else file.delete()
+        }
     }
 
     /** Write each CSV with the same buffered flush and ZIP entry boundaries as before. */

@@ -30,6 +30,10 @@ class GeoapifyMatcher(
     override var lastCallUsedNetwork = false
         private set
     private val responses = ExactMatchResponseCache(now)
+    // A cache miss is normally followed immediately by match() for the same GPS
+    // window. Save its serialized request once, without retaining stale evidence.
+    private var probedPoints: List<TrackPoint>? = null
+    private var probedPayload: String? = null
     override fun rateLimitRemainingMs(): Long = health.remaining(providerId)
 
     // Reject corrupt/out-of-range fixes before JSONObject serializes doubles:
@@ -54,8 +58,16 @@ class GeoapifyMatcher(
 
     @Synchronized override fun cachedMatch(points: List<TrackPoint>): MatchResult? {
         lastCallUsedNetwork = false
+        probedPoints = null
+        probedPayload = null
         if (responses.isEmpty || !validPoints(points)) return null
-        val body = responses.get(payload(points)) ?: return null
+        val serialized = payload(points)
+        val body = responses.get(serialized)
+        if (body == null) {
+            probedPoints = points.toList()
+            probedPayload = serialized
+            return null
+        }
         return runCatching { parse(body, points) }.getOrNull()
     }
 
@@ -63,8 +75,14 @@ class GeoapifyMatcher(
         checkMatchingCancellation()
         unavailable = false
         lastCallUsedNetwork = false
-        if (!validPoints(points)) return null
-        val payload = payload(points)
+        if (!validPoints(points)) {
+            probedPoints = null
+            probedPayload = null
+            return null
+        }
+        val payload = if (probedPoints == points) probedPayload ?: payload(points) else payload(points)
+        probedPoints = null
+        probedPayload = null
         responses.get(payload)?.let { body ->
             return runCatching { parse(body, points) }.getOrNull()
         }

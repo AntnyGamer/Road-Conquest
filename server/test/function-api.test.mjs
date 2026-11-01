@@ -17,6 +17,11 @@ test("serverless accounts enforce authentication, privacy, limits and TLS with r
     process.env.REQUIRE_HTTPS = "1";
     process.env.TRUST_PROXY = "1";
     process.env.APPLY_SCHEMA_ON_STARTUP = "0";
+    process.env.BACKUP_MASTER_KEYS_JSON = JSON.stringify({
+      v1: Buffer.alloc(32, 23).toString("base64url"),
+      v2: Buffer.alloc(32, 42).toString("base64url")
+    });
+    process.env.BACKUP_CURRENT_KEY_ID = "v2";
     const { default: api, pool } = await import("../dist/index.mjs");
     runtimePool = pool;
     async function call(path, method = "GET", body, token, extraHeaders = {}) {
@@ -41,6 +46,7 @@ test("serverless accounts enforce authentication, privacy, limits and TLS with r
     assert.equal(deletionPage.status, 200);
     assert.match(await deletionPage.text(), /Delete Road Conquest Account/u);
     assert.equal((await call("/v1/me")).status, 401);
+    assert.equal((await call("/v1/backups/account-key")).status, 401);
     assert.deepEqual((await call("/v1/backups")).body, { available: false, keys: [] });
     assert.equal((await call("/v1/backups/sign", "POST", { hash: "forged", integrity_token: "fake" })).status, 503);
     const credentials = { username: "FunctionDriver", password: "correct horse battery staple" };
@@ -52,7 +58,23 @@ test("serverless accounts enforce authentication, privacy, limits and TLS with r
     assert.equal((await call("/v1/login", "POST", { ...credentials, password: "an incorrect password" })).status, 401);
     const login = await call("/v1/login", "POST", { ...credentials, username: "FUNCTIONDRIVER" });
     assert.equal(login.status, 200);
-    assert.equal((await call("/v1/me", "GET", undefined, login.body.token)).body.username, credentials.username);
+    const initialProfile = await call("/v1/me", "GET", undefined, login.body.token);
+    assert.equal(initialProfile.body.username, credentials.username);
+    assert.deepEqual(initialProfile.body.competition, { available: false },
+      "Settings can use bundled competition availability without another HTTP request");
+    const originalKey = await call("/v1/backups/account-key", "GET", undefined, signup.body.token);
+    const loginKey = await call("/v1/backups/account-key", "GET", undefined, login.body.token);
+    assert.equal(originalKey.status, 200);
+    assert.match(originalKey.body.key, /^[A-Za-z0-9_-]{43}$/u);
+    assert.equal(originalKey.body.key_id, "v2");
+    const earlierKey = await call("/v1/backups/account-key?key_id=v1", "GET", undefined, login.body.token);
+    assert.equal(earlierKey.status, 200);
+    assert.equal(earlierKey.body.key_id, "v1");
+    assert.notEqual(earlierKey.body.key, originalKey.body.key);
+    assert.equal((await call("/v1/backups/account-key?key_id=invalid", "GET", undefined, login.body.token)).status, 410);
+    assert.equal((await call("/v1/backups/account-key?key_id=%21", "GET", undefined, login.body.token)).status, 400);
+    assert.deepEqual(loginKey, originalKey, "Different sessions for one account must restore the same file");
+    assert.equal((await call("/v1/backups/account-key", "GET", undefined, "A".repeat(43))).status, 401);
     assert.equal((await call("/v1/privacy", "PUT", { leaderboard_visible: false }, login.body.token)).body.leaderboard_visible, false);
     const privacyRow = await admin.query("SELECT xmin::text AS version FROM users WHERE username_key='functiondriver'");
     assert.equal((await call("/v1/privacy", "PUT", { leaderboard_visible: false }, login.body.token)).body.leaderboard_visible, false);
@@ -98,6 +120,9 @@ test("serverless accounts enforce authentication, privacy, limits and TLS with r
       { friends: [], weekly: { available: false, entries: [] } });
     const friend = await call("/v1/signup", "POST", { username: "FriendDriver", password: credentials.password });
     assert.equal(friend.status, 201);
+    const friendKey = await call("/v1/backups/account-key", "GET", undefined, friend.body.token);
+    assert.equal(friendKey.status, 200);
+    assert.notEqual(friendKey.body.key, originalKey.body.key, "Other accounts must never share encryption keys");
     assert.equal((await call("/v1/friends", "POST", { username: "FriendDriver", action: "request" }, login.body.token)).status, 200);
     assert.equal((await call("/v1/friends", "POST", { username: "FriendDriver", action: "accept" }, login.body.token)).status, 409);
     assert.equal((await call("/v1/friends", "POST", { username: credentials.username, action: "accept" }, friend.body.token)).status, 200);
@@ -128,6 +153,8 @@ test("serverless accounts enforce authentication, privacy, limits and TLS with r
     assert.equal((await call("/v1/account", "DELETE", { password: credentials.password }, login.body.token)).status, 200);
     assert.deepEqual((await call("/v1/friends", "GET", undefined, friend.body.token)).body, { friends: [] });
     assert.equal((await call("/v1/me", "GET", undefined, signup.body.token)).status, 401);
+    assert.equal((await call("/v1/backups/account-key", "GET", undefined, signup.body.token)).status, 401,
+      "Account deletion must revoke access to its recovery key");
     let logoutQueries = 0;
     const logoutQuery = runtimePool.query.bind(runtimePool);
     runtimePool.query = (...args) => { logoutQueries++; return logoutQuery(...args); };

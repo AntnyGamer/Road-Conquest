@@ -31,6 +31,7 @@ import com.roadconquest.app.account.AccountStore
 import com.roadconquest.app.data.LocalDataReset
 import com.roadconquest.app.data.TrackingRepository
 import com.roadconquest.app.export.DataImporter
+import com.roadconquest.app.export.AccountBackup
 import com.roadconquest.app.export.ExportOnlyBackup
 import com.roadconquest.app.util.Prefs
 import com.roadconquest.app.util.Appearance
@@ -54,6 +55,8 @@ internal fun exportFailureDetails(error: Throwable, cleanupFailed: Boolean): Str
 }
 
 class SettingsActivity : Activity() {
+    private enum class ExportFormat { SECURE, READABLE }
+    private var pendingExportFormat: ExportFormat? = null
     private fun setupPrivacyDescriptions() {
         val descriptions = listOf(
             R.id.friendNotificationsSwitch to R.string.friend_notifications_detail,
@@ -152,6 +155,9 @@ class SettingsActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         setTheme(Appearance.themeRes(this))
         super.onCreate(savedInstanceState)
+        pendingExportFormat = savedInstanceState?.getString("pending_export_format")?.let {
+            runCatching { ExportFormat.valueOf(it) }.getOrNull()
+        }
         appliedGoldUi = Prefs.isGoldUiEnabled(this)
         WindowCompat.enableEdgeToEdge(window)
         val lightSystemBars = !Appearance.isDark(this)
@@ -282,16 +288,32 @@ class SettingsActivity : Activity() {
     }
 
     private fun beginExport() {
-        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
-            type = "application/zip"
-            putExtra(Intent.EXTRA_TITLE, "RoadConquest-data-${Instant.now().toString().take(10)}-export-only.zip")
-        }
-        try {
-            startActivityForResult(intent, REQUEST_EXPORT)
-        } catch (_: ActivityNotFoundException) {
-            Toast.makeText(this, "Android's file picker is unavailable on this device.", Toast.LENGTH_LONG).show()
-        }
+        AlertDialog.Builder(this).setTitle("Export progress")
+            .setItems(arrayOf(
+                "Secure backup (restorable on Play and GitHub)",
+                "Readable ZIP (for analysis, cannot restore)"
+            )) { _, selected ->
+                val format = ExportFormat.entries[selected]
+                if (format == ExportFormat.SECURE && AccountStore.load(this) == null) {
+                    AlertDialog.Builder(this).setTitle("Sign in to back up progress")
+                        .setMessage("Secure backups require your Road Conquest account and an internet connection. Sign in under Account & community first.")
+                        .setPositiveButton("OK", null).show()
+                    return@setItems
+                }
+                pendingExportFormat = format
+                val suffix = if (format == ExportFormat.SECURE) ".rcbackup" else "-readable.zip"
+                val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = if (format == ExportFormat.SECURE) "application/octet-stream" else "application/zip"
+                    putExtra(Intent.EXTRA_TITLE, "RoadConquest-data-${Instant.now().toString().take(10)}$suffix")
+                }
+                try {
+                    startActivityForResult(intent, REQUEST_EXPORT)
+                } catch (_: ActivityNotFoundException) {
+                    pendingExportFormat = null
+                    Toast.makeText(this, "Android's file picker is unavailable on this device.", Toast.LENGTH_LONG).show()
+                }
+            }.show()
     }
 
     override fun onResume() {
@@ -327,6 +349,7 @@ class SettingsActivity : Activity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString("pending_export_format", pendingExportFormat?.name)
         navigation.save(outState)
         super.onSaveInstanceState(outState)
     }
@@ -339,40 +362,34 @@ class SettingsActivity : Activity() {
     @android.annotation.SuppressLint("GestureBackNavigation")
     override fun onBackPressed() { handleSettingsBack() }
 
-    @Deprecated("Used for a simple Storage Access Framework export on minSdk 31")
+    @Deprecated("Storage Access Framework document picker on minSdk 31")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode != REQUEST_EXPORT) return
-        if (resultCode != RESULT_OK) return
-        val uri = data?.data ?: return
-        // No second dialog after Android creates the destination document.
-        writeExport(uri)
+        val format = pendingExportFormat ?: return
+        pendingExportFormat = null
+        if (resultCode == RESULT_OK) data?.data?.let { writeExport(it, format) }
     }
 
-    private fun writeExport(uri: Uri) {
+    private fun writeExport(uri: Uri, format: ExportFormat) {
         Thread {
             val result = runCatching {
                 contentResolver.openOutputStream(uri, "w")?.use { output ->
-                    ExportOnlyBackup.write(this, repository, output)
+                    when (format) {
+                        ExportFormat.SECURE -> AccountBackup.writePortable(this, repository, output)
+                        ExportFormat.READABLE -> ExportOnlyBackup.write(this, repository, output)
+                    }
                 } ?: error("Could not open export destination")
             }
             var cleanupFailed = false
             if (result.isSuccess) {
-                // A valid ZIP remains available even if the user reset progress
-                // while exporting. Serialize only the backup-date update with
-                // restore/deletion so a stale export cannot reappear after reset.
                 synchronized(DataImporter.operationLock) {
-                    if (repository.isHistoryCurrent() &&
-                        !Prefs.isDeviceDataDeletionPending(this)
-                    ) {
+                    if (repository.isHistoryCurrent() && !Prefs.isDeviceDataDeletionPending(this)) {
                         getSharedPreferences("roadconquest_export_history", MODE_PRIVATE)
                             .edit().putLong("last_completed_at", System.currentTimeMillis()).commit()
                     }
                 }
             } else {
-                // ACTION_CREATE_DOCUMENT creates the destination before writing.
-                // Some SAF providers reject deletion; never silently imply that
-                // a partial backup was removed if its cleanup did not succeed.
                 cleanupFailed = !runCatching { contentResolver.delete(uri, null, null) > 0 }
                     .getOrDefault(false)
             }
@@ -380,7 +397,10 @@ class SettingsActivity : Activity() {
                 if (isDestroyed) return@runOnUiThread
                 result.fold(
                     onSuccess = {
-                        Toast.makeText(this, "Export-only ZIP saved. Keep it private.", Toast.LENGTH_LONG).show()
+                        val message = if (format == ExportFormat.SECURE)
+                            "Secure backup saved. Sign in to the same account to restore."
+                        else "Readable ZIP saved. It cannot be restored and contains private location history."
+                        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
                         refreshSummary()
                     },
                     onFailure = { error ->
@@ -388,8 +408,7 @@ class SettingsActivity : Activity() {
                         AlertDialog.Builder(this)
                             .setTitle("Export failed")
                             .setMessage(exportFailureDetails(error, cleanupFailed))
-                            .setPositiveButton("OK", null)
-                            .show()
+                            .setPositiveButton("OK", null).show()
                     }
                 )
             }
@@ -602,7 +621,7 @@ class SettingsActivity : Activity() {
         } else {
             "Verified scoring is unavailable."
         }
-        if (accountConfigured && competitionVisible) {
+        if (accountConfigured && competitionVisible && session == null) {
             accountExecutor.execute {
                 if (isDestroyed || isFinishing || refresh != accountRefreshGeneration) return@execute
                 val status = runCatching { AccountClient.competition() }
@@ -638,8 +657,26 @@ class SettingsActivity : Activity() {
             if (isDestroyed || isFinishing || refresh != accountRefreshGeneration ||
                 AccountStore.load(this)?.token != session.token) return@execute
             val result = runCatching { AccountClient.me(session.token) }
+            // The updated account response includes public competition availability.
+            // Older servers, and failed profile reads, retain the independent lookup.
+            val status = if (competitionVisible) runCatching {
+                val bundled = result.getOrNull()?.competition
+                if (bundled != null) {
+                    if (bundled.optBoolean("available")) AccountClient.requireVerifiedPolicy(bundled)
+                    bundled
+                } else AccountClient.competition()
+            } else null
             runOnUiThread {
                 if (isDestroyed || refresh != accountRefreshGeneration || AccountStore.load(this)?.token != session.token) return@runOnUiThread
+                status?.let {
+                    verificationStatus.text = it.fold(
+                        onSuccess = { response ->
+                            if (response.optBoolean("available")) "Verified scoring is available."
+                            else "Verified scoring is unavailable."
+                        },
+                        onFailure = { "Could not check verified scoring." }
+                    )
+                }
                 result.fold(
                     onSuccess = { account ->
                         val updated = AccountStore.refreshIfUnchanged(

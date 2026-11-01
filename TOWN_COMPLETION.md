@@ -16,4 +16,3 @@ Earned tiers remain owned if a later boundary correction changes the current per
 
 The 30 new achievements cover intermediate and long-term road, tile, distance and place milestones, including 10 town-medal achievements. Achievement IDs and previously earned payouts are preserved; new town-badge rewards are lower.
 
-Settings now opens to seven searchable categories: Tracking; Map & appearance; Account & community; Notifications & privacy; Backups & data; Your progress; Help & about. Search includes individual control text. Back returns from a category or search to the settings home, then to the map. Navigation survives rotation and appearance changes. Existing export/restore and destructive-action confirmations remain in their original handlers.

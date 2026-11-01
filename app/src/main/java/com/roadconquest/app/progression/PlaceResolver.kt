@@ -97,13 +97,19 @@ object PlaceResolver {
         municipalCache: VerifiedMunicipalCache? = null,
         addressesOverride: List<android.location.Address>? = null,
         stateLookup: (Double, Double) -> String? = UnitedStatesMunicipalityAtPoint::stateNameAt,
-        townLookup: (PlaceDiscovery) -> UnitedStatesMunicipalityAtPoint.Result? = UnitedStatesMunicipalityAtPoint::fetch,
-        overlayClient: PlaceOverlayClient? = null
+        townLookup: ((PlaceDiscovery) -> UnitedStatesMunicipalityAtPoint.Result?)? = null,
+        overlayClient: PlaceOverlayClient? = null,
+        cacheGeneration: Long = PlaceOverlayCache.generation(),
+        isCurrent: () -> Boolean = { true }
     ): List<PlaceDiscovery>? {
         // Capture BEFORE geocoding and network I/O. Clearing local data changes
         // this generation; older in-flight lookups must never recreate erased
         // precise-location boundary caches when their responses finally arrive.
-        val cacheGeneration = PlaceOverlayCache.generation()
+        fun current() = isCurrent() && !Thread.currentThread().isInterrupted &&
+            !com.roadconquest.app.util.Prefs.isDeviceDataDeletionPending(context) &&
+            PlaceOverlayCache.generation() == cacheGeneration
+        val lookupTown = townLookup ?: { seed: PlaceDiscovery -> UnitedStatesMunicipalityAtPoint.fetch(seed, ::current) }
+        if (!current()) return null
         val addresses = addressesOverride ?: if (Geocoder.isPresent()) try {
             Geocoder(context.applicationContext, Locale.US)
                 .getFromLocation(candidate.latitude, candidate.longitude, MAX_RESULTS)
@@ -113,8 +119,9 @@ object PlaceResolver {
         } catch (_: IllegalArgumentException) {
             emptyList()
         } else emptyList()
+        if (!current()) return null
         if (addresses.isEmpty()) {
-            return resolveWithoutGeocoder(context, candidate, cacheGeneration, municipalCache, stateLookup, townLookup)
+            return resolveWithoutGeocoder(context, candidate, cacheGeneration, municipalCache, stateLookup, lookupTown, ::current)
         }
         val parsed = resolveAddresses(candidate, addresses)
         // U.S. postal localities can differ from actual incorporated municipalities,
@@ -127,7 +134,7 @@ object PlaceResolver {
         val knownOutsideUs = country != null &&
             !UnitedStatesMunicipalBoundaries.isUnitedStatesCountry(country.displayName)
         if (!knownOutsideUs && (state == null || country == null)) {
-            return resolveWithoutGeocoder(context, candidate, cacheGeneration, municipalCache, stateLookup, townLookup)
+            return resolveWithoutGeocoder(context, candidate, cacheGeneration, municipalCache, stateLookup, lookupTown, ::current)
         }
         if (state != null && country != null &&
             UnitedStatesMunicipalBoundaries.stateCode(country.displayName, state.displayName) != null
@@ -142,12 +149,14 @@ object PlaceResolver {
             known.find(seed)?.let { town ->
                 return parsed.filterNot { it.kind == PlaceKind.TOWN } + town
             }
+            if (!current()) return null
             val result = try {
-                townLookup(seed)
+                lookupTown(seed)
             } catch (_: IOException) {
                 // Retry an unreachable provider rather than permanently discard a town.
                 return null
             }
+            if (!current()) return null
             // Empty/partial Census responses can occur during a transient outage.
             // Do not permanently retire a U.S. town candidate on its first null
             // response; bounded retries preserve the original GPS fix.
@@ -187,18 +196,21 @@ object PlaceResolver {
         // already-fetched provider config without sharing results across batches.
         val client by lazy { overlayClient ?: PlaceOverlayClient() }
         for (town in townCandidates) {
+            if (!current()) return null
             // Cache the authenticated municipal polygon by its town identity,
             // even when the current GPS fix falls OUTSIDE it. A nearby postal
             // town must not cause the same polygon to be fetched on every drive.
             val cached = PlaceOverlayCache.readVerifiedForDiscovery(context, town)
             val boundary = if (cached != null) cached else try {
-                client.fetch(town, requireContainment = false)?.also {
+                client.fetch(town, requireContainment = false, isCurrent = ::current)?.also {
+                    if (!current()) return null
                     if (!PlaceOverlayCache.write(
                             context, town, it, cacheGeneration, verifiedForDiscovery = true
                         )
                     ) return null
                 }
-            } catch (_: Exception) {
+            } catch (error: Exception) {
+                if (error is InterruptedException) Thread.currentThread().interrupt()
                 // Preserve the candidate for retry when the boundary provider is offline.
                 return null
             }
@@ -222,14 +234,19 @@ object PlaceResolver {
         cacheGeneration: Long,
         municipalCache: VerifiedMunicipalCache? = null,
         stateLookup: (Double, Double) -> String? = UnitedStatesMunicipalityAtPoint::stateNameAt,
-        townLookup: (PlaceDiscovery) -> UnitedStatesMunicipalityAtPoint.Result? =
-            UnitedStatesMunicipalityAtPoint::fetch
+        townLookup: ((PlaceDiscovery) -> UnitedStatesMunicipalityAtPoint.Result?)? = null,
+        isCurrent: () -> Boolean = { true }
     ): List<PlaceDiscovery>? {
+        fun current() = isCurrent() && !Thread.currentThread().isInterrupted &&
+            !com.roadconquest.app.util.Prefs.isDeviceDataDeletionPending(context) &&
+            PlaceOverlayCache.generation() == cacheGeneration
+        if (!current()) return null
         val state = try {
             stateLookup(candidate.latitude, candidate.longitude)
         } catch (_: IOException) {
             return null
         } ?: return null
+        if (!current()) return null
         val country = discovery(candidate, PlaceKind.COUNTRY,
             "us", "United States", "", "United States")
         val stateKey = "us|" + canonical(state)
@@ -239,8 +256,12 @@ object PlaceResolver {
             "$stateKey|gps", "", state, "United States")
         val known = municipalCache ?: VerifiedMunicipalCache(context)
         val cached = known.find(seed)
+        if (!current()) return null
         val town = cached ?: try {
-            townLookup(seed)?.let { official ->
+            val official = if (townLookup != null) townLookup(seed)
+                else UnitedStatesMunicipalityAtPoint.fetch(seed, ::current)
+            official?.let {
+                if (!current()) return null
                 if (!PlaceOverlayCache.writeOfficialUs(
                         context, official.place, official.overlay, cacheGeneration
                     )) return null
@@ -252,6 +273,7 @@ object PlaceResolver {
         } catch (_: IOException) {
             return null
         }
+        if (!current()) return null
         if (town == null && candidate.attempts < 2) return null
         return listOfNotNull(country, statePlace, town)
     }

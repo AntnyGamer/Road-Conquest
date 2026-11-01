@@ -969,12 +969,19 @@ object FogBitmapRenderer {
                 // pixels depend on already-processed lower/right neighbors; omitting
                 // this assignment leaves half of the outer fade fully opaque.
                 distances[i] = distance
-                // This smooth easing removes gray/checkerboard edge bands caused by
-                // separate side/corner shaders and low-resolution raster sampling.
-                val fraction = (distance / radius).coerceIn(0f, 1f)
-                val smooth = fraction * fraction * (3f - 2f * fraction)
-                val shade = ((1f - smooth) * 255f).roundToInt().coerceIn(0, 255)
-                pixels[i] = -0x1000000 or (shade * 0x10101)
+                // Most pixels are fully covered or revealed. Skip the easing math
+                // outside the transition; both colors match the original formula.
+                pixels[i] = when {
+                    distance >= radius -> -0x1000000
+                    distance == 0f -> -1
+                    else -> {
+                        // Smooth easing avoids gray/checkerboard edge bands.
+                        val fraction = (distance / radius).coerceIn(0f, 1f)
+                        val smooth = fraction * fraction * (3f - 2f * fraction)
+                        val shade = ((1f - smooth) * 255f).roundToInt().coerceIn(0, 255)
+                        -0x1000000 or (shade * 0x10101)
+                    }
+                }
             }
         }
         bitmap.setPixels(pixels, 0, width, 0, 0, width, height)
@@ -1061,7 +1068,7 @@ object FogBitmapRenderer {
     const val CLOUD_MEDIUM_METERS = 250_000.0
     const val CLOUD_BROAD_METERS = 6_400_000.0
     // Confirmed/pending blue roads stay visible farther out than the cleared fog corridor.
-    const val MIN_ROAD_ZOOM = 6.0
+    const val MIN_ROAD_ZOOM = 5.0
     const val MIN_FOG_REVEAL_ZOOM = 3.5
     const val MAX_ZOOM = 20.0
     const val CENTER_ZOOM = 18.0

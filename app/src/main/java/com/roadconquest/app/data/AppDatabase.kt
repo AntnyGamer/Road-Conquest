@@ -10,6 +10,13 @@ class AppDatabase private constructor(context: Context) :
     internal val historyLock = Any()
     @Volatile internal var historyGeneration = 0L
 
+    // Protected by historyLock. Totals can stay unchanged when delayed matching
+    // moves a first visit across a week boundary or changes its eligibility.
+    internal var weeklyEligibilityRevision = 0L
+        private set
+
+    internal fun invalidateWeeklyEligibility() { weeklyEligibilityRevision++ }
+
     // Summary reads happen frequently while the UI is open. Keep exact in-memory aggregates
     // between writes so large driving histories do not need to be rescanned just to redraw stats.
     // Any caller that asks for the raw database disables this cache because it may mutate tables

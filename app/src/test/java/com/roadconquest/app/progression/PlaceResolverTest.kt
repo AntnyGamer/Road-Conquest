@@ -17,6 +17,27 @@ import java.util.Locale
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31, 37], manifest = Config.NONE)
 class PlaceResolverTest {
+    @Test fun resetDuringStateLookupNeverStartsTheFollowingTownLookup() {
+        val context = org.robolectric.RuntimeEnvironment.getApplication()
+        com.roadconquest.app.util.Prefs.setDeviceDataDeletionPending(context, false)
+        assertNull(PlaceResolver.resolveWithoutGeocoder(context, candidate,
+            com.roadconquest.app.map.PlaceOverlayCache.generation(),
+            stateLookup = { _, _ ->
+                com.roadconquest.app.map.PlaceOverlayCache.clear(context)
+                "New Jersey"
+            },
+            townLookup = { fail("A stale lookup must stop before the next remote request"); null }))
+    }
+
+    @Test fun staleBatchGenerationCannotStartALookup() {
+        val context = org.robolectric.RuntimeEnvironment.getApplication()
+        val generation = com.roadconquest.app.map.PlaceOverlayCache.generation()
+        com.roadconquest.app.map.PlaceOverlayCache.clear(context)
+        assertNull(PlaceResolver.resolve(context, candidate, addressesOverride = emptyList(),
+            stateLookup = { _, _ -> fail("The old batch must not start Census"); null },
+            cacheGeneration = generation))
+    }
+
     private fun cached(place: PlaceDiscovery, polygon: JSONObject) =
         PlaceResolver.VerifiedMunicipalCache.CachedPolygon(place) { polygon }
 

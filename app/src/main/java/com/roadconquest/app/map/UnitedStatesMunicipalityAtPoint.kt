@@ -93,7 +93,10 @@ internal object UnitedStatesMunicipalityAtPoint {
         return UnitedStatesMunicipalBoundaries.stateNameFromFips(fips)
     }
 
-    fun fetch(seed: PlaceDiscovery): Result? {
+    fun fetch(seed: PlaceDiscovery): Result? = fetch(seed, { true })
+
+    internal fun fetch(seed: PlaceDiscovery, isCurrent: () -> Boolean,
+                       loadBody: (String) -> String = ::readMunicipalityBody): Result? {
         val state = UnitedStatesMunicipalBoundaries.stateCode(
             seed.countryName, seed.parentName
         ) ?: return null
@@ -106,6 +109,7 @@ internal object UnitedStatesMunicipalityAtPoint {
             listOf(4, 3, 1)
         } else listOf(4, 1)
         for (layer in layers) {
+            if (!isCurrent() || Thread.currentThread().isInterrupted) return null
             val request = Uri.parse("$BASE/$layer/query").buildUpon()
                 .appendQueryParameter("where", "STATE = '$state'")
                 .appendQueryParameter("geometry", "${seed.longitude},${seed.latitude}")
@@ -119,30 +123,33 @@ internal object UnitedStatesMunicipalityAtPoint {
                 .appendQueryParameter("resultRecordCount", "20")
                 .appendQueryParameter("f", "geojson")
                 .build().toString()
-            val connection = censusConnection(request, geoJson = true)
-            val body = try {
-                if (connection.responseCode !in 200..299) {
-                    throw IOException("Census municipality service HTTP ${connection.responseCode}")
-                }
-                connection.inputStream.bufferedReader().use { reader ->
-                    val builder = StringBuilder()
-                    val buffer = CharArray(8192)
-                    while (true) {
-                        val length = reader.read(buffer)
-                        if (length < 0) break
-                        if (builder.length + length > MAX_RESPONSE_CHARS) {
-                            throw IOException("Census municipality response too large")
-                        }
-                        builder.append(buffer, 0, length)
-                    }
-                    builder.toString()
-                }
-            } finally {
-                connection.disconnect()
-            }
+            val body = loadBody(request)
+            if (!isCurrent()) return null
             parseResponse(seed, body, layer)?.let { return it }
         }
         return null
+    }
+
+    private fun readMunicipalityBody(request: String): String {
+        val connection = censusConnection(request, geoJson = true)
+        return try {
+            if (connection.responseCode !in 200..299) {
+                throw IOException("Census municipality service HTTP ${connection.responseCode}")
+            }
+            connection.inputStream.bufferedReader().use { reader ->
+                val builder = StringBuilder()
+                val buffer = CharArray(8192)
+                while (true) {
+                    val length = reader.read(buffer)
+                    if (length < 0) break
+                    if (builder.length + length > MAX_RESPONSE_CHARS) {
+                        throw IOException("Census municipality response too large")
+                    }
+                    builder.append(buffer, 0, length)
+                }
+                builder.toString()
+            }
+        } finally { connection.disconnect() }
     }
 
     /** Parsing is independently testable without accessing the network. */

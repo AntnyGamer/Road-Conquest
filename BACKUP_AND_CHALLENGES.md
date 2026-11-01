@@ -4,22 +4,45 @@ Settings → **Import and restore progress** accepts authenticated Road Conquest
 the current CSV format (schema 12). It includes first-unlock timestamps for map tiles,
 compressed driving fixes, and reversible spreadsheet-safe text escaping.
 
-Settings exports a **password-free, export-only .zip** on GitHub and Play builds.
-It contains the original CSV tables and metadata, including readable GPS history.
-Keep the exported ZIP private. It is deliberately unsigned and **cannot be imported
-back into Road Conquest**, even if it contains valid data. Export does not require
-Google Play, internet, a passphrase, or a signing service.
+Settings → **Export progress** offers exactly two manual formats:
 
-The restore flow accepts current-format encrypted `.rcbackup` archives with their
-passphrase and current-format Play-signed ZIPs with valid signatures. These
-are separate from the export-only ZIPs.
+- **Secure backup (.rcbackup):** Restorable on Google Play and GitHub installations.
+- **Readable ZIP (export-only):** Unencrypted CSV/metadata for spreadsheet or ChatGPT
+  driving analysis. It cannot be restored into Road Conquest.
+
+The secure .rcbackup works on both
+Google Play and GitHub installations. An existing Road Conquest account and
+internet connection are required. The account service sends a versioned per-account
+256-bit encryption key over HTTPS; the backup and GPS history never leave the
+phone except for the user-selected export file. AES-256-GCM encrypts each bounded
+record and authenticates its position, file header and final end marker. A changed,
+truncated or reordered backup cannot be restored. No additional backup password
+is required.
+
+To restore on any compatible installation, sign in to the **same account** and
+select the .rcbackup. A different account, an altered file or a corrupted GCM
+authentication tag is rejected before data replacement. Do not delete the
+account or remove an older backup-master-key version while its backups
+still need to be restored. The backup master key is independent of the
+account password pepper. Preserve the master keyring securely across deployments.
+Protect account sessions: anyone who obtains the key by authenticating as the
+owner can decrypt and re-encrypt files. No local export is evidence of verified
+GPS driving; restored progress never earns fresh verified leaderboard credit.
+
+The importer continues to recognize already-created, valid Play-signed ZIPs and
+older password-encrypted .rcbackup files, but Settings no longer creates either
+format. It rejects new readable export-only ZIPs; those are not backups.
+Neither export is uploaded to cloud storage automatically. The account service only
+provides the secure backup encryption key; export files stay wherever users save them.
+ChatGPT can analyze the CSV files inside a readable ZIP if the user uploads it,
+but results depend on data quality, missing GPS fixes and the model's file-processing limits.
 
 The importer validates archive entries, CRCs, exact CSV columns, UTF-8, coordinates,
 geometry, timestamps, unique keys, road references, row counts, mileage and the points
 ledger before showing a replacement confirmation. It parses quoted names and multiline
 fields, uses bounded streaming into a private staging database, rejects duplicate or
 unexpected/path-traversal entries, and caps compressed and expanded data at 512 MiB.
-Export enforces the same expanded-data limit without requesting an archive signature.
+Export enforces the same expanded-data limit and authenticates every record with AES-GCM.
 
 Before replacement, one private recovery ZIP is saved on the phone. **Restore progress
 from before last import** can recover it offline on the same installation (the current state is
@@ -55,7 +78,7 @@ No verification evidence is collected or uploaded while hidden. Local weekly goa
 friend management remain available; the ranking implementation and existing scores are
 retained for a later enabled build.
 
-Free trip history covers 100 recent drives with basic distance, duration, newly matched roads, newly rewarded towns, dated new map tiles and pending GPS matching counts. VIP extends browsing to 500 drives and enables sharing text summaries and user-selected GPX files. GPX offers a privacy-first option that omits the first and last two minutes, or a deliberate full-route export. Free full-progress ZIP export/restore remains available to everyone.
+Free trip history covers 100 recent drives with basic distance, duration, newly matched roads, newly rewarded towns, dated new map tiles and pending GPS matching counts. VIP extends browsing to 500 drives and enables sharing text summaries and user-selected GPX files. GPX offers a privacy-first option that omits the first and last two minutes, or a deliberate full-route export. Free authenticated progress backup and restore remain available to everyone.
 
 Trip replay respects raw GPS gaps even when the displayed route is downsampled. A trip
 selected before data deletion/restore cannot replay unrelated replacement history.

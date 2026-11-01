@@ -24,6 +24,13 @@ function configuredOrigin(value) {
   }
 }
 
+// Public documents/status responses do not use client identity or rate limits.
+// Keep the lookup set shared rather than rebuilding it for every request.
+const PUBLIC_READS = new Set(['/health/live', '/privacy', '/delete-account', '/v1/competition', '/v1/backups']);
+function needsSignedIdentity(method, pathname) {
+  return !((method === 'GET' || method === 'HEAD') && PUBLIC_READS.has(pathname));
+}
+
 function trustedEdgeIp(request) {
   // Same-zone Worker subrequests can derive CF-Connecting-IP from a mutable
   // x-real-ip header. Do not turn an upstream Worker's claim into our signature.
@@ -81,7 +88,7 @@ export function createAccountIngress(upstreamFetch = fetch, now = () => Date.now
           name === "cf-worker" || name.startsWith("x-forwarded-") ||
           name.startsWith("x-roadconquest-client-")) forwarded.headers.delete(name);
     }
-    const ip = trustedEdgeIp(request);
+    const ip = needsSignedIdentity(request.method, incoming.pathname) ? trustedEdgeIp(request) : null;
     if (ip) {
       const timestamp = String(now());
       const signature = await signedClientIdentity(

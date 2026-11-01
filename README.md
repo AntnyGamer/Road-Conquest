@@ -1,4 +1,4 @@
-# Road Conquest Release 1.0
+# Road Conquest 1.0.1
 
 Road Conquest remembers the roads you drive and the places you visit, revealing them through a
 cloud-textured fog map.
@@ -7,7 +7,7 @@ cloud-textured fog map.
 [Source and issues](https://github.com/AntnyGamer/Road-Conquest) ·
 [GNU AGPL v3 license](LICENSE)
 
-**Release 1.0** improves historic town discovery from saved GPS, map controls, town-badge balance, and local performance. See the [release notes](RELEASE_NOTES.md) and [town completion details](TOWN_COMPLETION.md).
+**1.0.1** adds portable private backups and fixes delayed discovery rewards and location lookups after local-data deletion. See the [release notes](RELEASE_NOTES.md) and [backup documentation](BACKUP_AND_CHALLENGES.md).
 
 Earlier beta history is available in [GitHub Releases](https://github.com/AntnyGamer/Road-Conquest/releases).
 
@@ -17,7 +17,7 @@ Android 12 or newer is required. Download the signed APK from Releases for direc
 The GitHub APK uses the permanent upload key and updates compatible GitHub-installed betas.
 For an app installed through Google Play, update through Play instead: Play uses its separate
 app-signing key. Do not uninstall or clear app data to work around a signature error.
-Do not change installation channels without a compatible restorable backup. Password-free ZIP exports are archive-only and cannot be imported; authenticated backups in the current format can be restored.
+Do not change installation channels without a restorable backup. The current .rcbackup format works across GitHub and Play installations: sign in to the same Road Conquest account to create or restore it. A network connection is required; no separate backup password is needed. Do not uninstall or reset your phone until the backup has been created successfully.
 For Google Play, download the **signed** `RoadConquest-<version>.aab` from the [GitHub Releases](https://github.com/AntnyGamer/Road-Conquest/releases) page, not the unsigned intermediate from GitHub Actions. The Actions artifact is named `android-build-inputs-unsigned` and contains `app-release-UNSIGNED-DO-NOT-UPLOAD.aab`, which Google Play cannot accept. Each release also includes the Android Studio project and SHA-256 checksums.
 
 If Play still reports an invalid signature for the **signed release** bundle, compare the SHA-256 fingerprint under Play Console → Test and release → App integrity → **Upload key certificate** (not the separate Google Play **App signing key certificate**) with the release upload key:
@@ -30,7 +30,7 @@ Grant Precise location. For automatic background tracking, choose Allow all the 
 location settings and allow background battery use. Settings includes shortcuts to the relevant
 Android screens. Allow notifications to see the tracking notification and its Stop tracking control.
 
-Release 1.0 uses Android application ID `com.roadconquest.app`, internal version code **97**, and GitHub tag `release-v1.0`. Earlier development builds used other tags; these remain in GitHub history. Google Play permanently reserves uploaded version codes, even in testing tracks, so confirm 97 is unused before uploading. The app shows its exact version in Settings → Help & about.
+Version 1.0.1 uses Android application ID `com.roadconquest.app`, internal version code **98**, and GitHub tag `v1.0.1`. Google Play permanently reserves uploaded version codes, even in testing tracks, so confirm 98 is unused before uploading. The app shows its exact version in Settings → Help & about.
 
 ## Explore
 
@@ -61,7 +61,7 @@ Release 1.0 uses Android application ID `com.roadconquest.app`, internal version
   tiles. Tap the labeled **Garage · ⚔ points** chip to open the shop. The bottom bar keeps
   three primary destinations—**Trips**, **Badges** and **Goals**—without a duplicate Garage
   button. Settings organizes detailed totals into Driving, Exploration, Progression,
-  Tracking, and Data & Backup sections.
+  Tracking, and Backups & data sections.
 - Open Garage & Shop to buy and equip car shapes, car colors, road colors, or the Golden
   Road Conquest UI and launcher icon. Purchases are one-time and equipped cosmetics can be changed later.
 - Choose Streets, Minimal, Night or Satellite maps, and a Light, Dark or phone-controlled appearance.
@@ -74,13 +74,19 @@ Release 1.0 uses Android application ID `com.roadconquest.app`, internal version
 - Browse achievements by **Road Conquest**, **Mileage**, **Exploration**, and **Ad Rewards**. Retired low-battery Bonus challenges and their empty category are no longer shown.
   Optional rewarded ads in the Garage grant the displayed points only after confirmed completion, and count toward ad milestones.
 - Use automatic tracking or control it manually. Stop tracking from the foreground notification.
-- Export driving history, road geometry, explored places, place discoveries, point awards,
-  purchases and progression counters from Settings as a readable, password-free
-  **export-only .zip** on GitHub and Play installations. The archive can be inspected
-  externally but **cannot be imported or restored into Road Conquest**; it contains
-  sensitive GPS history, so store it privately. Current-format authenticated
-  backups can be restored separately. The Settings summary shows
-  when a complete export was last made. Tile first-unlock times are included in backups.
+- **Export progress** offers exactly two choices on Google Play and GitHub installs:
+  **Secure backup (.rcbackup)** encrypts progress and authenticates changes. It can be
+  restored on another installation after signing into the same Road Conquest account
+  with internet access; no separate backup passphrase is required. The account
+  service supplies a per-account key over HTTPS but never receives the backup file
+  or GPS history. **Readable ZIP (export-only)** contains CSV history, road
+  geometries, discovered places and progression data so it can be opened in
+  spreadsheet tools or uploaded to ChatGPT for driving analysis. It cannot be
+  restored into Road Conquest. It is **not encrypted** and contains sensitive
+  location history: inspect and share it deliberately. Deleting your account
+  or losing a configured version of the dedicated backup master key makes the
+  corresponding backups unreadable. Planned key rotation preserves older versions.
+  Restored data does not grant new verified scores. Settings shows the last export.
 - Create an optional account, change your username and manage leaderboard visibility. There are exactly two destructive account/data actions in the app: Account → Delete account removes the cloud account while keeping saved device history and requires the current account password; Settings → Backups & data → Delete local data removes all local Road Conquest data while keeping the cloud account and leaderboard scores and requires typing the exact local confirmation phrase. Local full-data deletion works while signed out, stops tracking, disables verified-drive sharing and removes private interrupted-export snapshots.
 
 Map drawing and viewport refresh timers stop while the map activity is hidden. Returning reloads
@@ -154,7 +160,7 @@ These choices keep the progression system from adding continuous background netw
 ## Build and verify
 
 Open the project in Android Studio with JDK 21 or newer, Android SDK 37.0 and Build Tools 36.0.0.
-The wrapper pins Gradle 9.8.1 with a verified checksum and Android Gradle Plugin 9.4.1.
+The wrapper pins Gradle 9.8.2 with a verified checksum and Android Gradle Plugin 9.4.1.
 
 ```sh
 ./gradlew :app:testDebugUnitTest :app:lintDebug :app:lintRelease :app:assembleDebug :app:assembleRelease :app:bundleRelease
@@ -196,6 +202,10 @@ See [server setup](server/README.md) and the [physical-device checklist](ANDROID
 ## Google Play submission
 
 The release bundle targets API 37, uses application ID `com.roadconquest.app`, and is signed for Play upload. GitHub embeds all four full MapLibre native debug-symbol libraries into the AAB, along with the R8 mapping, and validates it with Google's `bundletool` both before and after signing. No extra Play Console uploads are needed. Only the signed release AAB is submitted. The standalone symbol ZIP is omitted because its full contents are already stored in the AAB.
+These full symbols are development metadata, not installed on phones. Play delivers native
+libraries for each device's supported ABI instead of the four-ABI GitHub APK.
+The release build uses R8 and resource shrinking to reduce installed code and resources;
+CI reports compressed bytecode, resources and each ABI separately from debug symbols.
 CI verifies 16 KB native-library packaging/alignment before publication, in addition to unit tests, lint,
 release builds, account-server tests, and native map tests on supported Android generations.
 The account service exposes browser pages at `/privacy` and `/delete-account`. The app links the privacy policy from
@@ -205,35 +215,6 @@ covering precise location, background use, road matching, and optional verified 
 Play Console still requires the publisher to complete the Data safety form, background-location declaration,
 developer/package registration, store listing assets, review access where applicable, and the other account-level
 declarations that cannot be supplied by source code alone.
-
-## Beta 20 embedded native debug symbols and Play validation
-
-Beta 19's signed AAB was rejected by Play Console even though its JAR
-signature verified and the upload key matched the registered certificate.
-The exact cause is not confirmed. Beta 20 validates the AAB with Google's
-`bundletool` both after packaging and after signing; it also verifies the
-actual signature and upload-key fingerprint.
-
-All four **full, unstripped** MapLibre native debug-symbol libraries remain
-**embedded directly in the AAB** alongside the automatically embedded R8
-mapping. GitHub verifies their build IDs match the packaged libraries and
-checks that each embedded symbol file is byte-for-byte identical to its
-original. Metadata uses lossless maximum ZIP compression. Nothing is
-stripped and **only one AAB upload** is needed for Google Play.
-
-The large native debug data increases the GitHub AAB download size, but
-is not installed as application code on users' devices. Beta 20 omits
-the redundant standalone native-symbol ZIP from release assets to avoid
-storing the same full symbols twice. The full symbols can be extracted
-from the AAB if needed. This does not change the app's runtime behavior.
-
-## Beta 19 startup hotfix
-
-Beta 18's minified release crashed before the main screen: R8 removed the public no-argument
-constructor used by Room to create AdMob's WorkManager database. Beta 19 preserves that constructor.
-Publication now also requires two cold launches of the minified release APK on Android 12 and 17,
-using the exact unsigned APK produced by the release build before permanent signing. Install the
-signed Beta 19 APK as an update to retain local driving history; do not uninstall or clear storage.
 
 ## Ads
 
@@ -254,11 +235,9 @@ ad failures never block the rest of the screen.
 
 Before distributing live ads, publish the appropriate messages in AdMob **Privacy & messaging**,
 complete AdMob app/store verification and readiness review, and declare ads and the SDK's data
-collection in Play Console. Deploy the updated account-service bundle so `/privacy` includes the
-advertising disclosure, and allow version code 53 for verified scoring. GitHub release publication
-builds and attaches that bundle; it does not deploy the account service or change AdMob/Play settings.
-Ad requests have their own network, memory, storage, and battery costs; this release retains the
-Beta 17 map/tracking optimizations but does not claim ads have zero overhead.
+collection in Play Console. Keep the account service's `/privacy` advertising disclosure deployed. GitHub release jobs
+attach the tested backend bundle but do not deploy it or modify AdMob/Play settings.
+Ads have network, memory, storage and battery costs.
 
 ## Privacy and map credits
 
@@ -267,14 +246,15 @@ road segments can be recognized locally on a repeat drive; new road matching sen
 coordinate batches through the Road Conquest gateway to Geoapify. Town/state/country labels are requested through
 Android's system geocoder only while Road Conquest is foregrounded; the geocoder implementation and
 network behavior are supplied by the device. Pending data remains saved for retry after network or
-matching failures. User-selected ZIP exports contain precise history, road geometry and progression data.
-Protected exports require internet and production Play app verification; only a SHA-256 fingerprint
-and attestation are sent for signing. Restore rejects changed or unsigned files. Verification keys
-are fetched over HTTPS once per installation/key and saved for later offline checks. The private
-pre-restore recovery copy works offline on the same installation. Imported history, including delayed
-matching and town discovery, cannot earn new weekly challenge credit or change verified rankings.
-Restored local history and previously earned local rewards remain visible. See the account server
-README for signing-key setup required before releasing this change.
+matching failures. Settings → Backups & data offers two manual exports. **Secure backup** creates an
+AES-256-GCM-encrypted `.rcbackup` file that works across Google Play and GitHub builds;
+it needs a Road Conquest sign-in and internet access to get the account-bound key.
+**Readable ZIP** exports CSV files for analysis, but is unencrypted, contains precise
+location history, and cannot be restored. Neither file is uploaded automatically.
+Restore rejects altered secure backups and excludes imported history from new verified
+leaderboard or weekly challenge credit. Older authenticated Play-signed and passphrase
+backups remain restorable. See [backup and restore details](BACKUP_AND_CHALLENGES.md)
+and [server key management](server/README.md#protected-local-backups).
 
 When enabled and available, verified scoring sends precise live GPS batches with Play Integrity
 evidence for independent server matching. The server retains scores, short-lived receipt hashes,

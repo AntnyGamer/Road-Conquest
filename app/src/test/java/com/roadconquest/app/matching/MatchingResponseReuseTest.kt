@@ -4,6 +4,7 @@ import android.app.Application
 import com.roadconquest.app.data.TrackPoint
 import com.roadconquest.app.services.ProviderHealth
 import okhttp3.mockwebserver.MockResponse
+import org.json.JSONObject
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.Assert.*
 import org.junit.Test
@@ -38,6 +39,27 @@ class MatchingResponseReuseTest {
             server.enqueue(MockResponse().setBody(body))
             assertNotNull(matcher.match(points(0).map { it.copy(timestampMillis = it.timestampMillis + 1000) }))
             assertEquals(5, server.requestCount)
+        }
+    }
+
+    @Test fun cachedMissNeverReusesAPayloadAfterTheGpsWindowChanges() {
+        for (primary in listOf(true, false)) MockWebServer().use { server ->
+            server.start()
+            val body = if (primary) """{"type":"FeatureCollection","features":[]}"""
+                else """{"code":"NoMatch"}"""
+            repeat(3) { server.enqueue(MockResponse().setBody(body)) }
+            val matcher: RoadMatcher = if (primary) GeoapifyMatcher(server.url("/").toString(), ProviderHealth())
+                else LocationIqMatcher(server.url("/").toString(), ProviderHealth())
+            assertNotNull(matcher.match(points(0))) // Prime the exact-response cache.
+            assertNull(matcher.cachedMatch(points(1)))
+            val different = points(1).map { it.copy(longitude = it.longitude + 0.002) }
+            assertNotNull(matcher.match(different))
+            assertEquals(2, server.requestCount)
+            server.takeRequest()
+            val sent = JSONObject(server.takeRequest().body.readUtf8())
+                .getJSONArray("waypoints").getJSONObject(0).getJSONArray("location")
+            assertEquals(different[0].longitude, sent.getDouble(0), 0.0)
+            assertEquals(different[0].latitude, sent.getDouble(1), 0.0)
         }
     }
 

@@ -12,6 +12,30 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31], manifest = Config.NONE)
 class UnitedStatesMunicipalityAtPointTest {
+    @Test fun invalidationDuringOneLayerStopsAllLaterLayerRequests() {
+        var current = true
+        val requests = mutableListOf<String>()
+        assertNull(UnitedStatesMunicipalityAtPoint.fetch(seed(), { current }) { request ->
+            requests += request
+            current = false
+            response()
+        })
+        assertEquals(1, requests.size)
+        assertTrue(requests.single().contains("/4/query"))
+    }
+
+    @Test fun activeLookupStillFallsBackToTheCountySubdivision() {
+        val requests = mutableListOf<String>()
+        val result = UnitedStatesMunicipalityAtPoint.fetch(seed(), { true }) { request ->
+            requests += request
+            if (request.contains("/4/query")) response()
+            else response(feature("Actual township", "34", -75.04, -75.01))
+        }
+        assertEquals("Actual township", result!!.place.displayName)
+        assertEquals(2, requests.size)
+        assertTrue(requests.last().contains("/1/query"))
+    }
+
     private fun seed(state: String = "New Jersey") = PlaceDiscovery(
         PlaceKind.TOWN, "us|${state.lowercase()}|wrong postal town",
         "Wrong Postal Town", state, "United States", 1_000L, 39.82, -75.03

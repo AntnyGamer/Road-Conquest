@@ -15,7 +15,8 @@ object AccountClient {
     data class Account(
         val username: String,
         val token: String?,
-        val leaderboardVisible: Boolean
+        val leaderboardVisible: Boolean,
+        val competition: JSONObject? = null
     )
 
     class ApiException(message: String, val status: Int? = null) : Exception(message)
@@ -33,7 +34,8 @@ object AccountClient {
         return Account(
             body.getString("username"),
             null,
-            body.optBoolean("leaderboard_visible", false)
+            body.optBoolean("leaderboard_visible", false),
+            body.optJSONObject("competition")
         )
     }
 
@@ -86,6 +88,24 @@ object AccountClient {
 
     fun competition(): JSONObject = request("/v1/competition", "GET", null, null).also {
         if (it.optBoolean("available")) requireVerifiedPolicy(it)
+    }
+
+    /** Account-bound key from a dedicated, versioned server keyring; no backup bytes uploaded. */
+    fun backupEncryptionKey(token: String, keyId: String? = null): Pair<String, ByteArray> {
+        require(keyId == null || keyId.matches(Regex("[A-Za-z0-9_-]{1,32}")))
+        val path = "/v1/backups/account-key" + (keyId?.let { "?key_id=$it" } ?: "")
+        val response = request(path, "GET", null, token)
+        val returnedId = response.getString("key_id")
+        require(returnedId.matches(Regex("[A-Za-z0-9_-]{1,32}")) &&
+            (keyId == null || returnedId == keyId)) { "Invalid backup key identifier." }
+        val encoded = response.getString("key")
+        require(encoded.matches(Regex("[A-Za-z0-9_-]{43}"))) { "Invalid backup key response." }
+        val key = android.util.Base64.decode(encoded, android.util.Base64.URL_SAFE or
+            android.util.Base64.NO_WRAP or android.util.Base64.NO_PADDING)
+        require(key.size == 32 && android.util.Base64.encodeToString(key,
+            android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP or
+                android.util.Base64.NO_PADDING) == encoded) { "Invalid backup key response." }
+        return returnedId to key
     }
 
     fun backupKeys(): JSONObject = request("/v1/backups", "GET", null, null)
