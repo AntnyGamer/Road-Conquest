@@ -6,15 +6,17 @@ import com.roadconquest.app.account.AccountStore
 import com.roadconquest.app.data.TrackingRepository
 import com.roadconquest.app.util.Prefs
 import java.io.File
-import java.io.InputStream
 import java.io.OutputStream
 
 /** Portable account-bound encrypted backups for Play and GitHub installations. */
 object AccountBackup {
-    private fun sessionKey(context: Context, keyId: String? = null): Pair<String, Pair<String, ByteArray>> {
+    private data class SessionKey(val token: String, val id: String, val bytes: ByteArray)
+
+    private fun sessionKey(context: Context, keyId: String? = null): SessionKey {
         val token = AccountStore.load(context)?.token
             ?: error("Sign in to your Road Conquest account to create or restore a backup.")
-        return token to AccountClient.backupEncryptionKey(token, keyId)
+        val (id, bytes) = AccountClient.backupEncryptionKey(token, keyId)
+        return SessionKey(token, id, bytes)
     }
 
     fun isEncrypted(file: File): Boolean {
@@ -27,8 +29,7 @@ object AccountBackup {
     }
 
     fun writePortable(context: Context, repository: TrackingRepository, output: OutputStream) {
-        val (token, secret) = sessionKey(context)
-        val (keyId, key) = secret
+        val session = sessionKey(context)
         try {
             var written = 0L
             val bounded = object : OutputStream() {
@@ -45,7 +46,7 @@ object AccountBackup {
                 override fun flush() = output.flush()
                 override fun close() = output.close()
             }
-            EncryptedBackupCodec.Writer(bounded, keyId, key).use { encrypted ->
+            EncryptedBackupCodec.Writer(bounded, session.id, session.bytes).use { encrypted ->
                 DataExporter.writeZip(context, repository, object : OutputStream() {
                     override fun write(value: Int) = encrypted.write(value)
                     override fun write(buffer: ByteArray, offset: Int, length: Int) =
@@ -57,10 +58,10 @@ object AccountBackup {
                 })
             }
             check(repository.isHistoryCurrent() && !Prefs.isDeviceDataDeletionPending(context) &&
-                AccountStore.load(context)?.token == token) {
+                AccountStore.load(context)?.token == session.token) {
                 "Progress or account changed during backup. Export again."
             }
-        } finally { key.fill(0) }
+        } finally { session.bytes.fill(0) }
     }
 
     fun decrypt(context: Context, encrypted: File, destination: File) {
@@ -69,12 +70,12 @@ object AccountBackup {
         try {
             encrypted.inputStream().buffered().use { source ->
                 val header = EncryptedBackupCodec.readHeader(source)
-                val (token, secret) = sessionKey(context, header.id)
-                key = secret.second
+                val session = sessionKey(context, header.id)
+                key = session.bytes
                 destination.outputStream().use { output ->
-                    EncryptedBackupCodec.decrypt(source, output, key!!, header, DataImporter.MAX_BYTES)
+                    EncryptedBackupCodec.decrypt(source, output, session.bytes, header, DataImporter.MAX_BYTES)
                 }
-                check(AccountStore.load(context)?.token == token) {
+                check(AccountStore.load(context)?.token == session.token) {
                     "Account changed while checking the backup. Try again."
                 }
             }
