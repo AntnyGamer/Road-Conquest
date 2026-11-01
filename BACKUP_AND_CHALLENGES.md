@@ -12,16 +12,19 @@ Settings → **Export progress** offers exactly two manual formats:
 
 The secure .rcbackup works on both
 Google Play and GitHub installations. An existing Road Conquest account and
-internet connection are required. The account service sends a stable per-account
+internet connection are required. The account service sends a versioned per-account
 256-bit encryption key over HTTPS; the backup and GPS history never leave the
-phone except for the user-selected export file. AES-256-GCM encrypts the file and
-detects changes to its contents. No additional backup password is required.
+phone except for the user-selected export file. AES-256-GCM encrypts each bounded
+record and authenticates its position, file header and final end marker. A changed,
+truncated or reordered backup cannot be restored. No additional backup password
+is required.
 
 To restore on any compatible installation, sign in to the **same account** and
 select the .rcbackup. A different account, an altered file or a corrupted GCM
 authentication tag is rejected before data replacement. Do not delete the
-account or rotate the account service's password-pepper secret while backups
-still need to be restored; those changes make account-key recovery impossible.
+account or remove an older backup-master-key version while its backups
+still need to be restored. The backup master key is independent of the
+account password pepper. Preserve the master keyring securely across deployments.
 Protect account sessions: anyone who obtains the key by authenticating as the
 owner can decrypt and re-encrypt files. No local export is evidence of verified
 GPS driving; restored progress never earns fresh verified leaderboard credit.
@@ -39,7 +42,7 @@ geometry, timestamps, unique keys, road references, row counts, mileage and the 
 ledger before showing a replacement confirmation. It parses quoted names and multiline
 fields, uses bounded streaming into a private staging database, rejects duplicate or
 unexpected/path-traversal entries, and caps compressed and expanded data at 512 MiB.
-Export enforces the same expanded-data limit and authenticates its encrypted contents with AES-GCM.
+Export enforces the same expanded-data limit and authenticates every record with AES-GCM.
 
 Before replacement, one private recovery ZIP is saved on the phone. **Restore progress
 from before last import** can recover it offline on the same installation (the current state is
