@@ -15,7 +15,8 @@ object AccountClient {
     data class Account(
         val username: String,
         val token: String?,
-        val leaderboardVisible: Boolean
+        val leaderboardVisible: Boolean,
+        val competition: JSONObject? = null
     )
 
     class ApiException(message: String, val status: Int? = null) : Exception(message)
@@ -33,7 +34,8 @@ object AccountClient {
         return Account(
             body.getString("username"),
             null,
-            body.optBoolean("leaderboard_visible", false)
+            body.optBoolean("leaderboard_visible", false),
+            body.optJSONObject("competition")
         )
     }
 
