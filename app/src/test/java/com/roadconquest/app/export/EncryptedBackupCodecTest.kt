@@ -6,6 +6,7 @@ import org.junit.Assert.assertThrows
 import org.junit.Test
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.io.EOFException
 import javax.crypto.AEADBadTagException
 
 class EncryptedBackupCodecTest {
@@ -52,7 +53,7 @@ class EncryptedBackupCodecTest {
         assertThrows(AEADBadTagException::class.java) {
             decrypt(original, ByteArray(32) { 7 })
         }
-        assertThrows(Exception::class.java) { decrypt(original.copyOf(original.size - 16)) }
+        assertThrows(EOFException::class.java) { decrypt(original.copyOf(original.size - 16)) }
         assertThrows(IllegalArgumentException::class.java) { decrypt(original + byteArrayOf(1)) }
     }
 
