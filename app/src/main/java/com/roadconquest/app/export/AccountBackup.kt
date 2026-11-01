@@ -20,7 +20,7 @@ object AccountBackup {
     }
 
     fun isEncrypted(file: File): Boolean {
-        if (file.length() < EncryptedBackupCodec.magic.size + 1 + 1 + 12 + 4 + 16) return false
+        if (file.length() < EncryptedBackupCodec.magic.size) return false
         return file.inputStream().use { source ->
             val prefix = ByteArray(EncryptedBackupCodec.magic.size)
             java.io.DataInputStream(source).readFully(prefix)
