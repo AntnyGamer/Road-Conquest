@@ -1068,7 +1068,7 @@ object FogBitmapRenderer {
     const val CLOUD_MEDIUM_METERS = 250_000.0
     const val CLOUD_BROAD_METERS = 6_400_000.0
     // Confirmed/pending blue roads stay visible farther out than the cleared fog corridor.
-    const val MIN_ROAD_ZOOM = 6.0
+    const val MIN_ROAD_ZOOM = 5.0
     const val MIN_FOG_REVEAL_ZOOM = 3.5
     const val MAX_ZOOM = 20.0
     const val CENTER_ZOOM = 18.0
