@@ -621,7 +621,7 @@ class SettingsActivity : Activity() {
         } else {
             "Verified scoring is unavailable."
         }
-        if (accountConfigured && competitionVisible) {
+        if (accountConfigured && competitionVisible && session == null) {
             accountExecutor.execute {
                 if (isDestroyed || isFinishing || refresh != accountRefreshGeneration) return@execute
                 val status = runCatching { AccountClient.competition() }
@@ -657,8 +657,26 @@ class SettingsActivity : Activity() {
             if (isDestroyed || isFinishing || refresh != accountRefreshGeneration ||
                 AccountStore.load(this)?.token != session.token) return@execute
             val result = runCatching { AccountClient.me(session.token) }
+            // The updated account response includes public competition availability.
+            // Older servers, and failed profile reads, retain the independent lookup.
+            val status = if (competitionVisible) runCatching {
+                val bundled = result.getOrNull()?.competition
+                if (bundled != null) {
+                    if (bundled.optBoolean("available")) AccountClient.requireVerifiedPolicy(bundled)
+                    bundled
+                } else AccountClient.competition()
+            } else null
             runOnUiThread {
                 if (isDestroyed || refresh != accountRefreshGeneration || AccountStore.load(this)?.token != session.token) return@runOnUiThread
+                status?.let {
+                    verificationStatus.text = it.fold(
+                        onSuccess = { response ->
+                            if (response.optBoolean("available")) "Verified scoring is available."
+                            else "Verified scoring is unavailable."
+                        },
+                        onFailure = { "Could not check verified scoring." }
+                    )
+                }
                 result.fold(
                     onSuccess = { account ->
                         val updated = AccountStore.refreshIfUnchanged(
