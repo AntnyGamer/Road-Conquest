@@ -46,30 +46,28 @@ This checklist is for final device-level validation on supported Android 12+ pho
 
 ## Progression and achievements
 
-1. Unlock a previously unseen road and verify the point balance increases by 5 exactly once.
+1. Unlock a previously unseen road and verify the point balance increases by **2** exactly once.
 2. Cross into a locality/state/country not already recorded, keep Road Conquest foregrounded briefly,
    and verify the relevant discovery count/points appear without repeated rewards on a revisit.
 3. Verify town/state/country achievement progress reflects the discovery counts.
-4. At 5% battery while Road Conquest is open or tracking, verify **Running on Fumes** unlocks once.
-   At 1%, verify **Last Percent** unlocks once. Ordinary battery levels must not affect progression.
-5. Confirm achievement category buttons show **Roads**, **Distance**, **Places**, **Ads**, and **Extra**. Battery achievements belong to Extra; ad milestones belong only to Ads.
-6. In Garage & Shop, complete an AdMob rewarded ad and confirm the earned points are saved once.
+4. Confirm achievement categories show **Road Conquest**, **Map Tiles**, **Distance**, **Exploration**, **Town Badges** and **Ad Rewards**. Retired low-battery achievements must not appear.
+5. In Garage & Shop, complete an AdMob rewarded ad and confirm the earned points are saved once.
    Verify the Ads achievement count advances toward the 5/10/25/50/100 milestones. Cancel or
    fail to load an ad and confirm neither points nor achievement progress increases.
 
-## Export
+## Export and restore
 
-1. Use **Export driving data** in Settings.
-2. Open the ZIP and verify `metadata.json`, `track_points.csv`, `roads.csv`,
-   `road_visits.csv`, `explored_places.csv`, `visited_places.csv`, `place_candidates.csv`,
-   `progression_rewards.csv`, `progression_purchases.csv`, and
-   `progression_counters.csv` are present. Metadata schema version is 8.
-3. Verify metadata point/discovery counts agree with their CSVs and equipped car/road/gold settings
-   match the app.
-4. Verify road rows contain segment ID, road name, first-unlocked time, last-driven time, and the
-   `coordinates_json` geometry array.
+1. In Settings → **Backups & data** → **Export progress**, verify there are exactly two choices: **Secure backup** and **Readable ZIP**. No cloud-backup option should appear.
+2. **Secure backup:** With a Road Conquest account and internet connection, save a `.rcbackup`. Sign into that same account in a GitHub or Play installation and restore it. Verify roads, tiles, mileage, points and purchases survive, without adding new verified or weekly credit.
+3. Confirm restoring with a different Road Conquest account, a modified file, a truncated file or the wrong key version fails **before** replacing local data. Failed restore must preserve existing progress.
+4. Confirm an account sign-out or offline connection prevents **new** secure backups and remote account-key recovery without deleting local progress. Check that recovery still works when signed in again.
+5. **Readable ZIP:** Export without signing in. Check `metadata.json` (schema version **12**) and all eleven CSVs: `track_points`, `skipped_driving_fixes`, `roads`, `road_visits`, `explored_places`, `explored_grid`, `visited_places`, `place_candidates`, `progression_rewards`, `progression_purchases`, and `progression_counters`.
+6. Confirm a readable ZIP opens in a spreadsheet or external analysis tool, and that Road Conquest **rejects** it as a restorable backup. It is unencrypted and contains precise location history.
+7. Validate the readable road rows include a segment ID, road name, first-unlocked and last-driven times, and coordinates. Verify exported counts and points against Settings.
+8. Cancel an export and interrupt one mid-write; ensure no successful-export timestamp is recorded for an incomplete file. Verify the destination is deleted if the document provider permits it, and no private snapshot remains after restart.
+9. Test successful restore of previously generated valid **Play-signed ZIP** and **passphrase-protected .rcbackup** files when those samples are available. These are legacy restore formats, not additional new export options.
 
-If all of the above pass on the target Android device and firmware, that provides the device-level validation that static analysis cannot substitute for.
+These are device-level acceptance checks, not substitutes for automated tests or a live backend check.
 
 ## Account maintenance
 
@@ -78,7 +76,7 @@ If all of the above pass on the target Android device and firmware, that provide
   must leave the original account unchanged.
 - Cancel both deletion confirmations and verify that all data remains.
 - **Account → Delete account** must require the current password, delete the cloud account/sessions/leaderboard data, and leave saved device history intact.
-- **Settings → Data and privacy → Delete all data** must remain available while signed out and require typing `I confirm I want to delete all of my local data.` exactly, including the period. A partial/mismatched phrase must not delete anything. After exact confirmation, local deletion must begin without any account or network dependency; the cloud account and leaderboard scores stay. Then tracking stops, verified-drive sharing turns off, history and fog reveals clear, points/purchases/cosmetics clear, and delayed road matches cannot restore them. The
+- **Settings → Backups & data → Delete local data** must remain available while signed out and require typing `I confirm I want to delete all of my local data.` exactly, including the period. A partial/mismatched phrase must not delete anything. After exact confirmation, local deletion must begin without any account or network dependency; the cloud account and leaderboard scores stay. Then tracking stops, verified-drive sharing turns off, history and fog reveals clear, points/purchases/cosmetics clear, and delayed road matches cannot restore them. The
   cloud account remains when only device data is deleted. Tracking and verified sharing can be
   explicitly re-enabled later.
 - Interrupt an export (for example by killing the app during export), reopen Road Conquest, then
