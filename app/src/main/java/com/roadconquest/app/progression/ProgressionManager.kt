@@ -87,6 +87,7 @@ object ProgressionManager {
         var added = 0
         var newestVisitAt = 0L
         var placesUpdated = false
+        var startingTownConfirmed = false
         var processed = 0
         while (processed < limit) {
             val candidates = repository.pendingPlaceCandidates(limit - processed)
@@ -107,12 +108,13 @@ object ProgressionManager {
                 if (discoveries.isNullOrEmpty()) {
                     repository.deferCandidate(candidate)
                 } else {
-                    val missingStartTown = repository.hasMissingStartingTown()
-                    // Most drives have an established starting municipality.
-                    // The reconciliation helper would immediately repeat the
-                    // same database check and return in that common case.
+                    // The missing-baseline flag can only clear during this serialized
+                    // batch, not reappear without a history reset. Avoid re-querying
+                    // SQLite for every subsequent resolved GPS candidate.
+                    val missingStartTown = !startingTownConfirmed && repository.hasMissingStartingTown()
                     if (missingStartTown) reconcileMissingStartingTown(context, repository, discoveries)
                     val startTownRecovered = missingStartTown && !repository.hasMissingStartingTown()
+                    if (!missingStartTown || startTownRecovered) startingTownConfirmed = true
                     val newPlaces = repository.resolveCandidate(candidate, discoveries)
                     added += newPlaces
                     // A zero-point baseline or a late recovery changes visited-place
