@@ -437,6 +437,45 @@ do not guarantee unlimited free service.
 
 ## Protected local backups
 
+### Current account-bound portable backups (new exports)
+
+Set **both** secret environment variables on the account service before deploying this
+app update:
+
+```text
+BACKUP_MASTER_KEYS_JSON={"v1":"<43-character base64url encoding of 32 random bytes>"}
+BACKUP_CURRENT_KEY_ID=v1
+```
+
+Generate the random 32-byte master key with a cryptographically secure generator in
+a trusted environment and save the exact keyring in durable private secret storage.
+Never put real values in Git, an APK, public release assets, or logs. The server
+**fails closed** for account backup requests (HTTP 503) when unconfigured. Supplying
+only one variable or a malformed keyring prevents server startup.
+
+`GET /v1/backups/account-key` returns `{key_id, key}` for a currently signed-in
+account, and `?key_id=v1` retrieves an older version for restoring an existing file.
+The raw archive, decrypted GPS or a copy of the master key is never returned or
+stored. The derived per-account key is delivered to the authenticated device over
+HTTPS; compromised sessions and server administrators with key access can decrypt
+backups, so these are **not end-to-end encrypted** against the operator.
+
+To rotate, add `v2` with a **new independent random 32-byte secret** to the JSON
+object, deploy it while keeping `BACKUP_CURRENT_KEY_ID=v1`, confirm restoration
+of existing backups, then update `BACKUP_CURRENT_KEY_ID=v2`. **Never discard v1
+until all v1 backups may be abandoned.** Rotation of `PASSWORD_PEPPER` is now
+independent of backup-file encryption, though changing the pepper can still
+invalidate account credentials and sessions.
+
+New files have an explicit authenticated key version, independently authenticated
+32 KiB AES-256-GCM records, and a mandatory authenticated terminator. All content
+stays in user-selected local files; there is no cloud backup or road storage.
+The readable export-only ZIP remains deliberately unencrypted and nonrestorable.
+Deploy the service *before* releasing the updated Android app, and test restore
+from both official signing channels before declaring the feature working.
+
+### Legacy Play-signed backups (restore compatibility only)
+
 Beta 65's exact target, secure key generation, offline configuration preflight,
 environment preservation, artifact packaging, rotation and release gates are in
 [the backend preparation runbook](BETA65_BACKEND_PREPARATION.md). The preparation
