@@ -44,7 +44,8 @@ object AccountBackup {
                     written += length
                 }
                 override fun flush() = output.flush()
-                override fun close() = output.close()
+                // The caller owns the output stream and closes it after export.
+                override fun close() = output.flush()
             }
             EncryptedBackupCodec.Writer(bounded, session.id, session.bytes).use { encrypted ->
                 DataExporter.writeZip(context, repository, object : OutputStream() {
