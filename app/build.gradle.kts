@@ -59,10 +59,10 @@ android {
             manifestPlaceholders["admobAppId"] = "ca-app-pub-4489303482171969~1528361127"
             buildConfigField("String", "ADMOB_BANNER_ID", "\"ca-app-pub-4489303482171969/1295506962\"")
             buildConfigField("String", "ADMOB_REWARDED_ID", "\"ca-app-pub-4489303482171969/2621950945\"")
-            // R8 reduces shipped bytecode and embeds the mapping metadata Play needs to
-            // deobfuscate Java/Kotlin crashes. Keep resource shrinking off to avoid changing
-            // resource reachability/packaging behavior solely for size.
+            // R8 and optimized resource shrinking remove unused shipped code/resources.
+            // MapLibre's own consumer rules protect JNI/reflection entry points.
             isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
