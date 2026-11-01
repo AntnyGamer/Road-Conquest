@@ -16,6 +16,7 @@ import {
 } from "./security.mjs";
 import { competitionConfig, createCompetition } from "./competition.mjs";
 import { createBackups } from "./backups.mjs";
+import { createAccountBackupKeys } from "./account-backup-keys.mjs";
 import { createIntegrityVerifier } from "./integrity.mjs";
 import { createFriends } from "./friends.mjs";
 import { createNotifications, createFcmSender } from "./notifications.mjs";
@@ -26,6 +27,7 @@ import { EvidenceError } from './scoring.mjs';
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL;
 const PEPPER = process.env.PASSWORD_PEPPER || "";
+const accountBackupKeys = createAccountBackupKeys(process.env);
 const REQUIRE_HTTPS = process.env.REQUIRE_HTTPS === "1";
 const TRUST_PROXY = process.env.TRUST_PROXY === "1";
 const SESSION_DAYS = 30;
@@ -293,19 +295,21 @@ async function handle(req, res) {
   if (req.method === "GET" && url.pathname === "/v1/backups") {
     return send(res, 200, backups.status()); // Public verification keys do not wake the database.
   }
-  // Portable backups use a stable, domain-separated per-account secret instead
-  // of Google Play licensing. No GPS archive or backup bytes reach the service.
-  // A different Road Conquest account cannot recover another account's key.
+  // Each account backup uses one versioned, dedicated 256-bit master secret.
+  // Keep older key IDs configured through rotation; never upload GPS archives.
   if (req.method === "GET" && url.pathname === "/v1/backups/account-key") {
     if (!bearerToken(req)) return send(res, 401, { error: "Sign in to use secure backups." });
+    if (!accountBackupKeys) return send(res, 503, { error: "Secure backup service is not configured." });
     const access = await rateLimitedUser(req, "backup-key-ip", 60, 60_000);
     if (!access.allowed) return send(res, 429, { error: "Try again later." });
     if (!access.user) return send(res, 401, { error: "Sign in to use secure backups." });
-    const key = createHmac("sha256", PEPPER)
-      .update("RoadConquestAccountBackup/v1\0", "utf8")
-      .update(String(access.user.id), "utf8")
-      .digest("base64url");
-    return send(res, 200, { key });
+    const requestedId = url.searchParams.get("key_id");
+    if (requestedId !== null && !/^[A-Za-z0-9_-]{1,32}$/u.test(requestedId)) {
+      return send(res, 400, { error: "Invalid backup key ID." });
+    }
+    const derived = accountBackupKeys.derive(access.user.id, requestedId ?? undefined);
+    return derived ? send(res, 200, derived) :
+      send(res, 410, { error: "Backup key version is no longer available." });
   }
 
   const ip = clientIp(req);
