@@ -52,6 +52,7 @@ internal object EncryptedBackupCodec {
         private val sink = DataOutputStream(destination)
         private val header: Header
         private val pending = ByteArray(RECORD_SIZE)
+        private val ciphertext = ByteArray(RECORD_SIZE + TAG_SIZE)
         private var used = 0
         private var sequence = 0
         private var finished = false
@@ -87,8 +88,10 @@ internal object EncryptedBackupCodec {
         }
 
         private fun emit(count: Int) {
+            val length = crypt(Cipher.ENCRYPT_MODE, key, header, sequence++, count)
+                .doFinal(pending, 0, count, ciphertext, 0)
             sink.writeInt(count)
-            sink.write(crypt(Cipher.ENCRYPT_MODE, key, header, sequence++, count).doFinal(pending, 0, count))
+            sink.write(ciphertext, 0, length)
             used = 0
         }
 
@@ -110,23 +113,24 @@ internal object EncryptedBackupCodec {
         val input = DataInputStream(source)
         var sequence = 0
         var written = 0L
-        // Reuse this buffer rather than allocating a new 32 KiB ciphertext array per record.
+        // Reuse both record buffers across the entire restore.
         val encrypted = ByteArray(RECORD_SIZE + TAG_SIZE)
+        val plaintext = ByteArray(RECORD_SIZE)
         while (true) {
             check(!Thread.currentThread().isInterrupted) { "Restore cancelled." }
             val count = input.readInt() // EOF before the authenticated terminator is an error.
             require(count in 0..RECORD_SIZE) { "Invalid backup record size." }
             input.readFully(encrypted, 0, count + TAG_SIZE)
-            val plaintext = crypt(Cipher.DECRYPT_MODE, key, header, sequence++, count)
-                .doFinal(encrypted, 0, count + TAG_SIZE)
-            check(plaintext.size == count) { "Invalid decrypted backup record." }
+            val decoded = crypt(Cipher.DECRYPT_MODE, key, header, sequence++, count)
+                .doFinal(encrypted, 0, count + TAG_SIZE, plaintext, 0)
+            check(decoded == count) { "Invalid decrypted backup record." }
             if (count == 0) {
                 require(input.read() == -1) { "Unexpected data after backup end." }
                 return
             }
             written += count
             require(written <= maxBytes) { "Backup exceeds 512 MB." }
-            destination.write(plaintext)
+            destination.write(plaintext, 0, decoded)
         }
     }
 }
