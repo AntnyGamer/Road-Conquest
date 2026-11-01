@@ -554,7 +554,8 @@ async function handle(req, res) {
     if (!profile.username_display) return send(res, 401, { error: "Authentication required." });
     return send(res, 200, {
       username: profile.username_display,
-      leaderboard_visible: profile.leaderboard_visible
+      leaderboard_visible: profile.leaderboard_visible,
+      competition: competition?.status() || { available: false }
     });
   }
 
