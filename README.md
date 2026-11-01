@@ -61,7 +61,7 @@ Release 1.0 uses Android application ID `com.roadconquest.app`, internal version
   tiles. Tap the labeled **Garage · ⚔ points** chip to open the shop. The bottom bar keeps
   three primary destinations—**Trips**, **Badges** and **Goals**—without a duplicate Garage
   button. Settings organizes detailed totals into Driving, Exploration, Progression,
-  Tracking, and Data & Backup sections.
+  Tracking, and Backups & data sections.
 - Open Garage & Shop to buy and equip car shapes, car colors, road colors, or the Golden
   Road Conquest UI and launcher icon. Purchases are one-time and equipped cosmetics can be changed later.
 - Choose Streets, Minimal, Night or Satellite maps, and a Light, Dark or phone-controlled appearance.
@@ -160,7 +160,7 @@ These choices keep the progression system from adding continuous background netw
 ## Build and verify
 
 Open the project in Android Studio with JDK 21 or newer, Android SDK 37.0 and Build Tools 36.0.0.
-The wrapper pins Gradle 9.8.1 with a verified checksum and Android Gradle Plugin 9.4.1.
+The wrapper pins Gradle 9.8.2 with a verified checksum and Android Gradle Plugin 9.4.1.
 
 ```sh
 ./gradlew :app:testDebugUnitTest :app:lintDebug :app:lintRelease :app:assembleDebug :app:assembleRelease :app:bundleRelease
@@ -212,35 +212,6 @@ Play Console still requires the publisher to complete the Data safety form, back
 developer/package registration, store listing assets, review access where applicable, and the other account-level
 declarations that cannot be supplied by source code alone.
 
-## Beta 20 embedded native debug symbols and Play validation
-
-Beta 19's signed AAB was rejected by Play Console even though its JAR
-signature verified and the upload key matched the registered certificate.
-The exact cause is not confirmed. Beta 20 validates the AAB with Google's
-`bundletool` both after packaging and after signing; it also verifies the
-actual signature and upload-key fingerprint.
-
-All four **full, unstripped** MapLibre native debug-symbol libraries remain
-**embedded directly in the AAB** alongside the automatically embedded R8
-mapping. GitHub verifies their build IDs match the packaged libraries and
-checks that each embedded symbol file is byte-for-byte identical to its
-original. Metadata uses lossless maximum ZIP compression. Nothing is
-stripped and **only one AAB upload** is needed for Google Play.
-
-The large native debug data increases the GitHub AAB download size, but
-is not installed as application code on users' devices. Beta 20 omits
-the redundant standalone native-symbol ZIP from release assets to avoid
-storing the same full symbols twice. The full symbols can be extracted
-from the AAB if needed. This does not change the app's runtime behavior.
-
-## Beta 19 startup hotfix
-
-Beta 18's minified release crashed before the main screen: R8 removed the public no-argument
-constructor used by Room to create AdMob's WorkManager database. Beta 19 preserves that constructor.
-Publication now also requires two cold launches of the minified release APK on Android 12 and 17,
-using the exact unsigned APK produced by the release build before permanent signing. Install the
-signed Beta 19 APK as an update to retain local driving history; do not uninstall or clear storage.
-
 ## Ads
 
 AdMob anchored adaptive banners appear in separate footers on Garage, Achievements, Leaderboards,
@@ -260,11 +231,9 @@ ad failures never block the rest of the screen.
 
 Before distributing live ads, publish the appropriate messages in AdMob **Privacy & messaging**,
 complete AdMob app/store verification and readiness review, and declare ads and the SDK's data
-collection in Play Console. Deploy the updated account-service bundle so `/privacy` includes the
-advertising disclosure, and allow version code 53 for verified scoring. GitHub release publication
-builds and attaches that bundle; it does not deploy the account service or change AdMob/Play settings.
-Ad requests have their own network, memory, storage, and battery costs; this release retains the
-Beta 17 map/tracking optimizations but does not claim ads have zero overhead.
+collection in Play Console. Keep the account service's `/privacy` advertising disclosure deployed. GitHub release jobs
+attach the tested backend bundle but do not deploy it or modify AdMob/Play settings.
+Ads have network, memory, storage and battery costs.
 
 ## Privacy and map credits
 
@@ -273,14 +242,15 @@ road segments can be recognized locally on a repeat drive; new road matching sen
 coordinate batches through the Road Conquest gateway to Geoapify. Town/state/country labels are requested through
 Android's system geocoder only while Road Conquest is foregrounded; the geocoder implementation and
 network behavior are supplied by the device. Pending data remains saved for retry after network or
-matching failures. User-selected ZIP exports contain precise history, road geometry and progression data.
-Protected exports require internet and production Play app verification; only a SHA-256 fingerprint
-and attestation are sent for signing. Restore rejects changed or unsigned files. Verification keys
-are fetched over HTTPS once per installation/key and saved for later offline checks. The private
-pre-restore recovery copy works offline on the same installation. Imported history, including delayed
-matching and town discovery, cannot earn new weekly challenge credit or change verified rankings.
-Restored local history and previously earned local rewards remain visible. See the account server
-README for signing-key setup required before releasing this change.
+matching failures. Settings → Backups & data offers two manual exports. **Secure backup** creates an
+AES-256-GCM-encrypted `.rcbackup` file that works across Google Play and GitHub builds;
+it needs a Road Conquest sign-in and internet access to get the account-bound key.
+**Readable ZIP** exports CSV files for analysis, but is unencrypted, contains precise
+location history, and cannot be restored. Neither file is uploaded automatically.
+Restore rejects altered secure backups and excludes imported history from new verified
+leaderboard or weekly challenge credit. Older authenticated Play-signed and passphrase
+backups remain restorable. See [backup and restore details](BACKUP_AND_CHALLENGES.md)
+and [server key management](server/README.md#protected-local-backups).
 
 When enabled and available, verified scoring sends precise live GPS batches with Play Integrity
 evidence for independent server matching. The server retains scores, short-lived receipt hashes,
