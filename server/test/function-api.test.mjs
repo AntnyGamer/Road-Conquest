@@ -58,7 +58,10 @@ test("serverless accounts enforce authentication, privacy, limits and TLS with r
     assert.equal((await call("/v1/login", "POST", { ...credentials, password: "an incorrect password" })).status, 401);
     const login = await call("/v1/login", "POST", { ...credentials, username: "FUNCTIONDRIVER" });
     assert.equal(login.status, 200);
-    assert.equal((await call("/v1/me", "GET", undefined, login.body.token)).body.username, credentials.username);
+    const initialProfile = await call("/v1/me", "GET", undefined, login.body.token);
+    assert.equal(initialProfile.body.username, credentials.username);
+    assert.deepEqual(initialProfile.body.competition, { available: false },
+      "Settings can use bundled competition availability without another HTTP request");
     const originalKey = await call("/v1/backups/account-key", "GET", undefined, signup.body.token);
     const loginKey = await call("/v1/backups/account-key", "GET", undefined, login.body.token);
     assert.equal(originalKey.status, 200);
