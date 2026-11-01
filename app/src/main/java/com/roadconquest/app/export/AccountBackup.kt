@@ -10,7 +10,7 @@ import java.io.OutputStream
 
 /** Portable account-bound encrypted backups for Play and GitHub installations. */
 object AccountBackup {
-    private data class SessionKey(val token: String, val id: String, val bytes: ByteArray)
+    private class SessionKey(val token: String, val id: String, val bytes: ByteArray)
 
     private fun sessionKey(context: Context, keyId: String? = null): SessionKey {
         val token = AccountStore.load(context)?.token
