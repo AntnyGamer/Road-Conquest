@@ -439,8 +439,8 @@ do not guarantee unlimited free service.
 
 ### Current account-bound portable backups (new exports)
 
-Set **both** secret environment variables on the account service before deploying this
-app update:
+The account service requires **both** secret environment variables to enable the
+account-bound backup endpoint (already configured for the production Neon Function):
 
 ```text
 BACKUP_MASTER_KEYS_JSON={"v1":"<43-character base64url encoding of 32 random bytes>"}
@@ -476,10 +476,9 @@ from both official signing channels before declaring the feature working.
 
 ### Legacy Play-signed backups (restore compatibility only)
 
-Beta 65's exact target, secure key generation, offline configuration preflight,
-environment preservation, artifact packaging, rotation and release gates are in
-[the backend preparation runbook](BETA65_BACKEND_PREPARATION.md). The preparation
-tools do not deploy or modify Neon.
+Previously created Play-signed ZIP backups remain valid for restore. This legacy
+signing service is retained for verification compatibility; new exports use the
+account-bound encrypted format above.
 
 Portable backup exports are authenticated with server-held P-256 signatures. Configure
 `BACKUP_SIGNING_PRIVATE_KEY` with a dedicated PKCS#8 PEM private key in the function's secret
