@@ -84,7 +84,8 @@ Release 1.0 uses Android application ID `com.roadconquest.app`, internal version
   spreadsheet tools or uploaded to ChatGPT for driving analysis. It cannot be
   restored into Road Conquest. It is **not encrypted** and contains sensitive
   location history: inspect and share it deliberately. Deleting your account
-  or changing the service's key-derivation secret makes secure backups unreadable.
+  or losing a configured version of the dedicated backup master key makes the
+  corresponding backups unreadable. Planned key rotation preserves older versions.
   Restored data does not grant new verified scores. Settings shows the last export.
 - Create an optional account, change your username and manage leaderboard visibility. There are exactly two destructive account/data actions in the app: Account → Delete account removes the cloud account while keeping saved device history and requires the current account password; Settings → Backups & data → Delete local data removes all local Road Conquest data while keeping the cloud account and leaderboard scores and requires typing the exact local confirmation phrase. Local full-data deletion works while signed out, stops tracking, disables verified-drive sharing and removes private interrupted-export snapshots.
 
