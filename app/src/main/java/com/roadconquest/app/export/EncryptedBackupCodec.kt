@@ -37,12 +37,13 @@ internal object EncryptedBackupCodec {
         return Header(id, magic + byteArrayOf(size.toByte()) + idBytes, nonce)
     }
 
-    private fun crypt(mode: Int, key: ByteArray, header: Header, sequence: Int, length: Int): Cipher {
+    private fun crypt(cipher: Cipher, mode: Int, key: SecretKeySpec,
+                      header: Header, sequence: Int, length: Int): Cipher {
         val nonce = header.nonce.copyOf()
         for (i in 0..3) nonce[NONCE_SIZE - 1 - i] =
             (nonce[NONCE_SIZE - 1 - i].toInt() xor (sequence ushr (8 * i))).toByte()
-        return Cipher.getInstance("AES/GCM/NoPadding").apply {
-            init(mode, SecretKeySpec(key, "AES"), GCMParameterSpec(TAG_SIZE * 8, nonce))
+        return cipher.apply {
+            init(mode, key, GCMParameterSpec(TAG_SIZE * 8, nonce))
             updateAAD(header.authenticated)
             updateAAD(ByteBuffer.allocate(8).putInt(sequence).putInt(length).array())
         }
@@ -53,6 +54,8 @@ internal object EncryptedBackupCodec {
         private val header: Header
         private val pending = ByteArray(RECORD_SIZE)
         private val ciphertext = ByteArray(RECORD_SIZE + TAG_SIZE)
+        private val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        private val aesKey = SecretKeySpec(key, "AES")
         private var used = 0
         private var sequence = 0
         private var finished = false
@@ -88,7 +91,7 @@ internal object EncryptedBackupCodec {
         }
 
         private fun emit(count: Int) {
-            val length = crypt(Cipher.ENCRYPT_MODE, key, header, sequence++, count)
+            val length = crypt(cipher, Cipher.ENCRYPT_MODE, aesKey, header, sequence++, count)
                 .doFinal(pending, 0, count, ciphertext, 0)
             sink.writeInt(count)
             sink.write(ciphertext, 0, length)
@@ -116,12 +119,14 @@ internal object EncryptedBackupCodec {
         // Reuse both record buffers across the entire restore.
         val encrypted = ByteArray(RECORD_SIZE + TAG_SIZE)
         val plaintext = ByteArray(RECORD_SIZE)
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        val aesKey = SecretKeySpec(key, "AES")
         while (true) {
             check(!Thread.currentThread().isInterrupted) { "Restore cancelled." }
             val count = input.readInt() // EOF before the authenticated terminator is an error.
             require(count in 0..RECORD_SIZE) { "Invalid backup record size." }
             input.readFully(encrypted, 0, count + TAG_SIZE)
-            val decoded = crypt(Cipher.DECRYPT_MODE, key, header, sequence++, count)
+            val decoded = crypt(cipher, Cipher.DECRYPT_MODE, aesKey, header, sequence++, count)
                 .doFinal(encrypted, 0, count + TAG_SIZE, plaintext, 0)
             check(decoded == count) { "Invalid decrypted backup record." }
             if (count == 0) {
