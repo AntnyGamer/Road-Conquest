@@ -12,7 +12,8 @@ data class ChallengeWeek(val startsAt: Long, val endsAt: Long, val challenges: L
 
 /** Local goals reward once per UTC week; local history never becomes a verified score. */
 object WeeklyChallenges {
-    private data class CacheKey(val generation: Long, val week: Long, val roads: Long, val towns: Long)
+    private data class CacheKey(val generation: Long, val week: Long, val roads: Long, val towns: Long,
+        val eligibilityRevision: Long)
     private var cachedKey: CacheKey? = null
 
     fun weekStart(now: Long): Long = Instant.ofEpochMilli(now).atZone(ZoneOffset.UTC).toLocalDate()
@@ -23,7 +24,8 @@ object WeeklyChallenges {
         val helper = AppDatabase.get(context)
         synchronized(helper.historyLock) {
             if (summary.historyGeneration != helper.historyGeneration) return false
-            val key = CacheKey(helper.historyGeneration, weekStart(now), summary.roadsUnlockedCount, progression.towns)
+            val key = CacheKey(helper.historyGeneration, weekStart(now), summary.roadsUnlockedCount,
+                progression.towns, helper.weeklyEligibilityRevision)
             if (cachedKey == key) return false
             status(context, now)
             cachedKey = key

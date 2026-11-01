@@ -8,6 +8,7 @@ import com.roadconquest.app.data.ProgressionRepository
 import com.roadconquest.app.data.ProgressionSnapshot
 import com.roadconquest.app.data.PlaceDiscovery
 import com.roadconquest.app.data.PlaceKind
+import com.roadconquest.app.data.PendingPlaceCandidate
 import com.roadconquest.app.map.PlaceGeometry
 import com.roadconquest.app.map.PlaceOverlayCache
 import com.roadconquest.app.map.UnitedStatesMunicipalBoundaries
@@ -74,15 +75,33 @@ object ProgressionManager {
     fun resolvePendingPlaces(context: Context, limit: Int = 6): Int =
         resolvePendingPlacesWithDetails(context, limit).added
 
-    fun resolvePendingPlacesWithDetails(context: Context, limit: Int = 6): PlaceResolutionResult = synchronized(placeResolutionLock) {
-        require(limit > 0)
-        if (Thread.currentThread().isInterrupted) return@synchronized PlaceResolutionResult(0, 0L, false)
-        val repository = ProgressionRepository(context)
+    fun resolvePendingPlacesWithDetails(context: Context, limit: Int = 6): PlaceResolutionResult {
         // Limit polygon parsing and database reads to one set per foreground batch.
         val municipalCache by lazy { PlaceResolver.VerifiedMunicipalCache(context) }
         // Reuse remote provider configuration across candidates in this bounded
         // batch, but create a fresh client on the next batch to honor config changes.
         val overlayClient by lazy { com.roadconquest.app.map.PlaceOverlayClient() }
+        return resolvePendingPlacesWithDetails(context, limit,
+            lookup = { candidate, generation, current ->
+                PlaceResolver.resolve(context, candidate, municipalCache, overlayClient = overlayClient,
+                    cacheGeneration = generation, isCurrent = current)
+            },
+            reconcile = { repository, discoveries, current ->
+                reconcileMissingStartingTown(context, repository, discoveries, isCurrent = current)
+            })
+    }
+
+    internal fun resolvePendingPlacesWithDetails(
+        context: Context, limit: Int,
+        lookup: (PendingPlaceCandidate, Long, () -> Boolean) -> List<PlaceDiscovery>?,
+        reconcile: (ProgressionRepository, List<PlaceDiscovery>, () -> Boolean) -> Unit
+    ): PlaceResolutionResult = synchronized(placeResolutionLock) {
+        require(limit > 0)
+        val repository = ProgressionRepository(context)
+        val cacheGeneration = PlaceOverlayCache.generation()
+        fun current() = !Thread.currentThread().isInterrupted && repository.isHistoryCurrent() &&
+            !com.roadconquest.app.util.Prefs.isDeviceDataDeletionPending(context) &&
+            PlaceOverlayCache.generation() == cacheGeneration
         // Do not manufacture new discovery notifications from replaying historical drives.
         var added = 0
         var newestVisitAt = 0L
@@ -90,37 +109,41 @@ object ProgressionManager {
         var startingTownConfirmed = false
         var processed = 0
         while (processed < limit) {
+            if (!current()) break
             val candidates = repository.pendingPlaceCandidates(limit - processed)
             if (candidates.isEmpty()) break
             for (candidate in candidates) {
                 // A malformed provider response or an Android geocoder runtime failure
                 // must not abort the entire queue and strand every later municipality.
                 // Retry only the failed fix with the existing persistent backoff.
-                if (Thread.currentThread().isInterrupted) {
+                if (!current()) {
                     return@synchronized PlaceResolutionResult(added, newestVisitAt, placesUpdated)
                 }
                 val discoveries = try {
-                    PlaceResolver.resolve(context, candidate, municipalCache, overlayClient = overlayClient)
+                    lookup(candidate, cacheGeneration, ::current)
                 } catch (error: Exception) {
+                    if (error is InterruptedException) Thread.currentThread().interrupt()
                     android.util.Log.w("RoadConquest", "Place candidate will retry", error)
                     null
                 }
+                if (!current()) return@synchronized PlaceResolutionResult(added, newestVisitAt, placesUpdated)
                 if (discoveries.isNullOrEmpty()) {
                     repository.deferCandidate(candidate)
                 } else {
-                    // The missing-baseline flag can only clear during this serialized
-                    // batch, not reappear without a history reset. Avoid re-querying
-                    // SQLite for every subsequent resolved GPS candidate.
+                    val baseline = candidate.cellX == Long.MIN_VALUE && candidate.cellY == Long.MIN_VALUE
+                    // Ordinary candidates cannot introduce a missing baseline kind.
+                    // The baseline sentinel itself can do so when its retries expire.
                     val missingStartTown = !startingTownConfirmed && repository.hasMissingStartingTown()
-                    if (missingStartTown) reconcileMissingStartingTown(context, repository, discoveries)
+                    if (missingStartTown) reconcile(repository, discoveries, ::current)
+                    if (!current()) return@synchronized PlaceResolutionResult(added, newestVisitAt, placesUpdated)
                     val startTownRecovered = missingStartTown && !repository.hasMissingStartingTown()
-                    if (!missingStartTown || startTownRecovered) startingTownConfirmed = true
                     val newPlaces = repository.resolveCandidate(candidate, discoveries)
+                    startingTownConfirmed = !baseline && (!missingStartTown || startTownRecovered)
                     added += newPlaces
                     // A zero-point baseline or a late recovery changes visited-place
                     // overlays without awarding any points or showing a "new place" toast.
                     placesUpdated = placesUpdated || newPlaces > 0 || startTownRecovered ||
-                        (candidate.cellX == Long.MIN_VALUE && candidate.cellY == Long.MIN_VALUE)
+                        baseline
                     if (newPlaces > 0) newestVisitAt = maxOf(newestVisitAt, candidate.visitedAt)
                 }
                 processed++
@@ -139,13 +162,18 @@ object ProgressionManager {
         context: Context,
         repository: ProgressionRepository,
         discoveries: List<PlaceDiscovery>,
+        isCurrent: () -> Boolean = { repository.isHistoryCurrent() },
         resolveOfficialAtStart: (PlaceDiscovery) -> PlaceDiscovery? = {
-            UnitedStatesMunicipalityAtPoint.fetch(it)?.place
+            UnitedStatesMunicipalityAtPoint.fetch(it, isCurrent)?.place
         }
     ) {
-        if (!repository.hasMissingStartingTown()) return
+        val cacheGeneration = PlaceOverlayCache.generation()
+        fun current() = isCurrent() && !Thread.currentThread().isInterrupted &&
+            PlaceOverlayCache.generation() == cacheGeneration
+        if (!current() || !repository.hasMissingStartingTown()) return
         val start = repository.startingLocation() ?: return
         for (town in discoveries) {
+            if (!current()) return
             if (town.kind != PlaceKind.TOWN ||
                 !UnitedStatesMunicipalBoundaries.applies(town)
             ) continue
@@ -157,6 +185,7 @@ object ProgressionManager {
                 )
             }.getOrDefault(false)
             if (!containsStart) continue
+            if (!current()) return
             // Both Census layers may cover the start. Containment alone cannot
             // establish which town takes precedence. Confirm the actual Census
             // point result before suppressing a legitimate discovery reward.
@@ -165,8 +194,10 @@ object ProgressionManager {
                     latitude = start.latitude, longitude = start.longitude,
                     visitedAt = start.recordedAt
                 ))
+            }.onFailure {
+                if (it is InterruptedException) Thread.currentThread().interrupt()
             }.getOrNull()
-            if (atStart?.key == town.key &&
+            if (current() && atStart?.key == town.key &&
                 repository.recordVerifiedStartingTown(town, start)
             ) break
         }

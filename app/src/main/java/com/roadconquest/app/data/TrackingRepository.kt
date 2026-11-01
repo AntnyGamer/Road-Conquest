@@ -973,6 +973,10 @@ class TrackingRepository(context: Context) {
             put("max_lon", bounds.maxLon)
             put("weekly_eligible", if (eligible) 1 else 0)
         }
+        if (existing == null || firstTimestamp < existing.firstUnlockedAt ||
+                eligible != existing.weeklyEligible || groupId != previousGroup) {
+            dbHelper.invalidateWeeklyEligibility()
+        }
         if (existing == null) {
             db.insertOrThrow("roads", null, values)
         } else {

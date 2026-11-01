@@ -79,6 +79,8 @@ class ProgressionRepository(context: Context) {
     private val appContext = context.applicationContext
     private val dbHelper = AppDatabase.get(appContext)
     private val historyGeneration = synchronized(dbHelper.historyLock) { dbHelper.historyGeneration }
+
+    internal fun isHistoryCurrent(): Boolean = synchronized(dbHelper.historyLock) { isCurrentHistory() }
     // Only accessed under dbHelper.historyLock. Reuse the one-element result
     // through bounded history backfills instead of allocating per duplicate fix.
     private val candidateDistanceScratch = FloatArray(1)
@@ -801,6 +803,7 @@ class ProgressionRepository(context: Context) {
                 "progression_purchases",
                 "progression_counters"
             )) db.delete(table, null, null)
+            dbHelper.invalidateWeeklyEligibility()
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
@@ -954,7 +957,7 @@ class ProgressionRepository(context: Context) {
             // Older backfilled GPS samples can resolve out of order. Preserve the
             // earliest confirmed fix without altering reward or baseline counters.
             if (!inserted) {
-                db.update(
+                val corrected = db.update(
                     "visited_places",
                     ContentValues().apply {
                         put("first_visited_at", discovery.visitedAt)
@@ -965,6 +968,9 @@ class ProgressionRepository(context: Context) {
                     "kind = ? AND place_key = ? AND first_visited_at " + (if (weeklyEligible) "> ?" else ">= ?"),
                     arrayOf(discovery.kind.name, discovery.key, discovery.visitedAt.toString())
                 )
+                if (corrected > 0 && discovery.kind == PlaceKind.TOWN) {
+                    dbHelper.invalidateWeeklyEligibility()
+                }
             }
             val key = placeLastVisitKey(discovery.kind, discovery.key)
             val previous = counterOrNull(db, key)

@@ -436,17 +436,24 @@ class PlaceOverlayClient(
     private var resolvedEndpoint: String? = null
     private val boundaryBackup = GeoBoundariesClient()
 
-    fun fetch(place: PlaceDiscovery, requireContainment: Boolean = true): PlaceOverlayData? {
+    fun fetch(place: PlaceDiscovery, requireContainment: Boolean = true,
+              isCurrent: () -> Boolean = { true }): PlaceOverlayData? {
+        if (!isCurrent()) return null
         val base = resolveEndpoint()
+        if (!isCurrent()) return null
         return try {
-            fetchPrimary(base, place, requireContainment) ?: boundaryBackup.fetch(place, requireContainment)
+            fetchPrimary(base, place, requireContainment, isCurrent) ?:
+                if (isCurrent()) boundaryBackup.fetch(place, requireContainment) else null
         } catch (error: IOException) {
+            if (!isCurrent()) return null
             boundaryBackup.fetch(place, requireContainment) ?: throw error
         }
     }
 
-    private fun fetchPrimary(base: String, place: PlaceDiscovery, requireContainment: Boolean): PlaceOverlayData? {
+    private fun fetchPrimary(base: String, place: PlaceDiscovery, requireContainment: Boolean,
+                             isCurrent: () -> Boolean): PlaceOverlayData? {
         throttle(base)
+        if (!isCurrent()) return null
         val threshold = when (place.kind) {
             PlaceKind.COUNTRY -> "0.02"
             PlaceKind.STATE -> "0"
