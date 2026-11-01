@@ -24,11 +24,11 @@ function configuredOrigin(value) {
   }
 }
 
-// These exact public documents/status responses do not use client identity or
-// rate limits. Avoid a WebCrypto signature for every uptime check or page view.
+// Public documents/status responses do not use client identity or rate limits.
+// Keep the lookup set shared rather than rebuilding it for every request.
+const PUBLIC_READS = new Set(['/health/live', '/privacy', '/delete-account', '/v1/competition', '/v1/backups']);
 function needsSignedIdentity(method, pathname) {
-  return !((method === 'GET' || method === 'HEAD') &&
-    ['/health/live', '/privacy', '/delete-account', '/v1/competition', '/v1/backups'].includes(pathname));
+  return !((method === 'GET' || method === 'HEAD') && PUBLIC_READS.has(pathname));
 }
 
 function trustedEdgeIp(request) {
