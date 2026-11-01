@@ -202,6 +202,10 @@ See [server setup](server/README.md) and the [physical-device checklist](ANDROID
 ## Google Play submission
 
 The release bundle targets API 37, uses application ID `com.roadconquest.app`, and is signed for Play upload. GitHub embeds all four full MapLibre native debug-symbol libraries into the AAB, along with the R8 mapping, and validates it with Google's `bundletool` both before and after signing. No extra Play Console uploads are needed. Only the signed release AAB is submitted. The standalone symbol ZIP is omitted because its full contents are already stored in the AAB.
+These full symbols are development metadata, not installed on phones. Play delivers native
+libraries for each device's supported ABI instead of the four-ABI GitHub APK.
+The release build uses R8 and resource shrinking to reduce installed code and resources;
+CI reports compressed bytecode, resources and each ABI separately from debug symbols.
 CI verifies 16 KB native-library packaging/alignment before publication, in addition to unit tests, lint,
 release builds, account-server tests, and native map tests on supported Android generations.
 The account service exposes browser pages at `/privacy` and `/delete-account`. The app links the privacy policy from
