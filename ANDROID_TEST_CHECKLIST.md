@@ -20,7 +20,7 @@ This checklist is for final device-level validation on supported Android 12+ pho
 6. Confirm the map centers on the first fresh phone-location fix and the car icon follows current position.
 7. Zoom in fully and confirm fog, blue unlocked-road lines, and the car marker remain visible at Road Conquest's maximum zoom on the device.
 8. Zoom progressively outward and confirm the fog keeps visible cloud texture without collapsing into many tiny repeated tiles or producing a bright halo around traveled roads.
-9. Confirm blue traveled-road lines remain visible from zoom 6, but cleared fog corridors disappear below zoom 9. At world zoom and the next three zoom levels, pan through several full world copies in both directions and confirm fog stays over the whole map while crossing the date line and looping.
+9. Confirm blue traveled-road lines remain visible from zoom 5 (thin at zoom 5, normal width by zoom 6) and disappear below zoom 5, while cleared fog corridors disappear below zoom 9. Check that panning at zoom 5 remains responsive with a substantial saved road history. At world zoom and the next three zoom levels, pan through several full world copies in both directions and confirm fog stays over the whole map while crossing the date line and looping.
 10. Confirm the points chip is visible below the map stats and opens Garage & Shop.
 11. Buy/equip at least one car shape/color and one road color; return to the map and verify each changes without restarting tracking.
 12. If enough test points are available, equip Golden Road Conquest and verify the app palette and launcher icon change, then switch back to Standard UI.
