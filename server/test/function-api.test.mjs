@@ -17,6 +17,11 @@ test("serverless accounts enforce authentication, privacy, limits and TLS with r
     process.env.REQUIRE_HTTPS = "1";
     process.env.TRUST_PROXY = "1";
     process.env.APPLY_SCHEMA_ON_STARTUP = "0";
+    process.env.BACKUP_MASTER_KEYS_JSON = JSON.stringify({
+      v1: Buffer.alloc(32, 23).toString("base64url"),
+      v2: Buffer.alloc(32, 42).toString("base64url")
+    });
+    process.env.BACKUP_CURRENT_KEY_ID = "v2";
     const { default: api, pool } = await import("../dist/index.mjs");
     runtimePool = pool;
     async function call(path, method = "GET", body, token, extraHeaders = {}) {
@@ -58,6 +63,13 @@ test("serverless accounts enforce authentication, privacy, limits and TLS with r
     const loginKey = await call("/v1/backups/account-key", "GET", undefined, login.body.token);
     assert.equal(originalKey.status, 200);
     assert.match(originalKey.body.key, /^[A-Za-z0-9_-]{43}$/u);
+    assert.equal(originalKey.body.key_id, "v2");
+    const earlierKey = await call("/v1/backups/account-key?key_id=v1", "GET", undefined, login.body.token);
+    assert.equal(earlierKey.status, 200);
+    assert.equal(earlierKey.body.key_id, "v1");
+    assert.notEqual(earlierKey.body.key, originalKey.body.key);
+    assert.equal((await call("/v1/backups/account-key?key_id=invalid", "GET", undefined, login.body.token)).status, 410);
+    assert.equal((await call("/v1/backups/account-key?key_id=%21", "GET", undefined, login.body.token)).status, 400);
     assert.deepEqual(loginKey, originalKey, "Different sessions for one account must restore the same file");
     assert.equal((await call("/v1/backups/account-key", "GET", undefined, "A".repeat(43))).status, 401);
     assert.equal((await call("/v1/privacy", "PUT", { leaderboard_visible: false }, login.body.token)).body.leaderboard_visible, false);
