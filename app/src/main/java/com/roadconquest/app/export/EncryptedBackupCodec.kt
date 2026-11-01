@@ -48,7 +48,7 @@ internal object EncryptedBackupCodec {
         }
     }
 
-    class Writer(private val destination: OutputStream, id: String, private val key: ByteArray) : OutputStream() {
+    class Writer(destination: OutputStream, id: String, private val key: ByteArray) : OutputStream() {
         private val sink = DataOutputStream(destination)
         private val header: Header
         private val pending = ByteArray(RECORD_SIZE)
@@ -110,12 +110,15 @@ internal object EncryptedBackupCodec {
         val input = DataInputStream(source)
         var sequence = 0
         var written = 0L
+        // Reuse this buffer rather than allocating a new 32 KiB ciphertext array per record.
+        val encrypted = ByteArray(RECORD_SIZE + TAG_SIZE)
         while (true) {
             check(!Thread.currentThread().isInterrupted) { "Restore cancelled." }
             val count = input.readInt() // EOF before the authenticated terminator is an error.
             require(count in 0..RECORD_SIZE) { "Invalid backup record size." }
-            val encrypted = ByteArray(count + TAG_SIZE).also { input.readFully(it) }
-            val plaintext = crypt(Cipher.DECRYPT_MODE, key, header, sequence++, count).doFinal(encrypted)
+            input.readFully(encrypted, 0, count + TAG_SIZE)
+            val plaintext = crypt(Cipher.DECRYPT_MODE, key, header, sequence++, count)
+                .doFinal(encrypted, 0, count + TAG_SIZE)
             check(plaintext.size == count) { "Invalid decrypted backup record." }
             if (count == 0) {
                 require(input.read() == -1) { "Unexpected data after backup end." }
