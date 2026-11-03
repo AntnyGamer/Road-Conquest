@@ -29,9 +29,9 @@ Protect account sessions: anyone who obtains the key by authenticating as the
 owner can decrypt and re-encrypt files. No local export is evidence of verified
 GPS driving; restored progress never earns fresh verified leaderboard credit.
 
-The importer continues to recognize already-created, valid Play-signed ZIPs and
-older signed ZIP files, but Settings no longer creates that
-format. Retired passphrase-encrypted .rcbackup files can no longer be restored. It rejects new readable export-only ZIPs; those are not backups.
+The importer still supports valid older Play-signed ZIP backups, although Settings
+no longer creates them. Retired passphrase-encrypted .rcbackup files can no longer be
+restored. New readable ZIP exports are export-only and cannot be imported.
 Neither export is uploaded to cloud storage automatically. The account service only
 provides the secure backup encryption key; export files stay wherever users save them.
 ChatGPT can analyze the CSV files inside a readable ZIP if the user uploads it,
