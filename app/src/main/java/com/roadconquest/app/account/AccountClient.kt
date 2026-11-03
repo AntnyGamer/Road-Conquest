@@ -135,9 +135,6 @@ object AccountClient {
     fun changeFriend(token: String, username: String, action: String): JSONObject = request("/v1/friends", "POST",
         JSONObject().put("username", username).put("action", action), token)
 
-    fun friendWeek(token: String): JSONObject =
-        validatedFriendWeek(request("/v1/friends/weekly?metric=cells", "GET", null, token))
-
     internal fun validatedFriendWeek(body: JSONObject): JSONObject = body.also {
         if (it.optBoolean("available")) requireVerifiedPolicy(it)
     }

@@ -347,7 +347,7 @@ Incoming requests require acceptance by the other person; either person can remo
 relationship. Pending and accepted relationships are bounded to 50 per account. Stable
 user IDs preserve friendships through username changes; account deletion cascades them.
 
-`GET /v1/friends/weekly?metric=cells` ranks first-ever newly verified exploration
+`GET /v1/friends?include=weekly` ranks first-ever newly verified exploration
 cells in the current UTC Monday-to-Monday week. Only the caller and accepted
 friends appear. Hidden/ineligible accounts are excluded; ties share a rank.
 Revisits, retries and older weeks cannot inflate new-cell totals. Local weekly goals
@@ -442,7 +442,7 @@ substitutes cannot establish real Google eligibility.
 | `POST /v1/verified/batch` | Verified evidence; privately returns count and accepted IDs |
 | `GET /v1/verified/me` | Private verified cell count |
 | `GET /v1/leaderboard?metric=cells` | Top 50 visible eligible profiles |
-| `GET /v1/friends/weekly?metric=cells` | Current week's newly verified cells |
+| `GET /v1/friends?include=weekly` | Current week's newly verified cells |
 
 Unavailable rankings contain no scores; miles/roads metrics are rejected.
 Public/friend entries expose only username, rank and count, with caching disabled.

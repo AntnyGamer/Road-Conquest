@@ -56,7 +56,7 @@ HTTP 429, 401/403, 5xx, timeouts and connection failures move to an eligible bac
 ## Reducing authenticated account-server round trips
 
 - When the Challenges screen displays both the friend list and verified weekly standings, it requests `GET /v1/friends?include=weekly`. An updated server returns the same friend data and the existing verified-only weekly response together, eliminating one separate authenticated HTTP request, session lookup and rate-limit reservation per refresh.
-- Legacy `GET /v1/friends` clients and `GET /v1/friends/weekly` remain unchanged. A server that doesn't support bundling omits `weekly` and Android falls back to the original endpoint. A failed weekly query cannot hide friend management, and bundled standings still pass the same scoring-policy verification.
+- The retired standalone weekly endpoint is removed. An unavailable weekly query does not hide friend management; bundled standings still pass the same scoring-policy verification.
 - Server endpoint tests cover opt-in bundled responses and unchanged ordinary friend responses. This does not alter GPS upload cadence, matching accuracy, scoring or database schema.
 
 ## Combined local GPS continuity and heading check

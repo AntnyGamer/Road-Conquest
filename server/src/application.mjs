@@ -371,28 +371,21 @@ async function handle(req, res) {
     if (req.method === "DELETE") return send(res, 200, await notifications.remove(user));
     return send(res, 405, { error: "Method not allowed." });
   }
-  if (url.pathname === "/v1/friends" || url.pathname === "/v1/friends/weekly") {
+  if (url.pathname === "/v1/friends") {
     if (!bearerToken(req)) return send(res, 401, { error: "Authentication required." });
     const access = await rateLimitedUser(req, "friends-ip", 120, 60 * 1000);
     if (!access.allowed) return send(res, 429, { error: "Try again later." });
     const user = access.user;
     if (!user) return send(res, 401, { error: "Authentication required." });
-    if (req.method === "GET" && url.pathname === "/v1/friends/weekly") {
-      const metric = url.searchParams.get("metric") || "cells";
-      if (metric !== "cells") return send(res, 400, { error: "Choose cells." });
-      return send(res, 200, competition ? await competition.friendWeek(user, metric) : { available: false, entries: [] });
-    }
     if (req.method === "GET" && url.pathname === "/v1/friends") {
       const listing = await friends.list(user);
-      // One authenticated HTTP request, rate-limit reservation and session
-      // lookup instead of two when the Challenges screen displays rankings.
-      // Older clients still get the unchanged {friends} response.
+      // One authenticated list request provides friends and weekly rankings
+      // with one rate-limit reservation and session lookup.
       if (url.searchParams.get("include") === "weekly") {
         try {
           listing.weekly = competition ? await competition.friendWeek(user) : { available: false, entries: [] };
         } catch {
-          // Do not hide friend management if the independent weekly query fails.
-          // Omission allows the client to use its existing weekly-only fallback.
+          // Weekly rankings are optional; friend management remains available.
         }
       }
       return send(res, 200, listing);

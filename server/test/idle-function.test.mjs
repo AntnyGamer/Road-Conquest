@@ -20,7 +20,7 @@ for (const applySchema of ['0', '1']) test(`cold liveness and public pages need 
     try {
       for (const [path,status] of [['/health/live',200],['/privacy',200],['/delete-account',200],
         ['/v1/competition',200],['/v1/leaderboard',200],['/v1/leaderboard?metric=invalid',400],['/missing',404],['/v1/me',401],['/v1/verified/batch',404],
-        ['/v1/friends',401],['/v1/friends/weekly',401],['/v1/notifications/device',401]]) {
+        ['/v1/friends',401],['/v1/friends/weekly',404],['/v1/notifications/device',401]]) {
         const response=await api.fetch(new Request('https://offline.example'+path));
         assert.equal(response.status,status,path);
         await response.text();

@@ -187,11 +187,10 @@ class ChallengesActivity : Activity() {
             val friendList = listing.mapCatching { it.getJSONArray("friends") }
             if (expected != generation) return@execute
             val standings = if (FeatureFlags.LEADERBOARDS_VISIBLE) runCatching {
-                // Older account servers omit "weekly"; fall back without hiding
-                // friend management or changing verification policy checks.
+                // An unavailable weekly query must not hide the friend list.
                 val bundled = listing.getOrNull()?.optJSONObject("weekly")
                 if (bundled != null) AccountClient.validatedFriendWeek(bundled)
-                else AccountClient.friendWeek(session.token)
+                else org.json.JSONObject().put("available", false)
             } else null
             runOnUiThread {
                 if (isDestroyed || expected != generation || AccountStore.load(this)?.token != session.token) return@runOnUiThread
