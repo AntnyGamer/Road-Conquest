@@ -22,6 +22,8 @@ internal object UnitedStatesMunicipalityAtPoint {
         "https://tigerweb.geo.census.gov/arcgis/rest/services/" +
             "TIGERweb/Places_CouSub_ConCity_SubMCD/MapServer"
     private const val MAX_RESPONSE_CHARS = 16 * 1024 * 1024
+    private val MUNICIPAL_LAYERS = listOf(4, 1)
+    private val CONSOLIDATED_LAYERS = listOf(4, 3, 1)
     private val WHITESPACE_RE = Regex("\\s+")
 
     private fun censusConnection(request: String, geoJson: Boolean): HttpURLConnection =
@@ -106,8 +108,8 @@ internal object UnitedStatesMunicipalityAtPoint {
         ) return null
 
         val layers = if (UnitedStatesMunicipalBoundaries.hasConsolidatedCities(state)) {
-            listOf(4, 3, 1)
-        } else listOf(4, 1)
+            CONSOLIDATED_LAYERS
+        } else MUNICIPAL_LAYERS
         for (layer in layers) {
             if (!isCurrent() || Thread.currentThread().isInterrupted) return null
             val request = Uri.parse("$BASE/$layer/query").buildUpon()
@@ -154,7 +156,7 @@ internal object UnitedStatesMunicipalityAtPoint {
 
     /** Parsing is independently testable without accessing the network. */
     internal fun parseResponse(seed: PlaceDiscovery, body: String, layer: Int): Result? {
-        if (layer !in setOf(1, 3, 4)) return null
+        if (layer != 1 && layer != 3 && layer != 4) return null
         val state = UnitedStatesMunicipalBoundaries.stateCode(
             seed.countryName, seed.parentName
         ) ?: return null

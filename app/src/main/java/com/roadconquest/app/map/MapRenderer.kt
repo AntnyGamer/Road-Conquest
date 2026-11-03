@@ -96,9 +96,9 @@ class MapRenderer(
     private var queryRunning = false
     private var queryAgain = false
     private var queryRoadsAgain = false
-    private var viewportRevision = 0
+    @Volatile private var viewportRevision = 0
     private var cameraMoving = false
-    private var viewportActive = true
+    @Volatile private var viewportActive = true
     private var resumeVisibilityCheck: Runnable? = null
     private var resumeFrameListener: MapView.OnDidFinishRenderingFrameListener? = null
     private var resumeGeneration = 0
@@ -904,7 +904,10 @@ class MapRenderer(
         val loadedRoadBoundsAtStart = loadedRoadBounds
         val loadedPlaceBoundsAtStart = loadedPlaceBounds
         executor.execute {
+            fun current() = !destroyed && viewportActive && revision == viewportRevision &&
+                !Thread.currentThread().isInterrupted
             val result = runCatching {
+                if (!current()) return@runCatching null
                 // Match the larger native fog footprint so a normal pan continues to show
                 // already-unlocked roads while the gesture is in progress.
                 // Include a full grid cell beyond the existing fade padding, so a visited
@@ -944,17 +947,20 @@ class MapRenderer(
                 } else {
                     null
                 }
+                if (!current()) return@runCatching null
                 val roads = roadQuery?.roads?.let { saved ->
                     // Optional historical evidence must never prevent normal roads from
                     // rendering if reading the extra visit table fails.
                     val visits = if (saved.size < 2) emptyMap() else
                         runCatching { repository.getVisitWindowsForRoads(saved) }
                             .getOrDefault(emptyMap())
+                    if (!current()) return@runCatching null
                     OverlayRoads.prepare(saved, visits,
                         repository::hasRecordedDrivingAcrossGap,
                         repository::hasRecordedDrivingThroughTurn,
                         requireMatchedConnectorGeometry = true)
                 }
+                if (!current()) return@runCatching null
                 val places = if (queryPlaces) {
                     repository.getExploredGridInBounds(queryNorth, queryEast, querySouth, queryWest)
                 } else {
@@ -966,6 +972,7 @@ class MapRenderer(
                         visibleSinceMillis = System.currentTimeMillis() - PENDING_ROUTE_MAX_AGE_MS
                     )
                 } else TrackingRepository.PendingRouteResult(emptyList(), null)
+                if (!current()) return@runCatching null
                 RoadDisplay(
                     roads,
                     roads?.let(::roadFeatures),

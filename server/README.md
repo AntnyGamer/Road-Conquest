@@ -78,13 +78,27 @@ and `revision`, a public source commit hash. `GET /health` also checks the datab
 and returns the same metadata after success. Both responses use `Cache-Control: no-store`.
 
 `npm run build:function` embeds the checked-out Git revision in the function bundle.
+`npm run build:ingress` independently embeds it in `dist/ingress.mjs`, the Worker
+entry point selected by `worker/wrangler.jsonc`. Build both from a clean checkout
+before deploying. `GET /health/ingress` (and `HEAD`) reports the ingress revision
+without contacting the account function, signing an identity, or opening a database.
 Exported source archives can set `ROADCONQUEST_SERVER_REVISION` to the full 40-character
 commit hash at build time. A native `npm start` deployment can set that variable at runtime.
 An unrelated enclosing Git repository is ignored. An unknown revision is `null`,
 never an inferred claim about deployment freshness.
 
-After deploying the account function, fetch `/health/live` through the actual public
-account URL and compare `revision` with the intended source commit (`git rev-parse HEAD`).
+After deploying, compare both public revisions with their intended source commits:
+
+```sh
+node server/tools/verify-deployment.mjs <full-function-commit> <full-ingress-commit>
+```
+
+The optional third argument selects another HTTPS account origin. The **Verify deployed
+service revisions** GitHub Actions workflow runs the same read-only check against the
+production origin, with both full hashes supplied explicitly. A non-success response,
+unknown revision, mismatch, redirect or timeout fails the check. The function and ingress
+may intentionally come from different commits; each must match its own intended hash.
+
 Publishing an Android release or attaching the account-function ZIP to GitHub does not
 deploy the backend. A mismatched or null revision needs investigation before claiming
 the backend includes a release's changes. This identifies code only: credentials,
@@ -120,6 +134,20 @@ reduces duplicate database reads without caching authorization or changing per-r
 authentication, rate budgets, moderation or locked transaction checks. Separate instances
 still rely on the database for idempotency. Deploy the account function to activate this
 optimization; no schema migration is needed.
+
+The moderator also shares identical text and canonical GIF URLs already being
+checked on the same instance, even when separate posts have different request IDs.
+At most 32 active checks are retained; overflow proceeds normally. Every post keeps
+its own rate budget, account restrictions, cooldown and locked transaction. Completed
+verdicts and GIF bytes are not cached: a later post re-downloads the GIF and obtains
+a fresh moderation result. Concurrent identical content therefore needs one GIF
+download and one moderation request, while changed content is checked separately.
+
+GPS evidence validation checks its exact allowed field sets without allocating and
+sorting a field-name list for each fix. GIF previews reuse their horizontal pixel
+offsets across rows and frames, preserving the same contact-sheet bytes. Purchase
+token decryption authenticates the complete ciphertext before exposing plaintext
+and avoids copying it again when GCM returns no final plaintext bytes.
 
 ## Free Neon deployment
 
@@ -215,6 +243,7 @@ budget. It does **not** trust client-supplied forwarding or signature headers.
    From the repository root, validate and deploy only the new Worker:
 
    ```sh
+   npm --prefix server run build:ingress
    node --test server/test/ingress.test.mjs server/test/fetch-adapter.test.mjs
    npx wrangler deploy --dry-run --config server/worker/wrangler.jsonc
    npx wrangler deploy --config server/worker/wrangler.jsonc

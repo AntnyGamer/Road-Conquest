@@ -176,14 +176,17 @@ object Achievements {
         context: Context,
         summary: DataSummary,
         metrics: AchievementMetrics = AchievementMetrics()
+    ): List<AchievementProgress> = newlyUnlocked(context, summary, progress(context, summary, metrics))
+
+    /** Reuse the evaluation that already paid rewards during this refresh. */
+    fun newlyUnlocked(
+        context: Context,
+        summary: DataSummary,
+        evaluated: List<AchievementProgress>
     ): List<AchievementProgress> = synchronized(stateLock) {
         if (!isCurrentSummary(context, summary)) return@synchronized emptyList()
         val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        // We already validated this summary under stateLock. Avoid calling progress(context,...),
-        // which would repeat the database-generation check and preferences lookup.
-        val highestRoads = persistentRoadMaximum(prefs, summary.roadsUnlockedCount)
-        val current = progress(summary.copy(roadsUnlockedCount = highestRoads), metrics)
-            .filter { it.unlocked }
+        val current = evaluated.filter { it.unlocked }
         val announced = prefs.getStringSet(KEY_ANNOUNCED, emptySet()).orEmpty().toMutableSet()
         if (!prefs.getBoolean(KEY_INITIALIZED, false)) {
             announced += current.map { it.id }

@@ -57,7 +57,7 @@ class RestoreActivity : Activity() {
         }
         val dp = resources.displayMetrics.density
         root.addView(TextView(this).apply {
-            text = "Restore your progress"
+            text = getString(R.string.ui_restore_your_progress)
             isAccessibilityHeading = true
             textSize = 28f
             setTypeface(typeface, Typeface.BOLD)
@@ -65,7 +65,7 @@ class RestoreActivity : Activity() {
             setPadding(0, 0, 0, (12 * dp).toInt())
         })
         root.addView(TextView(this).apply {
-            text = "Choose a Road Conquest backup to restore trips, roads, distance, fog, discoveries, points and garage items.\n\nNew secure .rcbackup files work with both Google Play and GitHub installations. Sign in to the same Road Conquest account and connect to the internet to restore. No extra backup password is required. Damaged or altered backups are rejected. Earlier signed ZIP and passphrase backups can still be restored.\n\nYour current progress is backed up. Tracking and verified sharing remain off afterward. Restored history does not earn weekly challenge credit or change verified rankings.\n\nSign in and restore Google Play VIP separately."
+            text = getString(R.string.ui_choose_a_road_conquest_backup_to_restore_trips_roads_distance_fo)
             textSize = 15f
             setTextColor(Appearance.color(this@RestoreActivity, R.attr.rcTextSecondary))
             setBackgroundResource(R.drawable.settings_card_background)
@@ -73,7 +73,7 @@ class RestoreActivity : Activity() {
             setPadding(inset, inset, inset, inset)
         })
         choose = Button(this).apply {
-            text = "Choose backup (.zip or .rcbackup)"
+            text = getString(R.string.ui_choose_backup_zip_or_rcbackup)
             setOnClickListener {
                 try {
                     startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
@@ -83,12 +83,12 @@ class RestoreActivity : Activity() {
                         // Let the strict backup validator reject unrelated file types instead
                         // of hiding legitimate encrypted backups in Android's picker.
                     }, REQUEST_IMPORT)
-                } catch (_: ActivityNotFoundException) { status.text = "Android's file picker is unavailable." }
+                } catch (_: ActivityNotFoundException) { status.text = getString(R.string.ui_android_s_file_picker_is_unavailable) }
             }
             root.addView(this, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (14 * dp).toInt() })
         }
         recovery = Button(this, null, 0, R.style.RoadConquest_SettingsAction).apply {
-            text = "Restore progress before last import"
+            text = getString(R.string.ui_restore_progress_before_last_import)
             isEnabled = DataImporter.previousBackup(this@RestoreActivity).isFile
             setOnClickListener { validate { DataImporter.previousBackup(applicationContext).inputStream() } }
             root.addView(this, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (10 * dp).toInt() })
@@ -117,16 +117,16 @@ class RestoreActivity : Activity() {
 
     private fun promptPassphrase(open: () -> java.io.InputStream) {
         val field = EditText(this).apply {
-            hint = "Backup passphrase"
+            hint = getString(R.string.ui_backup_passphrase)
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
             val p = (16 * resources.displayMetrics.density).toInt()
             setPadding(p, p, p, p)
         }
-        AlertDialog.Builder(this).setTitle("Unlock private backup")
-            .setMessage("Enter the passphrase used when this backup was exported.")
+        AlertDialog.Builder(this).setTitle(getString(R.string.ui_unlock_private_backup))
+            .setMessage(getString(R.string.ui_enter_the_passphrase_used_when_this_backup_was_exported))
             .setView(field)
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("Unlock") { _, _ ->
+            .setNegativeButton(getString(R.string.ui_cancel), null)
+            .setPositiveButton(getString(R.string.ui_unlock)) { _, _ ->
                 val secret = field.text.toString().toCharArray()
                 field.text.clear()
                 validate(open, secret)
@@ -138,7 +138,7 @@ class RestoreActivity : Activity() {
     private fun validate(open: () -> java.io.InputStream, passphrase: CharArray?) {
         if (busy) { passphrase?.fill(0.toChar()); return }
         setBusy(true)
-        status.text = "Checking backup…"
+        status.text = getString(R.string.ui_checking_backup)
         worker.execute {
             val result = try {
                 runCatching { open().use { DataImporter.prepare(applicationContext, it, passphrase) } }
@@ -149,22 +149,22 @@ class RestoreActivity : Activity() {
                 result.fold({ backup ->
                     prepared?.close()
                     prepared = backup
-                    status.text = "Backup validated."
+                    status.text = getString(R.string.ui_backup_validated)
                     val summary = backup.summary
                     val message = String.format(Locale.getDefault(),
                         "Backup: %d roads • %s • %d GPS fixes\nPoints: %d\nExported: %s\n\nReplace this phone's current progress? A recovery backup is saved before replacement. Tracking and verified sharing will be turned off.",
                         summary.roadsUnlockedCount, MeasurementUnits.current().longDistance(summary.distanceMeters, decimals = 2), summary.trackPointCount,
                         backup.metadata.getLong("points_balance"), backup.metadata.getString("exported_at"))
-                    AlertDialog.Builder(this).setTitle("Replace device progress?").setMessage(message)
-                        .setNegativeButton("Cancel", null)
-                        .setPositiveButton("Restore") { _, _ ->
+                    AlertDialog.Builder(this).setTitle(getString(R.string.ui_replace_device_progress)).setMessage(message)
+                        .setNegativeButton(getString(R.string.ui_cancel), null)
+                        .setPositiveButton(getString(R.string.ui_restore)) { _, _ ->
                             prepared = null
                             restore(backup)
                         }
                         .setOnDismissListener { if (prepared === backup) { prepared = null; backup.close() } }.show()
                 }, { error ->
                     if (error is PassphraseBackup.PassphraseRequiredException) promptPassphrase(open)
-                    else status.text = "Backup was not imported: ${error.message ?: "invalid or unreadable file"}"
+                    else status.text = getString(R.string.ui_backup_was_not_imported_1_s, error.message ?: "invalid or unreadable file")
                 })
             }
         }
@@ -173,7 +173,7 @@ class RestoreActivity : Activity() {
     private fun restore(backup: DataImporter.Prepared) {
         restoreStarted = true
         setBusy(true)
-        status.text = "Saving recovery backup and restoring progress…"
+        status.text = getString(R.string.ui_saving_recovery_backup_and_restoring_progress)
         worker.execute {
             val result = runCatching { backup.use { DataImporter.restore(applicationContext, it) } }
             runOnUiThread {
@@ -184,7 +184,7 @@ class RestoreActivity : Activity() {
                     android.widget.Toast.makeText(this, "Progress restored. Tracking is off.", android.widget.Toast.LENGTH_LONG).show()
                     // Rebuild map/repository owners after invalidating their history generation.
                     startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
-                }, { status.text = "Restore failed: ${it.message}. Existing progress was kept. Check tracking settings before driving." })
+                }, { status.text = getString(R.string.ui_restore_failed_1_s_existing_progress_was_kept_check_tracking_set, it.message) })
             }
         }
     }

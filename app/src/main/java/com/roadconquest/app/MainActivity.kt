@@ -764,9 +764,9 @@ class MainActivity : Activity() {
             }.onFailure {
                 if (requestIfMissing) {
                     AlertDialog.Builder(this)
-                        .setTitle("Could not start tracking")
-                        .setMessage("Android blocked the tracking service. Open Road Conquest again and verify location permissions and battery settings.")
-                        .setPositiveButton("OK", null)
+                        .setTitle(getString(R.string.ui_could_not_start_tracking))
+                        .setMessage(getString(R.string.ui_android_blocked_the_tracking_service_open_road_conquest_again_an))
+                        .setPositiveButton(getString(R.string.ui_ok), null)
                         .show()
                 }
             }
@@ -795,16 +795,16 @@ class MainActivity : Activity() {
     private fun showLocationDisclosure() {
         if (locationDisclosure?.isShowing == true) return
         locationDisclosure = AlertDialog.Builder(this)
-            .setTitle("Location use")
+            .setTitle(getString(R.string.ui_location_use))
             .setMessage(
                 "Road Conquest collects precise location data to record driven roads and reveal visited places, including in the background when automatic tracking is enabled and the app is closed or not in use. " +
                     "It also uses location to show your position. Road matching sends GPS batches, timestamps and accuracy through Road Conquest's map service to Geoapify or fallback LocationIQ. Foreground U.S. town discovery sends individual saved GPS coordinates to Census TIGERweb. Verified scoring sends live GPS and app-integrity evidence only if you explicitly enable it."
             )
-            .setPositiveButton("Continue") { _, _ ->
+            .setPositiveButton(getString(R.string.ui_continue)) { _, _ ->
                 Prefs.setLocationDisclosureShown(this, true)
                 ensureBasicPermissions()
             }
-            .setNegativeButton("Not now", null)
+            .setNegativeButton(getString(R.string.ui_not_now), null)
             .create()
         locationDisclosure?.setOnDismissListener { locationDisclosure = null }
         locationDisclosure?.show()
@@ -815,33 +815,33 @@ class MainActivity : Activity() {
         Prefs.setBackgroundPromptShown(this, true)
 
         AlertDialog.Builder(this)
-            .setTitle("Allow all-the-time location")
+            .setTitle(getString(R.string.ui_allow_all_the_time_location))
             .setMessage(
                 "For Road Conquest to restart tracking automatically after a reboot or service restart when Android Location is on, " +
                     "set Location permission to ‘Allow all the time’ in Android settings. A tracking service that you start while Road Conquest is open can continue after you leave the app."
             )
-            .setPositiveButton("Open settings") { _, _ -> openAppSettings() }
-            .setNegativeButton("Not now", null)
+            .setPositiveButton(getString(R.string.ui_open_settings)) { _, _ -> openAppSettings() }
+            .setNegativeButton(getString(R.string.ui_not_now), null)
             .show()
     }
 
     private fun showPreciseLocationDialog() {
         AlertDialog.Builder(this)
-            .setTitle("Precise location required")
-            .setMessage("Road Conquest needs Precise location to distinguish nearby roads. Enable Precise location for Road Conquest in Android settings.")
-            .setPositiveButton("Open settings") { _, _ -> openAppSettings() }
-            .setNegativeButton("Not now", null)
+            .setTitle(getString(R.string.ui_precise_location_required))
+            .setMessage(getString(R.string.ui_road_conquest_needs_precise_location_to_distinguish_nearby_roads))
+            .setPositiveButton(getString(R.string.ui_open_settings)) { _, _ -> openAppSettings() }
+            .setNegativeButton(getString(R.string.ui_not_now), null)
             .show()
     }
 
     private fun showLocationOffDialog() {
         AlertDialog.Builder(this)
-            .setTitle("Location is off")
-            .setMessage("Turn on Android Location to record driven roads.")
-            .setPositiveButton("Location settings") { _, _ ->
+            .setTitle(getString(R.string.ui_location_is_off))
+            .setMessage(getString(R.string.ui_turn_on_android_location_to_record_driven_roads))
+            .setPositiveButton(getString(R.string.ui_location_settings)) { _, _ ->
                 SystemSettingsNavigator.open(this, SystemSettingsNavigator.Destination.DEVICE_LOCATION)
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(getString(R.string.ui_cancel), null)
             .show()
     }
 
@@ -889,10 +889,10 @@ class MainActivity : Activity() {
             val result = runCatching {
                 val summary = repository.getSummary()
                 val deleting = Prefs.isDeviceDataDeletionPending(this)
-                val progression = if (deleting) {
-                    ProgressionRepository(this).snapshot()
+                val synced = if (deleting) {
+                    ProgressionManager.SyncedProgress(ProgressionRepository(this).snapshot(), emptyList())
                 } else {
-                    ProgressionManager.sync(this, summary)
+                    ProgressionManager.syncWithAchievements(this, summary)
                 }
                 val unlocked = if (deleting) {
                     emptyList()
@@ -900,10 +900,10 @@ class MainActivity : Activity() {
                     Achievements.newlyUnlocked(
                         this,
                         summary,
-                        ProgressionManager.metrics(progression)
+                        synced.achievements
                     )
                 }
-                Triple(summary, progression, unlocked)
+                Triple(summary, synced.snapshot, unlocked)
             }
             runOnUiThread {
                 if (isDestroyed || generation != summaryGeneration) return@runOnUiThread
@@ -911,7 +911,7 @@ class MainActivity : Activity() {
                     onSuccess = { (value, progression, unlocked) ->
                         statsText.setTextIfDifferent(StatsText.mapOverview(this, value, progression.tilesUnlocked))
                         val points = String.format(Locale.getDefault(), "%,d", progression.balance)
-                        pointsText.setTextIfDifferent("Garage · ⚔ $points")
+                        pointsText.setTextIfDifferent(getString(R.string.ui_garage_1_s, points))
                         val pointsDescription = "Garage and shop. $points points. Double tap to open."
                         if (pointsText.contentDescription?.toString() != pointsDescription)
                             pointsText.contentDescription = pointsDescription
@@ -934,7 +934,7 @@ class MainActivity : Activity() {
                     onFailure = { error ->
                         Log.e("RoadConquest", "Could not load data summary", error)
                         statsText.setTextIfDifferent(getString(R.string.saved_data_unavailable))
-                        pointsText.setTextIfDifferent("Garage · Points unavailable")
+                        pointsText.setTextIfDifferent(getString(R.string.ui_garage_points_unavailable))
                         val pointsDescription = "Open Garage and shop. Points are temporarily unavailable."
                         if (pointsText.contentDescription?.toString() != pointsDescription)
                             pointsText.contentDescription = pointsDescription
@@ -944,13 +944,13 @@ class MainActivity : Activity() {
         }
 
         if (deletionPending) {
-            enableButton.setTextIfDifferent("Deleting device data…")
+            enableButton.setTextIfDifferent(getString(R.string.ui_deleting_device_data))
             enableButton.isEnabled = false
         } else if (trackingPaused) {
             enableButton.setTextIfDifferent(getString(R.string.resume_tracking))
             enableButton.isEnabled = true
         } else if (!manualOnly) {
-            enableButton.setTextIfDifferent("Enabled automatically")
+            enableButton.setTextIfDifferent(getString(R.string.ui_enabled_automatically))
             enableButton.isEnabled = false
         } else {
             enableButton.isEnabled = true
@@ -967,7 +967,7 @@ class MainActivity : Activity() {
         )
         val choices = arrayOf("No overlay", "Countries: blue", "States and regions: purple", "Towns: green")
         val current = renderer?.placeOverlayMode() ?: Prefs.placeOverlayMode(this)
-        AlertDialog.Builder(this).setTitle("Map overlay")
+        AlertDialog.Builder(this).setTitle(getString(R.string.ui_map_overlay))
             .setSingleChoiceItems(choices, modes.indexOf(current).coerceAtLeast(0)) { dialog, index ->
                 val next = modes[index]
                 if (next != current) {
@@ -984,7 +984,7 @@ class MainActivity : Activity() {
             }
             .setNeutralButton(if (renderer?.isNearbyExplorationVisible() == true)
                 "Hide nearby exploration" else "Explore nearby") { _, _ -> showNearbyExploration() }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(getString(R.string.ui_cancel), null)
             .show()
     }
 
@@ -1027,14 +1027,14 @@ class MainActivity : Activity() {
         val dialog = AlertDialog.Builder(this)
             .setTitle(info.name)
             .setMessage("")
-            .setPositiveButton("Close", null)
+            .setPositiveButton(getString(R.string.ui_close), null)
             .show()
         // Both workers update UI-owned strings on the main thread so neither
         // asynchronous result can erase the other or block ordinary map stats.
         fun updateDialog() {
             val heading = if (populationSource == "2020 Census") "Population (2020 Census)"
                 else "Population"
-            dialog.setMessage("$type\n$heading: $population\nArea: $area\nFirst visited: $firstVisited\nLast visited: $lastVisited$completion")
+            dialog.setMessage(getString(R.string.ui_place_details, type, heading, population, area, firstVisited, lastVisited, completion))
         }
         updateDialog()
         summaryExecutor.execute {
@@ -1099,7 +1099,7 @@ class MainActivity : Activity() {
                     "Times driven on road: " + driven + "\n" +
                     "Section length: " + length
             )
-            .setPositiveButton("Close", null)
+            .setPositiveButton(getString(R.string.ui_close), null)
             .show()
     }
 

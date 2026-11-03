@@ -59,6 +59,9 @@ class CsvUtilTest {
         val output = java.io.StringWriter()
         rows.forEach { CsvUtil.writeRow(output, it) }
         assertArrayEquals(original.toByteArray(Charsets.UTF_8), output.toString().toByteArray(Charsets.UTF_8))
+        val arrays = java.io.StringWriter()
+        rows.forEach { CsvUtil.writeRow(arrays, it.toTypedArray()) }
+        assertArrayEquals(output.toString().toByteArray(Charsets.UTF_8), arrays.toString().toByteArray(Charsets.UTF_8))
         val reader = CsvReader(java.io.StringReader(output.toString()))
         rows.forEach { row ->
             assertEquals(row, requireNotNull(reader.next()).map { CsvUtil.unescape(it) })

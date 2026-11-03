@@ -68,7 +68,9 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: account-function
-          path: server/dist/index.mjs
+          path: |
+            server/dist/index.mjs
+            server/dist/ingress.mjs
           retention-days: 14
       - name: Stop isolated PostgreSQL test database
         if: always()
@@ -553,6 +555,8 @@ jobs:
             exit 1
           fi
           cp "${account_bundles[0]}" "$out/RoadConquest-account-function-$version.mjs"
+          test -s "$function_dir/ingress.mjs"
+          cp "$function_dir/ingress.mjs" "$out/RoadConquest-account-ingress-$version.mjs"
 
           # ProGuard mapping and all four full MapLibre native-symbol files
           # must be embedded in the ONE Play upload AAB.

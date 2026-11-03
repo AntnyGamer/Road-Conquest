@@ -51,7 +51,7 @@ test('exported source inside another repository never claims the parent commit',
       'commit', '--allow-empty', '-qm', 'Unrelated parent']);
     const archive = join(temporary, 'export', 'server');
     await mkdir(join(archive, 'tools'), { recursive: true });
-    for (const path of ['src', 'package.json', 'tools/build-function.mjs']) {
+    for (const path of ['src', 'package.json', 'tools']) {
       await cp(new URL('../' + path, import.meta.url), join(archive, path), { recursive: true });
     }
     await symlink(fileURLToPath(new URL('../node_modules', import.meta.url)), join(archive, 'node_modules'), 'junction');

@@ -418,12 +418,7 @@ class TrackingService : Service(), LocationListener {
             storageExecutor.execute {
                 try {
                     repository.recordSkippedDrivingFix(accepted)
-                    if (placeCandidate != null && ::progressionRepository.isInitialized &&
-                        progressionRepository.recordPlaceCandidate(placeCandidate)
-                    ) {
-                        sendUiBroadcast(ACTION_PLACE_CANDIDATE_UPDATED)
-                        scheduleBackgroundPlaceDiscovery()
-                    }
+                    recordPlaceCandidate(placeCandidate)
                 } catch (error: Exception) {
                     Log.e("RoadConquest", "Could not preserve a compressed-out driving fix", error)
                     stopSelf()
@@ -446,20 +441,7 @@ class TrackingService : Service(), LocationListener {
                         add(accepted)
                     })
                 }
-                if (placeCandidate != null && ::progressionRepository.isInitialized) {
-                    try {
-                        if (progressionRepository.recordPlaceCandidate(placeCandidate)) {
-                            // Resolve actual new crossing candidates while the map is open,
-                            // even inside a previously cleared mile-sized fog tile.
-                            sendUiBroadcast(ACTION_PLACE_CANDIDATE_UPDATED)
-                            scheduleBackgroundPlaceDiscovery()
-                        }
-                    } catch (error: Exception) {
-                        // Optional municipal lookups must never interrupt recorded
-                        // driving, distance, road matching, or fog persistence.
-                        Log.e("RoadConquest", "Could not queue place discovery", error)
-                    }
-                }
+                recordPlaceCandidate(placeCandidate)
                 persistedDrivingFixThisSession.set(true)
                 sendUiBroadcast(ACTION_STATS_UPDATED)
                 maybeRunMatching()
@@ -467,6 +449,19 @@ class TrackingService : Service(), LocationListener {
                 Log.e("RoadConquest", "Could not save driving locations. Stopping tracking", error)
                 stopSelf()
             }
+        }
+    }
+
+    /** Optional discovery failure never interrupts a successfully persisted driving fix. */
+    private fun recordPlaceCandidate(candidate: Location?) {
+        if (candidate == null || !::progressionRepository.isInitialized) return
+        try {
+            if (progressionRepository.recordPlaceCandidate(candidate)) {
+                sendUiBroadcast(ACTION_PLACE_CANDIDATE_UPDATED)
+                scheduleBackgroundPlaceDiscovery()
+            }
+        } catch (error: Exception) {
+            Log.e("RoadConquest", "Could not queue place discovery", error)
         }
     }
 

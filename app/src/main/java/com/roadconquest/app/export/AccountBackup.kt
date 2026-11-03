@@ -28,7 +28,22 @@ object AccountBackup {
         }
     }
 
-    fun writePortable(context: Context, repository: TrackingRepository, output: OutputStream) {
+    class ExportReceipt internal constructor(private val repository: TrackingRepository, private val token: String) {
+        fun requireCurrent(context: Context) {
+            check(repository.isHistoryCurrent() && !Prefs.isDeviceDataDeletionPending(context) &&
+                AccountStore.load(context)?.token == token) {
+                "Progress or account changed during backup. Export again."
+            }
+        }
+    }
+
+    /** Validate after the document provider's final close, which can finish a slow cloud save. */
+    fun writeDocument(context: Context, repository: TrackingRepository, open: () -> OutputStream) {
+        val receipt = open().use { writePortable(context, repository, it) }
+        receipt.requireCurrent(context)
+    }
+
+    fun writePortable(context: Context, repository: TrackingRepository, output: OutputStream): ExportReceipt {
         val session = sessionKey(context)
         try {
             var written = 0L
@@ -58,10 +73,7 @@ object AccountBackup {
                     override fun close() = encrypted.flush()
                 })
             }
-            check(repository.isHistoryCurrent() && !Prefs.isDeviceDataDeletionPending(context) &&
-                AccountStore.load(context)?.token == session.token) {
-                "Progress or account changed during backup. Export again."
-            }
+            return ExportReceipt(repository, session.token).also { it.requireCurrent(context) }
         } finally { session.bytes.fill(0) }
     }
 

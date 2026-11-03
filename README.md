@@ -152,8 +152,8 @@ bitmap still covers the viewport, avoiding the old flash back to fully covered f
 accounts for the screen diagonal and camera latitude so rotation keeps the map inside its world edges.
 
 Place discovery is intentionally sparse: background tracking records only an occasional local
-candidate, while town/state/country names are resolved later on a foreground worker through
-Android's system geocoder. Point refreshes use aggregate database queries, Shop/Settings avoid
+candidate. Bounded workers resolve town/state/country names through Android's system geocoder
+while the map is visible or the tracking foreground service remains active in the background. Point refreshes use aggregate database queries, Shop/Settings avoid
 duplicate launch refreshes, and map cosmetics are only regenerated when their selection changes.
 These choices keep the progression system from adding continuous background network or rendering work.
 
@@ -244,7 +244,8 @@ Ads have network, memory, storage and battery costs.
 Driving history, explored places, points and purchases stay on the phone. Already verified
 road segments can be recognized locally on a repeat drive; new road matching sends bounded
 coordinate batches through the Road Conquest gateway to Geoapify. Town/state/country labels are requested through
-Android's system geocoder only while Road Conquest is foregrounded; the geocoder implementation and
+Android's system geocoder while the map is visible or the tracking foreground service remains active
+in the background; the geocoder implementation and
 network behavior are supplied by the device. Pending data remains saved for retry after network or
 matching failures. Settings → Backups & data offers two manual exports. **Secure backup** creates an
 AES-256-GCM-encrypted `.rcbackup` file that works across Google Play and GitHub builds;

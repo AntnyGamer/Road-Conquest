@@ -119,7 +119,7 @@ class ForumActivity : Activity() {
         compose = findViewById(R.id.forumCompose)
         plus = findViewById(R.id.forumPlus)
         morePosts = Button(this,null,0,R.style.RoadConquest_FilterAction).apply {
-            text = "Load more"
+            text = getString(R.string.ui_load_more)
             setOnClickListener { refresh(true) }
         }
         list.addFooterView(morePosts,null,true)
@@ -328,7 +328,7 @@ class ForumActivity : Activity() {
         }
     }
     private fun rules() {
-        AlertDialog.Builder(this).setTitle("Community rules").setMessage(R.string.forum_rules).setPositiveButton("Got it",null).show()
+        AlertDialog.Builder(this).setTitle(getString(R.string.ui_community_rules)).setMessage(R.string.forum_rules).setPositiveButton(getString(R.string.ui_got_it),null).show()
     }
     private fun saveDraft() {
         composer?.findViewById<EditText>(R.id.forumDraftText)?.let { draftText = it.text.toString() }
@@ -399,12 +399,12 @@ class ForumActivity : Activity() {
         content.addView(label("GIFs: up to 2 MB, 512 × 512 pixels and 60 frames.").apply { id = R.id.forumGifHelp })
         content.addView(Button(this,null,0,R.style.RoadConquest_TourQuietAction).apply {
             id = R.id.forumGifUpsell
-            this.text = "GIFs and highlights · Forum Plus"; setOnClickListener { showPlus() }
+            this.text = getString(R.string.ui_gifs_and_highlights_forum_plus); setOnClickListener { showPlus() }
         })
-        content.addView(Button(this,null,0,R.style.RoadConquest_TourQuietAction).apply { this.text = "Read community rules"; setOnClickListener { rules() } })
+        content.addView(Button(this,null,0,R.style.RoadConquest_TourQuietAction).apply { this.text = getString(R.string.ui_read_community_rules); setOnClickListener { rules() } })
         val agreed = CheckBox(this).apply {
             id = R.id.forumDraftRules
-            this.text = "I agree to the community rules. My post will be public."; minHeight = dp(48)
+            this.text = getString(R.string.ui_i_agree_to_the_community_rules_my_post_will_be_public); minHeight = dp(48)
             setTextColor(Appearance.color(this@ForumActivity,R.attr.rcTextSecondary))
         }
         content.addView(agreed)
@@ -442,9 +442,9 @@ class ForumActivity : Activity() {
                                 !response.isNull("muted_until") -> "Forum participation is muted until " + date(response.getString("muted_until")) + "."
                                 else -> "A second violation results in a 7-day forum mute."
                             }
-                            AlertDialog.Builder(this).setTitle("Post removed")
-                                .setMessage("The post violated the community rules. $penalty\n\nPost ID: ${response.optString("id")}")
-                                .setPositiveButton("OK",null).show()
+                            AlertDialog.Builder(this).setTitle(getString(R.string.ui_post_removed))
+                                .setMessage(getString(R.string.ui_the_post_violated_the_community_rules_1_s_post_id_2_s, penalty, response.optString("id")))
+                                .setPositiveButton(getString(R.string.ui_ok),null).show()
                         } else message("Posted to the community.")
                         refresh()
                     },onFailure = {
@@ -508,7 +508,7 @@ class ForumActivity : Activity() {
         }.apply { isEnabled = false }
         content.addView(checkout)
         content.addView(Button(this,null,0,R.style.RoadConquest_TourQuietAction).apply {
-            text = "Restore purchase"; setOnClickListener { restoreRequested = true; billing().restore() }
+            text = getString(R.string.ui_restore_purchase); setOnClickListener { restoreRequested = true; billing().restore() }
         })
         dialog.setOnDismissListener { checkout = null; purchaseMessage = null }
         showPanel(dialog)
@@ -524,9 +524,9 @@ class ForumActivity : Activity() {
                 result.fold(onSuccess = { array ->
                     val accounts = (0 until array.length()).map { array.getString(it) }
                     if (accounts.isEmpty()) message("You have no blocked accounts.")
-                    else AlertDialog.Builder(this).setTitle("Unblock an account")
+                    else AlertDialog.Builder(this).setTitle(getString(R.string.ui_unblock_an_account))
                         .setItems(accounts.toTypedArray()) { _,index -> action({ ForumClient.block(it,accounts[index],false) },"Account unblocked.") }
-                        .setNegativeButton("Cancel",null).show()
+                        .setNegativeButton(getString(R.string.ui_cancel),null).show()
                 },onFailure = { message("Could not load blocked accounts.") })
             }
         }
@@ -539,7 +539,7 @@ class ForumActivity : Activity() {
                 if (!active() || sessionToken() != token) return@runOnUiThread
                 result.fold(onSuccess = { array ->
                     if (array.length() == 0) message("No reports are waiting for review.")
-                    else AlertDialog.Builder(this).setTitle("Reported posts")
+                    else AlertDialog.Builder(this).setTitle(getString(R.string.ui_reported_posts))
                         .setItems(Array(array.length()) { i -> array.getJSONObject(i).let { "${it.getString("username")}: ${it.getString("text").take(120)}" } }) { _,index ->
                             val post = array.getJSONObject(index)
                             val reviewBody = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20),0,dp(20),0) }
@@ -550,23 +550,23 @@ class ForumActivity : Activity() {
                                 reviewBody.addView(image,LinearLayout.LayoutParams(-1,dp(200)))
                                 gifs.load(image,url,post.optString("gif_hash"))
                             }
-                            val review = AlertDialog.Builder(this).setTitle("Review post").setView(reviewBody)
-                                .setPositiveButton("Remove + strike") { _,_ -> action({ ForumClient.review(it,post.getString("id"),true) },"Post removed and violation applied.") }
-                                .setNeutralButton("Keep post") { _,_ -> action({ ForumClient.review(it,post.getString("id"),false) },"Report reviewed.") }
-                                .setNegativeButton("Cancel",null).create()
+                            val review = AlertDialog.Builder(this).setTitle(getString(R.string.ui_review_post)).setView(reviewBody)
+                                .setPositiveButton(getString(R.string.ui_remove_strike)) { _,_ -> action({ ForumClient.review(it,post.getString("id"),true) },"Post removed and violation applied.") }
+                                .setNeutralButton(getString(R.string.ui_keep_post)) { _,_ -> action({ ForumClient.review(it,post.getString("id"),false) },"Report reviewed.") }
+                                .setNegativeButton(getString(R.string.ui_cancel),null).create()
                             review.setOnDismissListener { gifs.clear(image) }
                             review.show()
-                        }.setNegativeButton("Close",null).show()
+                        }.setNegativeButton(getString(R.string.ui_close),null).show()
                 },onFailure = { message("Could not load moderation reports.") })
             }
         }
     }
     private fun appeal() {
         val name = EditText(this).apply { hint = "Username"; isSingleLine = true; filters = arrayOf(InputFilter.LengthFilter(24)) }
-        AlertDialog.Builder(this).setTitle("Clear forum penalties").setView(name)
-            .setMessage("Use after reviewing an appeal. This resets violations and removes the forum mute or ban.")
-            .setPositiveButton("Clear penalties") { _,_ -> action({ ForumClient.clearPenalty(it,name.text.toString()) },"Forum penalties cleared.") }
-            .setNegativeButton("Cancel",null).show()
+        AlertDialog.Builder(this).setTitle(getString(R.string.ui_clear_forum_penalties)).setView(name)
+            .setMessage(getString(R.string.ui_use_after_reviewing_an_appeal_this_resets_violations_and_removes))
+            .setPositiveButton(getString(R.string.ui_clear_penalties)) { _,_ -> action({ ForumClient.clearPenalty(it,name.text.toString()) },"Forum penalties cleared.") }
+            .setNegativeButton(getString(R.string.ui_cancel),null).show()
     }
 
     private inner class PostsAdapter : BaseAdapter() {
@@ -603,9 +603,9 @@ class ForumActivity : Activity() {
                         menu.add("Report post").setOnMenuItemClickListener {
                             val choices = arrayOf("Harassment","Hate","Sexual content","Graphic violence","Spam","Other")
                             val reasons = arrayOf("harassment","hate","sexual","violence","spam","other")
-                            AlertDialog.Builder(this@ForumActivity).setTitle("Report post").setItems(choices) { _,which ->
+                            AlertDialog.Builder(this@ForumActivity).setTitle(getString(R.string.ui_report_post)).setItems(choices) { _,which ->
                                 action({ ForumClient.report(it,post.id,reasons[which]) },"Report sent for review.")
-                            }.setNegativeButton("Cancel",null).show(); true
+                            }.setNegativeButton(getString(R.string.ui_cancel),null).show(); true
                         }
                         menu.add("Block ${post.username}").setOnMenuItemClickListener { action({ ForumClient.block(it,post.username,true) },"Account blocked. Its posts are hidden from your feed."); true }
                     }
@@ -618,7 +618,7 @@ class ForumActivity : Activity() {
             val count = post.reactions[key] ?: 0
             val selected = post.mine == key
             view.findViewById<Button>(id).apply {
-                text = "$icon $count"
+                text = getString(R.string.ui_value_unit, icon, count.toString())
                 contentDescription = "$key: $count" + if (selected) ", selected" else ""
                 isSelected = selected
                 setTextColor(Appearance.color(this@ForumActivity,if (selected) R.attr.rcAccent else R.attr.rcTextSecondary))

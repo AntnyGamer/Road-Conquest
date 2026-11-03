@@ -1,18 +1,9 @@
 import { build } from "esbuild";
 import { fileURLToPath } from "node:url";
-import { execFileSync } from "node:child_process";
-import { realpathSync } from "node:fs";
+import { sourceRevision } from './source-revision.mjs';
 
 const root = fileURLToPath(new URL("../", import.meta.url));
-let revision = process.env.ROADCONQUEST_SERVER_REVISION || null;
-try {
-  const [checkout, head] = execFileSync('git', ['rev-parse', '--show-toplevel', 'HEAD'],
-    { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim().split(/\r?\n/);
-  // Exported source may sit inside an unrelated repository. Only this checkout
-  // can identify the bundle's source; otherwise keep the explicit value or null.
-  if (realpathSync(checkout) === realpathSync(new URL('../../', import.meta.url))) revision = head;
-} catch { /* Exported source archives can supply the revision explicitly. */ }
-if (revision !== null && !/^[a-f0-9]{40}$/i.test(revision)) throw new Error('Invalid server source revision');
+const revision = sourceRevision();
 await build({
   absWorkingDir: root,
   entryPoints: ["src/function.mjs"],

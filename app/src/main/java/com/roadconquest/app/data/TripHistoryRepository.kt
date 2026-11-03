@@ -42,6 +42,7 @@ class TripHistoryRepository(context: Context) {
 
     /** Bounded recent history: free users see 100 drives; VIP can request up to 500. */
     fun recentTrips(limit: Int = 100): List<SavedTrip> = withHistorySnapshot { db, generation ->
+        requireActiveRead()
         require(limit in 1..(if (VipEntitlement.isActive(appContext)) 500 else 100)) {
             "Extended trip history requires lifetime VIP"
         }
@@ -69,6 +70,7 @@ class TripHistoryRepository(context: Context) {
         var beforeId: Long? = null
         var pageSize = RECENT_TRIP_PAGE_SIZE
         while (output.size < limit) {
+            requireActiveRead()
             var rows = 0
             val where = if (beforeId == null) "" else " WHERE id < ?"
             db.rawQuery(
@@ -76,6 +78,7 @@ class TripHistoryRepository(context: Context) {
                 beforeId?.let { arrayOf(it.toString()) }
             ).use { cursor ->
                 while (cursor.moveToNext() && output.size < limit) {
+                    requireActiveRead()
                     val id = cursor.getLong(0)
                     beforeId = id
                     rows++
@@ -228,6 +231,7 @@ class TripHistoryRepository(context: Context) {
     /** Read a bounded route sample, always retaining the first and last points. */
     fun replay(trip: SavedTrip, maxPoints: Int = 2500): List<SavedTripPoint> =
         withHistorySnapshot { db, generation ->
+            requireActiveRead()
             require(maxPoints in 2..5000)
             if (trip.historyGeneration != generation) return@withHistorySnapshot emptyList()
             val bounds = arrayOf(trip.firstId.toString(), trip.lastId.toString())
@@ -248,6 +252,7 @@ class TripHistoryRepository(context: Context) {
                     "WHERE id BETWEEN ? AND ? ORDER BY id ASC", bounds
             ).use { cursor ->
                 while (cursor.moveToNext()) {
+                    requireActiveRead()
                     val time = cursor.getLong(2)
                     previousTime?.let { if (time <= it || time - it > 30_000L) gapSinceSample = true }
                     lastLatitude = cursor.getDouble(0)
@@ -275,6 +280,9 @@ class TripHistoryRepository(context: Context) {
         }
 
     companion object {
+        private fun requireActiveRead() {
+            if (Thread.currentThread().isInterrupted) throw InterruptedException("Trip read cancelled")
+        }
         internal const val RECENT_TRIP_PAGE_SIZE = 512
         private const val MAX_RECENT_TRIP_PAGE_SIZE = 8192
         internal const val TRIP_GAP_MS = 15 * 60_000L

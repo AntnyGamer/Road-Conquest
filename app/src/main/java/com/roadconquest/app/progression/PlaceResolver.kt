@@ -17,7 +17,7 @@ import java.util.Locale
 
 object PlaceResolver {
     /**
-     * The foreground worker processes up to six GPS candidates per batch.
+     * Visible-map and tracking-service workers process bounded GPS candidate batches.
      * Parse relevant official cached town geometry once per batch, not once per fix.
      * A new verified town is immediately available to later fixes in the batch.
      * No location, town matching, or reward criteria are changed.
@@ -314,9 +314,7 @@ object PlaceResolver {
             else firstValue { it.countryName }
         }
         val isUnitedStates = reportedCountryCode.equals("US", ignoreCase = true) ||
-            canonical(reportedCountryName) in setOf(
-                "us", "usa", "united states", "united states of america"
-            )
+            canonical(reportedCountryName) in US_COUNTRY_NAMES
         // Reverse geocoders can omit either country field for the very same GPS
         // position. Use one stable US key and display name regardless of which
         // field was present, including during the zero-point baseline.
@@ -388,6 +386,7 @@ object PlaceResolver {
         " township", " borough", " municipality", " village", " town", " city"
     )
     private val WHITESPACE_RE = Regex("\\s+")
+    private val US_COUNTRY_NAMES = setOf("us", "usa", "united states", "united states of america")
     private val ISO_COUNTRY_CODES = Locale.getISOCountries().toSet()
     private const val MAX_RESULTS = 5
 }

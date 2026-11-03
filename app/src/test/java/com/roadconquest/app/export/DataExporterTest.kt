@@ -90,7 +90,7 @@ class DataExporterTest {
         assertEquals(com.roadconquest.app.BuildConfig.VERSION_CODE, metadata.getInt("app_version_code"))
         assertEquals(1L, metadata.getLong("explored_place_count"))
         assertEquals(1L, metadata.getLong("road_visit_count"))
-        assertEquals(0L, metadata.getLong("points_balance"))
+        assertEquals(2L, metadata.getLong("points_balance"))
         assertEquals(0L, metadata.getLong("towns_visited"))
         assertEquals(1, entries.getValue("visited_places.csv").lineSequence().filter { it.isNotEmpty() }.count())
         assertEquals(2, entries.getValue("explored_places.csv").lineSequence().filter { it.isNotEmpty() }.count())

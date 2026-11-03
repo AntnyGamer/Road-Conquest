@@ -10,6 +10,25 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31, 37], manifest = Config.NONE)
 class TripHistoryRepositoryTest {
+    @Test fun cancelledTripScansStopPromptlyAndLeaveHistoryReadable() {
+        val context = RuntimeEnvironment.getApplication()
+        TrackingRepository(context).clearHistory()
+        val db = AppDatabase.get(context).writableDatabase
+        db.execSQL("""INSERT INTO track_points(latitude,longitude,accuracy_m,speed_mps,bearing_deg,timestamp_ms,distance_m)
+            VALUES (40,-74,3,8,90,1000,10),(40.001,-74,3,8,90,2000,10)""")
+        val repository = TripHistoryRepository(context)
+        val trip = repository.recentTrips().single()
+        for (read in listOf<() -> Any>({ repository.recentTrips() }, { repository.replay(trip) })) {
+            Thread.currentThread().interrupt()
+            try {
+                assertTrue(runCatching(read).exceptionOrNull() is InterruptedException)
+                assertTrue(Thread.currentThread().isInterrupted)
+            } finally { Thread.interrupted() }
+        }
+        assertEquals(listOf(trip), repository.recentTrips())
+        assertEquals(2, repository.replay(trip).size)
+    }
+
     @Test fun tinyWalkingNoiseGroupsAreHiddenWithoutDeletingDataOrHidingCredibleShortDrives() {
         val context = RuntimeEnvironment.getApplication()
         TrackingRepository(context).clearHistory()

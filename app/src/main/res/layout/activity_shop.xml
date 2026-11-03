@@ -23,12 +23,12 @@
             android:layout_width="wrap_content"
             android:layout_height="48dp"
             android:layout_marginBottom="8dp"
-            android:text="Back" />
+            android:text="@string/tour_back" />
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="CUSTOMIZE YOUR JOURNEY"
+            android:text="@string/ui_customize_your_journey"
             android:letterSpacing="0.14"
             android:textSize="12sp"
             android:fontFamily="sans-serif-medium"
@@ -38,7 +38,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:text="Garage &amp; Shop"
+            android:text="@string/ui_garage_shop"
             android:accessibilityHeading="true"
             android:textColor="?attr/rcTextPrimary"
             android:textSize="30sp"
@@ -51,7 +51,7 @@
             android:layout_marginTop="12dp"
             android:background="@drawable/panel_background"
             android:elevation="3dp"
-            android:text="⚔ 0 points"
+            android:text="@string/ui_0_points"
             android:textColor="?attr/rcTextPrimary"
             android:textSize="18sp"
             android:textStyle="bold" />

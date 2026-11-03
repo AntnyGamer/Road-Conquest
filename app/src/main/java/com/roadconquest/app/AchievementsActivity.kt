@@ -95,8 +95,8 @@ class AchievementsActivity : Activity() {
             if (expected != loadGeneration) return@execute
             val result = runCatching {
                 val summary = TrackingRepository(this).getSummary()
-                val progression = ProgressionManager.sync(this, summary)
-                progression to Achievements.progress(this, summary, ProgressionManager.metrics(progression))
+                val synced = ProgressionManager.syncWithAchievements(this, summary)
+                synced.snapshot to synced.achievements
             }
             runOnUiThread {
                 if (isDestroyed || expected != loadGeneration) return@runOnUiThread
@@ -114,7 +114,7 @@ class AchievementsActivity : Activity() {
                         achievements = emptyList()
                         list.removeAllViews()
                         text.visibility = android.view.View.VISIBLE
-                        text.text = "Achievements are temporarily unavailable."
+                        text.text = getString(R.string.ui_achievements_are_temporarily_unavailable)
                     }
                 )
             }
@@ -159,17 +159,17 @@ class AchievementsActivity : Activity() {
             setPadding(padding, padding, padding, padding)
         }
         card.addView(TextView(this).apply {
-            val title = if (metricDistance && item.id == "miles_10000") "Distance Champion"
-                else if (metricDistance && item.id == "miles_5000") "Distance Legend" else item.title
-            text = (if (item.unlocked) "✓  " else "○  ") + title
+            val title = if (metricDistance && item.id == "miles_10000") getString(R.string.ui_distance_champion)
+                else if (metricDistance && item.id == "miles_5000") getString(R.string.ui_distance_legend) else item.title
+            text = getString(if (item.unlocked) R.string.ui_achievement_unlocked else R.string.ui_achievement_locked, title)
             setTextColor(Appearance.color(this@AchievementsActivity, R.attr.rcTextPrimary))
             textSize = 17f
             setTypeface(typeface, android.graphics.Typeface.BOLD)
         })
         card.addView(TextView(this).apply {
-            val description = if (metricDistance) "Travel " + units.longDistance(
-                item.goal * MeasurementUnits.METERS_PER_MILE) else item.description
-            text = description + String.format(Locale.getDefault(), "  •  +%,d points", item.rewardPoints)
+            val description = if (metricDistance) getString(R.string.ui_travel_distance, units.longDistance(
+                item.goal * MeasurementUnits.METERS_PER_MILE)) else item.description
+            text = resources.getQuantityString(R.plurals.ui_achievement_reward, item.rewardPoints.toInt(), description, item.rewardPoints)
             setTextColor(Appearance.color(this@AchievementsActivity, R.attr.rcTextSecondary))
             textSize = 14f
             setPadding(0, dp(4), 0, dp(8))

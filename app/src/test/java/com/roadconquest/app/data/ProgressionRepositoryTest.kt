@@ -25,6 +25,21 @@ class ProgressionRepositoryTest {
         Achievements.reset(context)
     }
 
+    @Test fun sharedAchievementEvaluationPreservesRoadMaximumRewardsAndOneTimeAnnouncements() {
+        val summary = TrackingRepository(context).getSummary().copy(roadsUnlockedCount = 10)
+        val first = ProgressionManager.syncWithAchievements(context, summary)
+        assertEquals(Achievements.progress(context, summary, ProgressionManager.metrics(first.snapshot)), first.achievements)
+        assertTrue(Achievements.newlyUnlocked(context, summary, first.achievements).isEmpty())
+        val nextSummary = summary.copy(roadsUnlockedCount = 25)
+        val next = ProgressionManager.syncWithAchievements(context, nextSummary)
+        assertEquals(listOf("roads_25"), Achievements.newlyUnlocked(context, nextSummary, next.achievements).map { it.id })
+        assertTrue(Achievements.newlyUnlocked(context, nextSummary, next.achievements).isEmpty())
+        val merged = summary.copy(roadsUnlockedCount = 1)
+        val afterMerge = ProgressionManager.syncWithAchievements(context, merged)
+        assertEquals(next.achievements, afterMerge.achievements)
+        assertEquals(next.snapshot.balance, afterMerge.snapshot.balance)
+    }
+
     @Test fun resetLocalProgressionAlsoClearsAchievementPreferenceState() {
         com.roadconquest.app.util.Prefs.setCarStyle(context, "sport")
         com.roadconquest.app.util.Prefs.setCarColor(context, "red")

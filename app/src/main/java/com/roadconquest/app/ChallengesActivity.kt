@@ -71,7 +71,7 @@ class ChallengesActivity : Activity() {
             root.addView(this)
         }
         root.addView(Button(this, null, 0, R.style.RoadConquest_BackAction).apply {
-            text = "Back"
+            text = getString(R.string.tour_back)
             setOnClickListener { finish() }
         }, LinearLayout.LayoutParams(dp(110), dp(48)).apply { bottomMargin = dp(8) })
         label("YOUR WEEK", 12f).apply {
@@ -88,7 +88,7 @@ class ChallengesActivity : Activity() {
             root.addView(this, LinearLayout.LayoutParams(-1, -2))
         }
         root.addView(Button(this, null, 0, R.style.RoadConquest_SettingsAction).apply {
-            text = "Refresh"
+            text = getString(R.string.ui_refresh)
             setOnClickListener { refresh() }
         }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
         val socialStart = root.childCount
@@ -104,17 +104,17 @@ class ChallengesActivity : Activity() {
         }
         status = label("").apply { setPadding(0, 0, 0, 0) }
         invite = Button(this).apply {
-            text = "Add friend by username"
+            text = getString(R.string.ui_add_friend_by_username)
             setOnClickListener {
                 if (AccountStore.load(this@ChallengesActivity) == null) {
                     startActivity(Intent(this@ChallengesActivity, AccountActivity::class.java))
                 } else {
                     val input = EditText(this@ChallengesActivity).apply {
-                        hint = "Road Conquest username"; setSingleLine(); filters = arrayOf(InputFilter.LengthFilter(24))
+                        hint = getString(R.string.ui_road_conquest_username); setSingleLine(); filters = arrayOf(InputFilter.LengthFilter(24))
                     }
-                    AlertDialog.Builder(this@ChallengesActivity).setTitle("Send friend request").setView(input)
-                        .setNegativeButton("Cancel", null)
-                        .setPositiveButton("Request") { _, _ -> changeFriend(input.text.toString().trim(), "request") }.show()
+                    AlertDialog.Builder(this@ChallengesActivity).setTitle(getString(R.string.ui_send_friend_request)).setView(input)
+                        .setNegativeButton(getString(R.string.ui_cancel), null)
+                        .setPositiveButton(getString(R.string.ui_request)) { _, _ -> changeFriend(input.text.toString().trim(), "request") }.show()
                 }
             }
             minHeight = dp(52)
@@ -139,7 +139,7 @@ class ChallengesActivity : Activity() {
                 social.addView(child)
             }
             val toggle = Button(this, null, 0, R.style.RoadConquest_SettingsAction).apply {
-                text = "Manage friends"
+                text = getString(R.string.ui_manage_friends)
                 setOnClickListener {
                     socialExpanded = !socialExpanded
                     social.visibility = if (socialExpanded) View.VISIBLE else View.GONE
@@ -174,9 +174,9 @@ class ChallengesActivity : Activity() {
             if (session == null) {
                 runOnUiThread {
                     if (!isDestroyed && expected == generation) {
-                        status.text = "Sign in to add friends."
+                        status.text = getString(R.string.ui_sign_in_to_add_friends)
                         ranking.text = if (FeatureFlags.LEADERBOARDS_VISIBLE) "Sign in to view verified weekly rankings." else ""
-                        invite.text = "Sign in"; friends.removeAllViews()
+                        invite.text = getString(R.string.ui_sign_in); friends.removeAllViews()
                     }
                 }
                 return@execute
@@ -195,7 +195,7 @@ class ChallengesActivity : Activity() {
             } else null
             runOnUiThread {
                 if (isDestroyed || expected != generation || AccountStore.load(this)?.token != session.token) return@runOnUiThread
-                invite.text = "Add friend by username"
+                invite.text = getString(R.string.ui_add_friend_by_username)
                 friends.removeAllViews()
                 status.text = pendingFriendFeedback.orEmpty()
                 pendingFriendFeedback = null
@@ -218,15 +218,15 @@ class ChallengesActivity : Activity() {
                         }, 13f))
                         val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
                         if (relation == "incoming") actions.addView(Button(this).apply {
-                            text = "Accept"; isEnabled = !changingFriend
+                            text = getString(R.string.ui_accept); isEnabled = !changingFriend
                             setOnClickListener { changeFriend(username, "accept") }
                         }, LinearLayout.LayoutParams(0, -2, 1f))
                         actions.addView(Button(this, null, 0, R.style.RoadConquest_SettingsAction).apply {
                             text = when (relation) { "accepted" -> "Remove"; "incoming" -> "Decline"; else -> "Cancel request" }
                             isEnabled = !changingFriend
                             setOnClickListener {
-                                AlertDialog.Builder(this@ChallengesActivity).setTitle("${text} $username?")
-                                    .setNegativeButton("Keep", null)
+                                AlertDialog.Builder(this@ChallengesActivity).setTitle(getString(R.string.ui_action_username_confirmation, text, username))
+                                    .setNegativeButton(getString(R.string.ui_keep), null)
                                     .setPositiveButton(text) { _, _ -> changeFriend(username, "remove") }.show()
                             }
                         }, LinearLayout.LayoutParams(0, -2, 1f).apply {
@@ -287,7 +287,7 @@ class ChallengesActivity : Activity() {
                 max = 1000
                 progress = ((goal.progress.coerceIn(0L, goal.target).toDouble() /
                     goal.target.coerceAtLeast(1L)) * 1000).toInt()
-                contentDescription = "${goal.title}: ${goal.progress.coerceAtMost(goal.target)} of ${goal.target}"
+                contentDescription = getString(R.string.ui_goal_accessibility, goal.title, goal.progress.coerceAtMost(goal.target), goal.target)
             }, LinearLayout.LayoutParams(-1, dp(12)).apply { topMargin = dp(6) })
             section.addView(goalLabel("${goal.progress.coerceAtMost(goal.target)} / ${goal.target}", 13f))
             local.addView(section)
@@ -301,10 +301,10 @@ class ChallengesActivity : Activity() {
 
     private fun changeFriend(username: String, action: String) {
         if (changingFriend) return
-        if (!username.matches(Regex("[A-Za-z0-9_]{3,24}"))) { status.text = "Enter a valid 3–24 character username."; return }
+        if (!username.matches(Regex("[A-Za-z0-9_]{3,24}"))) { status.text = getString(R.string.ui_enter_a_valid_3_24_character_username); return }
         val session = AccountStore.load(this) ?: return
         changingFriend = true; invite.isEnabled = false
-        status.text = "Updating friendship…"
+        status.text = getString(R.string.ui_updating_friendship)
         worker.execute {
             val result = runCatching { AccountClient.changeFriend(session.token, username, action) }
             runOnUiThread {

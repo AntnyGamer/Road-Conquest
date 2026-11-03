@@ -1,5 +1,9 @@
 import { createHmacSigner } from './hmac.mjs';
 
+const revision = typeof __ROADCONQUEST_INGRESS_REVISION__ === 'undefined' ? null : __ROADCONQUEST_INGRESS_REVISION__;
+const INGRESS_INFO = Object.freeze({ ok: true, service: 'account-ingress',
+  revision: typeof revision === 'string' && /^[a-f0-9]{40}$/i.test(revision) ? revision.toLowerCase() : null });
+
 /**
  * Road Conquest's optional Cloudflare Workers ingress for its Neon account API.
  *
@@ -63,10 +67,16 @@ function unavailable() {
 export function createAccountIngress(upstreamFetch = fetch, now = () => Date.now()) {
   const sign = createHmacSigner();
   return async function handle(request, env) {
+    const incoming = new URL(request.url);
+    if (incoming.protocol === 'https:' && incoming.pathname === '/health/ingress' &&
+        (request.method === 'GET' || request.method === 'HEAD')) {
+      return new Response(request.method === 'HEAD' ? null : JSON.stringify(INGRESS_INFO), {
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }
+      });
+    }
     const originConfig = configuredOrigin(env?.API_ORIGIN);
     const key = env?.RATE_LIMIT_IP_SIGNATURE_KEY;
     if (!originConfig || typeof key !== "string" || key.length < 32) return unavailable();
-    const incoming = new URL(request.url);
     // A misconfigured Worker must never proxy into itself and loop until
     // Cloudflare exhausts subrequest limits. The real Neon origin differs.
     if (originConfig.host === incoming.host) return unavailable();

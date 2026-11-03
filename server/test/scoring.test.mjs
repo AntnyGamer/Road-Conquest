@@ -16,6 +16,30 @@ const verdict = () => ({ requestDetails: { requestHash: "hash", requestPackageNa
   appIntegrity: { appRecognitionVerdict: "PLAY_RECOGNIZED", packageName: config.packageName, versionCode: "90", certificateSha256Digest: config.certificates },
   accountDetails: { appLicensingVerdict: "LICENSED" }, deviceIntegrity: { deviceRecognitionVerdict: ["MEETS_DEVICE_INTEGRITY", "MEETS_STRONG_INTEGRITY"] } });
 
+test('evidence fields are order-independent, with every missing or unexpected field rejected', () => {
+  const valid = evidence();
+  const reversed = Object.fromEntries(Object.entries(valid).reverse());
+  reversed.fixes = valid.fixes.map(fix => Object.fromEntries(Object.entries(fix).reverse()));
+  assert.deepEqual(parseEvidence(JSON.stringify(reversed), now), valid);
+  for (const key of Object.keys(valid)) {
+    const body = evidence();
+    delete body[key];
+    assert.throws(() => parseEvidence(JSON.stringify(body), now));
+  }
+  for (const key of Object.keys(valid.fixes[0])) {
+    const body = evidence();
+    delete body.fixes[0][key];
+    assert.throws(() => parseEvidence(JSON.stringify(body), now));
+  }
+  for (const key of ['__proto__', 'constructor', 'prototype', 'cells', 'lat,lon']) {
+    for (const fix of [false, true]) {
+      const body = evidence();
+      Object.defineProperty(fix ? body.fixes[0] : body, key, { value: 1, enumerable: true });
+      assert.throws(() => parseEvidence(JSON.stringify(body), now));
+    }
+  }
+});
+
 test("only tightly bounded fresh GPS evidence is accepted and all client totals are rejected", () => {
   const body = evidence();
   assert.deepEqual(parseEvidence(JSON.stringify(body), now), body);

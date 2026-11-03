@@ -119,6 +119,7 @@ class ShopActivity : Activity() {
     private fun refresh() {
         val current = ++generation
         executor.execute {
+            if (isDestroyed || current != generation) return@execute
             val result = runCatching {
                 val summary = TrackingRepository(this).getSummary()
                 ProgressionManager.sync(this, summary)
@@ -128,8 +129,8 @@ class ShopActivity : Activity() {
                 result.fold(
                     onSuccess = ::render,
                     onFailure = {
-                        pointsText.text = "Points unavailable"
-                        progressText.text = "Could not load local progression."
+                        pointsText.text = getString(R.string.ui_points_unavailable)
+                        progressText.text = getString(R.string.ui_could_not_load_local_progression)
                         items.removeAllViews()
                     }
                 )
@@ -175,13 +176,13 @@ class ShopActivity : Activity() {
         val vip = VipEntitlement.isActive(this)
         val card = newShopCard()
         card.addView(TextView(this).apply {
-            text = "VIP • Lifetime"
+            text = getString(R.string.ui_vip_lifetime)
             textSize = 20f
             setTypeface(typeface, android.graphics.Typeface.BOLD)
             setTextColor(Appearance.color(this@ShopActivity, R.attr.rcTextPrimary))
         })
         card.addView(TextView(this).apply {
-            text = "Lifetime VIP is a one-time Google Play purchase. It removes banners and rewarded-ad offers and unlocks the Gold car, roads and theme, up to 500 recent drives, trip-summary sharing and GPX export."
+            text = getString(R.string.ui_lifetime_vip_is_a_one_time_google_play_purchase_it_removes_banne)
             textSize = 13f
             setTextColor(Appearance.color(this@ShopActivity, R.attr.rcTextSecondary))
             setPadding(0, dp(8), 0, dp(8))
@@ -274,7 +275,7 @@ class ShopActivity : Activity() {
     private fun previewFor(item: ShopItem): View {
         val preview = LinearLayout(this).apply {
             gravity = Gravity.CENTER
-            contentDescription = "Preview: ${item.name}"
+            contentDescription = getString(R.string.ui_preview_1_s, item.name)
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }
         when (item.type) {

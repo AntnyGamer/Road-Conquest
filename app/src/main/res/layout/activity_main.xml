@@ -21,7 +21,7 @@
         android:layout_height="match_parent"
         android:background="?attr/rcScreenBg"
         android:gravity="center"
-        android:text="Loading map…"
+        android:text="@string/ui_loading_map"
         android:textColor="?attr/rcTextSecondary"
         android:textSize="14sp"
         android:visibility="gone" />
@@ -56,8 +56,8 @@
         android:gravity="center_vertical"
         android:paddingStart="12dp"
         android:paddingEnd="12dp"
-        android:text="Garage · ⚔ 0"
-        android:contentDescription="Garage and shop. 0 points. Double tap to open."
+        android:text="@string/ui_garage_0"
+        android:contentDescription="@string/ui_garage_and_shop_0_points_double_tap_to_open"
         android:textColor="?attr/rcTextPrimary"
         android:textSize="12sp"
         android:fontFamily="sans-serif-medium" />
@@ -97,7 +97,7 @@
         android:layout_marginEnd="10dp"
         android:layout_marginTop="126dp"
         android:background="@drawable/circle_button_background"
-        android:contentDescription="Map layers and overlays"
+        android:contentDescription="@string/ui_map_layers_and_overlays"
         android:elevation="6dp"
         android:padding="12dp"
         android:src="@drawable/ic_layers"
@@ -127,7 +127,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Not tracking"
+                android:text="@string/ui_not_tracking"
                 android:textColor="?attr/rcTextPrimary"
                 android:textSize="15sp"
                 android:fontFamily="sans-serif-medium"
@@ -152,7 +152,7 @@
             android:layout_height="wrap_content"
             android:minHeight="48dp"
             android:layout_marginTop="6dp"
-            android:text="Enable tracking" />
+            android:text="@string/ui_enable_tracking" />
 
         <LinearLayout
             android:id="@+id/exploreNav"
@@ -166,7 +166,7 @@
                 android:drawableTop="@drawable/ic_nav_trips"
                 android:drawablePadding="2dp"
                 android:drawableTint="?attr/rcTextPrimary"
-                android:contentDescription="Trip history and replay"
+                android:contentDescription="@string/ui_trip_history_and_replay"
                 style="@style/RoadConquest.NavigationAction"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
@@ -174,14 +174,14 @@
                 android:paddingTop="8dp"
                 android:paddingBottom="8dp"
                 android:layout_weight="1"
-                android:text="Trips" />
+                android:text="@string/ui_trips" />
 
             <Button
                 android:id="@+id/badgesNavButton"
                 android:drawableTop="@drawable/ic_nav_badges"
                 android:drawablePadding="2dp"
                 android:drawableTint="?attr/rcTextPrimary"
-                android:contentDescription="Achievements and milestones"
+                android:contentDescription="@string/ui_achievements_and_milestones"
                 style="@style/RoadConquest.NavigationAction"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
@@ -190,14 +190,14 @@
                 android:paddingBottom="8dp"
                 android:layout_marginStart="6dp"
                 android:layout_weight="1"
-                android:text="Badges" />
+                android:text="@string/ui_badges" />
 
             <Button
                 android:id="@+id/weeklyGoalsNavButton"
                 android:drawableTop="@drawable/ic_nav_weekly"
                 android:drawablePadding="2dp"
                 android:drawableTint="?attr/rcTextPrimary"
-                android:contentDescription="Weekly exploration goals"
+                android:contentDescription="@string/ui_weekly_exploration_goals"
                 style="@style/RoadConquest.NavigationAction"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
@@ -206,7 +206,7 @@
                 android:paddingBottom="8dp"
                 android:layout_marginStart="6dp"
                 android:layout_weight="1"
-                android:text="Goals" />
+                android:text="@string/ui_goals" />
             <Button
                 android:id="@+id/forumNavButton"
                 style="@style/RoadConquest.NavigationAction"
@@ -220,8 +220,8 @@
                 android:drawableTop="@drawable/ic_forum"
                 android:drawablePadding="2dp"
                 android:drawableTint="?attr/rcTextPrimary"
-                android:contentDescription="Public community forum"
-                android:text="Forum" />
+                android:contentDescription="@string/ui_public_community_forum"
+                android:text="@string/ui_forum" />
         </LinearLayout>
     </LinearLayout>
 </FrameLayout>

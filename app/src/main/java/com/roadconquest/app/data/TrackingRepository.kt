@@ -5,7 +5,6 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.location.Location
 import android.database.Cursor
-import android.os.Build
 import com.roadconquest.app.util.LocationProviders
 import com.roadconquest.app.util.allAdjacent
 import org.json.JSONArray
@@ -1100,6 +1099,12 @@ class TrackingRepository(context: Context) {
         val identityPrefix = humanRoadIdentityPrefix(name, referenceKeys)
         val canonicalSegment = canonicalSegments.minOrNull() ?: segmentId
         val canonical = "$identityPrefix|$canonicalSegment"
+        // Reward the discovery, not the mutable group count. A connector can
+        // merge earlier groups without making the next genuinely new road free.
+        // This shares the geometry transaction, including its rollback.
+        if (groupIds.isEmpty() && ungroupedSegments.isEmpty()) {
+            ProgressionRepository.rewardNewRoad(db)
+        }
         val values = ContentValues().apply { put("road_group_id", canonical) }
         for (group in groupIds) {
             if (group != canonical) {
@@ -1783,44 +1788,49 @@ class TrackingRepository(context: Context) {
     /** Copy history at one database revision, then release locks before slow ZIP I/O. */
     @Synchronized
     fun copyExportSnapshot(destination: SQLiteDatabase) {
-        val source = dbHelper.readableDatabase
-        if (Build.VERSION.SDK_INT >= 35) source.beginTransactionReadOnly() else source.beginTransactionNonExclusive()
-        try {
-            destination.beginTransaction()
+        // An owned read-only database has one connection. An outer SAVEPOINT
+        // opens a DEFERRED snapshot on every supported Android version without
+        // reserving the live pool's writer (the pre-35 transaction APIs do).
+        SQLiteDatabase.openDatabase(dbHelper.readableDatabase.path, null, SQLiteDatabase.OPEN_READONLY).use { source ->
+            source.execSQL("SAVEPOINT export_snapshot")
             try {
-                for (table in listOf(
-                    "track_points", "skipped_driving_fixes", "roads", "road_visits", "explored_places", "explored_grid",
-                    "visited_places", "place_candidates", "progression_rewards",
-                    "progression_purchases", "progression_counters"
-                )) {
-                    val createSql = source.rawQuery("SELECT sql FROM sqlite_master WHERE type='table' AND name=?", arrayOf(table)).use {
-                        check(it.moveToFirst()); it.getString(0)
-                    }
-                    destination.execSQL(createSql)
-                    source.query(table, null, null, null, null, null, null).use { cursor ->
-                        val columnNames = cursor.columnNames
-                        // Inserts bind synchronously. Reuse one row buffer per table
-                        // rather than allocating a map for every saved GPS record.
-                        val row = ContentValues(columnNames.size)
-                        while (cursor.moveToNext()) {
-                            row.clear()
-                            columnNames.forEachIndexed { index, name ->
-                                when (cursor.getType(index)) {
-                                    Cursor.FIELD_TYPE_NULL -> row.putNull(name)
-                                    Cursor.FIELD_TYPE_INTEGER -> row.put(name, cursor.getLong(index))
-                                    Cursor.FIELD_TYPE_FLOAT -> row.put(name, cursor.getDouble(index))
-                                    Cursor.FIELD_TYPE_STRING -> row.put(name, cursor.getString(index))
-                                    Cursor.FIELD_TYPE_BLOB -> row.put(name, cursor.getBlob(index))
+                destination.beginTransaction()
+                try {
+                    for (table in listOf(
+                        "track_points", "skipped_driving_fixes", "roads", "road_visits", "explored_places", "explored_grid",
+                        "visited_places", "place_candidates", "progression_rewards",
+                        "progression_purchases", "progression_counters"
+                    )) {
+                        val createSql = source.rawQuery("SELECT sql FROM sqlite_master WHERE type='table' AND name=?", arrayOf(table)).use {
+                            check(it.moveToFirst()); it.getString(0)
+                        }
+                        destination.execSQL(createSql)
+                        source.query(table, null, null, null, null, null, null).use { cursor ->
+                            val columnNames = cursor.columnNames
+                            // Reuse the statement and bindings for this entire table.
+                            val columns = columnNames.joinToString(",") { "\"$it\"" }
+                            val placeholders = columnNames.joinToString(",") { "?" }
+                            destination.compileStatement("INSERT INTO $table ($columns) VALUES ($placeholders)").use { insert ->
+                                while (cursor.moveToNext()) {
+                                    columnNames.indices.forEach { index ->
+                                        val parameter = index + 1
+                                        when (cursor.getType(index)) {
+                                            Cursor.FIELD_TYPE_NULL -> insert.bindNull(parameter)
+                                            Cursor.FIELD_TYPE_INTEGER -> insert.bindLong(parameter, cursor.getLong(index))
+                                            Cursor.FIELD_TYPE_FLOAT -> insert.bindDouble(parameter, cursor.getDouble(index))
+                                            Cursor.FIELD_TYPE_STRING -> insert.bindString(parameter, cursor.getString(index))
+                                            Cursor.FIELD_TYPE_BLOB -> insert.bindBlob(parameter, cursor.getBlob(index))
+                                        }
+                                    }
+                                    insert.executeInsert()
                                 }
                             }
-                            destination.insertOrThrow(table, null, row)
                         }
                     }
-                }
-                destination.setTransactionSuccessful()
-            } finally { destination.endTransaction() }
-            source.setTransactionSuccessful()
-        } finally { source.endTransaction() }
+                    destination.setTransactionSuccessful()
+                } finally { destination.endTransaction() }
+            } finally { source.execSQL("RELEASE export_snapshot") }
+        }
     }
 
     /** Only the explicit stopped-data deletion flow calls this, after its deletes commit. */

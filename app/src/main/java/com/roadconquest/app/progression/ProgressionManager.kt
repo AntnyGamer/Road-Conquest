@@ -3,6 +3,7 @@ package com.roadconquest.app.progression
 import android.content.Context
 import com.roadconquest.app.achievements.AchievementMetrics
 import com.roadconquest.app.achievements.Achievements
+import com.roadconquest.app.achievements.AchievementProgress
 import com.roadconquest.app.data.DataSummary
 import com.roadconquest.app.data.ProgressionRepository
 import com.roadconquest.app.data.ProgressionSnapshot
@@ -23,13 +24,16 @@ data class PlaceResolutionResult(
 )
 
 object ProgressionManager {
+    data class SyncedProgress(val snapshot: ProgressionSnapshot, val achievements: List<AchievementProgress>)
     private val placeResolutionLock = Any()
-    fun sync(context: Context, summary: DataSummary): ProgressionSnapshot {
+    fun sync(context: Context, summary: DataSummary): ProgressionSnapshot = syncWithAchievements(context, summary).snapshot
+
+    fun syncWithAchievements(context: Context, summary: DataSummary): SyncedProgress {
         val repository = ProgressionRepository(context)
         var snapshot = repository.snapshot()
         val expectedGeneration = summary.historyGeneration.takeIf { it >= 0L }
         if (expectedGeneration != null && !repository.isHistoryGenerationCurrent(expectedGeneration)) {
-            return snapshot
+            return SyncedProgress(snapshot, emptyList())
         }
         if (summary.roadsUnlockedCount > snapshot.rewardedRoads) {
             repository.syncRoadRewards(summary.roadsUnlockedCount, expectedGeneration)
@@ -50,7 +54,7 @@ object ProgressionManager {
             }
         }
         val weeklyChanged = com.roadconquest.app.data.WeeklyChallenges.sync(context, summary, snapshot)
-        return if (changed || weeklyChanged) repository.snapshot() else snapshot
+        return SyncedProgress(if (changed || weeklyChanged) repository.snapshot() else snapshot, achievements)
     }
 
     fun recordCompletedAd(repository: ProgressionRepository, receiptId: String, points: Long): Boolean {

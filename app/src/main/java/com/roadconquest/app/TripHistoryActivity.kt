@@ -180,11 +180,11 @@ class TripHistoryActivity : Activity() {
             insets
         }
         root.addView(Button(this, null, 0, R.style.RoadConquest_BackAction).apply {
-            text = "Back"
+            text = getString(R.string.tour_back)
             setOnClickListener { finish() }
         }, LinearLayout.LayoutParams(dp(110), dp(48)).apply { bottomMargin = dp(8) })
         root.addView(TextView(this).apply {
-            text = "Trip history"
+            text = getString(R.string.ui_trip_history)
             isAccessibilityHeading = true
             textSize = 28f
             setTypeface(typeface, android.graphics.Typeface.BOLD)
@@ -193,7 +193,7 @@ class TripHistoryActivity : Activity() {
         })
         val status = TextView(this).also {
             routeStatus = it
-            it.text = "Select a drive to replay."
+            it.text = getString(R.string.ui_select_a_drive_to_replay)
             it.accessibilityLiveRegion = android.view.View.ACCESSIBILITY_LIVE_REGION_POLITE
             it.textSize = 14f
             it.setTextColor(Appearance.color(this@TripHistoryActivity, R.attr.rcTextSecondary))
@@ -230,7 +230,7 @@ class TripHistoryActivity : Activity() {
                 override fun onStartTrackingTouch(bar: SeekBar) { pauseReplay() }
                 override fun onStopTrackingTouch(bar: SeekBar) {}
             })
-            contentDescription = "Replay position"
+            contentDescription = getString(R.string.ui_replay_position)
             root.addView(this)
         }
         replayProgress = TextView(this).apply {
@@ -242,13 +242,13 @@ class TripHistoryActivity : Activity() {
             root.addView(this)
         }
         playButton = Button(this).apply {
-            text = "Play replay"
+            text = getString(R.string.ui_play_replay)
             isEnabled = false
             setOnClickListener {
                 if (playing) pauseReplay() else {
                     if (seek?.progress == seek?.max) seek?.progress = 0
                     playing = true
-                    text = "Pause replay"
+                    text = getString(R.string.ui_pause_replay)
                     handler.post(tick)
                 }
             }
@@ -266,12 +266,12 @@ class TripHistoryActivity : Activity() {
             root.addView(this)
         }
         shareButton = Button(this, null, 0, R.style.RoadConquest_SettingsAction).apply {
-            text = "Share trip summary · VIP"
+            text = getString(R.string.ui_share_trip_summary_vip)
             setOnClickListener { shareSelectedTrip() }
             root.addView(this, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
         }
         gpxButton = Button(this, null, 0, R.style.RoadConquest_SettingsAction).apply {
-            text = "Save trip as GPX · VIP"
+            text = getString(R.string.ui_save_trip_as_gpx_vip)
             setOnClickListener { selectGpxPrivacy() }
             root.addView(this, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8); bottomMargin = dp(8) })
         }
@@ -343,10 +343,10 @@ class TripHistoryActivity : Activity() {
     private fun requireVip(): Boolean {
         if (VipEntitlement.isActive(this)) return true
         AlertDialog.Builder(this)
-            .setTitle("VIP trip extras")
-            .setMessage("Lifetime VIP unlocks up to 500 recent drives, trip-summary sharing and GPX export. Basic trip history, replays and progress backups stay free.")
-            .setNegativeButton("Not now", null)
-            .setPositiveButton("Open Garage") { _, _ ->
+            .setTitle(getString(R.string.ui_vip_trip_extras))
+            .setMessage(getString(R.string.ui_lifetime_vip_unlocks_up_to_500_recent_drives_trip_summary_sharin))
+            .setNegativeButton(getString(R.string.ui_not_now), null)
+            .setPositiveButton(getString(R.string.ui_open_garage)) { _, _ ->
                 startActivity(Intent(this, ShopActivity::class.java))
             }.show()
         return false
@@ -384,7 +384,7 @@ class TripHistoryActivity : Activity() {
                     }
                     if (trips.isEmpty()) {
                         column.addView(TextView(this@TripHistoryActivity).apply {
-                            text = "No drives yet. Recorded trips will appear here."
+                            text = getString(R.string.ui_no_drives_yet_recorded_trips_will_appear_here)
                         })
                     }
                     // Inflate only visible-sized batches. 500 Buttons at once
@@ -397,7 +397,7 @@ class TripHistoryActivity : Activity() {
                             val duration = DateUtils.formatElapsedTime(
                                 ((trip.endedAt - trip.startedAt).coerceAtLeast(0L)) / 1000
                             )
-                            text = "%s\n%s  •  %s".format(formatter.format(Date(trip.startedAt)),
+                            text = getString(R.string.ui_s_s_s).format(formatter.format(Date(trip.startedAt)),
                                 StatsText.tripDistance(trip.distanceMeters), duration)
                             minHeight = dp(66)
                             gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
@@ -405,7 +405,7 @@ class TripHistoryActivity : Activity() {
                             if (trip.firstId == selectedTrip?.firstId) {
                                 selectedTripButton = this
                                 isSelected = true
-                                contentDescription = "$text, selected trip"
+                                contentDescription = getString(R.string.ui_selected_trip_description, text)
                                 setBackgroundResource(R.drawable.selected_filter_background)
                                 setTextColor(Appearance.color(this@TripHistoryActivity, R.attr.rcOnAccent))
                             }
@@ -418,7 +418,7 @@ class TripHistoryActivity : Activity() {
                                 }
                                 selectedTripButton = this
                                 isSelected = true
-                                contentDescription = "$text, selected trip"
+                                contentDescription = getString(R.string.ui_selected_trip_description, text)
                                 setBackgroundResource(R.drawable.selected_filter_background)
                                 setTextColor(Appearance.color(this@TripHistoryActivity, R.attr.rcOnAccent))
                                 loadTrip(trip)
@@ -428,7 +428,7 @@ class TripHistoryActivity : Activity() {
                         if (end < trips.size) {
                             column.addView(Button(this@TripHistoryActivity, null, 0,
                                 R.style.RoadConquest_SettingsAction).apply {
-                                text = "Show more drives (${trips.size - end} remaining)"
+                                text = resources.getQuantityString(R.plurals.ui_show_more_drives, trips.size - end, trips.size - end)
                                 minHeight = dp(52)
                                 setOnClickListener {
                                     column.removeView(this)
@@ -440,7 +440,7 @@ class TripHistoryActivity : Activity() {
                     if (trips.isNotEmpty()) appendBatch(0)
                 }, {
                     column.addView(TextView(this@TripHistoryActivity).apply {
-                        text = "Trip history is temporarily unavailable."
+                        text = getString(R.string.ui_trip_history_is_temporarily_unavailable)
                     })
                 })
             }
@@ -464,7 +464,7 @@ class TripHistoryActivity : Activity() {
         selectedTrip = null
         shareSummaryReady = false
         refreshVipControls()
-        insightsText?.text = "Driving history changed. Reopen Trips to select a current drive."
+        insightsText?.text = getString(R.string.ui_driving_history_changed_reopen_trips_to_select_a_current_drive)
         return false
     }
 
@@ -491,7 +491,7 @@ class TripHistoryActivity : Activity() {
         AlertDialog.Builder(this)
             // AlertDialog cannot show both a message and an item list: the message
             // hides the privacy choices, preventing the document picker from opening.
-            .setTitle("Save GPX · Precise GPS locations")
+            .setTitle(getString(R.string.ui_save_gpx_precise_gps_locations))
             .setItems(arrayOf(
                 "Hide first/last 2 minutes (recommended, privacy not guaranteed)",
                 "Full route with exact endpoints (review before sharing)"
@@ -514,7 +514,7 @@ class TripHistoryActivity : Activity() {
                     Toast.makeText(this, "Android's file picker is unavailable on this device.", Toast.LENGTH_LONG).show()
                 }
             }
-            .setNegativeButton("Cancel", null).show()
+            .setNegativeButton(getString(R.string.ui_cancel), null).show()
     }
 
     @Deprecated("Uses Android document picker for direct user-controlled GPX files")
@@ -581,13 +581,13 @@ class TripHistoryActivity : Activity() {
         selectedTrip = trip
         shareSummaryReady = false
         refreshVipControls()
-        insightsText?.text = "Checking new roads, towns and matching status…"
+        insightsText?.text = getString(R.string.ui_checking_new_roads_towns_and_matching_status)
         val expected = ++generation
         // Clear the previous drive immediately; never show its track or marker
         // while the next drive is loading or if loading fails.
         resetReplayDisplay()
-        routeStatus?.text = "Loading drive…"
-        replayProgress?.text = "Loading drive…"
+        routeStatus?.text = getString(R.string.ui_loading_drive)
+        replayProgress?.text = getString(R.string.ui_loading_drive)
         worker.execute {
             // Drop queued requests superseded by a newer selection before
             // touching the database, not merely after completing the work.
@@ -621,14 +621,14 @@ class TripHistoryActivity : Activity() {
                             (trip.endedAt - trip.startedAt).coerceAtLeast(0L) / 60_000,
                             trip.pointCount)
                     renderReplay()
-                    if (loaded.size < 2) replayProgress?.text = "Drive unavailable"
-                    else if (!mapReady) replayProgress?.text = "Preparing replay map…"
+                    if (loaded.size < 2) replayProgress?.text = getString(R.string.ui_drive_unavailable)
+                    else if (!mapReady) replayProgress?.text = getString(R.string.ui_preparing_replay_map)
                 }, {
-                    routeStatus?.text = "Could not load the selected drive."
+                    routeStatus?.text = getString(R.string.ui_could_not_load_the_selected_drive)
                     shareSummaryReady = false
                     refreshVipControls()
-                    insightsText?.text = "Trip details unavailable."
-                    replayProgress?.text = "Replay unavailable"
+                    insightsText?.text = getString(R.string.ui_trip_details_unavailable)
+                    replayProgress?.text = getString(R.string.ui_replay_unavailable)
                 })
             }
         }
@@ -685,7 +685,7 @@ class TripHistoryActivity : Activity() {
         val firstTimestamp = points.first().timestamp
         val totalSeconds = ((points.last().timestamp - firstTimestamp).coerceAtLeast(0L)) / 1000L
         val elapsedSeconds = ((point.timestamp - firstTimestamp).coerceIn(0L, totalSeconds * 1000L)) / 1000L
-        replayProgress?.text = "${DateUtils.formatElapsedTime(elapsedSeconds)} / ${DateUtils.formatElapsedTime(totalSeconds)}"
+        replayProgress?.text = getString(R.string.ui_progress_fraction, DateUtils.formatElapsedTime(elapsedSeconds), DateUtils.formatElapsedTime(totalSeconds))
         val visible = replayRoute.visibleRanges(index).map { range ->
             routeCoordinates.subList(range.first, range.last + 1)
         }
@@ -700,7 +700,7 @@ class TripHistoryActivity : Activity() {
     private fun pauseReplay() {
         playing = false
         handler.removeCallbacks(tick)
-        playButton?.text = "Play replay"
+        playButton?.text = getString(R.string.ui_play_replay)
     }
 
     override fun onStart() { super.onStart(); ForegroundSession.app.onStart(this); mapView?.onStart() }
@@ -719,7 +719,7 @@ class TripHistoryActivity : Activity() {
             selectedTripButton = null
             shareSummaryReady = false
             resetReplayDisplay()
-            routeStatus?.text = "Driving history changed. Choose a saved drive."
+            routeStatus?.text = getString(R.string.ui_driving_history_changed_choose_a_saved_drive)
             replayProgress?.text = ""
             insightsText?.text = ""
             refreshTripList()

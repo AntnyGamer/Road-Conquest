@@ -12,6 +12,19 @@ export class EvidenceError extends Error {
 }
 export const evidenceHash = evidence => createHash("sha256").update(evidence, "utf8").digest("base64url");
 
+const EVIDENCE_FIELDS = new Set(['fixes', 'nonce', 'run', 'sequence']);
+const FIX_FIELDS = new Set(['accuracy', 'elapsed', 'lat', 'lon', 'mock', 'speed', 'time']);
+function exactFields(value, fields) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  let count = 0;
+  for (const field in value) {
+    if (!Object.hasOwn(value, field)) continue;
+    if (!fields.has(field)) return false;
+    count++;
+  }
+  return count === fields.size;
+}
+
 /** Recheck just freshness after an authenticated retry-receipt miss.
  * The evidence has already passed full shape, motion and continuity validation.
  */
@@ -37,7 +50,7 @@ export function parseEvidence(text, now = Date.now(), requireFresh = true) {
   if (typeof text !== "string" || Buffer.byteLength(text) > 12000) throw new EvidenceError("Invalid evidence.");
   let body;
   try { body = JSON.parse(text); } catch { throw new EvidenceError("Invalid evidence."); }
-  if (!body || Object.keys(body).sort().join(",") !== "fixes,nonce,run,sequence" ||
+  if (!exactFields(body, EVIDENCE_FIELDS) ||
       typeof body.run !== "string" || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/u.test(body.run) ||
       typeof body.nonce !== "string" || !/^[A-Za-z0-9_-]{43}$/u.test(body.nonce) ||
       !Number.isSafeInteger(body.sequence) || body.sequence < 0 ||
@@ -46,7 +59,7 @@ export function parseEvidence(text, now = Date.now(), requireFresh = true) {
   }
   for (let i = 0; i < body.fixes.length; i += 1) {
     const f = body.fixes[i];
-    if (!f || Object.keys(f).sort().join(",") !== "accuracy,elapsed,lat,lon,mock,speed,time" ||
+    if (!exactFields(f, FIX_FIELDS) ||
         !Number.isFinite(f.lat) || Math.abs(f.lat) > 90 || !Number.isFinite(f.lon) || Math.abs(f.lon) > 180 ||
         !Number.isFinite(f.accuracy) || f.accuracy <= 0 || f.accuracy > 25 ||
         !Number.isFinite(f.speed) || f.speed < 0 || f.speed > 65 || f.mock !== false ||

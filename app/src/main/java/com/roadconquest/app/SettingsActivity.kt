@@ -277,8 +277,8 @@ class SettingsActivity : Activity() {
             val credits = listOf("licenses/RoadConquest-AGPL-3.0.txt", "map-credits.txt", "satellite-credits.txt", "service-credits.txt").joinToString("\n\n") { asset ->
                 assets.open(asset).bufferedReader().use { it.readText() }
             }
-            AlertDialog.Builder(this).setTitle("Licenses and map credits").setMessage(credits)
-                .setPositiveButton("Close", null).show()
+            AlertDialog.Builder(this).setTitle(getString(R.string.ui_licenses_and_map_credits)).setMessage(credits)
+                .setPositiveButton(getString(R.string.ui_close), null).show()
         }
 
         deleteDeviceDataButton.setOnClickListener { showDeleteDeviceDataDialog() }
@@ -288,16 +288,16 @@ class SettingsActivity : Activity() {
     }
 
     private fun beginExport() {
-        AlertDialog.Builder(this).setTitle("Export progress")
+        AlertDialog.Builder(this).setTitle(getString(R.string.ui_export_progress))
             .setItems(arrayOf(
                 "Secure backup (restorable on Play and GitHub)",
                 "Readable ZIP (for analysis, cannot restore)"
             )) { _, selected ->
                 val format = ExportFormat.entries[selected]
                 if (format == ExportFormat.SECURE && AccountStore.load(this) == null) {
-                    AlertDialog.Builder(this).setTitle("Sign in to back up progress")
-                        .setMessage("Secure backups require your Road Conquest account and an internet connection. Sign in under Account & community first.")
-                        .setPositiveButton("OK", null).show()
+                    AlertDialog.Builder(this).setTitle(getString(R.string.ui_sign_in_to_back_up_progress))
+                        .setMessage(getString(R.string.ui_secure_backups_require_your_road_conquest_account_and_an_interne))
+                        .setPositiveButton(getString(R.string.ui_ok), null).show()
                     return@setItems
                 }
                 pendingExportFormat = format
@@ -374,25 +374,21 @@ class SettingsActivity : Activity() {
     private fun writeExport(uri: Uri, format: ExportFormat) {
         Thread {
             val result = runCatching {
-                contentResolver.openOutputStream(uri, "w")?.use { output ->
-                    when (format) {
-                        ExportFormat.SECURE -> AccountBackup.writePortable(this, repository, output)
-                        ExportFormat.READABLE -> ExportOnlyBackup.write(this, repository, output)
-                    }
-                } ?: error("Could not open export destination")
-            }
-            var cleanupFailed = false
-            if (result.isSuccess) {
-                synchronized(DataImporter.operationLock) {
-                    if (repository.isHistoryCurrent() && !Prefs.isDeviceDataDeletionPending(this)) {
-                        getSharedPreferences("roadconquest_export_history", MODE_PRIVATE)
-                            .edit().putLong("last_completed_at", System.currentTimeMillis()).commit()
-                    }
+                fun open() = contentResolver.openOutputStream(uri, "w") ?: error("Could not open export destination")
+                when (format) {
+                    ExportFormat.SECURE -> AccountBackup.writeDocument(this, repository, ::open)
+                    ExportFormat.READABLE -> open().use { ExportOnlyBackup.write(this, repository, it) }
                 }
-            } else {
-                cleanupFailed = !runCatching { contentResolver.delete(uri, null, null) > 0 }
-                    .getOrDefault(false)
+                synchronized(DataImporter.operationLock) {
+                    check(repository.isHistoryCurrent() && !Prefs.isDeviceDataDeletionPending(this)) {
+                        "Device progress changed while exporting. Export again."
+                    }
+                    getSharedPreferences("roadconquest_export_history", MODE_PRIVATE)
+                        .edit().putLong("last_completed_at", System.currentTimeMillis()).commit()
+                }
             }
+            val cleanupFailed = result.isFailure && !runCatching { contentResolver.delete(uri, null, null) > 0 }
+                .getOrDefault(false)
             runOnUiThread {
                 if (isDestroyed) return@runOnUiThread
                 result.fold(
@@ -406,9 +402,9 @@ class SettingsActivity : Activity() {
                     onFailure = { error ->
                         Log.e("RoadConquest", "Progress export failed", error)
                         AlertDialog.Builder(this)
-                            .setTitle("Export failed")
+                            .setTitle(getString(R.string.ui_export_failed))
                             .setMessage(exportFailureDetails(error, cleanupFailed))
-                            .setPositiveButton("OK", null).show()
+                            .setPositiveButton(getString(R.string.ui_ok), null).show()
                     }
                 )
             }
@@ -455,33 +451,33 @@ class SettingsActivity : Activity() {
             setPadding((24 * density).toInt(), 0, (24 * density).toInt(), 0)
         }
         val confirmation = EditText(this).apply {
-            hint = "Type the confirmation phrase exactly"
+            hint = getString(R.string.ui_type_the_confirmation_phrase_exactly)
             isSingleLine = false
             maxLines = 3
             filters = arrayOf(android.text.InputFilter.LengthFilter(128))
             isSaveEnabled = false
             importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
-            contentDescription = "Delete local data confirmation phrase"
+            contentDescription = getString(R.string.ui_delete_local_data_confirmation_phrase)
         }
         val error = TextView(this)
         fields.addView(confirmation)
         fields.addView(error)
 
         val dialog = AlertDialog.Builder(this)
-            .setTitle("Delete local data?")
+            .setTitle(getString(R.string.ui_delete_local_data_2))
             .setMessage(
-                "This permanently deletes saved Road Conquest progress on this phone, including trips, distance, roads, explored places, points and cosmetics bought with points. Your cloud account and lifetime VIP purchase in Google Play remain. VIP can be restored through Google Play if needed. Tracking stops and verified-drive sharing turns off. Exported files must be deleted separately. Deleted progress cannot be recovered without an existing backup.\n\nType exactly:\n$DELETE_LOCAL_DATA_CONFIRMATION"
+                getString(R.string.ui_this_permanently_deletes_saved_road_conquest_progress_on_this_ph, DELETE_LOCAL_DATA_CONFIRMATION)
             )
             .setView(fields)
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("Delete local data", null)
+            .setNegativeButton(getString(R.string.ui_cancel), null)
+            .setPositiveButton(getString(R.string.ui_delete_local_data), null)
             .create()
 
         dialog.setOnDismissListener { confirmation.text.clear() }
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 if (confirmation.text.toString() != DELETE_LOCAL_DATA_CONFIRMATION) {
-                    error.text = "Type the confirmation phrase exactly, including the period."
+                    error.text = getString(R.string.ui_type_the_confirmation_phrase_exactly_including_the_period)
                     return@setOnClickListener
                 }
 
@@ -540,18 +536,18 @@ class SettingsActivity : Activity() {
         }
         val unitsButton = findViewById<Button>(R.id.distanceUnitsButton)
         fun showDistanceUnits() {
-            unitsButton.text = "Distance units: ${Prefs.distanceUnits(this).label}"
+            unitsButton.text = getString(R.string.ui_distance_units_1_s, Prefs.distanceUnits(this).label)
         }
         showDistanceUnits()
         unitsButton.setOnClickListener {
             val modes = com.roadconquest.app.util.DistanceUnitPreference.entries
-            AlertDialog.Builder(this).setTitle("Distance units")
+            AlertDialog.Builder(this).setTitle(getString(R.string.ui_distance_units))
                 .setSingleChoiceItems(Array(modes.size) { modes[it].label }, modes.indexOf(Prefs.distanceUnits(this))) { dialog, index ->
                     Prefs.setDistanceUnits(this, modes[index])
                     showDistanceUnits()
                     refreshSummary()
                     dialog.dismiss()
-                }.setNegativeButton("Cancel", null).show()
+                }.setNegativeButton(getString(R.string.ui_cancel), null).show()
         }
         findViewById<Switch>(R.id.fogSwitch).apply {
             isChecked = Prefs.isFogEnabled(this@SettingsActivity)
@@ -565,12 +561,12 @@ class SettingsActivity : Activity() {
         showMapStyle(Prefs.mapMode(this))
         mapButton.setOnClickListener {
             val modes = MapMode.entries
-            AlertDialog.Builder(this).setTitle("Map style")
+            AlertDialog.Builder(this).setTitle(getString(R.string.ui_map_style))
                 .setSingleChoiceItems(Array(modes.size) { modes[it].label }, modes.indexOf(Prefs.mapMode(this))) { dialog, index ->
                     Prefs.setMapMode(this, modes[index])
                     showMapStyle(modes[index])
                     dialog.dismiss()
-                }.setNegativeButton("Cancel", null).show()
+                }.setNegativeButton(getString(R.string.ui_cancel), null).show()
         }
         val themeButton = findViewById<Button>(R.id.uiThemeButton)
         themeButton.text = getString(R.string.ui_theme_label, Prefs.uiTheme(this).label)
@@ -582,7 +578,7 @@ class SettingsActivity : Activity() {
             }, 0, 0, 0)
         themeButton.setOnClickListener {
             val themes = UiTheme.entries
-            AlertDialog.Builder(this).setTitle("Appearance")
+            AlertDialog.Builder(this).setTitle(getString(R.string.ui_appearance))
                 .setSingleChoiceItems(Array(themes.size) { themes[it].label }, themes.indexOf(Prefs.uiTheme(this))) { dialog, index ->
                     val changed = Prefs.uiTheme(this) != themes[index]
                     Prefs.setUiTheme(this, themes[index])
@@ -591,7 +587,7 @@ class SettingsActivity : Activity() {
                         recreatingForAppearance = true
                         recreate()
                     }
-                }.setNegativeButton("Cancel", null).show()
+                }.setNegativeButton(getString(R.string.ui_cancel), null).show()
         }
     }
 
@@ -683,7 +679,7 @@ class SettingsActivity : Activity() {
                             this, session, account.username, account.leaderboardVisible
                         ) ?: return@runOnUiThread
                         renderingAccountPrivacy = true
-                        accountSummaryText.text = "Signed in as " + updated.username
+                        accountSummaryText.text = getString(R.string.ui_signed_in_as, updated.username)
                         leaderboardPrivacySwitch.isChecked = updated.leaderboardVisible
                         leaderboardPrivacySwitch.isEnabled = true
                         renderingAccountPrivacy = false
@@ -694,7 +690,7 @@ class SettingsActivity : Activity() {
                             verifySwitch.isChecked = false
                             verifySwitch.isEnabled = false
                             renderingAccountPrivacy = true
-                            accountSummaryText.text = "Session expired. Open Account / sign in."
+                            accountSummaryText.text = getString(R.string.ui_session_expired_open_account_sign_in)
                             leaderboardPrivacySwitch.isChecked = false
                             leaderboardPrivacySwitch.isEnabled = false
                             deleteDeviceDataButton.isEnabled =
@@ -777,7 +773,7 @@ class SettingsActivity : Activity() {
                         val backupDate = if (lastBackup > 0L) java.text.DateFormat.getDateTimeInstance()
                             .format(java.util.Date(lastBackup)) else null
                         findViewById<TextView>(R.id.backupStatusText).text =
-                            "Last successful export: " + (backupDate ?: "Never")
+                            getString(R.string.ui_last_successful_export, backupDate ?: getString(R.string.ui_never))
                         summaryText.text = buildString {
                             append(StatsText.settingsOverview(this@SettingsActivity, summary, progression))
                             append("\n\nTRACKING\n")
