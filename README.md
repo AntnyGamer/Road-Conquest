@@ -1,4 +1,4 @@
-# Road Conquest 1.0.1
+# Road Conquest 1.0.2
 
 Road Conquest remembers the roads you drive and the places you visit, revealing them through a
 cloud-textured fog map.
@@ -7,7 +7,7 @@ cloud-textured fog map.
 [Source and issues](https://github.com/AntnyGamer/Road-Conquest) ·
 [GNU AGPL v3 license](LICENSE)
 
-**1.0.1** adds portable private backups and fixes delayed discovery rewards and location lookups after local-data deletion. See the [release notes](RELEASE_NOTES.md) and [backup documentation](BACKUP_AND_CHALLENGES.md).
+**1.0.2** fixes tracking, merged-road rewards, secure export completion, and avoidable server work. It also removes the unused passphrase export writer while keeping older backups restorable. See the [release notes](RELEASE_NOTES.md) and [backup documentation](BACKUP_AND_CHALLENGES.md).
 
 Earlier beta history is available in [GitHub Releases](https://github.com/AntnyGamer/Road-Conquest/releases).
 
@@ -30,7 +30,7 @@ Grant Precise location. For automatic background tracking, choose Allow all the 
 location settings and allow background battery use. Settings includes shortcuts to the relevant
 Android screens. Allow notifications to see the tracking notification and its Stop tracking control.
 
-Version 1.0.1 uses Android application ID `com.roadconquest.app`, internal version code **98**, and GitHub tag `v1.0.1`. Google Play permanently reserves uploaded version codes, even in testing tracks, so confirm 98 is unused before uploading. The app shows its exact version in Settings → Help & about.
+Version 1.0.2 uses Android application ID `com.roadconquest.app`, internal version code **99**, and GitHub tag `v1.0.2`. Google Play permanently reserves uploaded version codes, even in testing tracks, so confirm 99 is unused before uploading. The app shows its exact version in Settings → Help & about.
 
 ## Explore
 
