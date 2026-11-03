@@ -74,6 +74,11 @@ for (const applySchema of ['0', '1']) test(`cold liveness and public pages need 
         assert.equal(response.status,401);
         await response.text();
       }
+      const unconfiguredPush=await api.fetch(new Request('https://offline.example/v1/notifications/device', {
+        method:'POST',headers:{Authorization:'Bearer '+'x'.repeat(43),'Content-Type':'application/json'},body:'{}'
+      }));
+      assert.equal(unconfiguredPush.status,503);
+      assert.deepEqual(await unconfiguredPush.json(),{error:'Request failed.'});
       const unavailableRanking=await api.fetch(new Request('https://offline.example/v1/leaderboard?mine=1', {
         headers:{Authorization:'Bearer '+'x'.repeat(43)}
       }));
