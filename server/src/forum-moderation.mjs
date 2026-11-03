@@ -36,6 +36,7 @@ export function gifContactSheet(bytes) {
   const thumb = 128;
   const scale = Math.min(thumb / width, thumb / height);
   const w = Math.max(1, Math.floor(width * scale)), h = Math.max(1, Math.floor(height * scale));
+  const sourceColumns = Int32Array.from({ length: w }, (_, x) => Math.floor(x / scale) * 4);
   const sheet = new PNG({ width: columns * thumb, height: Math.ceil(frames / columns) * thumb });
   sheet.data.fill(255);
   const pixels = Buffer.alloc(width * height * 4);
@@ -63,10 +64,10 @@ export function gifContactSheet(bytes) {
       const left = index % columns * thumb + Math.floor((thumb - w) / 2);
       const top = Math.floor(index / columns) * thumb + Math.floor((thumb - h) / 2);
       for (let y = 0; y < h; y++) {
-        const sourceRow = Math.floor(y / scale) * width;
+        const sourceRow = Math.floor(y / scale) * width * 4;
         let target = ((top + y) * sheet.width + left) * 4;
         for (let x = 0; x < w; x++, target += 4) {
-          const source = (sourceRow + Math.floor(x / scale)) * 4;
+          const source = sourceRow + sourceColumns[x];
           // GIF pixels are opaque or transparent. The decoder writes alpha 255;
           // transparent samples retain the sheet's original opaque white.
           if (pixels[source + 3]) {
@@ -84,7 +85,8 @@ export function gifContactSheet(bytes) {
 
 export function createForumModerator(key, request = fetch) {
   if (!key) return null;
-  return async ({ text, gifUrl }) => {
+  const pending = new Map();
+  async function moderate({ text, gifUrl }) {
     const input = [{ type: 'text', text: text || 'An image shared in the Road Conquest community.' }];
     let gifHash = null;
     if (gifUrl) {
@@ -146,5 +148,17 @@ export function createForumModerator(key, request = fetch) {
     // Crash/travel discussions and expressions of distress alone are not rule violations.
     return { flagged: categories.length > 0, categories,
       model: result.model, gifHash };
+  }
+  return async ({ text, gifUrl }) => {
+    const input = { text, gifUrl: forumGifUrl(gifUrl) };
+    // Share only identical content already being checked by this moderator.
+    // Every post still has its own rate limits, account checks and transaction.
+    // No completed verdict or GIF bytes survive the request.
+    const identity = createHash('sha256').update(JSON.stringify([input.text, input.gifUrl])).digest('hex');
+    if (pending.has(identity)) return pending.get(identity);
+    const task = moderate(input);
+    if (pending.size >= 32) return task;
+    pending.set(identity, task);
+    try { return await task; } finally { pending.delete(identity); }
   };
 }

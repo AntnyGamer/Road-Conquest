@@ -14,24 +14,13 @@ import kotlin.math.abs
 @Config(sdk = [31, 37], manifest = Config.NONE)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class FogOverlayTest {
-    private fun request(
-        roads: OverlayRoads = OverlayRoads.EMPTY,
-        roadScreen: DoubleArray = doubleArrayOf(),
-        metersPerPixel: Double = 1.0,
-        liveLatitude: Double? = null,
-        liveScreen: DoubleArray? = null
-    ) = FogBitmapRenderer.Request(
+    private fun request(metersPerPixel: Double = 1.0) = FogBitmapRenderer.Request(
         bitmapWidth = 640,
         bitmapHeight = 640,
         screenLeft = 0f,
         screenTop = 0f,
         screenScale = 1f,
-        roads = roads,
-        roadScreen = roadScreen,
-        centerLatitude = 0.0,
-        metersPerScreenPixelAtCenter = metersPerPixel,
-        liveLatitude = liveLatitude,
-        liveScreen = liveScreen
+        metersPerScreenPixelAtCenter = metersPerPixel
     )
 
     private fun alpha(x: Int, y: Int, request: FogBitmapRenderer.Request): Int =
@@ -319,7 +308,6 @@ class FogOverlayTest {
     @Test fun worldAnchoredCloudsHaveVisibleDarkGrayVariationWithoutAlphaFlicker() {
         val raster = FogGeoRaster.around(40.0, -74.0, 13.0, 640)
         val tile = request(metersPerPixel = raster.metersPerPixel).copy(
-            gridMode = true,
             textureMatrix = raster.textureMatrix(FogBitmapRenderer.CLOUD_DETAIL_METERS),
             mediumCloudMatrix = raster.textureMatrix(FogBitmapRenderer.CLOUD_MEDIUM_METERS),
             broadCloudMatrix = raster.textureMatrix(FogBitmapRenderer.CLOUD_BROAD_METERS)
@@ -350,7 +338,7 @@ class FogOverlayTest {
     }
 
     @Test fun remoteExplorationCellsSkipFogMaskButEdgeCellsKeepTheirFade() {
-        val base = request(metersPerPixel = 5.0).copy(gridMode = true)
+        val base = request(metersPerPixel = 5.0)
         val coords = doubleArrayOf(0.01, -0.01, 0.01, 0.01, -0.01, 0.01, -0.01, -0.01)
         val far = base.copy(
             gridCoordinates = coords,
@@ -379,7 +367,7 @@ class FogOverlayTest {
         // at a 512px overview. Anti-aliased fractional coverage must remain
         // fractional instead of turning the entire giant pixel transparent.
         val distant = request(metersPerPixel = 78_000.0).copy(
-            bitmapWidth = 128, bitmapHeight = 128, gridMode = true,
+            bitmapWidth = 128, bitmapHeight = 128,
             gridCoordinates = doubleArrayOf(
                 0.01, -0.01, 0.01, 0.01, -0.01, 0.01, -0.01, -0.01
             ),
@@ -397,7 +385,6 @@ class FogOverlayTest {
 
     @Test fun visitedMileTileClearsEntireInteriorWithOriginal1500FootFade() {
         val tile = request(metersPerPixel = 5.0).copy(
-            gridMode = true,
             gridCoordinates = doubleArrayOf(
                 0.01, -0.01, 0.01, 0.01, -0.01, 0.01, -0.01, -0.01
             ),
@@ -416,7 +403,6 @@ class FogOverlayTest {
 
     @Test fun neighboringCellsFadeAsOneRegionWithoutInternalGraySquareBands() {
         val cells = request(metersPerPixel = 5.0).copy(
-            gridMode = true,
             gridCoordinates = doubleArrayOf(
                 0.01, -0.02, 0.01, 0.0, -0.01, 0.0, -0.01, -0.02,
                 0.01, 0.0, 0.01, 0.02, -0.01, 0.02, -0.01, 0.0
@@ -437,10 +423,8 @@ class FogOverlayTest {
         assertEquals(204, Color.alpha(fog.getPixel(360, 100)))
     }
 
-    @Test fun mileGridIgnoresRoadOnlyClearingsAndAdjacentTilesHaveNoSeam() {
-        val road = OverlayRoads(doubleArrayOf(0.0, -1.0, 0.0, 1.0), intArrayOf(0, 4))
-        val roadScreen = doubleArrayOf(0.0, 320.0, 640.0, 320.0)
-        val withoutTiles = request(road, roadScreen, metersPerPixel = 5.0).copy(gridMode = true)
+    @Test fun mileGridAdjacentTilesHaveNoSeam() {
+        val withoutTiles = request(metersPerPixel = 5.0)
         assertEquals(204, alpha(320, 320, withoutTiles))
         val withTiles = withoutTiles.copy(
             gridCoordinates = doubleArrayOf(
@@ -455,88 +439,6 @@ class FogOverlayTest {
         assertEquals(0, alpha(400, 300, withTiles))
         assertEquals(0, alpha(500, 300, withTiles))
         assertEquals(204, alpha(60, 100, withTiles))
-    }
-
-    @Test fun roadFadeKeepsClearCoreButAvoidsARegionalGlow() {
-        val roads = OverlayRoads(doubleArrayOf(0.0, -1.0, 0.0, 1.0), intArrayOf(0, 4))
-        val screen = doubleArrayOf(-200.0, 300.0, 900.0, 300.0)
-        val rendered = FogBitmapRenderer.render(request(roads, screen, 6.0 * 0.3048))
-
-        assertEquals(0, Color.alpha(rendered.getPixel(320, 305))) // 30 feet: fully clear.
-        assertEquals(0, Color.alpha(rendered.getPixel(320, 307))) // 42 feet: same clear core.
-        assertTrue(Color.alpha(rendered.getPixel(320, 315)) in 8..24) // Fade starts after 50 feet.
-        assertTrue(Color.alpha(rendered.getPixel(320, 350)) in 82..102) // ~300 feet.
-        assertTrue(Color.alpha(rendered.getPixel(320, 425)) in 154..172) // ~750 feet.
-        assertTrue(Color.alpha(rendered.getPixel(320, 500)) in 186..198) // ~1200 feet.
-        assertTrue(Color.alpha(rendered.getPixel(320, 525)) < 204)
-        assertEquals(204, Color.alpha(rendered.getPixel(320, 551)))
-
-        val samples = (310..545).map { Color.alpha(rendered.getPixel(320, it)) }
-        assertTrue(samples.zipWithNext().all { (a, b) -> b >= a && b - a <= 5 })
-        assertTrue(samples.distinct().size > 100)
-    }
-
-    @Test fun liveLocationClearingUsesPhysicalMetersAndFogCanRemainOpaqueElsewhere() {
-        val rendered = FogBitmapRenderer.render(request(
-            metersPerPixel = 2.0,
-            liveLatitude = 0.0,
-            liveScreen = doubleArrayOf(300.0, 300.0)
-        ))
-        assertEquals(0, Color.alpha(rendered.getPixel(305, 300)))
-        assertTrue(Color.alpha(rendered.getPixel(320, 300)) > 0)
-        assertTrue(Color.alpha(rendered.getPixel(430, 300)) in 160..180)
-        assertEquals(204, Color.alpha(rendered.getPixel(600, 300)))
-        assertEquals(204, Color.alpha(rendered.getPixel(20, 20)))
-    }
-
-    @Test fun bitmapScalingPreservesRoadAndLiveClearings() {
-        val roads = OverlayRoads(doubleArrayOf(0.0, -1.0, 0.0, 1.0), intArrayOf(0, 4))
-        val rendered = FogBitmapRenderer.render(FogBitmapRenderer.Request(
-            bitmapWidth = 320,
-            bitmapHeight = 320,
-            screenLeft = 0f,
-            screenTop = 0f,
-            screenScale = 0.5f,
-            roads = roads,
-            roadScreen = doubleArrayOf(-200.0, 300.0, 900.0, 300.0),
-            centerLatitude = 0.0,
-            metersPerScreenPixelAtCenter = 3.0,
-            liveLatitude = 0.0,
-            liveScreen = doubleArrayOf(300.0, 300.0)
-        ))
-        assertEquals(0, Color.alpha(rendered.getPixel(150, 150)))
-        assertEquals(204, Color.alpha(rendered.getPixel(10, 10)))
-    }
-
-    @Test fun savedVisitedPlacesStayClearWithoutLiveLocationOrRoads() {
-        val rendered = FogBitmapRenderer.render(request(metersPerPixel = 2.0).copy(
-            exploredCoordinates = doubleArrayOf(0.0, 0.0),
-            exploredScreen = doubleArrayOf(300.0, 300.0)
-        ))
-        assertEquals(0, Color.alpha(rendered.getPixel(300, 300)))
-        assertEquals(0, Color.alpha(rendered.getPixel(305, 300)))
-        assertTrue(Color.alpha(rendered.getPixel(320, 300)) > 0)
-        assertTrue(Color.alpha(rendered.getPixel(430, 300)) in 160..180)
-        assertEquals(204, Color.alpha(rendered.getPixel(600, 300)))
-    }
-
-    @Test fun overlappingRoadsAndVisitedPlacesCannotPushTheFadeFartherOut() {
-        val roads = OverlayRoads(doubleArrayOf(0.0, -1.0, 0.0, 1.0), intArrayOf(0, 4))
-        val screen = doubleArrayOf(-200.0, 300.0, 900.0, 300.0)
-        val single = FogBitmapRenderer.render(request(roads, screen, 2.0))
-        val repeated = FogBitmapRenderer.render(request(
-            OverlayRoads(DoubleArray(40) { roads.coordinates[it % 4] }, IntArray(11) { it * 4 }),
-            DoubleArray(40) { screen[it % 4] }, 2.0
-        ).copy(
-            exploredCoordinates = DoubleArray(20),
-            exploredScreen = DoubleArray(20) { if (it % 2 == 0) 320.0 else 300.0 },
-            liveLatitude = 0.0,
-            liveScreen = doubleArrayOf(320.0, 300.0)
-        ))
-        for (y in listOf(305, 320, 380, 450, 520, 560)) {
-            assertEquals("Overlapping reveals keep the same physical fade at y=$y",
-                Color.alpha(single.getPixel(320, y)), Color.alpha(repeated.getPixel(320, y)))
-        }
     }
 
     @Test fun malformedLegacyRoadsCannotBridgeValidEndsOrCrossTheWorld() {

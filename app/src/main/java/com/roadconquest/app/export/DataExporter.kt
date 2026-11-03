@@ -260,13 +260,12 @@ object DataExporter {
                 null, null, null, null,
                 "started_at ASC"
             ).use { cursor ->
+                val fields = Array(3) { "" }
                 while (cursor.moveToNext()) {
                     count++
-                    val fields = listOf(
-                        cursor.getString(0),
-                        Instant.ofEpochMilli(cursor.getLong(1)).toString(),
-                        Instant.ofEpochMilli(cursor.getLong(2)).toString()
-                    )
+                    fields[0] = cursor.getString(0)
+                    fields[1] = Instant.ofEpochMilli(cursor.getLong(1)).toString()
+                    fields[2] = Instant.ofEpochMilli(cursor.getLong(2)).toString()
                     CsvUtil.writeRow(writer, fields)
                 }
             }
@@ -294,13 +293,12 @@ object DataExporter {
                     "first_visited_at", "latitude", "longitude"),
                 null, null, null, null, "first_visited_at ASC, kind, place_key"
             ).use { cursor ->
+                val fields = Array(8) { "" }
                 while (cursor.moveToNext()) {
-                    val fields = listOf(
-                        cursor.getString(0), cursor.getString(1), cursor.getString(2),
-                        cursor.getString(3), cursor.getString(4),
-                        Instant.ofEpochMilli(cursor.getLong(5)).toString(),
-                        cursor.getDouble(6).toString(), cursor.getDouble(7).toString()
-                    )
+                    for (index in 0..4) fields[index] = cursor.getString(index)
+                    fields[5] = Instant.ofEpochMilli(cursor.getLong(5)).toString()
+                    fields[6] = cursor.getDouble(6).toString()
+                    fields[7] = cursor.getDouble(7).toString()
                     CsvUtil.writeRow(writer, fields)
                 }
             }
@@ -331,16 +329,17 @@ object DataExporter {
                 arrayOf("cell_x", "cell_y", "latitude", "longitude", "first_seen_at", "attempts", "next_attempt_ms"),
                 null, null, null, null, "first_seen_at ASC"
             ).use { cursor ->
+                val fields = Array(7) { "" }
                 while (cursor.moveToNext()) {
                     pending++
                     val retry = cursor.getLong(6)
-                    val fields = listOf(
-                        cursor.getLong(0).toString(), cursor.getLong(1).toString(),
-                        cursor.getDouble(2).toString(), cursor.getDouble(3).toString(),
-                        Instant.ofEpochMilli(cursor.getLong(4)).toString(),
-                        cursor.getInt(5).toString(),
-                        if (retry > 0L) Instant.ofEpochMilli(retry).toString() else ""
-                    )
+                    fields[0] = cursor.getLong(0).toString()
+                    fields[1] = cursor.getLong(1).toString()
+                    fields[2] = cursor.getDouble(2).toString()
+                    fields[3] = cursor.getDouble(3).toString()
+                    fields[4] = Instant.ofEpochMilli(cursor.getLong(4)).toString()
+                    fields[5] = cursor.getInt(5).toString()
+                    fields[6] = if (retry > 0L) Instant.ofEpochMilli(retry).toString() else ""
                     CsvUtil.writeRow(writer, fields)
                 }
             }
@@ -415,19 +414,18 @@ object DataExporter {
                 null, null, null, null,
                 "first_unlocked_at ASC"
             ).use { cursor ->
+                val fields = Array(8) { "" }
                 while (cursor.moveToNext()) {
                     count++
                     val segmentId = cursor.getString(0)
-                    val fields = listOf(
-                        segmentId,
-                        cursor.getString(1).ifBlank { segmentId },
-                        cursor.getString(2),
-                        Instant.ofEpochMilli(cursor.getLong(3)).toString(),
-                        Instant.ofEpochMilli(cursor.getLong(4)).toString(),
-                        cursor.getInt(5).toString(),
-                        (cursor.getInt(6) != 0).toString(),
-                        cursor.getString(7)
-                    )
+                    fields[0] = segmentId
+                    fields[1] = cursor.getString(1).ifBlank { segmentId }
+                    fields[2] = cursor.getString(2)
+                    fields[3] = Instant.ofEpochMilli(cursor.getLong(3)).toString()
+                    fields[4] = Instant.ofEpochMilli(cursor.getLong(4)).toString()
+                    fields[5] = cursor.getInt(5).toString()
+                    fields[6] = (cursor.getInt(6) != 0).toString()
+                    fields[7] = cursor.getString(7)
                     CsvUtil.writeRow(writer, fields)
                 }
             }

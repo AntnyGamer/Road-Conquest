@@ -43,10 +43,16 @@
     <string name="ad_unavailable">Rewarded ads unavailable</string>
     <string name="ad_load">Load rewarded ad</string>
     <string name="ad_loading">Loading rewarded ad…</string>
-    <string name="ad_watch">Watch ad • +%1$d points</string>
+    <plurals name="ad_watch">
+        <item quantity="one">Watch ad • +%1$d point</item>
+        <item quantity="other">Watch ad • +%1$d points</item>
+    </plurals>
     <string name="ad_showing">Rewarded ad in progress…</string>
     <string name="ad_no_fill">No ad available right now. Try again later.</string>
     <string name="ad_consent_error">Ad privacy settings could not be updated. The shop is still available.</string>
-    <string name="ad_reward_saved">+%1$d points earned</string>
+    <plurals name="ad_reward_saved">
+        <item quantity="one">+%1$d point earned</item>
+        <item quantity="other">+%1$d points earned</item>
+    </plurals>
     <string name="ad_reward_failed">Could not save the ad reward.</string>
 </resources>

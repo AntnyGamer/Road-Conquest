@@ -69,7 +69,7 @@ class LeaderboardActivity : Activity() {
         val current = ++generation
         val message = findViewById<TextView>(R.id.rankingEntriesText)
         val container = findViewById<LinearLayout>(R.id.rankingRows)
-        message.text = "Loading verified scores…"
+        message.text = getString(R.string.ui_loading_verified_scores)
         container.removeAllViews()
         executor.execute {
             if (current != generation) return@execute
@@ -116,8 +116,8 @@ class LeaderboardActivity : Activity() {
                             setPadding(dp(16), dp(12), dp(16), dp(12))
                         }
                         card.addView(TextView(this).apply {
-                            text = "${user.rank}.  ${user.username}" +
-                                if (user.username == display.myUsername) "  •  You" else ""
+                            text = getString(if (user.username == display.myUsername) R.string.ui_leaderboard_self
+                                else R.string.ui_leaderboard_user, user.rank, user.username)
                             textSize = 17f
                             setTypeface(typeface, android.graphics.Typeface.BOLD)
                             setTextColor(Appearance.color(this@LeaderboardActivity, R.attr.rcTextPrimary))

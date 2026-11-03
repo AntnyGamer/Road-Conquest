@@ -68,7 +68,9 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: account-function
-          path: server/dist/index.mjs
+          path: |
+            server/dist/index.mjs
+            server/dist/ingress.mjs
           retention-days: 14
       - name: Stop isolated PostgreSQL test database
         if: always()
@@ -95,7 +97,7 @@ jobs:
           distribution: temurin
           java-version: '21'
       - name: Restore Gradle build state
-        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
           cache-provider: basic
       - name: Ensure Android SDK packages
@@ -326,7 +328,7 @@ jobs:
           distribution: temurin
           java-version: '21'
       - name: Restore Gradle build state
-        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
           cache-provider: basic
       - name: Ensure compile SDK
@@ -553,6 +555,8 @@ jobs:
             exit 1
           fi
           cp "${account_bundles[0]}" "$out/RoadConquest-account-function-$version.mjs"
+          test -s "$function_dir/ingress.mjs"
+          cp "$function_dir/ingress.mjs" "$out/RoadConquest-account-ingress-$version.mjs"
 
           # ProGuard mapping and all four full MapLibre native-symbol files
           # must be embedded in the ONE Play upload AAB.

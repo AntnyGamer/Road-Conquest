@@ -17,7 +17,9 @@ export function purchaseCodec(pepper) {
     open(bytes) {
       const cipher = createDecipheriv('aes-256-gcm', key, bytes.subarray(0, 12));
       cipher.setAuthTag(bytes.subarray(-16));
-      return Buffer.concat([cipher.update(bytes.subarray(12, -16)), cipher.final()]).toString('utf8');
+      const plaintext = cipher.update(bytes.subarray(12, -16));
+      const tail = cipher.final(); // Authenticate before exposing the purchase token.
+      return (tail.length ? Buffer.concat([plaintext, tail]) : plaintext).toString('utf8');
     }
   };
 }

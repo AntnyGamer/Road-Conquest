@@ -17,13 +17,13 @@
             android:layout_width="wrap_content"
             android:layout_height="48dp"
             android:layout_marginBottom="8dp"
-            android:text="Back" />
+            android:text="@string/tour_back" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:text="Account"
+            android:text="@string/ui_account"
             android:accessibilityHeading="true"
             android:textColor="?attr/rcTextPrimary"
             android:textSize="28sp"
@@ -52,7 +52,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="54dp"
                 android:autofillHints="username"
-                android:hint="Username"
+                android:hint="@string/ui_username"
                 android:inputType="text"
                 android:maxLength="24"
                 android:singleLine="true"
@@ -75,7 +75,7 @@
                     android:layout_height="54dp"
                     android:layout_weight="1"
                     android:autofillHints="password"
-                    android:hint="Password"
+                    android:hint="@string/ui_password"
                     android:inputType="textPassword"
                     android:maxLength="256"
                     android:saveEnabled="false"
@@ -91,7 +91,7 @@
                     android:layout_width="48dp"
                     android:layout_height="48dp"
                     android:background="?android:attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="Show password"
+                    android:contentDescription="@string/ui_show_password"
                     android:padding="12dp"
                     android:src="@drawable/ic_visibility" />
             </LinearLayout>
@@ -109,7 +109,7 @@
                     android:layout_height="54dp"
                     android:layout_weight="1"
                     android:autofillHints="newPassword"
-                    android:hint="Confirm password"
+                    android:hint="@string/ui_confirm_password"
                     android:inputType="textPassword"
                     android:maxLength="256"
                     android:saveEnabled="false"
@@ -125,7 +125,7 @@
                     android:layout_width="48dp"
                     android:layout_height="48dp"
                     android:background="?android:attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="Show password"
+                    android:contentDescription="@string/ui_show_password"
                     android:padding="12dp"
                     android:src="@drawable/ic_visibility" />
             </LinearLayout>
@@ -134,7 +134,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
-                android:text="Confirm password is only needed when creating an account."
+                android:text="@string/ui_confirm_password_is_only_needed_when_creating_an_account"
                 android:textColor="?attr/rcTextSecondary"
                 android:textSize="12sp" />
 
@@ -142,7 +142,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
-                android:text="Username: 3–24 letters, numbers or underscores (case-insensitive). Password: 8–128 characters."
+                android:text="@string/ui_username_3_24_letters_numbers_or_underscores_case_insensitive_pa"
                 android:textColor="?attr/rcTextSecondary"
                 android:textSize="13sp" />
 
@@ -151,7 +151,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
-                android:text="Create account" />
+                android:text="@string/ui_create_account" />
 
             <Button
                 android:id="@+id/accountLoginButton"
@@ -159,7 +159,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="18dp"
-                android:text="Sign in" />
+                android:text="@string/ui_sign_in" />
         </LinearLayout>
 
         <LinearLayout
@@ -186,7 +186,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
-                android:text="Rankings count verified live exploration only. Imports and local points do not count. Sharing live GPS requires consent."
+                android:text="@string/ui_rankings_count_verified_live_exploration_only_imports_and_local"
                 android:textColor="?attr/rcTextSecondary"
                 android:textSize="13sp" />
 
@@ -196,7 +196,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
-                android:text="Show my profile on global leaderboards"
+                android:text="@string/ui_show_my_profile_on_global_leaderboards"
                 android:textColor="?attr/rcTextPrimary"
                 android:textSize="16sp" />
 
@@ -204,7 +204,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
-                android:text="Turn this off to hide your profile without deleting your account."
+                android:text="@string/ui_turn_this_off_to_hide_your_profile_without_deleting_your_account"
                 android:id="@+id/accountLeaderboardPrivacyHelp"
                 android:visibility="gone"
                 android:textColor="?attr/rcTextSecondary"
@@ -216,7 +216,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="18dp"
-                android:text="Change username" />
+                android:text="@string/ui_change_username" />
 
             <Button
                 android:id="@+id/accountLogoutButton"
@@ -224,7 +224,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="18dp"
-                android:text="Sign out" />
+                android:text="@string/ui_sign_out" />
 
             <Button
                 android:id="@+id/accountDeleteButton"
@@ -232,7 +232,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="18dp"
-                android:text="Delete account" />
+                android:text="@string/ui_delete_account" />
         </LinearLayout>
     </LinearLayout>
 </ScrollView>

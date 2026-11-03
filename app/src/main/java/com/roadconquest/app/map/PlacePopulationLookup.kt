@@ -54,10 +54,13 @@ internal object PlacePopulationLookup {
 
     // Census 2020 counts are fixed historical figures. Never persist dynamic
     // country counts or failed/ambiguous responses.
-    internal fun savedCensus(context: Context, info: PlaceOverlayInfo): Value? {
-        if (!isUnitedStates(info) || requestFor(info) == null) return null
+    internal fun savedCensus(context: Context, info: PlaceOverlayInfo): Value? =
+        savedCensus(context, key(info), isUnitedStates(info) && requestFor(info) != null)
+
+    private fun savedCensus(context: Context, identity: String, eligible: Boolean): Value? {
+        if (!eligible) return null
         val value = context.applicationContext.getSharedPreferences(CENSUS_CACHE, Context.MODE_PRIVATE)
-            .getLong(key(info), -1L)
+            .getLong(identity, -1L)
         return value.takeIf { it >= 0L }?.let { Value(it, "2020 Census") }
     }
 
@@ -139,25 +142,28 @@ internal object PlacePopulationLookup {
         // Re-check memory and persistent cache after waiting for an identical
         // in-flight lookup; the first success is shared without another request.
         val startedAtGeneration = generation()
-        return withLookupLock("$startedAtGeneration:${key(info)}") {
-            lookupCurrent(context, info, startedAtGeneration)
+        val identity = key(info)
+        return withLookupLock("$startedAtGeneration:$identity") {
+            lookupCurrent(context, info, identity, startedAtGeneration)
         }
     }
 
     private fun lookupCurrent(
-        context: Context, info: PlaceOverlayInfo, startedAtGeneration: Long
+        context: Context, info: PlaceOverlayInfo, identity: String, startedAtGeneration: Long
     ): Value? {
         // A queued request from before Delete all data must not issue a new
         // provider request after the saved-data generation has changed.
         if (startedAtGeneration != cacheGeneration) return null
-        cached[key(info)]?.let { return it }
-        savedCensus(context, info)?.let { saved ->
+        cached[identity]?.let { return it }
+        val request = requestFor(info)
+        val census = isUnitedStates(info) && request != null
+        savedCensus(context, identity, census)?.let { saved ->
             // A reset can occur between reading disk and populating the memory
             // cache. Coordinate with clearCache so old data cannot reappear.
             return synchronized(cacheLock) {
                 if (startedAtGeneration != cacheGeneration) null
                 else {
-                    cached.putIfAbsent(key(info), saved)
+                    cached.putIfAbsent(identity, saved)
                     saved
                 }
             }
@@ -165,7 +171,7 @@ internal object PlacePopulationLookup {
         val value = if (isUnitedStates(info) && info.kind == PlaceKind.COUNTRY) {
             Value(US_2020_POPULATION, "2020 Census")
         } else {
-            val request = requestFor(info) ?: return null
+            if (request == null) return null
             val connection = (URL(request.url).openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
                 connectTimeout = 6_000
@@ -195,8 +201,11 @@ internal object PlacePopulationLookup {
         }
         if (value != null) synchronized(cacheLock) {
             if (startedAtGeneration == cacheGeneration) {
-                cached.putIfAbsent(key(info), value)
-                rememberCensus(context, info, value, startedAtGeneration)
+                cached.putIfAbsent(identity, value)
+                if (census && value.source == "2020 Census") {
+                    context.applicationContext.getSharedPreferences(CENSUS_CACHE, Context.MODE_PRIVATE)
+                        .edit().putLong(identity, value.count).apply()
+                }
             }
         }
         return value

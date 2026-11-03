@@ -135,6 +135,7 @@ export function createNotifications(pool, { pepper, sender, deliveryLimit, sampl
         AND d.friend_requests_enabled
         ${permit ? 'AND EXISTS(SELECT 1 FROM permit WHERE allowed)' : ''}
         ORDER BY d.updated_at DESC LIMIT 5`, permit ? [...permit,userId] : [userId]);
+      if (!rows.length) return;
       await Promise.allSettled(rows.map(async row => {
         const token = open(row.encrypted_token);
         const result = await sender(token, row.binding);
@@ -177,6 +178,7 @@ export function createNotifications(pool, { pepper, sender, deliveryLimit, sampl
           AND d.updated_at>CURRENT_TIMESTAMP-INTERVAL '30 days'
           AND d.friend_posts_enabled ORDER BY d.updated_at DESC LIMIT 5
       ) d`, [authorId]);
+      if (!rows.length) return;
       await Promise.allSettled(rows.map(async row => {
         const token = open(row.encrypted_token);
         const result = await sender(token, row.binding, false, 'friend_post');

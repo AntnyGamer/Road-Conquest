@@ -60,25 +60,17 @@ object DataImporter {
     fun clearTemporaryFiles(context: Context) {
         if (temporaryFilesInitialized) return
         temporaryFilesInitialized = true
-        BackupProtection.clearTemporaryFiles(context)
-        PassphraseBackup.clearTemporaryFiles(context)
         File(context.applicationContext.filesDir, "before-restore.tmp.zip").delete()
         context.cacheDir.listFiles().orEmpty().filter { it.name.startsWith(PREFIX) }.forEach {
             if (it.name.endsWith(".db")) SQLiteDatabase.deleteDatabase(it) else it.delete()
         }
     }
 
-    fun prepare(context: Context, input: InputStream): Prepared = prepare(context, input, null)
-
-    fun prepare(context: Context, input: InputStream, passphrase: CharArray?): Prepared =
-        prepare(context, input, { BackupProtection.verify(context, it) }, passphrase)
+    fun prepare(context: Context, input: InputStream): Prepared =
+        prepare(context, input) { BackupProtection.verify(context, it) }
 
     /** Explicit trust boundary allows structural-format fixtures to exercise parsing independently. */
-    internal fun prepare(context: Context, input: InputStream, authenticate: (File) -> Unit): Prepared =
-        prepare(context, input, authenticate, null)
-
-    private fun prepare(context: Context, input: InputStream, authenticate: (File) -> Unit,
-                        passphrase: CharArray?): Prepared {
+    internal fun prepare(context: Context, input: InputStream, authenticate: (File) -> Unit): Prepared {
         clearTemporaryFiles(context)
         val helper = AppDatabase.get(context)
         val generation = synchronized(helper.historyLock) { helper.historyGeneration }
@@ -103,13 +95,6 @@ object DataImporter {
                 File.createTempFile(PREFIX, ".zip", context.cacheDir).also { decrypted ->
                     decryptedZip = decrypted
                     AccountBackup.decrypt(context, zipPath, decrypted)
-                }
-            } else if (PassphraseBackup.isEncrypted(zipPath)) {
-                // Existing encrypted backups remain restorable; new exports use only account protection.
-                val password = passphrase ?: throw PassphraseBackup.PassphraseRequiredException()
-                File.createTempFile(PREFIX, ".zip", context.cacheDir).also { decrypted ->
-                    decryptedZip = decrypted
-                    PassphraseBackup.decrypt(zipPath, decrypted, password)
                 }
             } else {
                 require(!ExportOnlyBackup.isExportOnly(zipPath)) {

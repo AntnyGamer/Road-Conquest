@@ -10,7 +10,8 @@
     "start": "node src/server.mjs",
     "test": "node --test --test-concurrency=1 && node --check src/server.mjs",
     "build:function": "node tools/build-function.mjs",
-    "pretest": "npm run build:function"
+    "build:ingress": "node tools/build-ingress.mjs",
+    "pretest": "npm run build:function && npm run build:ingress"
   },
   "dependencies": {
     "omggif": "1.0.10",

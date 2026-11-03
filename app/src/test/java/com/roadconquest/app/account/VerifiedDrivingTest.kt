@@ -143,6 +143,16 @@ class VerifiedDrivingTest {
         verified.close()
     }
 
+    @Test fun closingUnusedVerificationDoesNotStartAWorkerAndIsIdempotent() {
+        val verified = VerifiedDriving(RuntimeEnvironment.getApplication())
+        val executor = VerifiedDriving::class.java.getDeclaredField("executor").apply { isAccessible = true }
+            .get(verified) as java.util.concurrent.ScheduledThreadPoolExecutor
+        verified.close()
+        verified.close()
+        assertEquals(0, executor.largestPoolSize)
+        assertEquals(true, executor.isShutdown)
+    }
+
     @Test fun hiddenLeaderboardsRejectLiveEvidenceEvenWithOldSharingConsent() {
         val context = RuntimeEnvironment.getApplication()
         val verified = VerifiedDriving(context)

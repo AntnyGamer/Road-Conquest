@@ -108,12 +108,6 @@ object AccountClient {
         return returnedId to key
     }
 
-    fun backupKeys(): JSONObject = request("/v1/backups", "GET", null, null)
-
-    // A cold signer can make two sequential Google requests with 8-second limits.
-    fun signBackup(hash: String, integrityToken: String): JSONObject = request("/v1/backups/sign", "POST",
-        JSONObject().put("hash", hash).put("integrity_token", integrityToken), null, readTimeoutMs = 30_000)
-
     fun leaderboard(token: String? = null): JSONObject {
         val includeMine = !token.isNullOrBlank()
         return request(
@@ -140,9 +134,6 @@ object AccountClient {
 
     fun changeFriend(token: String, username: String, action: String): JSONObject = request("/v1/friends", "POST",
         JSONObject().put("username", username).put("action", action), token)
-
-    fun friendWeek(token: String): JSONObject =
-        validatedFriendWeek(request("/v1/friends/weekly?metric=cells", "GET", null, token))
 
     internal fun validatedFriendWeek(body: JSONObject): JSONObject = body.also {
         if (it.optBoolean("available")) requireVerifiedPolicy(it)

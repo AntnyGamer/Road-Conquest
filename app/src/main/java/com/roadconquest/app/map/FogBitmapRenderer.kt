@@ -5,14 +5,11 @@ import android.graphics.BitmapShader
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.ColorMatrixColorFilter
-import android.graphics.LinearGradient
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
-import android.graphics.RadialGradient
-import android.graphics.RectF
 import android.graphics.Shader
 import com.roadconquest.app.data.RoadRecord
 import kotlin.math.*
@@ -711,18 +708,10 @@ object FogBitmapRenderer {
         val screenLeft: Float,
         val screenTop: Float,
         val screenScale: Float,
-        val roads: OverlayRoads,
-        val roadScreen: DoubleArray,
-        val centerLatitude: Double,
         val metersPerScreenPixelAtCenter: Double,
-        val liveLatitude: Double?,
-        val liveScreen: DoubleArray?,
         val textureMatrix: FloatArray = floatArrayOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f),
         val mediumCloudMatrix: FloatArray = textureMatrix,
         val broadCloudMatrix: FloatArray = textureMatrix,
-        val exploredCoordinates: DoubleArray = doubleArrayOf(),
-        val exploredScreen: DoubleArray = doubleArrayOf(),
-        val gridMode: Boolean = false,
         val gridCoordinates: DoubleArray = doubleArrayOf(),
         val gridScreen: DoubleArray = doubleArrayOf()
     )
@@ -739,101 +728,37 @@ object FogBitmapRenderer {
         }
         val canvas = Canvas(bitmap)
         val scratch = requireNotNull(renderScratch.get())
-        if (request.gridMode) {
-            // All three cloud octaves use geographic Mercator texture matrices,
-            // never the camera's previous pan or zoom. The dark, layered wisps
-            // therefore travel WITH the map while the alpha remains exactly 80%.
-            canvas.drawColor(STABLE_GRID_FOG_COLOR, PorterDuff.Mode.SRC)
-            val metersPerPixel = request.metersPerScreenPixelAtCenter / request.screenScale
-            scratch.drawClouds(canvas, request, metersPerPixel)
-        } else {
-            // Retain the legacy road-fog renderer for its independent unit tests.
-            scratch.textureMatrix.setValues(request.textureMatrix)
-            scratch.cloudShader.setLocalMatrix(scratch.textureMatrix)
-            canvas.drawRect(0f, 0f, request.bitmapWidth.toFloat(), request.bitmapHeight.toFloat(), scratch.legacy.cloudPaint)
-        }
-        // In grid mode, road geometry and point-radius fog reveals do not contribute.
-        // Blue roads still render separately; entering a mile tile is the sole unlock trigger.
-        if (request.gridMode) {
-            if (request.gridScreen.isEmpty()) return bitmap
-            // Acquire the reveal mask only for the first tile that can affect
-            // the bitmap; most nearby views have many saved tiles entirely offscreen.
-            var reveal: Bitmap? = null
-            var revealCanvas: Canvas? = null
-            // These camera/raster parameters are constant for every tile in
-            // this render. Compute the fade envelope only once, not per cell.
-            val gridScale = request.screenScale.toDouble()
-            val gridMetersPerPixel = request.metersPerScreenPixelAtCenter
-            val gridFade = if (!gridScale.isFinite() || gridScale <= 0.0 ||
-                !gridMetersPerPixel.isFinite() || gridMetersPerPixel <= 0.0
-            ) Double.NaN else ROAD_FULL_M * gridScale / gridMetersPerPixel + 2.0
-            for (i in 0 until minOf(request.gridCoordinates.size, request.gridScreen.size) - 7 step 8) {
-                if (!gridCellMayAffectBitmap(request, i, gridScale, gridFade)) continue
-                if (revealCanvas == null) {
-                    reveal = scratch.acquireRevealBitmap(request.bitmapWidth, request.bitmapHeight)
-                    revealCanvas = Canvas(reveal)
-                }
-                drawGridReveal(revealCanvas, request, i, scratch)
+        canvas.drawColor(STABLE_GRID_FOG_COLOR, PorterDuff.Mode.SRC)
+        val metersPerPixel = request.metersPerScreenPixelAtCenter / request.screenScale
+        scratch.drawClouds(canvas, request, metersPerPixel)
+        if (request.gridScreen.isEmpty()) return bitmap
+        // Acquire the reveal mask only for the first tile that can affect
+        // the bitmap; most nearby views have many saved tiles entirely offscreen.
+        var reveal: Bitmap? = null
+        var revealCanvas: Canvas? = null
+        // These camera/raster parameters are constant for every tile in
+        // this render. Compute the fade envelope only once, not per cell.
+        val gridScale = request.screenScale.toDouble()
+        val gridMetersPerPixel = request.metersPerScreenPixelAtCenter
+        val gridFade = if (!gridScale.isFinite() || gridScale <= 0.0 ||
+            !gridMetersPerPixel.isFinite() || gridMetersPerPixel <= 0.0
+        ) Double.NaN else ROAD_FULL_M * gridScale / gridMetersPerPixel + 2.0
+        for (i in 0 until minOf(request.gridCoordinates.size, request.gridScreen.size) - 7 step 8) {
+            if (!gridCellMayAffectBitmap(request, i, gridScale, gridFade)) continue
+            if (revealCanvas == null) {
+                reveal = scratch.acquireRevealBitmap(request.bitmapWidth, request.bitmapHeight)
+                revealCanvas = Canvas(reveal)
             }
-            // No recorded tile affects this raster, even via its 1,500-foot fade:
-            // avoid the bitmap-sized reveal mask and distance transform altogether.
-            val mask = reveal ?: return bitmap
-            // Merge every visited cell into ONE binary silhouette before fading. Individual
-            // square edge/corner shaders create visible gray tiles and double seams where
-            // neighboring cells meet. One distance-to-union mask has neither artifact.
-            fadeGridUnion(mask, request, scratch)
-            canvas.drawBitmap(mask, 0f, 0f, scratch.applyRevealPaint)
-            return bitmap
+            drawGridReveal(revealCanvas, request, i, scratch)
         }
-        if (request.roads.coordinates.isEmpty() && request.exploredCoordinates.isEmpty() && request.liveScreen == null) return bitmap
-
-        // Combine the strongest reveal once. Repeated DST_OUT operations multiply the
-        // remaining alpha, widening the clear area as roads/visited places overlap.
-        val reveal = scratch.acquireRevealBitmap(request.bitmapWidth, request.bitmapHeight)
-        val revealCanvas = Canvas(reveal)
-        val erasePaint = scratch.revealPaint
-        val legacy = scratch.legacy
-        val capBounds = legacy.capBounds
-        val roadLinear = legacy.roadLinear
-        val roadRadial = legacy.roadRadial
-        val locationRadial = legacy.locationRadial
-
-        val centerCos = cos(Math.toRadians(request.centerLatitude.coerceIn(-85.05112878, 85.05112878)))
-            .coerceAtLeast(1e-6)
-        val metersPerPixelCosScale = request.metersPerScreenPixelAtCenter / centerCos
-        for (road in 0 until request.roads.starts.size - 1) {
-            for (i in request.roads.starts[road] until request.roads.starts[road + 1] - 2 step 2) {
-                if (!request.roadScreen[i].isFinite() || !request.roadScreen[i + 1].isFinite() ||
-                    !request.roadScreen[i + 2].isFinite() || !request.roadScreen[i + 3].isFinite()) continue
-                val latitude = (request.roads.coordinates[i] + request.roads.coordinates[i + 2]) / 2.0
-                val localMetersPerPixel = metersPerPixelCosScale *
-                    cos(Math.toRadians(latitude.coerceIn(-85.05112878, 85.05112878)))
-                if (!localMetersPerPixel.isFinite() || localMetersPerPixel <= 0) continue
-                val radius = maxOf(
-                    (ROAD_FULL_M / localMetersPerPixel * request.screenScale).toFloat(),
-                    MIN_VISIBLE_REVEAL_RADIUS_PX * request.screenScale
-                )
-                drawRoadReveal(
-                    revealCanvas,
-                    ((request.roadScreen[i] - request.screenLeft) * request.screenScale).toFloat(),
-                    ((request.roadScreen[i + 1] - request.screenTop) * request.screenScale).toFloat(),
-                    ((request.roadScreen[i + 2] - request.screenLeft) * request.screenScale).toFloat(),
-                    ((request.roadScreen[i + 3] - request.screenTop) * request.screenScale).toFloat(),
-                    radius, erasePaint, roadLinear, roadRadial, capBounds
-                )
-            }
-        }
-
-        for (i in request.exploredCoordinates.indices step 2) {
-            drawPlaceReveal(revealCanvas, request, request.exploredCoordinates[i], request.exploredScreen[i],
-                request.exploredScreen[i + 1], metersPerPixelCosScale, erasePaint, locationRadial)
-        }
-        val live = request.liveScreen
-        val liveLatitude = request.liveLatitude
-        if (live != null && liveLatitude != null && live.all { it.isFinite() }) {
-            drawPlaceReveal(revealCanvas, request, liveLatitude, live[0], live[1], metersPerPixelCosScale, erasePaint, locationRadial)
-        }
-        canvas.drawBitmap(reveal, 0f, 0f, scratch.applyRevealPaint)
+        // No recorded tile affects this raster, even via its 1,500-foot fade:
+        // avoid the bitmap-sized reveal mask and distance transform altogether.
+        val mask = reveal ?: return bitmap
+        // Merge every visited cell into ONE binary silhouette before fading. Individual
+        // square edge/corner shaders create visible gray tiles and double seams where
+        // neighboring cells meet. One distance-to-union mask has neither artifact.
+        fadeGridUnion(mask, request, scratch)
+        canvas.drawBitmap(mask, 0f, 0f, scratch.applyRevealPaint)
         return bitmap
     }
 
@@ -987,76 +912,7 @@ object FogBitmapRenderer {
         bitmap.setPixels(pixels, 0, width, 0, 0, width, height)
     }
 
-    private fun drawPlaceReveal(canvas: Canvas, request: Request, latitude: Double, x: Double, y: Double,
-                                metersPerPixelCosScale: Double, paint: Paint, gradient: RadialGradient) {
-        if (!x.isFinite() || !y.isFinite()) return
-        val metersPerPixel = metersPerPixelCosScale *
-            cos(Math.toRadians(latitude.coerceIn(-85.05112878, 85.05112878)))
-        val radius = maxOf(
-            (LOCATION_FULL_M / metersPerPixel * request.screenScale).toFloat(),
-            MIN_VISIBLE_REVEAL_RADIUS_PX * request.screenScale
-        )
-        if (!radius.isFinite() || radius <= 0f) return
-        val drawX = ((x - request.screenLeft) * request.screenScale).toFloat()
-        val drawY = ((y - request.screenTop) * request.screenScale).toFloat()
-        if (drawX + radius < 0f || drawX - radius > canvas.width ||
-            drawY + radius < 0f || drawY - radius > canvas.height
-        ) return
-        val save = canvas.save()
-        canvas.translate(drawX, drawY)
-        canvas.scale(radius, radius)
-        paint.shader = gradient
-        canvas.drawCircle(0f, 0f, 1f, paint)
-        canvas.restoreToCount(save)
-    }
-
-    private fun drawRoadReveal(
-        canvas: Canvas,
-        x1: Float,
-        y1: Float,
-        x2: Float,
-        y2: Float,
-        radius: Float,
-        erasePaint: Paint,
-        roadLinear: LinearGradient,
-        roadRadial: RadialGradient,
-        capBounds: RectF
-    ) {
-        if (!radius.isFinite() || radius <= 0) return
-        if (maxOf(x1, x2) + radius < 0f || minOf(x1, x2) - radius > canvas.width ||
-            maxOf(y1, y2) + radius < 0f || minOf(y1, y2) - radius > canvas.height
-        ) return
-        val length = hypot(x2 - x1, y2 - y1)
-        val save = canvas.save()
-        canvas.translate(x1, y1)
-        canvas.rotate(Math.toDegrees(atan2((y2 - y1).toDouble(), (x2 - x1).toDouble())).toFloat())
-        canvas.scale(radius, radius)
-        erasePaint.shader = roadLinear
-        canvas.drawRect(0f, -1f, length / radius, 1f, erasePaint)
-        erasePaint.shader = roadRadial
-        canvas.drawArc(capBounds, 90f, 180f, true, erasePaint)
-        canvas.translate(length / radius, 0f)
-        canvas.drawArc(capBounds, -90f, 180f, true, erasePaint)
-        canvas.restoreToCount(save)
-    }
-
-    private fun radial(innerFraction: Float) = RadialGradient(
-        0f, 0f, 1f,
-        intArrayOf(
-            Color.WHITE,
-            Color.WHITE,
-            Color.rgb(140, 140, 140),
-            Color.rgb(51, 51, 51),
-            Color.rgb(15, 15, 15),
-            Color.BLACK
-        ),
-        floatArrayOf(0f, innerFraction, 0.20f, 0.50f, 0.80f, 1f),
-        Shader.TileMode.CLAMP
-    )
-
-    const val ROAD_CLEAR_M = 50f * 0.3048f
     const val ROAD_FULL_M = 1500f * 0.3048f
-    const val LOCATION_FULL_M = ROAD_FULL_M
     const val MAX_FOG_ALPHA = 0.80f
     // The entire visited-grid fog has ONE immutable tint, regardless of zoom or
     // panning. Underlying map styles may vary, but the fog's RGBA is stable.
@@ -1074,10 +930,6 @@ object FogBitmapRenderer {
     const val CENTER_ZOOM = 18.0
     const val MAX_BITMAP_DIMENSION = 1024
     const val VIEWPORT_PADDING_MULTIPLIER = 1.5f
-    // Keep narrow road/place reveals perceptible at the farthest supported overview zoom
-    // without changing their real-world fade distance at ordinary driving zoom levels.
-    private const val MIN_VISIBLE_REVEAL_RADIUS_PX = 1.25f
-
     fun bitmapDimensionForZoom(zoom: Double): Int = when {
         zoom < MIN_FOG_REVEAL_ZOOM -> 512 // Full Mercator world, without oversized mask pixels.
         zoom < 12.0 -> 896 // Local raster, not a 512-pixel world blown up at regional zoom.
@@ -1089,10 +941,6 @@ object FogBitmapRenderer {
     private class RenderScratch {
         val textureMatrix = Matrix()
         val cloudShader = BitmapShader(cloudTexture, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
-        // The app renders grid fog; initialize road-only native objects only for legacy requests.
-        private var legacyScratch: LegacyRoadScratch? = null
-        val legacy: LegacyRoadScratch
-            get() = legacyScratch ?: LegacyRoadScratch(cloudShader).also { legacyScratch = it }
         private val mediumShader = BitmapShader(cloudTexture, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
         private val broadShader = BitmapShader(cloudTexture, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
         private val mediumMatrix = Matrix()
@@ -1182,48 +1030,6 @@ object FogBitmapRenderer {
                 revealBitmap = it
             }
         }
-    }
-
-    private class LegacyRoadScratch(cloudShader: BitmapShader) {
-        val cloudPaint = Paint(Paint.FILTER_BITMAP_FLAG).apply {
-            shader = cloudShader
-            alpha = (MAX_FOG_ALPHA * 255).roundToInt()
-            xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC)
-        }
-        val capBounds = RectF(-1f, -1f, 1f, 1f)
-        private val roadClearFraction = ROAD_CLEAR_M / ROAD_FULL_M
-        val roadLinear = LinearGradient(
-            0f, -1f, 0f, 1f,
-            intArrayOf(
-                Color.BLACK,
-                Color.rgb(15, 15, 15),
-                Color.rgb(51, 51, 51),
-                Color.rgb(140, 140, 140),
-                Color.WHITE,
-                Color.WHITE,
-                Color.rgb(140, 140, 140),
-                Color.rgb(51, 51, 51),
-                Color.rgb(15, 15, 15),
-                Color.BLACK
-            ),
-            floatArrayOf(
-                0f,
-                0.10f,
-                0.25f,
-                0.40f,
-                (1f - roadClearFraction) / 2f,
-                (1f + roadClearFraction) / 2f,
-                0.60f,
-                0.75f,
-                0.90f,
-                1f
-            ),
-            Shader.TileMode.CLAMP
-        )
-        val roadRadial = radial(ROAD_CLEAR_M / ROAD_FULL_M)
-        // Road and place reveals intentionally use the same clear/full radii, so the exact
-        // same immutable shader can serve both instead of allocating a duplicate gradient.
-        val locationRadial = roadRadial
     }
 
     private val renderScratch = ThreadLocal.withInitial { RenderScratch() }

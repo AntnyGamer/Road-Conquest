@@ -1,9 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createHash, generateKeyPairSync, randomUUID } from "node:crypto";
+import { generateKeyPairSync, randomUUID } from "node:crypto";
 import { createIntegrityVerifier } from "../src/integrity.mjs";
 import { createFetchHandler } from "../src/fetch-adapter.mjs";
-import { backupMessage } from "../src/backups.mjs";
 
 const privateKey = generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey
   .export({ type: "pkcs8", format: "pem" });
@@ -12,21 +11,17 @@ const config = {
   packageName: "com.roadconquest.app", certificates: ["A".repeat(43)]
 };
 
-test('scoring and backup signing share OAuth credentials but independently verify every bound request', async () => {
+test('verified scoring rejects correctly shaped evidence with an incorrectly bound Integrity token', async () => {
   const environment = {
     DATABASE_URL: 'postgresql://unused@127.0.0.1:1/unavailable', PASSWORD_PEPPER: 'shared-integrity-test-pepper-'.repeat(2),
     NODE_ENV: 'production', REQUIRE_HTTPS: '1', TRUST_PROXY: '1', APPLY_SCHEMA_ON_STARTUP: '0',
     LEADERBOARDS_ENABLED: '1', FORUM_ENABLED: '0', FCM_SERVICE_ACCOUNT_JSON: '',
     PLAY_SERVICE_ACCOUNT_JSON: config.credentialsJson, PLAY_CERTIFICATES: config.certificates.join(','),
-    PLAY_VERSION_CODES: '71', PLAY_CLOUD_PROJECT_NUMBER: '123456789',
-    VERIFIED_EVIDENCE_KEY: Buffer.alloc(32, 3).toString('base64url'), BACKUP_VERIFICATION_KEYS_JSON: '[]',
-    BACKUP_SIGNING_PRIVATE_KEY: generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).privateKey
-      .export({ type: 'pkcs8', format: 'pem' })
+    PLAY_CLOUD_PROJECT_NUMBER: '123456789',
+    VERIFIED_EVIDENCE_KEY: Buffer.alloc(32, 3).toString('base64url')
   };
   const previous = Object.fromEntries(Object.keys(environment).map(key => [key, process.env[key]]));
   const fetcher = globalThis.fetch;
-  const hash = createHash('sha256').update('signed backup').digest('base64url');
-  const requestHash = createHash('sha256').update(backupMessage(hash)).digest('base64url');
   let oauth = 0, pool;
   const decoded = [];
   try {
@@ -41,7 +36,7 @@ test('scoring and backup signing share OAuth credentials but independently verif
       const token = JSON.parse(init.body).integrity_token;
       decoded.push(token);
       return Response.json({ tokenPayloadExternal: {
-        requestDetails: { requestHash: token.startsWith('backup-') ? requestHash : 'wrong-bound-hash',
+        requestDetails: { requestHash: 'wrong-bound-hash',
           requestPackageName: config.packageName, timestampMillis: String(Date.now()) },
         appIntegrity: { appRecognitionVerdict: 'PLAY_RECOGNIZED', packageName: config.packageName,
           versionCode: '90', certificateSha256Digest: config.certificates },
@@ -64,20 +59,12 @@ test('scoring and backup signing share OAuth credentials but independently verif
     const evidence = JSON.stringify({ run: randomUUID(), nonce: 'N'.repeat(43), sequence: 0,
       fixes: [0, 1].map(index => ({ lat: 40 + index * 0.0003, lon: -74, accuracy: 3, speed: 8,
         mock: false, time: now - 4000 + index * 3000, elapsed: 10000 + index * 3000 })) });
-    const [backup, score] = await Promise.all([
-      call('/v1/backups/sign', { hash, integrity_token: 'backup-integrity-token-example' }),
-      call('/v1/verified/batch', { evidence, integrity_token: 'score-integrity-token-example' })
-    ]);
-    assert.equal(backup.status, 200);
-    assert.equal((await backup.json()).kind, 'server-p256');
-    assert.equal(score.status, 403, 'The scoring request must check its own attested fingerprint');
-    const changed = await call('/v1/backups/sign', {
-      hash: createHash('sha256').update('changed backup').digest('base64url'),
-      integrity_token: 'backup-integrity-token-example'
+    const score = await call('/v1/verified/batch', {
+      evidence, integrity_token: 'score-integrity-token-example'
     });
-    assert.equal(changed.status, 403, 'A prior valid backup verdict must not be reused for changed contents');
-    assert.equal(oauth, 1, 'Both features and the retry use one credential refresh');
-    assert.deepEqual(decoded.sort(), ['backup-integrity-token-example', 'backup-integrity-token-example', 'score-integrity-token-example']);
+    assert.equal(score.status, 403, 'The scoring request must check its own attested fingerprint');
+    assert.equal(oauth, 1, 'One scoring request should perform one OAuth credential refresh');
+    assert.deepEqual(decoded, ['score-integrity-token-example']);
   } finally {
     globalThis.fetch = fetcher;
     for (const [key, value] of Object.entries(previous)) {

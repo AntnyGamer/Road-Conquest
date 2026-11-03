@@ -312,7 +312,8 @@ class ScreenAds(
                 showingReward -> activity.getString(R.string.ad_showing)
                 loadingReward -> activity.getString(R.string.ad_loading)
                 !adsAvailable -> activity.getString(R.string.ad_unavailable)
-                rewarded != null -> activity.getString(R.string.ad_watch, rewarded!!.rewardItem.amount)
+                rewarded != null -> activity.resources.getQuantityString(R.plurals.ad_watch,
+                    rewarded!!.rewardItem.amount, rewarded!!.rewardItem.amount)
                 else -> activity.getString(R.string.ad_load)
             }
         }
@@ -375,7 +376,8 @@ class ScreenAds(
                     if (!alive()) return@runOnUiThread
                     result.fold(onSuccess = { saved ->
                         if (saved) {
-                            if (active) Toast.makeText(activity, activity.getString(R.string.ad_reward_saved, points), Toast.LENGTH_SHORT).show()
+                            if (active) Toast.makeText(activity, activity.resources.getQuantityString(
+                                R.plurals.ad_reward_saved, points.toInt(), points), Toast.LENGTH_SHORT).show()
                             onRewardSaved()
                         }
                     }, onFailure = {

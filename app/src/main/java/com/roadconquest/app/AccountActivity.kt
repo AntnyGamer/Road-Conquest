@@ -109,12 +109,12 @@ class AccountActivity : Activity() {
         val session = AccountStore.load(this)
         render(session)
         if (!AccountClient.isConfigured()) {
-            statusText.text = "Account service is not configured in this build."
+            statusText.text = getString(R.string.ui_account_service_is_not_configured_in_this_build)
             setAuthEnabled(false)
         } else if (session != null) {
             refreshAccount(session)
         } else if (AccountStore.isAuthenticating()) {
-            statusText.text = "Account request in progress…"
+            statusText.text = getString(R.string.ui_account_request_in_progress)
         }
     }
 
@@ -138,16 +138,16 @@ class AccountActivity : Activity() {
         val username = usernameInput.text.toString().trim()
         val password = passwordInput.text.toString()
         if (!USERNAME.matches(username)) {
-            statusText.text = "Username must be 3-24 letters, numbers, or underscores."
+            statusText.text = getString(R.string.ui_username_must_be_3_24_letters_numbers_or_underscores)
             return
         }
         val passwordLength = password.codePointCount(0, password.length)
         if (passwordLength !in 8..128) {
-            statusText.text = "Password must be 8-128 characters."
+            statusText.text = getString(R.string.ui_password_must_be_8_128_characters)
             return
         }
         if (signup && password != confirmPasswordInput.text.toString()) {
-            statusText.text = "Passwords do not match."
+            statusText.text = getString(R.string.ui_passwords_do_not_match)
             return
         }
 
@@ -190,11 +190,11 @@ class AccountActivity : Activity() {
                         if (session != null && AccountStore.load(this)?.token == session.token) {
                             passwordInput.text.clear()
                             confirmPasswordInput.text.clear()
-                            statusText.text = "Signed in."
+                            statusText.text = getString(R.string.ui_signed_in)
                             render(session)
                             if (intent.getBooleanExtra(EXTRA_ONBOARDING, false)) finish()
                         } else {
-                            statusText.text = "A newer account action replaced this sign-in."
+                            statusText.text = getString(R.string.ui_a_newer_account_action_replaced_this_sign_in)
                             render(AccountStore.load(this))
                         }
                     },
@@ -209,7 +209,7 @@ class AccountActivity : Activity() {
     }
 
     private fun refreshAccount(session: AccountStore.Session) {
-        statusText.text = "Checking account…"
+        statusText.text = getString(R.string.ui_checking_account)
         executor.execute {
             val result = runCatching { AccountClient.me(session.token) }
             runOnUiThread {
@@ -219,16 +219,16 @@ class AccountActivity : Activity() {
                         val updated = AccountStore.refreshIfUnchanged(
                             this, session, account.username, account.leaderboardVisible
                         ) ?: return@runOnUiThread
-                        statusText.text = "Signed in."
+                        statusText.text = getString(R.string.ui_signed_in)
                         render(updated)
                     },
                     onFailure = { error ->
                         if (error is AccountClient.ApiException && error.status == 401) {
                             AccountStore.clear(this)
-                            statusText.text = "Your session expired. Sign in again."
+                            statusText.text = getString(R.string.ui_your_session_expired_sign_in_again)
                             render(null)
                         } else {
-                            statusText.text = "Could not refresh account. Your saved sign-in is unchanged."
+                            statusText.text = getString(R.string.ui_could_not_refresh_account_your_saved_sign_in_is_unchanged)
                         }
                     }
                 )
@@ -250,7 +250,7 @@ class AccountActivity : Activity() {
                         leaderboardSwitch.isChecked = saved
                         rendering = false
                         leaderboardSwitch.isEnabled = !busy
-                        statusText.text = "Leaderboard privacy saved."
+                        statusText.text = getString(R.string.ui_leaderboard_privacy_saved)
                     },
                     onFailure = { error ->
                         rendering = true
@@ -268,7 +268,7 @@ class AccountActivity : Activity() {
         val session = AccountStore.load(this)
         AccountStore.clear(this)
         render(null)
-        statusText.text = "Signed out."
+        statusText.text = getString(R.string.ui_signed_out)
         if (session != null && AccountClient.isConfigured()) {
             executor.execute { runCatching { AccountClient.logout(session.token) } }
         }
@@ -281,7 +281,7 @@ class AccountActivity : Activity() {
     }
 
     private fun passwordField(): EditText = EditText(this).apply {
-        hint = "Current password"
+        hint = getString(R.string.ui_current_password)
         inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
         isSingleLine = true
         isSaveEnabled = false
@@ -295,7 +295,7 @@ class AccountActivity : Activity() {
         val session = AccountStore.load(this) ?: return
         val fields = dialogFields()
         val username = EditText(this).apply {
-            hint = "New username"
+            hint = getString(R.string.ui_new_username)
             isSingleLine = true
             filters = arrayOf(android.text.InputFilter.LengthFilter(24))
             setText(session.username)
@@ -308,20 +308,20 @@ class AccountActivity : Activity() {
             LinearLayout.LayoutParams.WRAP_CONTENT
         ).apply { topMargin = (10 * resources.displayMetrics.density).toInt() })
         fields.addView(error)
-        val dialog = AlertDialog.Builder(this).setTitle("Change username").setView(fields)
-            .setNegativeButton("Cancel", null).setPositiveButton("Save", null).create()
+        val dialog = AlertDialog.Builder(this).setTitle(getString(R.string.ui_change_username)).setView(fields)
+            .setNegativeButton(getString(R.string.ui_cancel), null).setPositiveButton(getString(R.string.ui_save), null).create()
         dialog.setOnDismissListener { password.text.clear() }
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val name = username.text.toString().trim()
                 val currentPassword = password.text.toString()
                 if (!USERNAME.matches(name) || currentPassword.isEmpty()) {
-                    error.text = "Enter 3-24 letters, numbers or underscores and your current password."
+                    error.text = getString(R.string.ui_enter_3_24_letters_numbers_or_underscores_and_your_current_passw)
                     return@setOnClickListener
                 }
                 dialog.dismiss()
                 setBusy(true)
-                statusText.text = "Changing username…"
+                statusText.text = getString(R.string.ui_changing_username)
                 executor.execute {
                     val result = runCatching { AccountClient.changeUsername(session.token, name, currentPassword) }
                     val updated = result.getOrNull()?.let { account ->
@@ -354,20 +354,20 @@ class AccountActivity : Activity() {
         val password = passwordField()
         val error = TextView(this)
         fields.addView(password); fields.addView(error)
-        val dialog = AlertDialog.Builder(this).setTitle("Delete account?").setView(fields)
-            .setMessage("This permanently deletes your cloud account, sessions, friendships, cloud driving records and forum data, including posts and Forum Plus access tied to this account. Driving history saved on this phone stays. To remove both, also use Settings → Backups & data → Delete local data. That option does not delete your cloud account.")
-            .setNegativeButton("Cancel", null).setPositiveButton("Delete account", null).create()
+        val dialog = AlertDialog.Builder(this).setTitle(getString(R.string.ui_delete_account_2)).setView(fields)
+            .setMessage(getString(R.string.ui_this_permanently_deletes_your_cloud_account_sessions_friendships))
+            .setNegativeButton(getString(R.string.ui_cancel), null).setPositiveButton(getString(R.string.ui_delete_account), null).create()
         dialog.setOnDismissListener { password.text.clear() }
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val currentPassword = password.text.toString()
                 if (currentPassword.isEmpty()) {
-                    error.text = "Enter your current password to delete your account."
+                    error.text = getString(R.string.ui_enter_your_current_password_to_delete_your_account)
                     return@setOnClickListener
                 }
                 dialog.dismiss()
                 setBusy(true)
-                statusText.text = "Deleting account…"
+                statusText.text = getString(R.string.ui_deleting_account)
                 executor.execute {
                     val result = runCatching {
                         AccountClient.deleteAccount(session.token, currentPassword)
@@ -407,7 +407,7 @@ class AccountActivity : Activity() {
         authGroup.visibility = if (session == null) View.VISIBLE else View.GONE
         signedInGroup.visibility = if (session == null) View.GONE else View.VISIBLE
         if (session != null) {
-            signedInText.text = "Signed in as " + session.username
+            signedInText.text = getString(R.string.ui_signed_in_as, session.username)
             leaderboardSwitch.isChecked = session.leaderboardVisible
             leaderboardSwitch.isEnabled = AccountClient.isConfigured()
         }

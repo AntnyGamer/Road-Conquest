@@ -14,7 +14,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.security.MessageDigest
 import java.util.ArrayDeque
-import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledThreadPoolExecutor
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 class VerifiedDriving internal constructor(context: Context, private val competitionsEnabled: () -> Boolean) {
     constructor(context: Context) : this(context, { FeatureFlags.LEADERBOARDS_VISIBLE })
     private val context = context.applicationContext
-    private val executor = Executors.newSingleThreadScheduledExecutor()
+    private val executor = ScheduledThreadPoolExecutor(1).apply { setRemoveOnCancelPolicy(true) }
     private val busy = AtomicBoolean(false)
     @Volatile private var drainTask: java.util.concurrent.ScheduledFuture<*>? = null
     private val queueLock = Any()
@@ -233,7 +233,15 @@ class VerifiedDriving internal constructor(context: Context, private val competi
     }
 
     fun close() {
+        if (!accepting) return
         accepting = false
+        // Hidden/unused competition never enqueued evidence. Do not start a
+        // worker just to drain empty state when the tracking service stops.
+        if (executor.poolSize == 0 && !busy.get() && synchronized(queueLock) { pendingLocations.isEmpty() }) {
+            closed = true
+            executor.shutdown()
+            return
+        }
         // A pending cooldown must not delay the normal stop-time final submission.
         retryAfter = 0L
         drainTask?.cancel(false)

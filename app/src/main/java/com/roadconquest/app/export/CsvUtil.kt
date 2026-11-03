@@ -9,17 +9,30 @@ internal object CsvUtil {
         for (field in fields) {
             if (!first) writer.write(','.code)
             first = false
-            // A long array with no quotes needs only its enclosing CSV quotes.
-            // '[' is already spreadsheet-safe; keep all other values on escape().
-            if (field.length >= 1024 && field[0] == '[' && field.last() == ']' &&
-                ',' in field && '"' !in field
-            ) {
-                writer.write('"'.code)
-                writer.write(field)
-                writer.write('"'.code)
-            } else writer.write(escape(field))
+            writeField(writer, field)
         }
         writer.write('\n'.code)
+    }
+
+    /** Fixed-size buffers are reused across all rows of a streamed table. */
+    fun writeRow(writer: Writer, fields: Array<String>) {
+        for (index in fields.indices) {
+            if (index > 0) writer.write(','.code)
+            writeField(writer, fields[index])
+        }
+        writer.write('\n'.code)
+    }
+
+    private fun writeField(writer: Writer, field: String) {
+        // A long array with no quotes needs only its enclosing CSV quotes.
+        // '[' is already spreadsheet-safe; keep all other values on escape().
+        if (field.length >= 1024 && field[0] == '[' && field.last() == ']' &&
+            ',' in field && '"' !in field
+        ) {
+            writer.write('"'.code)
+            writer.write(field)
+            writer.write('"'.code)
+        } else writer.write(escape(field))
     }
 
     fun escape(value: String): String {

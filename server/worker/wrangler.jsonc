@@ -1,6 +1,6 @@
 {
   "name": "roadconquest-ingress",
-  "main": "./ingress.mjs",
+  "main": "../dist/ingress.mjs",
   "compatibility_date": "2026-10-15",
   "workers_dev": true,
   "preview_urls": false,

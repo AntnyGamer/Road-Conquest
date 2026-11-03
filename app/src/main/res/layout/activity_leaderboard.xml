@@ -11,17 +11,17 @@
             android:layout_width="wrap_content"
             android:layout_height="48dp"
             android:layout_marginBottom="8dp"
-            android:text="Back" />
+            android:text="@string/tour_back" />
 
         <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:text="Cells explored leaderboard"
+            android:text="@string/ui_cells_explored_leaderboard"
             android:accessibilityHeading="true" android:textSize="28sp"
             android:textStyle="bold" android:textColor="?attr/rcTextPrimary" />
         <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
             android:layout_marginTop="12dp" android:textSize="14sp" android:textColor="?attr/rcTextSecondary"
-            android:text="Top 50 public profiles. Each cell counts once from verified live visits. Imported history does not count." />
-        <Button android:id="@+id/refreshRankingButton" style="@style/RoadConquest.SettingsAction" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="Refresh" />
+            android:text="@string/ui_top_50_public_profiles_each_cell_counts_once_from_verified_live" />
+        <Button android:id="@+id/refreshRankingButton" style="@style/RoadConquest.SettingsAction" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="@string/ui_refresh" />
         <TextView android:id="@+id/rankingEntriesText" android:layout_width="match_parent" android:layout_height="wrap_content"
             android:layout_marginTop="12dp" android:textSize="16sp" android:textColor="?attr/rcTextPrimary" />
         <LinearLayout android:id="@+id/rankingRows" android:layout_width="match_parent"

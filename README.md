@@ -1,4 +1,4 @@
-# Road Conquest 1.0.1
+# Road Conquest 1.0.2
 
 Road Conquest remembers the roads you drive and the places you visit, revealing them through a
 cloud-textured fog map.
@@ -7,7 +7,7 @@ cloud-textured fog map.
 [Source and issues](https://github.com/AntnyGamer/Road-Conquest) ·
 [GNU AGPL v3 license](LICENSE)
 
-**1.0.1** adds portable private backups and fixes delayed discovery rewards and location lookups after local-data deletion. See the [release notes](RELEASE_NOTES.md) and [backup documentation](BACKUP_AND_CHALLENGES.md).
+**1.0.2** fixes tracking, merged-road rewards, secure export completion, and avoidable server work. It removes retired passphrase-encrypted and Play-signed ZIP backup formats; current account-based encrypted backups and the on-device pre-restore recovery copy remain supported. See the [release notes](RELEASE_NOTES.md) and [backup documentation](BACKUP_AND_CHALLENGES.md).
 
 Earlier beta history is available in [GitHub Releases](https://github.com/AntnyGamer/Road-Conquest/releases).
 
@@ -30,7 +30,7 @@ Grant Precise location. For automatic background tracking, choose Allow all the 
 location settings and allow background battery use. Settings includes shortcuts to the relevant
 Android screens. Allow notifications to see the tracking notification and its Stop tracking control.
 
-Version 1.0.1 uses Android application ID `com.roadconquest.app`, internal version code **98**, and GitHub tag `v1.0.1`. Google Play permanently reserves uploaded version codes, even in testing tracks, so confirm 98 is unused before uploading. The app shows its exact version in Settings → Help & about.
+Version 1.0.2 uses Android application ID `com.roadconquest.app`, internal version code **99**, and GitHub tag `v1.0.2`. Google Play permanently reserves uploaded version codes, even in testing tracks, so confirm 99 is unused before uploading. The app shows its exact version in Settings → Help & about.
 
 ## Explore
 
@@ -152,15 +152,15 @@ bitmap still covers the viewport, avoiding the old flash back to fully covered f
 accounts for the screen diagonal and camera latitude so rotation keeps the map inside its world edges.
 
 Place discovery is intentionally sparse: background tracking records only an occasional local
-candidate, while town/state/country names are resolved later on a foreground worker through
-Android's system geocoder. Point refreshes use aggregate database queries, Shop/Settings avoid
+candidate. Bounded workers resolve town/state/country names through Android's system geocoder
+while the map is visible or the tracking foreground service remains active in the background. Point refreshes use aggregate database queries, Shop/Settings avoid
 duplicate launch refreshes, and map cosmetics are only regenerated when their selection changes.
 These choices keep the progression system from adding continuous background network or rendering work.
 
 ## Build and verify
 
 Open the project in Android Studio with JDK 21 or newer, Android SDK 37.0 and Build Tools 36.0.0.
-The wrapper pins Gradle 9.8.2 with a verified checksum and Android Gradle Plugin 9.4.1.
+The wrapper pins Gradle 9.8.2 with a verified checksum and Android Gradle Plugin 9.5.0.
 
 ```sh
 ./gradlew :app:testDebugUnitTest :app:lintDebug :app:lintRelease :app:assembleDebug :app:assembleRelease :app:bundleRelease
@@ -244,7 +244,8 @@ Ads have network, memory, storage and battery costs.
 Driving history, explored places, points and purchases stay on the phone. Already verified
 road segments can be recognized locally on a repeat drive; new road matching sends bounded
 coordinate batches through the Road Conquest gateway to Geoapify. Town/state/country labels are requested through
-Android's system geocoder only while Road Conquest is foregrounded; the geocoder implementation and
+Android's system geocoder while the map is visible or the tracking foreground service remains active
+in the background; the geocoder implementation and
 network behavior are supplied by the device. Pending data remains saved for retry after network or
 matching failures. Settings → Backups & data offers two manual exports. **Secure backup** creates an
 AES-256-GCM-encrypted `.rcbackup` file that works across Google Play and GitHub builds;
@@ -252,8 +253,7 @@ it needs a Road Conquest sign-in and internet access to get the account-bound ke
 **Readable ZIP** exports CSV files for analysis, but is unencrypted, contains precise
 location history, and cannot be restored. Neither file is uploaded automatically.
 Restore rejects altered secure backups and excludes imported history from new verified
-leaderboard or weekly challenge credit. Older authenticated Play-signed and passphrase
-backups remain restorable. See [backup and restore details](BACKUP_AND_CHALLENGES.md)
+leaderboard or weekly challenge credit. Retired Play-signed ZIP and passphrase-encrypted .rcbackup files are no longer importable. See [backup and restore details](BACKUP_AND_CHALLENGES.md)
 and [server key management](server/README.md#protected-local-backups).
 
 When enabled and available, verified scoring sends precise live GPS batches with Play Integrity

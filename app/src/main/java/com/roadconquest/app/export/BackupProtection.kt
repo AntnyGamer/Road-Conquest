@@ -2,28 +2,17 @@ package com.roadconquest.app.export
 
 import android.content.Context
 import android.util.Base64
-import com.google.android.gms.tasks.Tasks
-import com.google.android.play.core.integrity.IntegrityManagerFactory
-import com.google.android.play.core.integrity.StandardIntegrityManager
-import com.roadconquest.app.account.AccountClient
-import com.roadconquest.app.data.TrackingRepository
 import org.json.JSONObject
 import java.io.File
-import java.io.OutputStream
 import java.io.RandomAccessFile
-import java.security.KeyFactory
 import java.security.MessageDigest
 import java.security.SecureRandom
-import java.security.Signature
-import java.security.spec.X509EncodedKeySpec
-import java.util.concurrent.TimeUnit
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
-/** Authenticate exact ZIP bytes, including metadata. No signing secret is shipped in the APK. */
+/** Authenticate the current on-device pre-restore recovery ZIP with a private HMAC key. */
 object BackupProtection {
     private const val MAX_COMMENT = 4096
-    private const val TEMP_PREFIX = "roadconquest-protected-"
     private const val KEY_FILE = "backup-recovery.key"
     private val localKeyLock = Any()
 
@@ -31,37 +20,6 @@ object BackupProtection {
     internal fun encode(bytes: ByteArray): String = Base64.encodeToString(bytes,
         Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
     private fun decode(text: String) = Base64.decode(text, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
-
-    /** Only the digest and Play attestation leave the phone, never the backup or GPS history. */
-    fun writePortable(context: Context, repository: TrackingRepository, output: OutputStream) {
-        // A restored Android task can open Settings without first opening the map.
-        // Finish one-time cleanup before creating any active export it could delete.
-        DataImporter.clearTemporaryFiles(context)
-        val status = AccountClient.backupKeys()
-        check(status.optBoolean("available")) { "Protected backups are unavailable. Try again when the backup service is ready." }
-        cacheKeys(context, status)
-        val file = File.createTempFile(TEMP_PREFIX, ".zip", context.cacheDir)
-        try {
-            file.outputStream().use { DataExporter.writeZip(context, repository, it) }
-            check(file.length() <= DataImporter.MAX_BYTES) { "Backup exceeds 512 MB" }
-            val hash = digest(file, endOfZip(file))
-            val requestHash = encode(MessageDigest.getInstance("SHA-256").digest(message(hash)))
-            // Attestation and the signing request run after releasing the history/snapshot locks.
-            val provider = Tasks.await(IntegrityManagerFactory.createStandard(context).prepareIntegrityToken(
-                StandardIntegrityManager.PrepareIntegrityTokenRequest.builder()
-                    .setCloudProjectNumber(status.getString("cloud_project").toLong()).build()
-            ), 15, TimeUnit.SECONDS)
-            val token = Tasks.await(provider.request(StandardIntegrityManager.StandardIntegrityTokenRequest.builder()
-                .setRequestHash(requestHash).build()), 15, TimeUnit.SECONDS).token()
-            val seal = AccountClient.signBackup(hash, token)
-            verifyServerSeal(context, hash, seal)
-            check(repository.isHistoryCurrent() && !com.roadconquest.app.util.Prefs.isDeviceDataDeletionPending(context)) {
-                "Device progress changed while exporting. Export again."
-            }
-            attach(file, seal)
-            file.inputStream().use { it.copyTo(output) }
-        } finally { file.delete() }
-    }
 
     /** The private pre-restore copy remains available without network access. */
     internal fun sealRecovery(context: Context, file: File) {
@@ -73,56 +31,16 @@ object BackupProtection {
     fun verify(context: Context, file: File) {
         val end = endOfZip(file)
         require(end.commentLength in 1..MAX_COMMENT) {
-            "This backup is unsigned and cannot be authenticated. Export a protected backup with the current app."
+            "This ZIP is not an authenticated local recovery backup."
         }
         val comment = ByteArray(end.commentLength)
         RandomAccessFile(file, "r").use { it.seek(end.offset + 22); it.readFully(comment) }
         val seal = JSONObject(Charsets.UTF_8.newDecoder().decode(java.nio.ByteBuffer.wrap(comment)).toString())
         val hash = digest(file, end)
         require(seal.optInt("version") == 1) { "Unsupported backup signature" }
-        when (seal.optString("kind")) {
-            "server-p256" -> verifyServerSeal(context, hash, seal)
-            "local-hmac" -> require(MessageDigest.isEqual(decode(seal.getString("signature")),
-                localMac(context, hash, createKey = false))) { "Recovery backup was altered" }
-            else -> error("Backup has no trusted signature")
-        }
-    }
-
-    private fun verifyServerSeal(context: Context, hash: String, seal: JSONObject) {
-        require(seal.optInt("version") == 1 && seal.optString("kind") == "server-p256") { "Invalid backup signature" }
-        val id = seal.getString("key_id")
-        require(id.matches(Regex("[A-Za-z0-9_-]{43}"))) { "Invalid backup signing key" }
-        val prefs = context.getSharedPreferences("roadconquest_backup_keys", Context.MODE_PRIVATE)
-        var key = prefs.getString(id, null)
-        if (key == null) {
-            // Keys are trusted only from our HTTPS service, never from the selected ZIP.
-            cacheKeys(context, AccountClient.backupKeys())
-            key = prefs.getString(id, null)
-        }
-        require(key != null) { "Backup signing key is unavailable. Connect to the internet and try again." }
-        verifySignature(hash, seal.getString("signature"), decode(key))
-    }
-
-    internal fun verifySignature(hash: String, signature: String, spki: ByteArray) {
-        val key = KeyFactory.getInstance("EC").generatePublic(X509EncodedKeySpec(spki))
-        require(Signature.getInstance("SHA256withECDSA").run {
-            initVerify(key); update(message(hash)); verify(decode(signature))
-        }) { "Backup was altered or its signature is invalid" }
-    }
-
-    private fun cacheKeys(context: Context, status: JSONObject) {
-        val keys = status.getJSONArray("keys")
-        require(keys.length() <= 8) { "Invalid backup key response" }
-        val edit = context.getSharedPreferences("roadconquest_backup_keys", Context.MODE_PRIVATE).edit()
-        for (i in 0 until keys.length()) {
-            val key = keys.getJSONObject(i)
-            val spki = key.getString("spki")
-            require(spki.length <= 512 && encode(MessageDigest.getInstance("SHA-256").digest(decode(spki))) == key.getString("id")) {
-                "Invalid backup key response"
-            }
-            edit.putString(key.getString("id"), spki)
-        }
-        check(edit.commit()) { "Could not save backup verification keys" }
+        require(seal.optString("kind") == "local-hmac") { "Backup has no trusted signature" }
+        require(MessageDigest.isEqual(decode(seal.getString("signature")),
+            localMac(context, hash, createKey = false))) { "Recovery backup was altered" }
     }
 
     private fun localMac(context: Context, hash: String, createKey: Boolean): ByteArray {
@@ -186,10 +104,6 @@ object BackupProtection {
             it.seek(end.offset + 20); it.write(comment.size and 255); it.write(comment.size shr 8)
             it.write(comment); it.fd.sync()
         }
-    }
-
-    internal fun clearTemporaryFiles(context: Context) {
-        context.cacheDir.listFiles().orEmpty().filter { it.name.startsWith(TEMP_PREFIX) }.forEach { it.delete() }
     }
 
     internal fun clearRecoveryKey(context: Context) = synchronized(localKeyLock) {

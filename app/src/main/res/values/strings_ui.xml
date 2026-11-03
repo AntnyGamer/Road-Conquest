@@ -1,0 +1,248 @@
+<resources>
+    <string name="ui_0_points" formatted="false">"⚔ 0 points"</string>
+    <string name="ui_action_username_confirmation">"%1$s %2$s?"</string>
+    <string name="ui_value_unit">"%1$s %2$s"</string>
+    <string name="ui_progress_fraction">"%1$s / %2$s"</string>
+    <string name="ui_place_details">"%1$s\n%2$s: %3$s\nArea: %4$s\nFirst visited: %5$s\nLast visited: %6$s%7$s"</string>
+    <string name="ui_goal_accessibility">"%1$s: %2$d of %3$d"</string>
+    <string name="ui_selected_trip_description">"%1$s, selected trip"</string>
+    <string name="ui_a_newer_account_action_replaced_this_sign_in" formatted="false">"A newer account action replaced this sign-in."</string>
+    <string name="ui_accept" formatted="false">"Accept"</string>
+    <string name="ui_account" formatted="false">"Account"</string>
+    <string name="ui_account_community" formatted="false">"Account &amp; community"</string>
+    <string name="ui_account_request_in_progress" formatted="false">"Account request in progress…"</string>
+    <string name="ui_account_service_is_not_configured_in_this_build" formatted="false">"Account service is not configured in this build."</string>
+    <string name="ui_achievements" formatted="false">"Achievements"</string>
+    <string name="ui_achievements_and_milestones" formatted="false">"Achievements and milestones"</string>
+    <string name="ui_achievements_are_temporarily_unavailable" formatted="false">"Achievements are temporarily unavailable."</string>
+    <string name="ui_ad_rewards" formatted="false">"Ad Rewards"</string>
+    <string name="ui_add_friend_by_username" formatted="false">"Add friend by username"</string>
+    <string name="ui_adjust_battery_limits_that_may_interrupt_tracking" formatted="false">"Adjust battery limits that may interrupt tracking."</string>
+    <string name="ui_allow_all_the_time_location" formatted="false">"Allow all-the-time location"</string>
+    <string name="ui_allow_precise_location_to_record_and_match_drives" formatted="false">"Allow precise location to record and match drives."</string>
+    <string name="ui_android_blocked_the_tracking_service_open_road_conquest_again_an" formatted="false">"Android blocked the tracking service. Open Road Conquest again and verify location permissions and battery settings."</string>
+    <string name="ui_android_s_file_picker_is_unavailable" formatted="false">"Android\'s file picker is unavailable."</string>
+    <string name="ui_appearance" formatted="false">"Appearance"</string>
+    <string name="ui_appearance_use_phone_setting" formatted="false">"Appearance: Use phone setting"</string>
+    <string name="ui_automatically_follow_your_car" formatted="false">"Automatically follow your car"</string>
+    <string name="ui_backup_validated" formatted="false">"Backup validated."</string>
+    <string name="ui_backup_was_not_imported_1_s">"Backup was not imported: %1$s"</string>
+    <string name="ui_backups_data" formatted="false">"Backups &amp; data"</string>
+    <string name="ui_badges" formatted="false">"Badges"</string>
+    <string name="ui_battery_settings" formatted="false">"Battery settings"</string>
+    <string name="ui_cancel" formatted="false">"Cancel"</string>
+    <string name="ui_cells_explored_leaderboard" formatted="false">"Cells explored leaderboard"</string>
+    <string name="ui_change_username" formatted="false">"Change username"</string>
+    <string name="ui_changing_username" formatted="false">"Changing username…"</string>
+    <string name="ui_checking_account" formatted="false">"Checking account…"</string>
+    <string name="ui_checking_backup" formatted="false">"Checking backup…"</string>
+    <string name="ui_checking_new_roads_towns_and_matching_status" formatted="false">"Checking new roads, towns and matching status…"</string>
+    <string name="ui_checking_verified_scoring" formatted="false">"Checking verified scoring…"</string>
+    <string name="ui_choose_a_category_or_search_settings" formatted="false">"Choose a category or search settings."</string>
+    <string name="ui_choose_a_road_conquest_backup_to_restore_trips_roads_distance_fo" formatted="false">"Choose a Road Conquest backup to restore trips, roads, distance, fog, discoveries, points and garage items.\n\nNew secure .rcbackup files work with both Google Play and GitHub installations. Sign in to the same Road Conquest account and connect to the internet to restore. No extra backup password is required. Damaged or altered backups are rejected. Only current account-based secure backups and this device's recovery copy can be restored.\n\nYour current progress is backed up. Tracking and verified sharing remain off afterward. Restored history does not earn weekly challenge credit or change verified rankings.\n\nSign in and restore Google Play VIP separately."</string>
+    <string name="ui_choose_a_secure_restorable_backup_account_and_internet_required" formatted="false">"Choose a secure, restorable backup (account and internet required) or an export-only readable ZIP for analysis. Readable exports include precise GPS history. Share carefully."</string>
+    <string name="ui_choose_backup_zip_or_rcbackup" formatted="false">"Choose backup (.zip or .rcbackup)"</string>
+    <string name="ui_choose_how_roads_and_terrain_look" formatted="false">"Choose how roads and terrain look."</string>
+    <string name="ui_choose_miles_or_kilometers_without_changing_progress" formatted="false">"Choose miles or kilometers without changing progress."</string>
+    <string name="ui_clear_forum_penalties" formatted="false">"Clear forum penalties"</string>
+    <string name="ui_clear_penalties" formatted="false">"Clear penalties"</string>
+    <string name="ui_close" formatted="false">"Close"</string>
+    <string name="ui_community_forum" formatted="false">"Community forum"</string>
+    <string name="ui_community_rules" formatted="false">"Community rules"</string>
+    <string name="ui_confirm_password" formatted="false">"Confirm password"</string>
+    <string name="ui_confirm_password_is_only_needed_when_creating_an_account" formatted="false">"Confirm password is only needed when creating an account."</string>
+    <string name="ui_continue" formatted="false">"Continue"</string>
+    <string name="ui_could_not_load_local_progression" formatted="false">"Could not load local progression."</string>
+    <string name="ui_could_not_load_the_selected_drive" formatted="false">"Could not load the selected drive."</string>
+    <string name="ui_could_not_refresh_account_your_saved_sign_in_is_unchanged" formatted="false">"Could not refresh account. Your saved sign-in is unchanged."</string>
+    <string name="ui_could_not_start_tracking" formatted="false">"Could not start tracking"</string>
+    <string name="ui_create_a_secure_restorable_backup_or_a_readable_export_for_analy" formatted="false">"Create a secure restorable backup or a readable export for analysis."</string>
+    <string name="ui_create_account" formatted="false">"Create account"</string>
+    <string name="ui_current_password" formatted="false">"Current password"</string>
+    <string name="ui_customize_your_journey" formatted="false">"CUSTOMIZE YOUR JOURNEY"</string>
+    <string name="ui_delete_account" formatted="false">"Delete account"</string>
+    <string name="ui_delete_account_2" formatted="false">"Delete account?"</string>
+    <string name="ui_delete_local_data" formatted="false">"Delete local data"</string>
+    <string name="ui_delete_local_data_2" formatted="false">"Delete local data?"</string>
+    <string name="ui_delete_local_data_confirmation_phrase" formatted="false">"Delete local data confirmation phrase"</string>
+    <string name="ui_deleting_account" formatted="false">"Deleting account…"</string>
+    <string name="ui_deleting_device_data" formatted="false">"Deleting device data…"</string>
+    <string name="ui_device_location_settings" formatted="false">"Device location settings"</string>
+    <string name="ui_distance_units" formatted="false">"Distance units"</string>
+    <string name="ui_distance_units_1_s">"Distance units: %1$s"</string>
+    <string name="ui_distance_units_automatic" formatted="false">"Distance units: Automatic"</string>
+    <string name="ui_drive_unavailable" formatted="false">"Drive unavailable"</string>
+    <string name="ui_driving_history_changed_choose_a_saved_drive" formatted="false">"Driving history changed. Choose a saved drive."</string>
+    <string name="ui_driving_history_changed_reopen_trips_to_select_a_current_drive" formatted="false">"Driving history changed. Reopen Trips to select a current drive."</string>
+    <string name="ui_earn_badges_and_bonus_points_from_roads_map_tiles_mileage_places" formatted="false">"Earn badges and bonus points from roads, map tiles, mileage, places and optional challenges."</string>
+    <string name="ui_enable_tracking" formatted="false">"Enable tracking"</string>
+    <string name="ui_enabled_automatically" formatted="false">"Enabled automatically"</string>
+    <string name="ui_enter_3_24_letters_numbers_or_underscores_and_your_current_passw" formatted="false">"Enter 3-24 letters, numbers or underscores and your current password."</string>
+    <string name="ui_enter_a_valid_3_24_character_username" formatted="false">"Enter a valid 3–24 character username."</string>
+    <string name="ui_enter_your_current_password_to_delete_your_account" formatted="false">"Enter your current password to delete your account."</string>
+    <string name="ui_exploration" formatted="false">"Exploration"</string>
+    <string name="ui_export_failed" formatted="false">"Export failed"</string>
+    <string name="ui_export_progress" formatted="false">"Export progress"</string>
+    <string name="ui_fog_only_changes_the_map_view_tracking_and_progress_continue" formatted="false">"Fog only changes the map view. Tracking and progress continue."</string>
+    <string name="ui_forum" formatted="false">"Forum"</string>
+    <string name="ui_garage_0" formatted="false">"Garage · ⚔ 0"</string>
+    <string name="ui_garage_1_s">"Garage · ⚔ %1$s"</string>
+    <string name="ui_garage_and_shop_0_points_double_tap_to_open" formatted="false">"Garage and shop. 0 points. Double tap to open."</string>
+    <string name="ui_garage_points_unavailable" formatted="false">"Garage · Points unavailable"</string>
+    <string name="ui_garage_shop" formatted="false">"Garage &amp; Shop"</string>
+    <string name="ui_gifs_and_highlights_forum_plus" formatted="false">"GIFs and highlights · Forum Plus"</string>
+    <string name="ui_global_leaderboards" formatted="false">"Global leaderboards"</string>
+    <string name="ui_goals" formatted="false">"Goals"</string>
+    <string name="ui_got_it" formatted="false">"Got it"</string>
+    <string name="ui_help_about" formatted="false">"Help &amp; about"</string>
+    <string name="ui_hide_medals_without_losing_earned_town_progress" formatted="false">"Hide medals without losing earned town progress."</string>
+    <string name="ui_i_agree_to_the_community_rules_my_post_will_be_public" formatted="false">"I agree to the community rules. My post will be public."</string>
+    <string name="ui_keep" formatted="false">"Keep"</string>
+    <string name="ui_keep_post" formatted="false">"Keep post"</string>
+    <string name="ui_keep_screen_awake_while_map_is_open" formatted="false">"Keep screen awake while map is open"</string>
+    <string name="ui_last_successful_export_loading" formatted="false">"Last successful export: loading…"</string>
+    <string name="ui_leaderboard_privacy_saved" formatted="false">"Leaderboard privacy saved."</string>
+    <string name="ui_licenses_and_map_credits" formatted="false">"Licenses and map credits"</string>
+    <string name="ui_lifetime_vip_is_a_one_time_google_play_purchase_it_removes_banne" formatted="false">"Lifetime VIP is a one-time Google Play purchase. It removes banners and rewarded-ad offers and unlocks the Gold car, roads and theme, up to 500 recent drives, trip-summary sharing and GPX export."</string>
+    <string name="ui_lifetime_vip_unlocks_up_to_500_recent_drives_trip_summary_sharin" formatted="false">"Lifetime VIP unlocks up to 500 recent drives, trip-summary sharing and GPX export. Basic trip history, replays and progress backups stay free."</string>
+    <string name="ui_load_more" formatted="false">"Load more"</string>
+    <string name="ui_loading_achievements" formatted="false">"Loading achievements…"</string>
+    <string name="ui_loading_drive" formatted="false">"Loading drive…"</string>
+    <string name="ui_loading_map" formatted="false">"Loading map…"</string>
+    <string name="ui_loading_verified_scores" formatted="false">"Loading verified scores…"</string>
+    <string name="ui_location_is_off" formatted="false">"Location is off"</string>
+    <string name="ui_location_permission" formatted="false">"Location permission"</string>
+    <string name="ui_location_settings" formatted="false">"Location settings"</string>
+    <string name="ui_location_use" formatted="false">"Location use"</string>
+    <string name="ui_manage_account" formatted="false">"Manage account"</string>
+    <string name="ui_manage_friends" formatted="false">"Manage friends"</string>
+    <string name="ui_map_and_overlay_data_openstreetmap_contributors_via_openfreemap" formatted="false">"Map and overlay data: OpenStreetMap contributors via OpenFreeMap/OpenMapTiles and Nominatim. Road matching: Geoapify and LocationIQ."</string>
+    <string name="ui_map_layers_and_overlays" formatted="false">"Map layers and overlays"</string>
+    <string name="ui_map_overlay" formatted="false">"Map overlay"</string>
+    <string name="ui_map_streets" formatted="false">"Map: Streets"</string>
+    <string name="ui_map_style" formatted="false">"Map style"</string>
+    <string name="ui_map_tiles" formatted="false">"Map Tiles"</string>
+    <string name="ui_mileage" formatted="false">"Mileage"</string>
+    <string name="ui_move_or_zoom_the_map_to_pause_following_tap_center_to_resume" formatted="false">"Move or zoom the map to pause following. Tap center to resume."</string>
+    <string name="ui_new_username" formatted="false">"New username"</string>
+    <string name="ui_no_drives_yet_recorded_trips_will_appear_here" formatted="false">"No drives yet. Recorded trips will appear here."</string>
+    <string name="ui_no_matching_settings_try_backup_location_or_dark" formatted="false">"No matching settings. Try “backup”, “location” or “dark”."</string>
+    <string name="ui_not_now" formatted="false">"Not now"</string>
+    <string name="ui_not_signed_in" formatted="false">"Not signed in"</string>
+    <string name="ui_not_tracking" formatted="false">"Not tracking"</string>
+    <string name="ui_notification_settings" formatted="false">"Notification settings"</string>
+    <string name="ui_notifications_privacy" formatted="false">"Notifications &amp; privacy"</string>
+    <string name="ui_ok" formatted="false">"OK"</string>
+    <string name="ui_open_garage" formatted="false">"Open Garage"</string>
+    <string name="ui_open_settings" formatted="false">"Open settings"</string>
+    <string name="ui_password" formatted="false">"Password"</string>
+    <string name="ui_password_must_be_8_128_characters" formatted="false">"Password must be 8-128 characters."</string>
+    <string name="ui_passwords_do_not_match" formatted="false">"Passwords do not match."</string>
+    <string name="ui_pause_replay" formatted="false">"Pause replay"</string>
+    <string name="ui_permanently_deletes_all_local_progress_including_trips_roads_exp" formatted="false">"Permanently deletes all local progress, including trips, roads, explored places, fog, points and cosmetics bought with points. Your cloud account and Google Play VIP remain. Confirmation is required."</string>
+    <string name="ui_play_replay" formatted="false">"Play replay"</string>
+    <string name="ui_points_unavailable" formatted="false">"Points unavailable"</string>
+    <string name="ui_post_removed" formatted="false">"Post removed"</string>
+    <string name="ui_precise_location_required" formatted="false">"Precise location required"</string>
+    <string name="ui_preparing_replay_map" formatted="false">"Preparing replay map…"</string>
+    <string name="ui_prevents_timeout_only_while_the_map_is_visible_uses_more_battery" formatted="false">"Prevents timeout only while the map is visible. Uses more battery."</string>
+    <string name="ui_preview_1_s">"Preview: %1$s"</string>
+    <string name="ui_privacy_policy" formatted="false">"Privacy policy"</string>
+    <string name="ui_public_community_forum" formatted="false">"Public community forum"</string>
+    <string name="ui_rankings_count_verified_live_exploration_only_imports_and_local" formatted="false">"Rankings count verified live exploration only. Imports and local points do not count. Sharing live GPS requires consent."</string>
+    <string name="ui_read_community_rules" formatted="false">"Read community rules"</string>
+    <string name="ui_refresh" formatted="false">"Refresh"</string>
+    <string name="ui_remove_strike" formatted="false">"Remove + strike"</string>
+    <string name="ui_replace_device_progress" formatted="false">"Replace device progress?"</string>
+    <string name="ui_replay_position" formatted="false">"Replay position"</string>
+    <string name="ui_replay_unavailable" formatted="false">"Replay unavailable"</string>
+    <string name="ui_report_post" formatted="false">"Report post"</string>
+    <string name="ui_reported_posts" formatted="false">"Reported posts"</string>
+    <string name="ui_request" formatted="false">"Request"</string>
+    <string name="ui_restore" formatted="false">"Restore"</string>
+    <string name="ui_restore_failed_1_s_existing_progress_was_kept_check_tracking_set">"Restore failed: %1$s. Existing progress was kept. Check tracking settings before driving."</string>
+    <string name="ui_restore_progress" formatted="false">"Restore progress"</string>
+    <string name="ui_restore_progress_before_last_import" formatted="false">"Restore progress before last import"</string>
+    <string name="ui_restore_purchase" formatted="false">"Restore purchase"</string>
+    <string name="ui_restore_saved_progress_from_a_backup_after_confirmation" formatted="false">"Restore saved progress from a backup after confirmation."</string>
+    <string name="ui_restore_your_progress" formatted="false">"Restore your progress"</string>
+    <string name="ui_review_post" formatted="false">"Review post"</string>
+    <string name="ui_road_conquest_needs_precise_location_to_distinguish_nearby_roads" formatted="false">"Road Conquest needs Precise location to distinguish nearby roads. Enable Precise location for Road Conquest in Android settings."</string>
+    <string name="ui_road_conquest_username" formatted="false">"Road Conquest username"</string>
+    <string name="ui_s_s_s" formatted="false">"%s\n%s  •  %s"</string>
+    <string name="ui_save" formatted="false">"Save"</string>
+    <string name="ui_save_gpx_precise_gps_locations" formatted="false">"Save GPX · Precise GPS locations"</string>
+    <string name="ui_save_trip_as_gpx_vip" formatted="false">"Save trip as GPX · VIP"</string>
+    <string name="ui_saved_trips_stay_on_your_phone_unless_exported_place_overlays_re" formatted="false">"Saved trips stay on your phone unless exported. Place overlays request boundaries by name. Road matching sends GPS data through Road Conquest’s map service to Geoapify or LocationIQ. Verified scoring sends live GPS and integrity evidence only when enabled."</string>
+    <string name="ui_saving_recovery_backup_and_restoring_progress" formatted="false">"Saving recovery backup and restoring progress…"</string>
+    <string name="ui_search_settings" formatted="false">"Search settings"</string>
+    <string name="ui_secure_backups_require_your_road_conquest_account_and_an_interne" formatted="false">"Secure backups require your Road Conquest account and an internet connection. Sign in under Account &amp; community first."</string>
+    <string name="ui_select_a_drive_to_replay" formatted="false">"Select a drive to replay."</string>
+    <string name="ui_send_friend_request" formatted="false">"Send friend request"</string>
+    <string name="ui_session_expired_open_account_sign_in" formatted="false">"Session expired. Open Account / sign in."</string>
+    <string name="ui_share_live_gps_to_verify_explored_cells" formatted="false">"Share live GPS to verify explored cells"</string>
+    <string name="ui_share_trip_summary_vip" formatted="false">"Share trip summary · VIP"</string>
+    <string name="ui_show_fog" formatted="false">"Show fog"</string>
+    <string name="ui_show_me_on_global_leaderboards" formatted="false">"Show me on global leaderboards"</string>
+    <string name="ui_show_my_profile_on_global_leaderboards" formatted="false">"Show my profile on global leaderboards"</string>
+    <string name="ui_show_password" formatted="false">"Show password"</string>
+    <string name="ui_show_town_medals_on_map" formatted="false">"Show town medals on map"</string>
+    <string name="ui_sign_in" formatted="false">"Sign in"</string>
+    <string name="ui_sign_in_or_manage_your_account_and_username" formatted="false">"Sign in or manage your account and username."</string>
+    <string name="ui_sign_in_to_add_friends" formatted="false">"Sign in to add friends."</string>
+    <string name="ui_sign_in_to_back_up_progress" formatted="false">"Sign in to back up progress"</string>
+    <string name="ui_sign_out" formatted="false">"Sign out"</string>
+    <string name="ui_signed_in" formatted="false">"Signed in."</string>
+    <string name="ui_signed_out" formatted="false">"Signed out."</string>
+    <string name="ui_the_post_violated_the_community_rules_1_s_post_id_2_s">"The post violated the community rules. %1$s\n\nPost ID: %2$s"</string>
+    <string name="ui_this_permanently_deletes_saved_road_conquest_progress_on_this_ph">"This permanently deletes saved Road Conquest progress on this phone, including trips, distance, roads, explored places, points and cosmetics bought with points. Your cloud account and lifetime VIP purchase in Google Play remain. VIP can be restored through Google Play if needed. Tracking stops and verified-drive sharing turns off. Exported files must be deleted separately. Deleted progress cannot be recovered without an existing backup.\n\nType exactly:\n%1$s"</string>
+    <string name="ui_this_permanently_deletes_your_cloud_account_sessions_friendships" formatted="false">"This permanently deletes your cloud account, sessions, friendships, cloud driving records and forum data, including posts and Forum Plus access tied to this account. Driving history saved on this phone stays. To remove both, also use Settings → Backups &amp; data → Delete local data. That option does not delete your cloud account."</string>
+    <string name="ui_top_50_public_profiles_each_cell_counts_once_from_verified_live" formatted="false">"Top 50 public profiles. Each cell counts once from verified live visits. Imported history does not count."</string>
+    <string name="ui_town_badges" formatted="false">"Town Badges"</string>
+    <string name="ui_track_only_when_i_press_enable" formatted="false">"Track only when I press Enable"</string>
+    <string name="ui_tracking" formatted="false">"Tracking"</string>
+    <string name="ui_trip_details_unavailable" formatted="false">"Trip details unavailable."</string>
+    <string name="ui_trip_history" formatted="false">"Trip history"</string>
+    <string name="ui_trip_history_and_replay" formatted="false">"Trip history and replay"</string>
+    <string name="ui_trip_history_is_temporarily_unavailable" formatted="false">"Trip history is temporarily unavailable."</string>
+    <string name="ui_trips" formatted="false">"Trips"</string>
+    <string name="ui_turn_on_android_location_to_record_driven_roads" formatted="false">"Turn on Android Location to record driven roads."</string>
+    <string name="ui_turn_this_off_to_hide_your_profile_without_deleting_your_account" formatted="false">"Turn this off to hide your profile without deleting your account."</string>
+    <string name="ui_type_the_confirmation_phrase_exactly" formatted="false">"Type the confirmation phrase exactly"</string>
+    <string name="ui_type_the_confirmation_phrase_exactly_including_the_period" formatted="false">"Type the confirmation phrase exactly, including the period."</string>
+    <string name="ui_unblock_an_account" formatted="false">"Unblock an account"</string>
+    <string name="ui_updating_friendship" formatted="false">"Updating friendship…"</string>
+    <string name="ui_use_after_reviewing_an_appeal_this_resets_violations_and_removes" formatted="false">"Use after reviewing an appeal. This resets violations and removes the forum mute or ban."</string>
+    <string name="ui_use_light_dark_or_your_phone_s_theme" formatted="false">"Use light, dark, or your phone\'s theme."</string>
+    <string name="ui_username" formatted="false">"Username"</string>
+    <string name="ui_username_3_24_letters_numbers_or_underscores_case_insensitive_pa" formatted="false">"Username: 3–24 letters, numbers or underscores (case-insensitive). Password: 8–128 characters."</string>
+    <string name="ui_username_must_be_3_24_letters_numbers_or_underscores" formatted="false">"Username must be 3-24 letters, numbers, or underscores."</string>
+    <string name="ui_version" formatted="false">"Version"</string>
+    <string name="ui_view_weekly_challenges_and_your_friends" formatted="false">"View weekly challenges and your friends."</string>
+    <string name="ui_vip_lifetime" formatted="false">"VIP • Lifetime"</string>
+    <string name="ui_vip_trip_extras" formatted="false">"VIP trip extras"</string>
+    <string name="ui_weekly_exploration_goals" formatted="false">"Weekly exploration goals"</string>
+    <string name="ui_weekly_goals_friends" formatted="false">"Weekly goals &amp; friends"</string>
+    <string name="ui_when_off_tracking_can_start_automatically_if_allowed" formatted="false">"When off, tracking can start automatically if allowed."</string>
+    <string name="ui_your_milestones" formatted="false">"YOUR MILESTONES"</string>
+    <string name="ui_your_progress" formatted="false">"Your progress"</string>
+    <string name="ui_your_session_expired_sign_in_again" formatted="false">"Your session expired. Sign in again."</string>
+    <string name="ui_signed_in_as">Signed in as %1$s</string>
+    <string name="ui_distance_champion">Distance Champion</string>
+    <string name="ui_distance_legend">Distance Legend</string>
+    <string name="ui_achievement_unlocked">"✓  %1$s"</string>
+    <string name="ui_achievement_locked">"○  %1$s"</string>
+    <string name="ui_travel_distance">Travel %1$s</string>
+    <string name="ui_leaderboard_self">"%1$d.  %2$s  •  You"</string>
+    <string name="ui_leaderboard_user">"%1$d.  %2$s"</string>
+    <string name="ui_last_successful_export">Last successful export: %1$s</string>
+    <string name="ui_never">Never</string>
+    <plurals name="ui_achievement_reward">
+        <item quantity="one">"%1$s  •  +%2$,d point"</item>
+        <item quantity="other">"%1$s  •  +%2$,d points"</item>
+    </plurals>
+    <plurals name="ui_show_more_drives">
+        <item quantity="one">Show more drives (%1$d remaining)</item>
+        <item quantity="other">Show more drives (%1$d remaining)</item>
+    </plurals>
+</resources>

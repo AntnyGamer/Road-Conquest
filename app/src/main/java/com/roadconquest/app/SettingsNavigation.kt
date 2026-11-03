@@ -20,7 +20,9 @@ import java.util.Locale
 /** Category navigation changes visibility only: all existing controls retain their bindings. */
 internal class SettingsNavigation(private val activity: Activity, state: Bundle?) {
     companion object { private val WORD_SEPARATOR = Regex("\\s+") }
-    private data class Section(val id: Int, val title: String, val detail: String, val icon: Int, val keywords: String)
+    private data class Section(val id: Int, val title: String, val detail: String, val icon: Int, val keywords: String) {
+        val searchPrefix = "$title $detail $keywords "
+    }
     private val sections = listOf(
         Section(R.id.trackingSettingsCard, "Tracking", "Location, battery and tracking behavior", R.drawable.ic_my_location, "gps automatic manual enable permission device exit confirmation screen awake display"),
         Section(R.id.mapSettingsCard, "Map & appearance", "Map styles, medals, following, distance units and fog", R.drawable.ic_map_day, "theme satellite night streets minimal phone medals badges follow car center miles kilometers units"),
@@ -78,7 +80,10 @@ internal class SettingsNavigation(private val activity: Activity, state: Bundle?
         var matches = 0
         for (section in sections) {
             val visible = if (searching) {
-                val haystack = "${section.title} ${section.detail} ${section.keywords} ${contentText(activity.findViewById(section.id))}".lowercase(Locale.ROOT)
+                val haystack = buildString {
+                    append(section.searchPrefix)
+                    appendContentText(activity.findViewById(section.id), this)
+                }.lowercase(Locale.ROOT)
                 words.all { it in haystack }
             } else section == chosen
             activity.findViewById<View>(section.id).visibility = if (visible) View.VISIBLE else View.GONE
@@ -105,10 +110,14 @@ internal class SettingsNavigation(private val activity: Activity, state: Bundle?
         state.putString("settings_query", search.text.toString())
     }
 
-    private fun contentText(view: View): String = when (view) {
-        is TextView -> view.text.toString()
-        is android.view.ViewGroup -> (0 until view.childCount).joinToString(" ") { contentText(view.getChildAt(it)) }
-        else -> ""
+    private fun appendContentText(view: View, output: StringBuilder) {
+        when (view) {
+            is TextView -> output.append(view.text)
+            is android.view.ViewGroup -> for (index in 0 until view.childCount) {
+                if (index > 0) output.append(' ')
+                appendContentText(view.getChildAt(index), output)
+            }
+        }
     }
 
     private fun dp(value: Int) = (value * activity.resources.displayMetrics.density + 0.5f).toInt()

@@ -15,7 +15,6 @@ import {
   verifyPassword
 } from "./security.mjs";
 import { competitionConfig, createCompetition } from "./competition.mjs";
-import { createBackups } from "./backups.mjs";
 import { createAccountBackupKeys } from "./account-backup-keys.mjs";
 import { createIntegrityVerifier } from "./integrity.mjs";
 import { createFriends } from "./friends.mjs";
@@ -39,10 +38,10 @@ const PRIVACY_HTML = `<!doctype html>
 <title>Road Conquest Privacy Policy</title>
 <style>body{font:16px system-ui,sans-serif;max-width:760px;margin:40px auto;padding:0 20px;line-height:1.55}h1,h2{line-height:1.2}code{overflow-wrap:anywhere}</style></head>
 <body><h1>Road Conquest Privacy Policy</h1>
-<p><strong>Effective:</strong> October 24, 2026. <strong>Developer/publisher:</strong> AntnyGamer.</p>
+<p><strong>Effective:</strong> November 2, 2026. <strong>Developer/publisher:</strong> AntnyGamer.</p>
 <p>Road Conquest collects precise location data to record driven roads and reveal visited places, including in the background when automatic tracking is enabled and the app is closed or not in use. It also uses location to display your live map position. Local driving history, explored places, points and cosmetics are stored on your device unless you export them. Optional cloud account and forum data are handled separately as described below.</p>
 <h2>Data sent to services</h2>
-<p>Road matching for new roads sends bounded GPS coordinate batches, timestamps and accuracy through Road Conquest's Cloudflare map proxy to Geoapify, or to LocationIQ when Geoapify is unavailable or its allowance is exhausted. See <a href="https://locationiq.com/privacy">LocationIQ's privacy policy</a>. Repeat drives on previously saved roads may be recognized on-device without a network request. The map proxy processes matching coordinates transiently and does not retain GPS traces. It stores daily request totals, daily keyed client-address fingerprints and random matching-attempt identifiers to enforce separate free allowances and avoid counting unsent work. Those daily records are deleted when a later day's requests are processed. Short provider-availability records contain no coordinates or raw client addresses. Expired records are pruned during later activity. OpenFreeMap and Esri provide map display data. Geoapify supplies backup street-map tiles. Map providers receive requests for areas you view. While the app is in the foreground, Android's system geocoder may process saved coordinates for place names, and U.S. Census TIGERweb receives individual saved GPS coordinates to verify the exact municipality visited. Outside the U.S., place names may be sent to the configured OpenStreetMap boundary service. Country and region overlays can fall back to public geoBoundaries datasets, selected by country code without sending GPS coordinates to geoBoundaries. Enabling place overlays downloads and locally caches public boundaries for discovered places.</p>
+<p>Road matching for new roads sends bounded GPS coordinate batches, timestamps and accuracy through Road Conquest's Cloudflare map proxy to Geoapify, or to LocationIQ when Geoapify is unavailable or its allowance is exhausted. See <a href="https://locationiq.com/privacy">LocationIQ's privacy policy</a>. Repeat drives on previously saved roads may be recognized on-device without a network request. The map proxy processes matching coordinates transiently and does not retain GPS traces. It stores daily request totals, daily keyed client-address fingerprints and random matching-attempt identifiers to enforce separate free allowances and avoid counting unsent work. Those daily records are deleted when a later day's requests are processed. Short provider-availability records contain no coordinates or raw client addresses. Expired records are pruned during later activity. OpenFreeMap and Esri provide map display data. Geoapify supplies backup street-map tiles. Map providers receive requests for areas you view. While the map is visible or the tracking foreground service remains active in the background, bounded discovery workers may send saved coordinates to Android's system geocoder for place names and to U.S. Census TIGERweb to verify the exact municipality visited. Outside the U.S., place names may be sent to the configured OpenStreetMap boundary service. Country and region overlays can fall back to public geoBoundaries datasets, selected by country code without sending GPS coordinates to geoBoundaries. Enabling place overlays downloads and locally caches public boundaries for discovered places.</p>
 <p>Optional Firebase Crashlytics reporting is off by default and enabled only after you enable Share crash reports in Settings. When enabled, Google receives crash stack traces, app/device and operating-system information, diagnostic events and installation identifiers. Road Conquest does not attach saved routes, GPS history, usernames, passwords or session tokens, and does not include Google Analytics. Turning reporting off stops automatic reports and requests deletion of unsent reports on the device. See <a href="https://firebase.google.com/support/privacy">Firebase privacy information</a> for Google's handling of reports already sent.</p>
 <p>Friend-request notifications and weekly challenge reminders are on by default unless you have already turned them off in Settings. Occasional friend forum-post notifications are also on by default unless previously disabled and can be controlled independently. At most one friend-post alert is attempted per recipient in seven days. Only roughly one in four approved new posts is considered, and blocked accounts are excluded. Both server push types require sign-in and Android notification permission. Weekly reminders work locally. When at least one server-delivered friend notification category is enabled and these requirements are met, the app initializes Firebase Cloud Messaging and shares a Firebase Installation ID with Google and the Road Conquest account service. The server encrypts the token and binds it to the current login session. Logout, account deletion or disabling both server push categories removes that session's registration. Logout preserves your saved notification choice. Device registrations expire after 30 days without refresh. Google receives only a generic friend-request or friend-post event and a random device binding, without usernames, passwords, Road Conquest session tokens or GPS. The phone checks the current setting, permission and account binding before showing a notification. Firebase may process device, app and installation information to deliver messages. Notifications do not enable crash reports. Weekly challenge reminders are scheduled locally without Firebase or a cloud account. You can turn all three notification categories off independently in Settings.</p>
 <p>The app downloads public provider availability switches from Cloudflare. These switches contain no personal data and cannot change road-verification rules or service URLs. UptimeRobot checks public service health endpoints and alerts the developer to outages. These monitoring requests contain no player account or driving data.</p>
@@ -56,7 +55,7 @@ const PRIVACY_HTML = `<!doctype html>
 <p>Forum Plus is an optional, one-time Google Play purchase tied to your Road Conquest account. The server verifies and acknowledges the purchase with Google, storing a keyed account identifier, a purchase-token fingerprint, an encrypted token and entitlement state. Authenticated Google notifications update refunded purchases. Notification IDs expire after 30 days during subsequent notification activity. Deleting the account deletes these records and its Forum Plus access. The optional Buy Me a Coffee support link opens an external site and grants no app benefits.</p>
 <h2>Retention and deletion</h2>
 <p>Competitive accounts count only server-verified exploration cells. Private visited-cell identifiers and weekly cell counts are stored until account deletion. These identifiers describe coarse geographic areas. Older totals and imported or local progress cannot enter hardened rankings. For anti-cheating continuity, the account service keeps one latest accepted GPS fix encrypted with an account-bound server key, plus its timestamp and keyed fingerprint. It is replaced by the next accepted batch and removed with account deletion. Full GPS traces are processed transiently for verification rather than stored in the ranking database.</p>
-<p>The Export progress control offers two choices. Secure backups are encrypted and authenticated with AES-256-GCM and saved to a user-chosen .rcbackup file. The app requests a per-account encryption key over HTTPS, requiring an active Road Conquest session; only the key is delivered, not the backup contents or GPS history. The same account and network connection are required to restore; deleting the account or losing a configured backup master key version prevents recovery. The keyring is separate from the account password pepper and must be kept through rotations. A separate password-free readable ZIP contains CSV tables and metadata, including precise GPS history, for external inspection or analysis. It is not encrypted and cannot be imported or restored into Road Conquest. Exported files remain where the user saves them and are not automatically sent to cloud storage. Legacy passphrase backups and Play-signed ZIP backups remain restorable with their original requirements; older protected exports used Play Integrity and public signing keys. Treat readable exports as sensitive and share them only intentionally. Restored history, including delayed road matching and place discovery, cannot earn new weekly challenge credit or change global or friend verified rankings. Previously earned local rewards remain part of restored history. Importing an authenticated backup validates and replaces local progress without uploading that history for verified scores. Before replacement, the app keeps one private recovery ZIP on this phone. Delete all data and uninstalling remove this recovery copy. Google Play VIP ownership and account credentials are not imported. Weekly local challenges award local points. Accepted friends can compare newly verified exploration cells each week. Friendships require consent, may be removed by either person, and are deleted with the account. Hiding a profile hides it from friend rankings as well as public leaderboards. Weekly verified totals remain with the account until account deletion.</p>
+<p>The Export progress control offers two choices. Secure backups are encrypted and authenticated with AES-256-GCM and saved to a user-chosen .rcbackup file. The app requests a per-account encryption key over HTTPS, requiring an active Road Conquest session; only the key is delivered, not the backup contents or GPS history. The same account and network connection are required to restore; deleting the account or losing a configured backup master key version prevents recovery. The keyring is separate from the account password pepper and must be kept through rotations. A separate password-free readable ZIP contains CSV tables and metadata, including precise GPS history, for external inspection or analysis. It is not encrypted and cannot be imported or restored into Road Conquest. Exported files remain where the user saves them and are not automatically sent to cloud storage. Retired Play-signed ZIP and passphrase-encrypted backup files are no longer supported. Local pre-restore recovery ZIPs use an installation-bound authentication key. Treat readable exports as sensitive and share them only intentionally. Restored history, including delayed road matching and place discovery, cannot earn new weekly challenge credit or change global or friend verified rankings. Previously earned local rewards remain part of restored history. Importing an authenticated backup validates and replaces local progress without uploading that history for verified scores. Before replacement, the app keeps one private recovery ZIP on this phone. Delete all data and uninstalling remove this recovery copy. Google Play VIP ownership and account credentials are not imported. Weekly local challenges award local points. Accepted friends can compare newly verified exploration cells each week. Friendships require consent, may be removed by either person, and are deleted with the account. Hiding a profile hides it from friend rankings as well as public leaderboards. Weekly verified totals remain with the account until account deletion.</p>
 <p>Local app data remains on your device until you use Delete all data, uninstall the app, or otherwise clear app storage. Delete all data requires typing the exact in-app confirmation phrase and removes local Road Conquest data while keeping the cloud account and leaderboard scores. It does not require account sign-in or network access. Exported files are controlled by you and must be deleted separately. Delete account requires the current account password and removes the cloud account, forum data and Forum Plus access, sessions, leaderboard scores, visited-cell and legacy verified-road records, live runs, and verification receipts while leaving saved device history in place. Some short-lived anti-abuse and verification records expire automatically.</p>
 <h2>Security and choices</h2>
 <p>Network account traffic uses HTTPS. You can use Road Conquest without an account, hide yourself from leaderboards, leave verified-drive sharing off, use manual tracking, export your data, delete only your cloud account, or delete all local Road Conquest data while keeping your account.</p>
@@ -107,11 +106,8 @@ const prepareDatabase = createRequestMaintenance(pool, { initialize: async () =>
   }
 } });
 const competitionSettings = competitionConfig(process.env);
-// Both features use the same app policy and OAuth scope. Share credential
-// refreshes/signing keys, while still verifying every request's bound verdict.
 const verifyIntegrity = competitionSettings ? await createIntegrityVerifier(competitionSettings) : undefined;
 const competition = await createCompetition(pool, competitionSettings, { verify: verifyIntegrity });
-const backups = await createBackups(process.env, { verify: verifyIntegrity });
 const notifications = createNotifications(pool, { pepper: PEPPER, sender: createFcmSender(process.env.FCM_SERVICE_ACCOUNT_JSON),
   deliveryLimit: target => ["push-delivery", opaqueRateKey("push-delivery", String(target)), 5 * 60 * 1000, 3] });
 const friends = createFriends(pool, async target => {
@@ -292,9 +288,6 @@ async function handle(req, res) {
   if (req.method === "GET" && url.pathname === "/v1/competition") {
     return send(res, 200, competition?.status() || { available: false });
   }
-  if (req.method === "GET" && url.pathname === "/v1/backups") {
-    return send(res, 200, backups.status()); // Public verification keys do not wake the database.
-  }
   // Each account backup uses one versioned, dedicated 256-bit master secret.
   // Keep older key IDs configured through rotation; never upload GPS archives.
   if (req.method === "GET" && url.pathname === "/v1/backups/account-key") {
@@ -313,11 +306,6 @@ async function handle(req, res) {
   }
 
   const ip = clientIp(req);
-  if (req.method === "POST" && url.pathname === "/v1/backups/sign") {
-    if (!backups.status().available) return send(res, 503, { error: "Protected backup signing is unavailable." });
-    if (!await rateLimit("backup-sign", ip, 6, 60 * 60 * 1000)) return send(res, 429, { error: "Try again later." });
-    return send(res, 200, await backups.sign(await readJson(req)));
-  }
   if (url.pathname.startsWith('/v1/forum/')) {
     if (!forum) return send(res, req.method === 'GET' ? 200 : 503,
       { available: false, posts: [], viewer: null, posting_available: false, purchases_available: false });
@@ -370,10 +358,10 @@ async function handle(req, res) {
     return send(res, 404, { error: 'Community action not found.' });
   }
   if (url.pathname === "/v1/notifications/device") {
-    // No database-backed rate-limit reservation or session lookup is needed
-    // for an absent/malformed bearer token. Validly shaped but invalid tokens
-    // retain the original persistent IP/session limits.
+    // Missing bearer tokens and unconfigured push delivery need no database.
+    // Enabled registration and device removal retain authentication and limits.
     if (!bearerToken(req)) return send(res, 401, { error: "Authentication required." });
+    if (req.method === "POST" && !notifications.configured) return send(res, 503, { error: "Request failed." });
     const access = await rateLimitedUser(req, "push-ip", 60, 60 * 1000);
     if (!access.allowed) return send(res, 429, { error: "Try again later." });
     const user = access.user;
@@ -383,28 +371,21 @@ async function handle(req, res) {
     if (req.method === "DELETE") return send(res, 200, await notifications.remove(user));
     return send(res, 405, { error: "Method not allowed." });
   }
-  if (url.pathname === "/v1/friends" || url.pathname === "/v1/friends/weekly") {
+  if (url.pathname === "/v1/friends") {
     if (!bearerToken(req)) return send(res, 401, { error: "Authentication required." });
     const access = await rateLimitedUser(req, "friends-ip", 120, 60 * 1000);
     if (!access.allowed) return send(res, 429, { error: "Try again later." });
     const user = access.user;
     if (!user) return send(res, 401, { error: "Authentication required." });
-    if (req.method === "GET" && url.pathname === "/v1/friends/weekly") {
-      const metric = url.searchParams.get("metric") || "cells";
-      if (metric !== "cells") return send(res, 400, { error: "Choose cells." });
-      return send(res, 200, competition ? await competition.friendWeek(user, metric) : { available: false, entries: [] });
-    }
     if (req.method === "GET" && url.pathname === "/v1/friends") {
       const listing = await friends.list(user);
-      // One authenticated HTTP request, rate-limit reservation and session
-      // lookup instead of two when the Challenges screen displays rankings.
-      // Older clients still get the unchanged {friends} response.
+      // One authenticated list request provides friends and weekly rankings
+      // with one rate-limit reservation and session lookup.
       if (url.searchParams.get("include") === "weekly") {
         try {
           listing.weekly = competition ? await competition.friendWeek(user) : { available: false, entries: [] };
         } catch {
-          // Do not hide friend management if the independent weekly query fails.
-          // Omission allows the client to use its existing weekly-only fallback.
+          // Weekly rankings are optional; friend management remains available.
         }
       }
       return send(res, 200, listing);

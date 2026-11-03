@@ -158,8 +158,8 @@ class ProgressionRepository(context: Context) {
             location.latitude in -85.0..85.0 && location.longitude in -180.0..180.0
 
     /**
-     * Save a sparse reverse-geocoding candidate locally. Background tracking never has to make
-     * a geocoder/network request; candidates are resolved later while the app is foregrounded.
+     * Save a sparse reverse-geocoding candidate locally. Bounded workers resolve it
+     * while the app is visible or while the tracking foreground service remains active.
      */
     fun recordPlaceCandidate(location: Location): Boolean = synchronized(dbHelper.historyLock) {
         if (!isCurrentHistory()) return@synchronized false
@@ -1047,39 +1047,47 @@ class ProgressionRepository(context: Context) {
         }
     }
 
-    private fun awardOnce(db: SQLiteDatabase, key: String, points: Long): Boolean =
-        db.insertWithOnConflict(
-            "progression_rewards",
-            null,
-            ContentValues().apply {
-                put("reward_key", key)
-                put("points", points)
-                put("awarded_at", System.currentTimeMillis())
-            },
-            SQLiteDatabase.CONFLICT_IGNORE
-        ) != -1L
-
-    private fun counter(db: SQLiteDatabase, key: String): Long = counterOrNull(db, key) ?: 0L
-
-    private fun counterOrNull(db: SQLiteDatabase, key: String): Long? =
-        db.rawQuery(
-            "SELECT value FROM progression_counters WHERE counter_key = ?",
-            arrayOf(key)
-        ).use { if (it.moveToFirst()) it.getLong(0) else null }
-
-    private fun putCounter(db: SQLiteDatabase, key: String, value: Long) {
-        db.insertWithOnConflict(
-            "progression_counters",
-            null,
-            ContentValues().apply {
-                put("counter_key", key)
-                put("value", value)
-            },
-            SQLiteDatabase.CONFLICT_REPLACE
-        )
-    }
-
     companion object {
+        /** Called only inside the geometry transaction for a genuinely new group. */
+        internal fun rewardNewRoad(db: SQLiteDatabase) {
+            check(db.inTransaction())
+            val previous = counter(db, COUNTER_REWARDED_ROADS)
+            check(awardOnce(db, "roads:$previous-${previous + 1}", POINTS_PER_ROAD))
+            putCounter(db, COUNTER_REWARDED_ROADS, previous + 1)
+        }
+
+        private fun awardOnce(db: SQLiteDatabase, key: String, points: Long): Boolean =
+            db.insertWithOnConflict(
+                "progression_rewards",
+                null,
+                ContentValues().apply {
+                    put("reward_key", key)
+                    put("points", points)
+                    put("awarded_at", System.currentTimeMillis())
+                },
+                SQLiteDatabase.CONFLICT_IGNORE
+            ) != -1L
+
+        private fun counter(db: SQLiteDatabase, key: String): Long = counterOrNull(db, key) ?: 0L
+
+        private fun counterOrNull(db: SQLiteDatabase, key: String): Long? =
+            db.rawQuery(
+                "SELECT value FROM progression_counters WHERE counter_key = ?",
+                arrayOf(key)
+            ).use { if (it.moveToFirst()) it.getLong(0) else null }
+
+        private fun putCounter(db: SQLiteDatabase, key: String, value: Long) {
+            db.insertWithOnConflict(
+                "progression_counters",
+                null,
+                ContentValues().apply {
+                    put("counter_key", key)
+                    put("value", value)
+                },
+                SQLiteDatabase.CONFLICT_REPLACE
+            )
+        }
+
         const val POINTS_PER_ROAD = 2L
         private val MUNICIPALITY_WHITESPACE_RE = Regex("\\s+")
         private val MUNICIPALITY_TYPES = listOf("township", "borough", "municipality", "village", "town", "city")
