@@ -1744,16 +1744,10 @@ class MapRenderer(
             screenLeft = 0f,
             screenTop = 0f,
             screenScale = 1f,
-            roads = OverlayRoads.EMPTY,
-            roadScreen = doubleArrayOf(),
-            centerLatitude = center.latitude,
             metersPerScreenPixelAtCenter = raster.metersPerPixel,
-            liveLatitude = null,
-            liveScreen = null,
             textureMatrix = raster.textureMatrix(FogBitmapRenderer.CLOUD_DETAIL_METERS),
             mediumCloudMatrix = raster.textureMatrix(FogBitmapRenderer.CLOUD_MEDIUM_METERS),
             broadCloudMatrix = raster.textureMatrix(FogBitmapRenderer.CLOUD_BROAD_METERS),
-            gridMode = true,
             gridCoordinates = corners,
             gridScreen = screen
         ), world = world, key = key))
@@ -1933,8 +1927,7 @@ class MapRenderer(
         private val overviewFog by lazy {
             // The instantly available safety layer must use the EXACT same
             // geographic cloud shader/color as subsequent detailed captures.
-            // Otherwise the first pan/zoom swaps a blue legacy texture in
-            // behind the dark gray clouds and appears to change map tint.
+            // Otherwise a pan or zoom could change the visible map tint.
             val geo = FogGeoRaster.fullWorld(FogTexture.SIZE)
             FogBitmapRenderer.render(FogBitmapRenderer.Request(
                 bitmapWidth = FogTexture.SIZE,
@@ -1942,16 +1935,10 @@ class MapRenderer(
                 screenLeft = 0f,
                 screenTop = 0f,
                 screenScale = 1f,
-                roads = OverlayRoads.EMPTY,
-                roadScreen = doubleArrayOf(),
-                centerLatitude = 0.0,
                 metersPerScreenPixelAtCenter = geo.metersPerPixel,
-                liveLatitude = null,
-                liveScreen = null,
                 textureMatrix = geo.textureMatrix(FogBitmapRenderer.CLOUD_DETAIL_METERS),
                 mediumCloudMatrix = geo.textureMatrix(FogBitmapRenderer.CLOUD_MEDIUM_METERS),
                 broadCloudMatrix = geo.textureMatrix(FogBitmapRenderer.CLOUD_BROAD_METERS),
-                gridMode = true
             ))
         }
         private const val CAR_SOURCE_ID = "roadconquest-car"
