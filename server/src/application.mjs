@@ -370,10 +370,10 @@ async function handle(req, res) {
     return send(res, 404, { error: 'Community action not found.' });
   }
   if (url.pathname === "/v1/notifications/device") {
-    // No database-backed rate-limit reservation or session lookup is needed
-    // for an absent/malformed bearer token. Validly shaped but invalid tokens
-    // retain the original persistent IP/session limits.
+    // Missing bearer tokens and unconfigured push delivery need no database.
+    // Enabled registration and device removal retain authentication and limits.
     if (!bearerToken(req)) return send(res, 401, { error: "Authentication required." });
+    if (req.method === "POST" && !notifications.configured) return send(res, 503, { error: "Request failed." });
     const access = await rateLimitedUser(req, "push-ip", 60, 60 * 1000);
     if (!access.allowed) return send(res, 429, { error: "Try again later." });
     const user = access.user;
