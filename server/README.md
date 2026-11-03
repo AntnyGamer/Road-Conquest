@@ -419,9 +419,8 @@ PLAY_CERTIFICATES=<base64url SHA256 Play app-signing certificate without padding
 ```
 
 Play Integrity accepts canonical Android version codes **90 and newer**. The server enforces this
-minimum directly for backups and verified scoring; future versions need no allowlist update.
-The legacy `PLAY_VERSION_CODES` environment variable is ignored. App identity, signing certificate,
-Play licensing, device integrity and request binding are still required.
+minimum for verified scoring; future versions need no allowlist update. App identity,
+signing certificate, Play licensing, device integrity and request binding are still required.
 
 Apply `schema.sql` as the database owner. Restricted API roles need
 `SELECT, INSERT, UPDATE, DELETE` on `cell_scores`, `competition_cells`,
@@ -466,7 +465,7 @@ do not guarantee unlimited free service.
 
 ## Protected local backups
 
-### Current account-bound portable backups (new exports)
+### Account-bound portable backups
 
 The account service requires **both** secret environment variables to enable the
 account-bound backup endpoint (already configured for the production Neon Function):
@@ -503,41 +502,10 @@ The readable export-only ZIP remains deliberately unencrypted and nonrestorable.
 Deploy the service *before* releasing the updated Android app, and test restore
 from both official signing channels before declaring the feature working.
 
-### Legacy Play-signed backups (restore compatibility only)
-
-Previously created Play-signed ZIP backups remain valid for restore. This legacy
-signing service is retained for verification compatibility; new exports use the
-account-bound encrypted format above.
-
-Portable backup exports are authenticated with server-held P-256 signatures. Configure
-`BACKUP_SIGNING_PRIVATE_KEY` with a dedicated PKCS#8 PEM private key in the function's secret
-configuration, alongside the existing production `PLAY_SERVICE_ACCOUNT_JSON` (or file),
-`PLAY_CERTIFICATES` and `PLAY_CLOUD_PROJECT_NUMBER`. This works independently
-of `LEADERBOARDS_ENABLED`; no account, scores or GPS history are used by the signer. Generate the
-key in a trusted environment with `openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256`.
-Keep a durable private copy outside source control. Do not reuse the APK, account or checkpoint keys.
-
-`GET /v1/backups` publishes availability and SPKI public keys without a database query.
-`POST /v1/backups/sign` accepts only a SHA-256 backup fingerprint and a fresh production Play
-Integrity token bound to `SHA256("RoadConquestBackup/v1\n" + fingerprint)`. IP rate limiting
-precedes external verification. Only the official licensed app on a device meeting strong integrity
-can request signatures; arbitrary unauthenticated digests are never blindly signed. No file content
-or saved GPS is uploaded or stored, and the signing service never reads/writes competition tables.
-
-The ZIP comment contains the signature, key ID and format version. Its signature covers every
-original ZIP byte, including CSVs, metadata, directory records and the zero-length original comment.
-Repacking, changing metadata, changing data, stripping the seal and changing checksums fail restore.
-Restore gets trusted keys only from the HTTPS service and caches them privately, allowing later
-offline verification. A fresh installation needs internet once. Older unsigned backups cannot be
-authenticated and are rejected rather than silently promoted to protected backups.
-
-For rotation, retain previous public SPKI keys in `BACKUP_VERIFICATION_KEYS_JSON`, a JSON array of
-base64url DER strings (up to seven previous keys). These remain available even with signing disabled.
-Never discard old verification keys while backups using them remain supported. Deploy/configure the
-signer before shipping the Android protected-export UI; signing fails closed while unconfigured.
-Private pre-restore recovery ZIPs instead use an installation-specific HMAC key in Android's private
-no-backup directory, keeping recovery offline. The key is never exported. Another installation cannot
-authenticate that private recovery copy.
+The previous Play-signed ZIP signing API and verification system have been retired.
+Only account-bound encrypted backups may be moved between installations. The
+installation-specific HMAC key for the local pre-restore recovery ZIP remains in
+Android's private no-backup directory and is never exported.
 
 Restores mark track points, roads, visited places and pending place candidates ineligible for local
 weekly challenges. Delayed matching, backfill and geocoding carry that provenance forward. New live

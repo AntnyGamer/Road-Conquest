@@ -31,7 +31,7 @@ object BackupProtection {
     fun verify(context: Context, file: File) {
         val end = endOfZip(file)
         require(end.commentLength in 1..MAX_COMMENT) {
-            "This backup is unsigned and cannot be authenticated. Export a protected backup with the current app."
+            "This ZIP is not an authenticated local recovery backup."
         }
         val comment = ByteArray(end.commentLength)
         RandomAccessFile(file, "r").use { it.seek(end.offset + 22); it.readFully(comment) }

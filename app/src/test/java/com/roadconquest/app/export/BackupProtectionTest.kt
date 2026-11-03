@@ -3,7 +3,6 @@ package com.roadconquest.app.export
 import android.content.Context
 import com.roadconquest.app.data.TrackingRepository
 import com.roadconquest.app.util.Prefs
-import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
@@ -13,7 +12,6 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import java.io.File
 import java.io.RandomAccessFile
-import java.security.MessageDigest
 import java.util.zip.ZipFile
 
 @RunWith(RobolectricTestRunner::class)
@@ -80,7 +78,5 @@ class BackupProtectionTest {
             assertThrows(IllegalArgumentException::class.java) { BackupProtection.verify(context, file) }
         } finally { file.delete() }
     }
-
-
 
 }

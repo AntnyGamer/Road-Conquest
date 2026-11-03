@@ -65,7 +65,7 @@ This checklist is for final device-level validation on supported Android 12+ pho
 6. Confirm a readable ZIP opens in a spreadsheet or external analysis tool, and that Road Conquest **rejects** it as a restorable backup. It is unencrypted and contains precise location history.
 7. Validate the readable road rows include a segment ID, road name, first-unlocked and last-driven times, and coordinates. Verify exported counts and points against Settings.
 8. Cancel an export and interrupt one mid-write; ensure no successful-export timestamp is recorded for an incomplete file. Verify the destination is deleted if the document provider permits it, and no private snapshot remains after restart.
-9. Test successful restore of a previously generated valid **Play-signed ZIP** if available. Confirm obsolete passphrase-protected .rcbackup files are rejected without changing device progress.
+9. Confirm retired **Play-signed ZIP** and passphrase-protected .rcbackup files cannot be restored and do not alter current progress. Current account-bound .rcbackup and local pre-restore recovery must still work.
 
 These are device-level acceptance checks, not substitutes for automated tests or a live backend check.
 

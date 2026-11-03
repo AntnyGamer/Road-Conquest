@@ -7,7 +7,7 @@ cloud-textured fog map.
 [Source and issues](https://github.com/AntnyGamer/Road-Conquest) ·
 [GNU AGPL v3 license](LICENSE)
 
-**1.0.2** fixes tracking, merged-road rewards, secure export completion, and avoidable server work. It removes the retired password-encrypted backup format; current account-based backups and older signed ZIP restores remain supported. See the [release notes](RELEASE_NOTES.md) and [backup documentation](BACKUP_AND_CHALLENGES.md).
+**1.0.2** fixes tracking, merged-road rewards, secure export completion, and avoidable server work. It removes retired passphrase-encrypted and Play-signed ZIP backup formats; current account-based encrypted backups and the on-device pre-restore recovery copy remain supported. See the [release notes](RELEASE_NOTES.md) and [backup documentation](BACKUP_AND_CHALLENGES.md).
 
 Earlier beta history is available in [GitHub Releases](https://github.com/AntnyGamer/Road-Conquest/releases).
 
@@ -253,8 +253,7 @@ it needs a Road Conquest sign-in and internet access to get the account-bound ke
 **Readable ZIP** exports CSV files for analysis, but is unencrypted, contains precise
 location history, and cannot be restored. Neither file is uploaded automatically.
 Restore rejects altered secure backups and excludes imported history from new verified
-leaderboard or weekly challenge credit. Older authenticated Play-signed ZIP
-backups remain restorable; obsolete passphrase-encrypted .rcbackup files are no longer supported. See [backup and restore details](BACKUP_AND_CHALLENGES.md)
+leaderboard or weekly challenge credit. Retired Play-signed ZIP and passphrase-encrypted .rcbackup files are no longer importable. See [backup and restore details](BACKUP_AND_CHALLENGES.md)
 and [server key management](server/README.md#protected-local-backups).
 
 When enabled and available, verified scoring sends precise live GPS batches with Play Integrity
