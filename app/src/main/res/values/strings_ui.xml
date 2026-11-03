@@ -211,7 +211,6 @@
     <string name="ui_type_the_confirmation_phrase_exactly" formatted="false">"Type the confirmation phrase exactly"</string>
     <string name="ui_type_the_confirmation_phrase_exactly_including_the_period" formatted="false">"Type the confirmation phrase exactly, including the period."</string>
     <string name="ui_unblock_an_account" formatted="false">"Unblock an account"</string>
-    <string name="ui_unlock" formatted="false">"Unlock"</string>
     <string name="ui_updating_friendship" formatted="false">"Updating friendship…"</string>
     <string name="ui_use_after_reviewing_an_appeal_this_resets_violations_and_removes" formatted="false">"Use after reviewing an appeal. This resets violations and removes the forum mute or ban."</string>
     <string name="ui_use_light_dark_or_your_phone_s_theme" formatted="false">"Use light, dark, or your phone\'s theme."</string>
