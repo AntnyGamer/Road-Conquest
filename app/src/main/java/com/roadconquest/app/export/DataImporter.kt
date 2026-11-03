@@ -62,7 +62,9 @@ object DataImporter {
         temporaryFilesInitialized = true
         BackupProtection.clearTemporaryFiles(context)
         File(context.applicationContext.filesDir, "before-restore.tmp.zip").delete()
-        context.cacheDir.listFiles().orEmpty().filter { it.name.startsWith(PREFIX) }.forEach {
+        context.cacheDir.listFiles().orEmpty().filter {
+            it.name.startsWith(PREFIX) || it.name.startsWith("roadconquest-private-export-")
+        }.forEach {
             if (it.name.endsWith(".db")) SQLiteDatabase.deleteDatabase(it) else it.delete()
         }
     }
