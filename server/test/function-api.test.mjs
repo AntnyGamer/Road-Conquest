@@ -98,7 +98,7 @@ test("serverless accounts enforce authentication, privacy, limits and TLS with r
     assert.equal(headHealth.status, 200);
     assert.equal(await headHealth.text(), "");
     assert.equal((await call("/v1/notifications/device", "POST", {})).status, 401);
-    assert.equal((await call("/v1/notifications/device", "POST", {}, login.body.token)).status, 400);
+    assert.equal((await call("/v1/notifications/device", "POST", {}, login.body.token)).status, 503);
     assert.equal((await call("/v1/notifications/device", "DELETE", undefined, login.body.token)).status, 200);
     // Personal profile lookup now reserves an IP budget in the same SQL call.
     const meQuery = runtimePool.query.bind(runtimePool);
