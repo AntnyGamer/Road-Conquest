@@ -6,8 +6,6 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import android.text.InputType
-import android.widget.EditText
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -16,7 +14,6 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import com.roadconquest.app.export.DataImporter
-import com.roadconquest.app.export.PassphraseBackup
 import com.roadconquest.app.util.Appearance
 import com.roadconquest.app.util.MeasurementUnits
 import android.graphics.Typeface
@@ -115,34 +112,12 @@ class RestoreActivity : Activity() {
         recovery.isEnabled = !value && DataImporter.previousBackup(this).isFile
     }
 
-    private fun promptPassphrase(open: () -> java.io.InputStream) {
-        val field = EditText(this).apply {
-            hint = getString(R.string.ui_backup_passphrase)
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-            val p = (16 * resources.displayMetrics.density).toInt()
-            setPadding(p, p, p, p)
-        }
-        AlertDialog.Builder(this).setTitle(getString(R.string.ui_unlock_private_backup))
-            .setMessage(getString(R.string.ui_enter_the_passphrase_used_when_this_backup_was_exported))
-            .setView(field)
-            .setNegativeButton(getString(R.string.ui_cancel), null)
-            .setPositiveButton(getString(R.string.ui_unlock)) { _, _ ->
-                val secret = field.text.toString().toCharArray()
-                field.text.clear()
-                validate(open, secret)
-            }.show()
-    }
-
-    private fun validate(open: () -> java.io.InputStream) = validate(open, null)
-
-    private fun validate(open: () -> java.io.InputStream, passphrase: CharArray?) {
-        if (busy) { passphrase?.fill(0.toChar()); return }
+    private fun validate(open: () -> java.io.InputStream) {
+        if (busy) return
         setBusy(true)
         status.text = getString(R.string.ui_checking_backup)
         worker.execute {
-            val result = try {
-                runCatching { open().use { DataImporter.prepare(applicationContext, it, passphrase) } }
-            } finally { passphrase?.fill(0.toChar()) }
+            val result = runCatching { open().use { DataImporter.prepare(applicationContext, it) } }
             runOnUiThread {
                 if (isDestroyed || isFinishing) { result.getOrNull()?.close(); return@runOnUiThread }
                 setBusy(false)
@@ -163,8 +138,7 @@ class RestoreActivity : Activity() {
                         }
                         .setOnDismissListener { if (prepared === backup) { prepared = null; backup.close() } }.show()
                 }, { error ->
-                    if (error is PassphraseBackup.PassphraseRequiredException) promptPassphrase(open)
-                    else status.text = getString(R.string.ui_backup_was_not_imported_1_s, error.message ?: "invalid or unreadable file")
+                    status.text = getString(R.string.ui_backup_was_not_imported_1_s, error.message ?: "invalid or unreadable file")
                 })
             }
         }
