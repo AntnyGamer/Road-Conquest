@@ -25,7 +25,6 @@
     <string name="ui_appearance" formatted="false">"Appearance"</string>
     <string name="ui_appearance_use_phone_setting" formatted="false">"Appearance: Use phone setting"</string>
     <string name="ui_automatically_follow_your_car" formatted="false">"Automatically follow your car"</string>
-    <string name="ui_backup_passphrase" formatted="false">"Backup passphrase"</string>
     <string name="ui_backup_validated" formatted="false">"Backup validated."</string>
     <string name="ui_backup_was_not_imported_1_s">"Backup was not imported: %1$s"</string>
     <string name="ui_backups_data" formatted="false">"Backups &amp; data"</string>
@@ -40,7 +39,7 @@
     <string name="ui_checking_new_roads_towns_and_matching_status" formatted="false">"Checking new roads, towns and matching status…"</string>
     <string name="ui_checking_verified_scoring" formatted="false">"Checking verified scoring…"</string>
     <string name="ui_choose_a_category_or_search_settings" formatted="false">"Choose a category or search settings."</string>
-    <string name="ui_choose_a_road_conquest_backup_to_restore_trips_roads_distance_fo" formatted="false">"Choose a Road Conquest backup to restore trips, roads, distance, fog, discoveries, points and garage items.\n\nNew secure .rcbackup files work with both Google Play and GitHub installations. Sign in to the same Road Conquest account and connect to the internet to restore. No extra backup password is required. Damaged or altered backups are rejected. Earlier signed ZIP and passphrase backups can still be restored.\n\nYour current progress is backed up. Tracking and verified sharing remain off afterward. Restored history does not earn weekly challenge credit or change verified rankings.\n\nSign in and restore Google Play VIP separately."</string>
+    <string name="ui_choose_a_road_conquest_backup_to_restore_trips_roads_distance_fo" formatted="false">"Choose a Road Conquest backup to restore trips, roads, distance, fog, discoveries, points and garage items.\n\nNew secure .rcbackup files work with both Google Play and GitHub installations. Sign in to the same Road Conquest account and connect to the internet to restore. No extra backup password is required. Damaged or altered backups are rejected. Earlier signed ZIP backups can still be restored.\n\nYour current progress is backed up. Tracking and verified sharing remain off afterward. Restored history does not earn weekly challenge credit or change verified rankings.\n\nSign in and restore Google Play VIP separately."</string>
     <string name="ui_choose_a_secure_restorable_backup_account_and_internet_required" formatted="false">"Choose a secure, restorable backup (account and internet required) or an export-only readable ZIP for analysis. Readable exports include precise GPS history. Share carefully."</string>
     <string name="ui_choose_backup_zip_or_rcbackup" formatted="false">"Choose backup (.zip or .rcbackup)"</string>
     <string name="ui_choose_how_roads_and_terrain_look" formatted="false">"Choose how roads and terrain look."</string>
@@ -80,7 +79,6 @@
     <string name="ui_enabled_automatically" formatted="false">"Enabled automatically"</string>
     <string name="ui_enter_3_24_letters_numbers_or_underscores_and_your_current_passw" formatted="false">"Enter 3-24 letters, numbers or underscores and your current password."</string>
     <string name="ui_enter_a_valid_3_24_character_username" formatted="false">"Enter a valid 3–24 character username."</string>
-    <string name="ui_enter_the_passphrase_used_when_this_backup_was_exported" formatted="false">"Enter the passphrase used when this backup was exported."</string>
     <string name="ui_enter_your_current_password_to_delete_your_account" formatted="false">"Enter your current password to delete your account."</string>
     <string name="ui_exploration" formatted="false">"Exploration"</string>
     <string name="ui_export_failed" formatted="false">"Export failed"</string>
@@ -214,7 +212,6 @@
     <string name="ui_type_the_confirmation_phrase_exactly_including_the_period" formatted="false">"Type the confirmation phrase exactly, including the period."</string>
     <string name="ui_unblock_an_account" formatted="false">"Unblock an account"</string>
     <string name="ui_unlock" formatted="false">"Unlock"</string>
-    <string name="ui_unlock_private_backup" formatted="false">"Unlock private backup"</string>
     <string name="ui_updating_friendship" formatted="false">"Updating friendship…"</string>
     <string name="ui_use_after_reviewing_an_appeal_this_resets_violations_and_removes" formatted="false">"Use after reviewing an appeal. This resets violations and removes the forum mute or ban."</string>
     <string name="ui_use_light_dark_or_your_phone_s_theme" formatted="false">"Use light, dark, or your phone\'s theme."</string>
