@@ -30,7 +30,7 @@ function configuredOrigin(value) {
 
 // Public documents/status responses do not use client identity or rate limits.
 // Keep the lookup set shared rather than rebuilding it for every request.
-const PUBLIC_READS = new Set(['/health/live', '/privacy', '/delete-account', '/v1/competition', '/v1/backups']);
+const PUBLIC_READS = new Set(['/health/live', '/privacy', '/delete-account', '/v1/competition']);
 function needsSignedIdentity(method, pathname) {
   return !((method === 'GET' || method === 'HEAD') && PUBLIC_READS.has(pathname));
 }

@@ -15,7 +15,6 @@ import {
   verifyPassword
 } from "./security.mjs";
 import { competitionConfig, createCompetition } from "./competition.mjs";
-import { createBackups } from "./backups.mjs";
 import { createAccountBackupKeys } from "./account-backup-keys.mjs";
 import { createIntegrityVerifier } from "./integrity.mjs";
 import { createFriends } from "./friends.mjs";
@@ -107,11 +106,8 @@ const prepareDatabase = createRequestMaintenance(pool, { initialize: async () =>
   }
 } });
 const competitionSettings = competitionConfig(process.env);
-// Both features use the same app policy and OAuth scope. Share credential
-// refreshes/signing keys, while still verifying every request's bound verdict.
 const verifyIntegrity = competitionSettings ? await createIntegrityVerifier(competitionSettings) : undefined;
 const competition = await createCompetition(pool, competitionSettings, { verify: verifyIntegrity });
-const backups = await createBackups(process.env, { verify: verifyIntegrity });
 const notifications = createNotifications(pool, { pepper: PEPPER, sender: createFcmSender(process.env.FCM_SERVICE_ACCOUNT_JSON),
   deliveryLimit: target => ["push-delivery", opaqueRateKey("push-delivery", String(target)), 5 * 60 * 1000, 3] });
 const friends = createFriends(pool, async target => {
@@ -292,9 +288,6 @@ async function handle(req, res) {
   if (req.method === "GET" && url.pathname === "/v1/competition") {
     return send(res, 200, competition?.status() || { available: false });
   }
-  if (req.method === "GET" && url.pathname === "/v1/backups") {
-    return send(res, 200, backups.status()); // Public verification keys do not wake the database.
-  }
   // Each account backup uses one versioned, dedicated 256-bit master secret.
   // Keep older key IDs configured through rotation; never upload GPS archives.
   if (req.method === "GET" && url.pathname === "/v1/backups/account-key") {
@@ -313,11 +306,6 @@ async function handle(req, res) {
   }
 
   const ip = clientIp(req);
-  if (req.method === "POST" && url.pathname === "/v1/backups/sign") {
-    if (!backups.status().available) return send(res, 503, { error: "Protected backup signing is unavailable." });
-    if (!await rateLimit("backup-sign", ip, 6, 60 * 60 * 1000)) return send(res, 429, { error: "Try again later." });
-    return send(res, 200, await backups.sign(await readJson(req)));
-  }
   if (url.pathname.startsWith('/v1/forum/')) {
     if (!forum) return send(res, req.method === 'GET' ? 200 : 503,
       { available: false, posts: [], viewer: null, posting_available: false, purchases_available: false });

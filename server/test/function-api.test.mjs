@@ -47,8 +47,8 @@ test("serverless accounts enforce authentication, privacy, limits and TLS with r
     assert.match(await deletionPage.text(), /Delete Road Conquest Account/u);
     assert.equal((await call("/v1/me")).status, 401);
     assert.equal((await call("/v1/backups/account-key")).status, 401);
-    assert.deepEqual((await call("/v1/backups")).body, { available: false, keys: [] });
-    assert.equal((await call("/v1/backups/sign", "POST", { hash: "forged", integrity_token: "fake" })).status, 503);
+    assert.equal((await call("/v1/backups")).status, 404);
+    assert.equal((await call("/v1/backups/sign", "POST", { hash: "forged", integrity_token: "fake" })).status, 404);
     const credentials = { username: "FunctionDriver", password: "correct horse battery staple" };
     const signup = await call("/v1/signup", "POST", credentials);
     assert.equal(signup.status, 201);

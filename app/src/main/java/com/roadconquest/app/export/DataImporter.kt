@@ -60,7 +60,6 @@ object DataImporter {
     fun clearTemporaryFiles(context: Context) {
         if (temporaryFilesInitialized) return
         temporaryFilesInitialized = true
-        BackupProtection.clearTemporaryFiles(context)
         File(context.applicationContext.filesDir, "before-restore.tmp.zip").delete()
         context.cacheDir.listFiles().orEmpty().filter { it.name.startsWith(PREFIX) }.forEach {
             if (it.name.endsWith(".db")) SQLiteDatabase.deleteDatabase(it) else it.delete()

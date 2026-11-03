@@ -64,7 +64,7 @@ test("static public reads avoid identity signing but other requests keep rate-li
   }, () => now);
   const headers = { "CF-Connecting-IP": "203.0.113.31",
     "X-RoadConquest-Client-IP": "forged", "X-RoadConquest-Client-Signature": "forged" };
-  for (const path of ["/health/live", "/privacy", "/delete-account", "/v1/competition", "/v1/backups"]) {
+  for (const path of ["/health/live", "/privacy", "/delete-account", "/v1/competition"]) {
     await proxy(new Request("https://roadconquest.workers.dev" + path, { headers }), env);
     const sent = forwarded.at(-1);
     assert.equal(sent.headers.get("X-RoadConquest-Client-IP"), null, path);
