@@ -160,7 +160,7 @@ These choices keep the progression system from adding continuous background netw
 ## Build and verify
 
 Open the project in Android Studio with JDK 21 or newer, Android SDK 37.0 and Build Tools 36.0.0.
-The wrapper pins Gradle 9.8.2 with a verified checksum and Android Gradle Plugin 9.4.1.
+The wrapper pins Gradle 9.8.2 with a verified checksum and Android Gradle Plugin 9.5.0.
 
 ```sh
 ./gradlew :app:testDebugUnitTest :app:lintDebug :app:lintRelease :app:assembleDebug :app:assembleRelease :app:bundleRelease
