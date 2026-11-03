@@ -10,10 +10,11 @@ Tracking, road-reward, export, and service-efficiency fixes.
 - **Less redundant app work:** Cancel stale map/history reads, reuse CSV row buffers and already-evaluated achievements, and reduce repeat lookup, decoding and allocation work without changing map precision or road-matching eligibility.
 - **Leaner optional services:** Identical overlapping forum moderation checks share in-flight work, while new attempts still get fresh results. Disabled push registration avoids PostgreSQL rate limiting/session lookup, and empty notification recipient lists avoid unnecessary promise fan-out. Authenticated delivery and device removal retain their protections.
 - **Remove retired backup formats:** Deleted the passphrase writer/reader and unlock UI, plus the old Play-signed ZIP exporter, P-256 verification path, server signing endpoints, public-key fixture and associated tests. **Neither legacy format can be restored.** Current account-bound secure backups and private on-device recovery remain supported.
+- **Remove retired implementation paths:** Deleted road-only fog rendering and its obsolete raster tests; current mile-grid fog, its fades and cloud texture, and road-overlay geometry remain. Removed the standalone friends-weekly HTTP route and old-server fallback; Challenges uses the current bundled friends-and-weekly response.
 - **Build and diagnostics:** Tighten Android lint regression checks, preserve readable sources, and stamp separate account-function and ingress bundles with their intended source revision for deployment verification.
 - **Tooling and dependency maintenance:** Android Gradle Plugin 9.5.0, pinned `gradle/actions/setup-gradle` 6.4.1 (three workflow references), and emulator replay `grpcio` 1.85.1; the other dependencies and signing identity are unchanged.
 
-**Build:** Android `versionName` **1.0.2**, `versionCode` **99**, Android 12+ (API 31). Application ID and permanent signing identity are unchanged. No schema migration or backup-format change.
+**Build:** Android `versionName` **1.0.2**, `versionCode` **99**, Android 12+ (API 31). Application ID and permanent signing identity are unchanged. No database migration or new backup format; old signed ZIP/passphrase restore support is intentionally retired.
 
 **Release tag:** `v1.0.2`.
 
