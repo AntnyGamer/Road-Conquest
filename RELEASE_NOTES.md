@@ -11,6 +11,7 @@ Tracking, road-reward, export, and service-efficiency fixes.
 - **Leaner optional services:** Identical overlapping forum moderation checks share in-flight work, while new attempts still get fresh results. Disabled push registration avoids PostgreSQL rate limiting/session lookup, and empty notification recipient lists avoid unnecessary promise fan-out. Authenticated delivery and device removal retain their protections.
 - **Retire legacy passphrase backups:** Removed the obsolete password-encrypted backup writer, reader, password prompt, and compatibility-only tests. **Old passphrase-encrypted .rcbackup files can no longer be restored.** Current account-bound secure backups and earlier authenticated Play-signed ZIP restores remain supported.
 - **Build and diagnostics:** Tighten Android lint regression checks, preserve readable sources, and stamp separate account-function and ingress bundles with their intended source revision for deployment verification.
+- **Tooling and dependency maintenance:** Android Gradle Plugin 9.5.0, pinned `gradle/actions/setup-gradle` 6.4.1 (three workflow references), and emulator replay `grpcio` 1.85.1; the other dependencies and signing identity are unchanged.
 
 **Build:** Android `versionName` **1.0.2**, `versionCode` **99**, Android 12+ (API 31). Application ID and permanent signing identity are unchanged. No schema migration or backup-format change.
 
