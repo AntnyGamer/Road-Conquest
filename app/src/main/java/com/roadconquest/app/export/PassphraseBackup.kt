@@ -1,7 +1,5 @@
 package com.roadconquest.app.export
 
-import android.content.Context
-import com.roadconquest.app.data.TrackingRepository
 import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
@@ -29,7 +27,6 @@ object PassphraseBackup {
     private const val PBKDF2_ROUNDS = 310_000
     private const val MIN_PASSWORD_LENGTH = 12
     private const val MAX_PASSWORD_LENGTH = 256
-    private const val TEMP_PREFIX = "roadconquest-private-export-"
 
     class PassphraseRequiredException : IllegalArgumentException("This backup requires a passphrase.")
 
@@ -66,40 +63,6 @@ object PassphraseBackup {
         output.write(nonce)
         // Closing this stream writes the final authentication tag, once.
         CipherOutputStream(output, cipher).use(write)
-    }
-
-    fun writePortable(context: Context, repository: TrackingRepository, output: OutputStream, password: CharArray) {
-        // Stream the compressed ZIP directly through AES-GCM. An intermediate ZIP
-        // duplicated up to 512 MB on internal storage and read the entire file twice.
-        // Only the encrypted destination sees location history, never the signing server.
-        withEncryptedOutput(output, password) { encrypted ->
-            val maxPlainBytes = DataImporter.MAX_BYTES - MAGIC.size - SALT_SIZE - NONCE_SIZE - TAG_SIZE
-            var written = 0L
-            // DataExporter closes its ZIP stream. The outer cipher must remain open
-            // until its own use block finalizes the authentication tag exactly once.
-            val bounded = object : OutputStream() {
-                override fun write(value: Int) {
-                    if (written >= maxPlainBytes) throw java.io.IOException("Backup exceeds 512 MB")
-                    encrypted.write(value)
-                    written++
-                }
-                override fun write(buffer: ByteArray, offset: Int, length: Int) {
-                    if (length < 0 || length.toLong() > maxPlainBytes - written)
-                        throw java.io.IOException("Backup exceeds 512 MB")
-                    encrypted.write(buffer, offset, length)
-                    written += length
-                }
-                override fun flush() = encrypted.flush()
-                override fun close() = flush()
-            }
-            DataExporter.writeZip(context, repository, bounded)
-        }
-        // As with Play-signed exports, never publish a stale GPS snapshot when
-        // the owner deleted or restored device history while it was being saved.
-        check(repository.isHistoryCurrent() &&
-            !com.roadconquest.app.util.Prefs.isDeviceDataDeletionPending(context)) {
-            "Device progress changed while exporting. Export again."
-        }
     }
 
     internal fun encrypt(plain: InputStream, output: OutputStream, password: CharArray) =
