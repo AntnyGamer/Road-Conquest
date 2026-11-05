@@ -1,23 +1,40 @@
-# Road Conquest website and public legal pages
+# Road Conquest — Cloudflare Pages (static website)
 
-The Road Conquest homepage is served at the root of the **existing account API's public Cloudflare hostname**:
+The website, Privacy Policy, Terms of Service, icon, and AdMob seller file are independent static assets in `docs/`. These files are ready to be deployed by **Cloudflare Pages** using the **existing** `AntnyGamer/Road-Conquest` GitHub repository. No second repository, domain purchase, account migration, or additional Android backend service is required.
 
-- Website: https://roadconquest-api.22abongiovanni.workers.dev/
-- Privacy Policy: https://roadconquest-api.22abongiovanni.workers.dev/privacy
-- Terms of Service: https://roadconquest-api.22abongiovanni.workers.dev/terms
-- AdMob seller file: https://roadconquest-api.22abongiovanni.workers.dev/app-ads.txt
-- Delete account: https://roadconquest-api.22abongiovanni.workers.dev/delete-account
+## Cloudflare Pages project settings
 
-The Cloudflare hostname routes to the existing Neon function; account sessions, maps, and app data remain separate and unchanged. Source-of-truth site assets are `server/src/public-site.mjs` (homepage and favicon) and `server/src/public-legal.mjs` (Terms and AdMob seller file); `server/src/application.mjs` serves them through the current API host. The `docs/` directory is a readable static reference and must be kept in sync, not deployed to GitHub Pages.
+In the existing Cloudflare account, go to **Workers & Pages → Create application → Pages → Import an existing Git repository**.
 
-The public website uses the real Android launcher icon from `app/src/main/res/drawable/ic_car.xml` (served via `/favicon.svg`).
+| Field | Value |
+| --- | --- |
+| Project name | `roadconquest` (if available) |
+| GitHub repository | `AntnyGamer/Road-Conquest` |
+| Production branch | `main` after PR #138 is merged; before merging, the staging branch is `site/road-conquest-pages` |
+| Framework preset | None |
+| Root directory | `/` (repository root) |
+| Build command | `exit 0` (or leave blank) |
+| Build output directory | `docs` |
 
-AdMob publisher record:
+Deploy the project. The intended address is `https://roadconquest.pages.dev/` **if Cloudflare assigns that project name**; the actual address must be confirmed in the Cloudflare dashboard.
 
-```
-google.com, pub-4489303482171969, DIRECT, f08c47fec0942fa0
-```
+The static site includes:
+- `index.html` — Road Conquest homepage, app icon, Google Play link
+- `privacy.html` — full Privacy Policy
+- `terms.html` — full Terms of Service
+- `app-ads.txt` — exact AdMob seller line
+- `favicon.svg` — icon traced from the app's own launcher vector
+- `_redirects` — /privacy and /terms aliases
+- `_headers`, `robots.txt`, `.nojekyll` — static-hosting metadata
 
-**Google Play Console:** Set the developer website to the **homepage URL above**, and the separate Privacy Policy field to the **/privacy** URL. Google must recognize that URL as the developer website before it can discover app-ads.txt. Do not claim AdMob verification succeeded until Google confirms it.
+## Only switch after verification
 
-The old Render website should not be removed until Google Play has switched to this site and AdMob verification is confirmed. Do not delete Cloudflare workers handling account or map services; this website shares their public hostname.
+Verify that the actual `pages.dev` hostname serves the homepage, `/privacy.html`, `/terms.html` and `/app-ads.txt` over HTTPS with HTTP 200. Then update the Play Console **developer website** to the new homepage and **Privacy Policy** to `/privacy.html`. Once verified, update Android Settings' web and legal links for new app versions.
+
+The existing **`roadconquest-api.22abongiovanni.workers.dev` account API** and **`roadconquest-maps.22abongiovanni.workers.dev` map service** must remain unchanged indefinitely to preserve older installed app versions. Account deletion continues to link to the existing backend because it is a functional service, not a static page.
+
+Do **not** disable the current Cloudflare Worker homepage, existing public legal routes, or the backup Render website until the new pages.dev site, Play listing, and AdMob verification are confirmed.
+
+A `pages.dev` subdomain may still not satisfy Liftoff Monetize's root-domain requirements. The completed setup does not guarantee Liftoff verification.
+
+Do not put API secrets into Pages build variables; this is a static site and needs none.
