@@ -1,36 +1,23 @@
-# Road Conquest site — GitHub Pages only
+# Road Conquest website and public legal pages
 
-This `docs/` folder contains the complete static marketing and legal website:
-- `index.html` — landing page
-- `privacy.html` — full privacy policy, adapted from the app's current privacy policy
-- `terms.html` — full terms of service
-- `app-ads.txt` — exact AdMob seller record
-- `favicon.svg`, `robots.txt`, and `.nojekyll` — supporting files
+The Road Conquest homepage is served at the root of the **existing account API's public Cloudflare hostname**:
 
-No Cloudflare or Render service is required to **serve these public static pages**. Road Conquest's *app* still uses Cloudflare and Neon for accounts, map services, and account deletion; these APIs must **not** be deleted.
+- Website: https://roadconquest-api.22abongiovanni.workers.dev/
+- Privacy Policy: https://roadconquest-api.22abongiovanni.workers.dev/privacy
+- Terms of Service: https://roadconquest-api.22abongiovanni.workers.dev/terms
+- AdMob seller file: https://roadconquest-api.22abongiovanni.workers.dev/app-ads.txt
+- Delete account: https://roadconquest-api.22abongiovanni.workers.dev/delete-account
 
-## Root-domain requirement for AdMob
+The Cloudflare hostname routes to the existing Neon function; account sessions, maps, and app data remain separate and unchanged. Source-of-truth site assets are `server/src/public-site.mjs` (homepage and favicon) and `server/src/public-legal.mjs` (Terms and AdMob seller file); `server/src/application.mjs` serves them through the current API host. The `docs/` directory is a readable static reference and must be kept in sync, not deployed to GitHub Pages.
 
-The existing repository is `AntnyGamer/Road-Conquest`. A normal project Pages site would have the URL `https://antnygamer.github.io/Road-Conquest/` and serve `app-ads.txt` under `/Road-Conquest/`. **AdMob looks at the hostname root**, which means it instead checks `https://antnygamer.github.io/app-ads.txt`; a file in the project subdirectory is insufficient.
+The public website uses the real Android launcher icon from `app/src/main/res/drawable/ic_car.xml` (served via `/favicon.svg`).
 
-**Publish this static website as a GitHub *user site***:
-1. Create a **public** GitHub repository named **`AntnyGamer.github.io`** in the `AntnyGamer` account (must match username exactly). This repository does not currently exist and cannot be created through the available GitHub connector actions.
-2. Copy the files in this `docs/` folder into the **root of that user-site repository**. The accompanying GitHub Action "Export GitHub Pages website" creates a downloadable ZIP artifact containing these root-ready files.
-3. In the new user-site repository's **Settings → Pages**, enable **Deploy from a branch**, using `main` and `/(root)`.
-4. Verify the three URLs return HTTP 200 (not a GitHub 404):
-   - `https://antnygamer.github.io/`
-   - `https://antnygamer.github.io/privacy.html`
-   - `https://antnygamer.github.io/terms.html`
-   - `https://antnygamer.github.io/app-ads.txt`
-5. **Only after verifying all live URLs**, use Play Console to set the *developer website* to `https://antnygamer.github.io/` and the *privacy-policy URL* to `https://antnygamer.github.io/privacy.html`, then request an AdMob recheck.
-6. After the new site is confirmed live, Android Settings should link to `https://antnygamer.github.io/privacy.html` and `https://antnygamer.github.io/terms.html`. Those source changes are staged on the website PR and should not be released until the pages exist.
+AdMob publisher record:
 
-AdMob may require a custom domain if it refuses GitHub's `github.io` domain. Never claim verification is complete until AdMob confirms it.
+```
+google.com, pub-4489303482171969, DIRECT, f08c47fec0942fa0
+```
 
-## Temporary live services and cleanup
+**Google Play Console:** Set the developer website to the **homepage URL above**, and the separate Privacy Policy field to the **/privacy** URL. Google must recognize that URL as the developer website before it can discover app-ads.txt. Do not claim AdMob verification succeeded until Google confirms it.
 
-The current marketing website on Render and public legal routes on the account backend should **not** be disabled until GitHub Pages works and Google Play and AdMob have switched to it. Rendering this static site does not require them. Render account service deletion and GitHub repository creation are not available through the current connected management actions; do not report either as completed.
-
-## Keep production backends untouched
-
-Cloudflare's account and map worker endpoints and the Neon account backend are part of Road Conquest's operational infrastructure, not GitHub Pages. Do not delete them, remove their Android endpoint configuration, or modify their secrets as part of a website-hosting change. The existing account deletion form remains part of the backend and is linked for that function.
+The old Render website should not be removed until Google Play has switched to this site and AdMob verification is confirmed. Do not delete Cloudflare workers handling account or map services; this website shares their public hostname.
