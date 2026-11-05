@@ -291,7 +291,11 @@ class AppearanceTest {
         try {
             val activity = controller.get()
             activity.findViewById<Button>(R.id.privacyPolicyButton).performClick()
-            assertTrue(shadowOf(activity).nextStartedActivity.data.toString().endsWith("/privacy"))
+            assertEquals("https://roadconquest-api.22abongiovanni.workers.dev/privacy",
+                shadowOf(activity).nextStartedActivity.data.toString())
+            activity.findViewById<Button>(R.id.termsOfServiceButton).performClick()
+            assertEquals("https://roadconquest-api.22abongiovanni.workers.dev/terms",
+                shadowOf(activity).nextStartedActivity.data.toString())
             assertEquals("Delete local data", activity.findViewById<Button>(R.id.deleteDeviceDataButton).text.toString())
         } finally { controller.pause().stop().destroy() }
     }
