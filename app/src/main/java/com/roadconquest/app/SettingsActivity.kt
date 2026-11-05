@@ -428,7 +428,7 @@ class SettingsActivity : Activity() {
         ViewCompat.requestApplyInsets(root)
     }
 
-    private fun openLegalPage(path: String) = openWebPage("https://antnygamer.github.io$path")
+    private fun openLegalPage(path: String) = openWebPage("https://antnygamer.github.io/Road-Conquest$path")
 
     private fun openWebPage(url: String) {
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).addCategory(Intent.CATEGORY_BROWSABLE)
