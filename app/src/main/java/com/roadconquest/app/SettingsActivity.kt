@@ -249,8 +249,8 @@ class SettingsActivity : Activity() {
             if (!renderingAccountPrivacy) updateLeaderboardPrivacy(visible)
         }
 
-        findViewById<Button>(R.id.privacyPolicyButton).setOnClickListener { openLegalPage("/privacy.html") }
-        findViewById<Button>(R.id.termsOfServiceButton).setOnClickListener { openLegalPage("/terms.html") }
+        findViewById<Button>(R.id.privacyPolicyButton).setOnClickListener { openLegalPage("/privacy") }
+        findViewById<Button>(R.id.termsOfServiceButton).setOnClickListener { openLegalPage("/terms") }
         findViewById<Switch>(R.id.crashReportingSwitch).apply {
             isChecked = com.roadconquest.app.diagnostics.CrashReporting.enabled(this@SettingsActivity)
             setOnCheckedChangeListener { _, checked ->
