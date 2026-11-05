@@ -57,7 +57,11 @@ jobs:
         run: |
           set -euo pipefail
           base="https://roadconquest-api.22abongiovanni.workers.dev"
-          curl --fail --silent --show-error --retry 6 --retry-delay 3 "$base/privacy" | grep -q "Road Conquest Privacy Policy"
-          curl --fail --silent --show-error --retry 6 --retry-delay 3 "$base/terms" | grep -q "Terms of Service"
-          curl --fail --silent --show-error --retry 6 --retry-delay 3 "$base/app-ads.txt" | grep -Fxq "google.com, pub-4489303482171969, DIRECT, f08c47fec0942fa0"
-          curl --fail --silent --show-error --retry 6 --retry-delay 3 "$base/health/ingress" | grep -q '"ok":true'
+          curl --fail --silent --show-error --retry 6 --retry-delay 3 "$base/privacy" -o "$RUNNER_TEMP/privacy.html"
+          grep -q "Road Conquest Privacy Policy" "$RUNNER_TEMP/privacy.html"
+          curl --fail --silent --show-error --retry 6 --retry-delay 3 "$base/terms" -o "$RUNNER_TEMP/terms.html"
+          grep -q "Terms of Service" "$RUNNER_TEMP/terms.html"
+          curl --fail --silent --show-error --retry 6 --retry-delay 3 "$base/app-ads.txt" -o "$RUNNER_TEMP/app-ads.txt"
+          grep -Fxq "google.com, pub-4489303482171969, DIRECT, f08c47fec0942fa0" "$RUNNER_TEMP/app-ads.txt"
+          curl --fail --silent --show-error --retry 6 --retry-delay 3 "$base/health/ingress" -o "$RUNNER_TEMP/health.json"
+          grep -q '"ok":true' "$RUNNER_TEMP/health.json"
