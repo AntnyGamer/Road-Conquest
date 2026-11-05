@@ -7,7 +7,7 @@ cloud-textured fog map.
 [Source and issues](https://github.com/AntnyGamer/Road-Conquest) ·
 [GNU AGPL v3 license](LICENSE)
 
-**1.0.3** switches the app's website and legal links to the new Cloudflare Pages site, preserves existing backend URLs for older installations, and removes deprecated system-bar color theme settings. See the [release notes](RELEASE_NOTES.md) and [backup documentation](BACKUP_AND_CHALLENGES.md).
+**1.0.3** prepares the updated in-app website, Privacy Policy and Terms links from the already merged Cloudflare Pages migration, and removes six deprecated system-bar color theme settings. Existing account and map Worker URLs are unchanged. This cleanup does not by itself guarantee that every Google Play edge-to-edge warning is resolved. See the [release notes](RELEASE_NOTES.md) and [backup documentation](BACKUP_AND_CHALLENGES.md).
 
 Earlier beta history is available in [GitHub Releases](https://github.com/AntnyGamer/Road-Conquest/releases).
 
@@ -30,7 +30,7 @@ Grant Precise location. For automatic background tracking, choose Allow all the 
 location settings and allow background battery use. Settings includes shortcuts to the relevant
 Android screens. Allow notifications to see the tracking notification and its Stop tracking control.
 
-Version 1.0.3 uses Android application ID `com.roadconquest.app`, internal version code **100**, and GitHub tag `v1.0.3`. Google Play permanently reserves uploaded version codes, even in testing tracks, so confirm 100 is unused before uploading. The app shows its exact version in Settings → Help & about.
+The 1.0.3 source declares Android application ID `com.roadconquest.app` and internal version code **100**. Its intended GitHub release tag is `v1.0.3`; this version is not released merely by opening a pull request. Google Play permanently reserves uploaded version codes, even in testing tracks, so confirm 100 is unused before uploading. The app shows its installed version in Settings → Help & about.
 
 ## Explore
 
