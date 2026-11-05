@@ -1,3 +1,22 @@
+# Road Conquest 1.0.3
+
+Website migration and Android edge-to-edge theme cleanup.
+
+## Changes since 1.0.2
+
+- **New public website:** Road Conquest's homepage, Privacy Policy, Terms of Service and `app-ads.txt` are hosted at `https://roadconquest.pages.dev/` through Cloudflare Pages. Website and legal links in Android Settings use the new domain.
+- **Older versions stay functional:** The existing Cloudflare account API and map Workers retain their original addresses for previously installed app versions.
+- **Cleaner edge-to-edge themes:** Remove six obsolete `android:statusBarColor` and `android:navigationBarColor` theme items while retaining AndroidX edge-to-edge and inset handling.
+- **No backend data migration:** Road Conquest continues using its existing Neon account backend and Cloudflare map services.
+
+**Build:** Android `versionName` **1.0.3**, `versionCode` **100**, Android 12+ (API 31). Application ID and signing identity remain unchanged.
+
+**Release tag:** `v1.0.3`. Publication is pending PR approval, merge, and successful release checks.
+
+---
+
+## Previous release notes
+
 # Road Conquest 1.0.2
 
 Tracking, road-reward, export, and service-efficiency fixes.
