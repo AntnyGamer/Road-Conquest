@@ -36,13 +36,13 @@ jobs:
             echo 'Legal pages should be hosted on GitHub Pages, not Cloudflare'
             exit 1
           fi
-      - name: Assemble root-ready GitHub user-site archive
-        run: |
-          cd docs
-          zip -q -r "$RUNNER_TEMP/road-conquest-github-pages.zip" index.html privacy.html terms.html app-ads.txt favicon.svg robots.txt .nojekyll
-      - name: Upload GitHub Pages website
+      - name: Upload root-ready GitHub Pages files
         uses: actions/upload-artifact@v4
         with:
           name: road-conquest-github-pages
-          path: ${{ runner.temp }}/road-conquest-github-pages.zip
+          path: |
+            docs/**
+            docs/.nojekyll
+            !docs/SITE_SETUP.md
+          include-hidden-files: true
           retention-days: 30
