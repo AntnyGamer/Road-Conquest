@@ -249,8 +249,8 @@ class SettingsActivity : Activity() {
             if (!renderingAccountPrivacy) updateLeaderboardPrivacy(visible)
         }
 
-        findViewById<Button>(R.id.privacyPolicyButton).setOnClickListener { openLegalPage("/privacy") }
-        findViewById<Button>(R.id.termsOfServiceButton).setOnClickListener { openLegalPage("/terms") }
+        findViewById<Button>(R.id.privacyPolicyButton).setOnClickListener { openLegalPage("/privacy.html") }
+        findViewById<Button>(R.id.termsOfServiceButton).setOnClickListener { openLegalPage("/terms.html") }
         findViewById<Switch>(R.id.crashReportingSwitch).apply {
             isChecked = com.roadconquest.app.diagnostics.CrashReporting.enabled(this@SettingsActivity)
             setOnCheckedChangeListener { _, checked ->
@@ -428,7 +428,7 @@ class SettingsActivity : Activity() {
         ViewCompat.requestApplyInsets(root)
     }
 
-    private fun openLegalPage(path: String) = openWebPage("https://roadconquest-api.22abongiovanni.workers.dev$path")
+    private fun openLegalPage(path: String) = openWebPage("https://antnygamer.github.io$path")
 
     private fun openWebPage(url: String) {
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).addCategory(Intent.CATEGORY_BROWSABLE)
