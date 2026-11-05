@@ -21,10 +21,10 @@ The code change does **not** deploy the live Worker. From an authenticated Cloud
 ```sh
 npm --prefix server ci --ignore-scripts --no-audit --no-fund
 npm --prefix server run build:ingress
-npx wrangler deploy --config server/worker/wrangler.jsonc
+npx wrangler deploy --config server/worker/wrangler-public.jsonc
 ```
 
-**Important:** `server/worker/wrangler.jsonc` names `roadconquest-ingress`, while the public API hostname is `roadconquest-api.22abongiovanni.workers.dev`. Verify the current Cloudflare Worker binding and deployment target before deploying; never overwrite a different production Worker by guessing. Preserve `API_ORIGIN`, `RATE_LIMIT_IP_SIGNATURE_KEY`, and all other deployed secrets/configuration. After deployment, verify `/privacy`, `/terms`, `/app-ads.txt`, and authenticated API endpoints. Build artifacts and local repositories do not automatically update Cloudflare.
+**Important:** `server/worker/wrangler-public.jsonc` explicitly targets `roadconquest-api`, the Worker name shown in the public hostname. The older `wrangler.jsonc` targets a DIFFERENT name (`roadconquest-ingress`); use the public config for this address. Verify the Cloudflare account and worker identity before deploying. Preserve `API_ORIGIN`, `RATE_LIMIT_IP_SIGNATURE_KEY`, and all other deployed secrets/configuration. After deployment, verify `/privacy`, `/terms`, `/app-ads.txt`, and authenticated API endpoints. Build artifacts and local repositories do not automatically update Cloudflare.
 
 ## AdMob
 
