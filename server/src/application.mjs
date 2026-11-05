@@ -22,6 +22,8 @@ import { createNotifications, createFcmSender } from "./notifications.mjs";
 import { createRequestMaintenance } from "./maintenance.mjs";
 import { RATE_LIMIT_SQL, RATE_LIMIT_PAIR_SQL, RATE_LIMIT_SESSION_SQL, RATE_LIMIT_PROFILE_SQL, RATE_LIMIT_LOGOUT_SQL, LOGIN_WITH_USER_SQL } from "./rate-limits.mjs";
 import { EvidenceError } from './scoring.mjs';
+import { TERMS_HTML, APP_ADS_TXT } from './public-legal.mjs';
+import { SITE_HTML, FAVICON_SVG, ROBOTS_TXT } from './public-site.mjs';
 
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -283,6 +285,36 @@ async function handle(req, res) {
     return send(res, 400, { error: "HTTPS required" });
   }
 
+  if ((req.method === "GET" || req.method === "HEAD") && ["/", "/index.html", "/favicon.svg", "/robots.txt"].includes(url.pathname)) {
+    const website = url.pathname === "/" || url.pathname === "/index.html";
+    const icon = url.pathname === "/favicon.svg";
+    const body = website ? SITE_HTML : icon ? FAVICON_SVG : ROBOTS_TXT;
+    const contentType = website ? "text/html" : icon ? "image/svg+xml" : "text/plain";
+    const headers = {
+      "Content-Type": contentType + "; charset=utf-8",
+      "Content-Length": Buffer.byteLength(body),
+      "Cache-Control": "public, max-age=300",
+      "X-Content-Type-Options": "nosniff",
+      "Referrer-Policy": "no-referrer"
+    };
+    if (website) headers["Content-Security-Policy"] =
+      "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+    if (REQUIRE_HTTPS) headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains";
+    res.writeHead(200, headers);
+    res.end(req.method === "HEAD" ? undefined : body);
+    return;
+  }
+  if (req.method === "GET" && url.pathname === "/terms") return sendHtml(res, 200, TERMS_HTML);
+  if ((req.method === "GET" || req.method === "HEAD") && url.pathname === "/app-ads.txt") {
+    res.writeHead(200, {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Content-Length": Buffer.byteLength(APP_ADS_TXT),
+      "Cache-Control": "public, max-age=3600",
+      "X-Content-Type-Options": "nosniff"
+    });
+    res.end(req.method === "HEAD" ? undefined : APP_ADS_TXT);
+    return;
+  }
   if (req.method === "GET" && url.pathname === "/privacy") return sendHtml(res, 200, PRIVACY_HTML);
   if (req.method === "GET" && url.pathname === "/delete-account") return sendHtml(res, 200, DELETE_ACCOUNT_HTML);
   if (req.method === "GET" && url.pathname === "/v1/competition") {
