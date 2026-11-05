@@ -250,7 +250,7 @@ class SettingsActivity : Activity() {
         }
 
         findViewById<Button>(R.id.privacyPolicyButton).setOnClickListener { openLegalPage("/privacy") }
-        findViewById<Button>(R.id.termsOfServiceButton).setOnClickListener { openWebPage("https://road-conquest-antnygamer.onrender.com/terms.html") }
+        findViewById<Button>(R.id.termsOfServiceButton).setOnClickListener { openLegalPage("/terms") }
         findViewById<Switch>(R.id.crashReportingSwitch).apply {
             isChecked = com.roadconquest.app.diagnostics.CrashReporting.enabled(this@SettingsActivity)
             setOnCheckedChangeListener { _, checked ->
