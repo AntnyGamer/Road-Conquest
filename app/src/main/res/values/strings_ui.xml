@@ -148,6 +148,7 @@
     <string name="ui_prevents_timeout_only_while_the_map_is_visible_uses_more_battery" formatted="false">"Prevents timeout only while the map is visible. Uses more battery."</string>
     <string name="ui_preview_1_s">"Preview: %1$s"</string>
     <string name="ui_privacy_policy" formatted="false">"Privacy policy"</string>
+    <string name="ui_terms_of_service">Terms of Service</string>
     <string name="ui_public_community_forum" formatted="false">"Public community forum"</string>
     <string name="ui_rankings_count_verified_live_exploration_only_imports_and_local" formatted="false">"Rankings count verified live exploration only. Imports and local points do not count. Sharing live GPS requires consent."</string>
     <string name="ui_read_community_rules" formatted="false">"Read community rules"</string>
