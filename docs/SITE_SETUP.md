@@ -1,33 +1,45 @@
-# Road Conquest website and app-ads.txt
+# Road Conquest website and legal pages
 
-The website source lives in `docs/`. It has no build dependencies, trackers, or analytics scripts.
+The static marketing site is hosted on Render from `docs/`. Its legal links point exclusively to Road Conquest's canonical Cloudflare account Worker; the older Render privacy page is a redirect.
 
-## Currently hosted website
+## URLs
 
-- Website: https://road-conquest-antnygamer.onrender.com/
-- Privacy Policy: https://road-conquest-antnygamer.onrender.com/privacy.html
-- Terms of Service: https://road-conquest-antnygamer.onrender.com/terms.html
-- AdMob sellers file: https://road-conquest-antnygamer.onrender.com/app-ads.txt
-- Render dashboard: https://dashboard.render.com/static/srv-dbmb1588v5cc73e3c830
+- Website (Render): https://road-conquest-antnygamer.onrender.com/
+- **Canonical Privacy Policy** (Cloudflare): https://roadconquest-api.22abongiovanni.workers.dev/privacy
+- **Canonical Terms of Service** (Cloudflare, requires Worker deployment): https://roadconquest-api.22abongiovanni.workers.dev/terms
+- AdMob sellers file on Render (LIVE): https://road-conquest-antnygamer.onrender.com/app-ads.txt
+- AdMob sellers file on Cloudflare (requires Worker deployment): https://roadconquest-api.22abongiovanni.workers.dev/app-ads.txt
 
-Render is set to deploy the Git branch `site/road-conquest-pages` automatically and serve the `docs` directory at the site root. Verify that new commits are reflected in a **successful latest deployment** before linking to newly added pages. The Google Play package name is `com.roadconquest.app`.
+The Google Play listing's **Privacy Policy** field should use the Cloudflare Privacy Policy URL, while **Developer website** should use the Render marketing URL. These are different Play Console fields. Do not use the GitHub Pages project path for the developer website: it does not serve `app-ads.txt` at the hostname root. These Play Console values must be changed in Play Console separately; a GitHub change cannot update them.
 
-## AdMob verification
+## Cloudflare publishing
 
-The `docs/app-ads.txt` file contains exactly the seller line supplied by the publisher in AdMob:
+The existing `roadconquest-api` Worker is the public ingress for the Neon account API. The `server/worker/ingress.mjs` route serves `/terms` and `/app-ads.txt` directly without relying on the Neon function or database. The Terms HTML and exact AdMob seller line are stored in `server/worker/legal-pages.mjs`.
+
+The code change does **not** deploy the live Worker. From an authenticated Cloudflare Wrangler environment, use the existing deployment process:
+
+```sh
+npm --prefix server ci --ignore-scripts --no-audit --no-fund
+npm --prefix server run build:ingress
+npx wrangler deploy --config server/worker/wrangler.jsonc
+```
+
+**Important:** `server/worker/wrangler.jsonc` names `roadconquest-ingress`, while the public API hostname is `roadconquest-api.22abongiovanni.workers.dev`. Verify the current Cloudflare Worker binding and deployment target before deploying; never overwrite a different production Worker by guessing. Preserve `API_ORIGIN`, `RATE_LIMIT_IP_SIGNATURE_KEY`, and all other deployed secrets/configuration. After deployment, verify `/privacy`, `/terms`, `/app-ads.txt`, and authenticated API endpoints. Build artifacts and local repositories do not automatically update Cloudflare.
+
+## AdMob
+
+The exact line supplied by the app publisher is:
 
 ```text
 google.com, pub-4489303482171969, DIRECT, f08c47fec0942fa0
 ```
 
-The file must be publicly accessible with HTTP 200 from the `/app-ads.txt` URL under the hostname that Google Play advertises as the app's developer website. A project Pages path such as `/Road-Conquest/app-ads.txt` is not equivalent to a root path. Use the **Render site URL above** in Google Play Console → Grow users → Store presence → Store settings → Store listing contact details → Website. After updating the listing, allow time for Google to discover it, then use AdMob → Apps → app-ads.txt → Check for updates. Check the exact URL AdMob reports it crawled.
+AdMob crawls `app-ads.txt` at the host in Google Play's developer website field, not the Privacy Policy URL. The Render root file above is publicly reachable over HTTPS and is the recommended verification location; the multi-level `workers.dev` API hostname might not be treated as the root by AdMob's subdomain crawler. After changing the Play listing, use **Check for updates** in AdMob and inspect the exact domain its diagnostics report.
 
-Google's documentation: https://support.google.com/admob/answer/9363762
+## GitHub Pages (optional alternative)
 
-## GitHub Pages alternative
-
-The workflow `.github/workflows/road-conquest-site.yml` can deploy these same assets to GitHub Pages. To use it, enable GitHub Actions as the Pages source under https://github.com/AntnyGamer/Road-Conquest/settings/pages and merge the site's PR into `main`. The resulting project site would typically be https://antnygamer.github.io/Road-Conquest/ ; this should *not* be used as the AdMob developer website unless `/app-ads.txt` is correctly served at the hostname root.
+The workflow `.github/workflows/road-conquest-site.yml` also supports Pages. Enable GitHub Actions as the Pages source at https://github.com/AntnyGamer/Road-Conquest/settings/pages before attempting Pages publication. The marketing site and app-ads.txt are deployed independently to Render from the website branch.
 
 ## Maintenance
 
-Update `docs/index.html`, `docs/privacy.html`, and `docs/terms.html`. The privacy policy is mirrored from `server/src/application.mjs`; keep the copy synchronized if the app's data handling changes. The account-deletion link points to the deployed account service. The legal pages are intended as practical templates and should be reviewed for local legal requirements before broader commercial use.
+Android Settings opens the canonical Cloudflare legal pages regardless of custom account API build overrides. Keep `server/worker/legal-pages.mjs` updated when Terms change and `server/src/application.mjs` updated when privacy practices change; the Cloudflare `/privacy` route is still proxied to the existing Neon application. The static `docs/terms.html` is only a fallback copy.
