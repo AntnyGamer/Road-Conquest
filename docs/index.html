@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#081220">
+  <meta name="description" content="Road Conquest turns every drive into discovery. Track the roads you've traveled, clear the fog, and make a map of your world. Available for Android.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Road Conquest — Every road is a discovery">
+  <meta property="og:description" content="Track your drives, uncover the map, and discover new places.">
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+  <title>Road Conquest — Every road is a discovery</title>
+  <style>
+    :root{color-scheme:dark;--bg:#081220;--panel:#101e30;--panel2:#13243a;--text:#f0f7ff;--muted:#a7b6ca;--aqua:#53ebd4;--blue:#77aefe;--line:rgba(167,205,247,.16)}
+    *,*::before,*::after{box-sizing:border-box}
+    html{scroll-behavior:smooth}
+    body{margin:0;background:var(--bg);color:var(--text);font:16px/1.65 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow-x:hidden}
+    body::before{content:"";position:absolute;inset:0 0 auto;height:720px;background:radial-gradient(ellipse 680px 450px at 77% 20%,rgba(53,105,181,.23),transparent 75%),radial-gradient(ellipse 600px 400px at 18% 20%,rgba(39,154,135,.10),transparent 76%);pointer-events:none}
+    a{color:inherit}
+    button{font:inherit}
+    .container{width:min(1120px,calc(100% - 40px));margin-inline:auto;position:relative}
+    .skip{position:absolute;left:12px;top:-60px;padding:10px;background:white;color:black;z-index:100}
+    .skip:focus{top:12px}
+    header{border-bottom:1px solid var(--line);position:relative;z-index:5;background:rgba(8,18,32,.82);backdrop-filter:blur(14px)}
+    .nav{display:flex;align-items:center;justify-content:space-between;gap:24px;min-height:78px}
+    .brand{display:flex;align-items:center;gap:11px;text-decoration:none;font-size:18px;font-weight:850;letter-spacing:-.045em;white-space:nowrap}
+    .brand svg{height:36px;width:36px}
+    nav{display:flex;align-items:center;gap:30px}
+    nav a{text-decoration:none;color:#c1cee0;font-weight:650;font-size:14px}
+    nav a:hover,nav a:focus-visible{color:var(--aqua)}
+    .button{display:inline-flex;align-items:center;justify-content:center;gap:9px;background:linear-gradient(115deg,#6bf2d6,#a6f4e9);color:#082027;border:1px solid transparent;border-radius:13px;min-height:49px;padding:11px 20px;text-decoration:none;font-weight:800;line-height:1.1;transition:transform .2s,box-shadow .2s}
+    .button:hover,.button:focus-visible{transform:translateY(-2px);box-shadow:0 13px 30px rgba(78,231,211,.20)}
+    .button.secondary{background:rgba(18,37,59,.67);border-color:rgba(163,213,249,.23);color:#edf7ff}
+    .nav-download{min-height:42px;padding:9px 15px;font-size:14px}
+    .mobile-toggle{display:none;background:none;border:1px solid var(--line);border-radius:8px;color:white;padding:7px 11px}
+    .hero{padding:100px 0 95px;display:grid;grid-template-columns:1fr 1.04fr;align-items:center;gap:44px}
+    .eyebrow{display:inline-flex;align-items:center;gap:9px;color:var(--aqua);font-size:12px;font-weight:850;letter-spacing:.15em;text-transform:uppercase}
+    .eyebrow::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--aqua);box-shadow:0 0 17px var(--aqua)}
+    h1,h2,h3,p{margin-top:0}
+    h1{font-size:clamp(45px,5.5vw,76px);line-height:1.06;letter-spacing:-.065em;margin:19px 0 25px;max-width:660px}
+    h1 span,.gradient{background:linear-gradient(110deg,#aaf9e9,#78afff);background-clip:text;-webkit-background-clip:text;color:transparent}
+    .lead{font-size:19px;color:#bac8dc;max-width:540px;line-height:1.75;margin-bottom:30px}
+    .ctas{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:23px}
+    .fine{color:#8c9eb6;font-size:13px}
+    .hero-art{background:linear-gradient(145deg,#142d45,#0a1a2b 70%);border:1px solid rgba(118,175,227,.22);border-radius:28px;box-shadow:0 34px 90px rgba(0,0,0,.30),inset 0 1px rgba(255,255,255,.03);overflow:hidden;position:relative;aspect-ratio:1/.94}
+    .hero-art::after{content:"";inset:0;position:absolute;pointer-events:none;background:radial-gradient(circle at 66% 47%,transparent 20%,rgba(8,19,32,.5) 79%,rgba(8,18,32,.84) 100%)}
+    .hero-art svg{display:block;width:100%;height:100%}
+    .map-top{position:absolute;top:22px;left:22px;z-index:1;background:rgba(7,17,30,.78);border:1px solid rgba(196,231,255,.13);border-radius:13px;padding:11px 15px;backdrop-filter:blur(12px)}
+    .map-top strong{font-size:14px;display:block;line-height:1.2}
+    .map-top small{color:#a5bad1;font-size:11px}
+    .map-bottom{position:absolute;bottom:22px;right:22px;z-index:1;display:flex;align-items:center;gap:11px;background:rgba(9,23,37,.88);border:1px solid rgba(162,227,232,.24);padding:12px 15px;border-radius:14px;backdrop-filter:blur(12px);font-size:13px;font-weight:750}
+    .dot{width:10px;height:10px;border-radius:50%;background:var(--aqua);box-shadow:0 0 0 6px rgba(83,235,212,.12)}
+    .art-caption{position:absolute;bottom:15px;left:20px;z-index:1;color:#a4b7d0;font-size:10px}
+    .facts{border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:rgba(11,28,45,.53)}
+    .fact-list{display:flex;justify-content:space-around;gap:26px;flex-wrap:wrap;padding:23px 0;color:#c7d5e5;font-weight:680;font-size:14px}
+    .fact-list span{display:flex;gap:10px;align-items:center}
+    .check{color:var(--aqua);font-size:18px}
+    section{scroll-margin-top:100px}
+    .section{padding:102px 0 90px}
+    .section-head{max-width:720px;margin-bottom:40px}
+    .kicker{display:block;color:var(--aqua);font-weight:850;text-transform:uppercase;letter-spacing:.15em;font-size:12px;margin-bottom:11px}
+    h2{font-size:clamp(34px,4vw,53px);line-height:1.15;letter-spacing:-.045em;margin-bottom:16px}
+    .section-head p{color:var(--muted);font-size:17px}
+    .feature-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:17px}
+    .feature{background:linear-gradient(145deg,rgba(23,45,69,.9),rgba(13,28,47,.9));border:1px solid var(--line);border-radius:20px;padding:29px;min-height:235px}
+    .feature-icon{width:45px;height:45px;border:1px solid rgba(83,235,212,.25);background:rgba(83,235,212,.08);border-radius:14px;display:grid;place-items:center;font-size:22px;color:var(--aqua);margin-bottom:22px;font-weight:800}
+    .feature h3{font-size:19px;letter-spacing:-.02em;margin-bottom:8px}
+    .feature p{color:#a8bad0;font-size:14px;line-height:1.7;margin:0}
+    .split{display:grid;grid-template-columns:1fr 1fr;gap:60px;align-items:center}
+    .steps{padding:30px 0}
+    .step{display:grid;grid-template-columns:42px 1fr;gap:17px;padding:20px 0;border-bottom:1px solid var(--line)}
+    .step:last-child{border-bottom:0}
+    .step .num{font-size:14px;font-weight:900;display:grid;place-items:center;width:39px;height:39px;border-radius:12px;background:var(--panel2);color:var(--aqua)}
+    .step h3{font-size:18px;margin:0 0 3px}
+    .step p{font-size:14px;color:var(--muted);margin:0}
+    .glow-panel{border-radius:27px;min-height:400px;position:relative;overflow:hidden;background:radial-gradient(circle at 50% 30%,rgba(60,226,200,.19),transparent 45%),radial-gradient(circle at 80% 85%,rgba(73,120,219,.27),transparent 48%),linear-gradient(145deg,#132a43,#0b192b);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;padding:35px}
+    .route-tile{background:rgba(7,21,37,.87);border:1px solid rgba(150,213,242,.29);border-radius:23px;box-shadow:0 26px 66px rgba(1,6,16,.38);padding:32px;width:min(100%,320px);transform:rotate(-3deg)}
+    .route-tile .mini-head{display:flex;align-items:center;justify-content:space-between;font-size:12px;color:#a8bad2;margin-bottom:25px}
+    .route-tile .progress{height:10px;background:#1f3953;border-radius:20px;overflow:hidden;margin:18px 0}
+    .route-tile .progress>span{display:block;width:64%;height:100%;background:linear-gradient(90deg,#43dcc1,#7aa7ff);border-radius:20px}
+    .route-tile .tiny{font-size:12px;color:#9aafc7}
+    .route-tile strong{font-size:27px;letter-spacing:-.04em}
+    .cta-panel{padding:57px 55px;border-radius:25px;background:linear-gradient(110deg,rgba(35,83,105,.55),rgba(27,47,90,.52)),#102438;border:1px solid rgba(105,200,226,.25);display:flex;align-items:center;justify-content:space-between;gap:35px}
+    .cta-panel h2{font-size:clamp(30px,3vw,42px);margin:0 0 8px}
+    .cta-panel p{color:#c0d0e2;margin:0}
+    .cta-panel .button{flex-shrink:0}
+    footer{border-top:1px solid var(--line);padding:37px 0 52px;margin-top:110px;background:#07101c}
+    .footer-content{display:flex;justify-content:space-between;gap:25px;align-items:center}
+    .footer-content p{margin:8px 0 0;color:#8da2bd;font-size:13px}
+    .footer-links{display:flex;flex-wrap:wrap;gap:17px}
+    .footer-links a{color:#aabbd0;font-size:13px;text-decoration:none}
+    .footer-links a:hover{text-decoration:underline;color:var(--aqua)}
+    :focus-visible{outline:2px solid var(--aqua);outline-offset:4px}
+    @media(max-width:900px){.hero{padding:72px 0;grid-template-columns:1fr}.hero-art{max-width:650px;width:100%;margin:auto;aspect-ratio:1.25}.feature-grid{grid-template-columns:repeat(2,1fr)}.split{gap:30px}.section{padding:75px 0}}
+    @media(max-width:640px){.container{width:min(100% - 30px,1120px)}.nav{min-height:68px}.mobile-toggle{display:block;margin-left:auto}.nav-download{display:none}nav{display:none;position:absolute;top:68px;left:-15px;right:-15px;flex-direction:column;align-items:stretch;background:#0c1b2a;border:1px solid var(--line);padding:16px 24px 22px;border-radius:0 0 16px 16px;box-shadow:0 16px 30px #040a15}nav.open{display:flex}nav a{padding:8px 0}.hero{gap:32px;padding:58px 0 63px}h1{font-size:clamp(42px,11vw,56px)}.lead{font-size:17px}.hero-art{aspect-ratio:1/.9;border-radius:19px}.feature-grid{grid-template-columns:1fr}.feature{min-height:auto}.split{grid-template-columns:1fr}.section{padding:67px 0}.glow-panel{min-height:320px}.cta-panel{padding:34px 26px;flex-direction:column;align-items:flex-start}.cta-panel .button{width:100%}.footer-content{align-items:flex-start;flex-direction:column}footer{margin-top:65px}}
+    @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{transition:none!important;animation:none!important}}
+  </style>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header>
+    <div class="container nav">
+      <a class="brand" href="#top" aria-label="Road Conquest home">
+        <svg viewBox="0 0 64 64" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><rect width="64" height="64" rx="17" fill="#1a4354"/><path d="M12 47C23 48 27 38 32 32S42 16 54 18" stroke="#61ebd1" stroke-width="7" fill="none" stroke-linecap="round"/><circle cx="13" cy="47" r="5" fill="#d5fff6"/><circle cx="53" cy="18" r="5" fill="#d5fff6"/></svg>
+        Road Conquest
+      </a>
+      <button class="mobile-toggle" id="menuToggle" type="button" aria-controls="menu" aria-expanded="false" aria-label="Toggle navigation">☰</button>
+      <nav id="menu" aria-label="Main navigation">
+        <a href="#features">Features</a>
+        <a href="#how-it-works">How it works</a>
+        <a href="#download">Download</a>
+        <a href="https://github.com/AntnyGamer/Road-Conquest" rel="noopener noreferrer">GitHub</a>
+      </nav>
+      <a class="button nav-download" href="https://play.google.com/store/apps/details?id=com.roadconquest.app" target="_blank" rel="noopener noreferrer">Get the app ↗</a>
+    </div>
+  </header>
+  <main id="main">
+    <div class="container hero" id="top">
+      <div>
+        <span class="eyebrow">Explore beyond the familiar</span>
+        <h1>Every road is <span>a discovery.</span></h1>
+        <p class="lead">Turn ordinary drives into your own exploration map. Clear the fog, uncover new places, and see how far your adventures take you.</p>
+        <div class="ctas">
+          <a class="button" href="https://play.google.com/store/apps/details?id=com.roadconquest.app" target="_blank" rel="noopener noreferrer">Get it on Google Play <span aria-hidden="true">↗</span></a>
+          <a class="button secondary" href="#features">Explore features <span aria-hidden="true">↓</span></a>
+        </div>
+        <p class="fine">Available for Android 12 and newer. Drive safely; set up the app while parked.</p>
+      </div>
+      <div class="hero-art" role="img" aria-label="Illustration of a winding route lighting up a dark map">
+        <div class="map-top"><strong>Explore your world</strong><small>One road at a time</small></div>
+        <svg viewBox="0 0 600 570" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <defs>
+            <pattern id="grid" width="55" height="55" patternUnits="userSpaceOnUse"><path d="M55 0H0V55" fill="none" stroke="#416080" stroke-opacity=".22" stroke-width="1.5"/></pattern>
+            <linearGradient id="route" x1="0" x2="1"><stop stop-color="#5df0cd"/><stop offset="1" stop-color="#83adff"/></linearGradient>
+            <radialGradient id="fog"><stop stop-color="#17374e" stop-opacity="0"/><stop offset=".52" stop-color="#091625" stop-opacity=".12"/><stop offset="1" stop-color="#071323" stop-opacity=".90"/></radialGradient>
+            <filter id="light"><feGaussianBlur stdDeviation="9"/></filter>
+          </defs>
+          <rect width="600" height="570" fill="#0d2033"/><rect width="600" height="570" fill="url(#grid)"/>
+          <g fill="none" stroke="#42617e" stroke-linecap="round" opacity=".72">
+            <path d="M-30 96 165 124 240 84 380 114 640 64" stroke-width="11"/>
+            <path d="M-30 290 165 245 268 292 440 244 630 290" stroke-width="9"/>
+            <path d="M20 480 130 438 250 475 420 427 630 486" stroke-width="10"/>
+            <path d="M96 -20 145 174 106 312 160 620" stroke-width="8"/>
+            <path d="M290 -30 275 145 340 250 299 390 338 600" stroke-width="8"/>
+            <path d="M485 -30 460 150 514 315 484 610" stroke-width="8"/>
+          </g>
+          <g fill="none" stroke="#273f57" stroke-width="4" stroke-linecap="round" opacity=".8">
+            <path d="M-20 173 200 185 350 166 600 192M-20 367 215 373 410 343 620 380M200 -20 200 620M408 -20 408 620M28 -10 28 600"/>
+          </g>
+          <path d="M66 470 152 434 162 367 267 290 340 252 435 245 461 157 534 125" fill="none" stroke="#40e9c9" stroke-width="26" stroke-opacity=".26" filter="url(#light)" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M66 470 152 434 162 367 267 290 340 252 435 245 461 157 534 125" fill="none" stroke="url(#route)" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+          <g fill="#b3fff0" stroke="#49e8cd" stroke-width="6"><circle cx="66" cy="470" r="10"/><circle cx="534" cy="125" r="10"/></g>
+          <circle cx="534" cy="125" r="27" fill="none" stroke="#66eacf" stroke-opacity=".36" stroke-width="3"/>
+          <rect width="600" height="570" fill="url(#fog)"/>
+        </svg>
+        <div class="map-bottom"><span class="dot" aria-hidden="true"></span><span>New roads discovered</span></div>
+        <span class="art-caption">Illustrative map concept</span>
+      </div>
+    </div>
+    <div class="facts"><div class="container fact-list"><span><b class="check">✓</b> Real-world exploration</span><span><b class="check">✓</b> Fog-of-war map</span><span><b class="check">✓</b> Driving history</span><span><b class="check">✓</b> Your pace, your routes</span></div></div>
+    <section class="section" id="features">
+      <div class="container">
+        <div class="section-head"><span class="kicker">Built for curious drivers</span><h2>Your world, <span class="gradient">uncovered.</span></h2><p>Road Conquest makes exploration rewarding without changing where you want to go.</p></div>
+        <div class="feature-grid">
+          <article class="feature"><div class="feature-icon" aria-hidden="true">⌁</div><h3>Clear the fog</h3><p>Reveal parts of the world map as you travel and watch your personal exploration grow.</p></article>
+          <article class="feature"><div class="feature-icon" aria-hidden="true">↗</div><h3>Remember every drive</h3><p>Record routes and revisit your trips, driving distance, and discovered roads.</p></article>
+          <article class="feature"><div class="feature-icon" aria-hidden="true">◎</div><h3>Discover places</h3><p>Explore towns, states or regions, and countries, with progress overlays on your map.</p></article>
+          <article class="feature"><div class="feature-icon" aria-hidden="true">★</div><h3>Earn achievements</h3><p>Unlock milestones and collect points as your road and place discoveries add up.</p></article>
+          <article class="feature"><div class="feature-icon" aria-hidden="true">✦</div><h3>Make it yours</h3><p>Use earned points to customize car styles, road colors, and other visual extras.</p></article>
+          <article class="feature"><div class="feature-icon" aria-hidden="true">↺</div><h3>Keep your progress</h3><p>Export your exploration data or create a secure backup to restore later.</p></article>
+        </div>
+      </div>
+    </section>
+    <section class="section" id="how-it-works">
+      <div class="container split">
+        <div><span class="kicker">Simple by design</span><h2>Go places. <span class="gradient">Make progress.</span></h2>
+          <div class="steps">
+            <div class="step"><div class="num">01</div><div><h3>Start exploring</h3><p>Enable the appropriate location permissions and choose manual or automatic tracking.</p></div></div>
+            <div class="step"><div class="num">02</div><div><h3>Take the roads you love</h3><p>Road Conquest records your driving and gradually reveals the places you visit.</p></div></div>
+            <div class="step"><div class="num">03</div><div><h3>See what you've conquered</h3><p>Review your routes, explore the map, earn points, and work toward achievements.</p></div></div>
+          </div>
+        </div>
+        <div class="glow-panel" aria-label="Illustrative exploration progress card">
+          <div class="route-tile"><div class="mini-head"><span>ROAD CONQUEST</span><span style="color:#63e8cb">● Exploring</span></div><strong>A world to uncover.</strong><div class="progress"><span></span></div><div class="tiny">Every new route adds to your personal map.</div><div style="margin-top:24px;padding-top:20px;border-top:1px solid rgba(160,196,230,.14);display:flex;justify-content:space-between;color:#b6cbdf;font-size:13px"><span>Discover roads</span><span style="color:#73edd8">Explore more ↗</span></div></div>
+        </div>
+      </div>
+    </section>
+    <section id="download"><div class="container"><div class="cta-panel"><div><span class="kicker">Ready to explore?</span><h2>Make every drive count.</h2><p>Download Road Conquest for Android and start building your map.</p></div><a class="button" href="https://play.google.com/store/apps/details?id=com.roadconquest.app" target="_blank" rel="noopener noreferrer">Get it on Google Play ↗</a></div></div></section>
+  </main>
+  <footer><div class="container footer-content"><div><a class="brand" href="#top">Road Conquest</a><p>© <span id="year">2026</span> AntnyGamer. Made for explorers.</p></div><div class="footer-links"><a href="https://roadconquest-api.22abongiovanni.workers.dev/privacy">Privacy policy</a><a href="https://roadconquest-api.22abongiovanni.workers.dev/delete-account">Delete account</a><a href="https://github.com/AntnyGamer/Road-Conquest">Source code</a><a href="https://github.com/AntnyGamer/Road-Conquest/issues">Support</a></div></div></footer>
+  <script>
+    const toggle=document.getElementById('menuToggle');
+    const menu=document.getElementById('menu');
+    toggle.addEventListener('click',()=>{const open=toggle.getAttribute('aria-expanded')==='true';toggle.setAttribute('aria-expanded',String(!open));menu.classList.toggle('open',!open);});
+    menu.querySelectorAll('a').forEach(link=>link.addEventListener('click',()=>{menu.classList.remove('open');toggle.setAttribute('aria-expanded','false');}));
+    document.getElementById('year').textContent=String(new Date().getFullYear());
+  </script>
+</body>
+</html>
