@@ -2,6 +2,8 @@
 
 ## Changes since the published 1.0.2 release
 
+- **Replay survives rotation:** Keep the selected drive and replay slider position when the Trips screen is recreated, including when a selected drive gains additional fixes.
+- **Fresh trip details after matching:** Update the selected drive's estimated road, town, tile and pending-matching counts when returning to Trips, even if matching changes without a new GPS fix.
 - **Website and legal links:** The app's Settings links for the Road Conquest website, Privacy Policy and Terms of Service now open `https://roadconquest.pages.dev/`. The website and its `app-ads.txt` were already published on Cloudflare Pages in the separately merged PR #138; version 1.0.3 is the first planned Android release containing those updated links.
 - **Existing app compatibility:** The Cloudflare account and map service Worker addresses are unchanged, so previously installed versions can continue using their original endpoints. The new website does not replace either backend service.
 - **System-bar theme cleanup:** Remove six deprecated `android:statusBarColor` and `android:navigationBarColor` items from the light, gold and dark themes. Keep existing AndroidX edge-to-edge setup, insets handling and light/dark system-bar icon configuration. This change alone does not guarantee that every edge-to-edge warning in Google Play Console disappears.
