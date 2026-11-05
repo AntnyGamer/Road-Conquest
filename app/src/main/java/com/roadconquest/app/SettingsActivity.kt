@@ -249,7 +249,8 @@ class SettingsActivity : Activity() {
             if (!renderingAccountPrivacy) updateLeaderboardPrivacy(visible)
         }
 
-        findViewById<Button>(R.id.privacyPolicyButton).setOnClickListener { openAccountPage("/privacy") }
+        findViewById<Button>(R.id.privacyPolicyButton).setOnClickListener { openLegalPage("/privacy") }
+        findViewById<Button>(R.id.termsOfServiceButton).setOnClickListener { openLegalPage("/terms") }
         findViewById<Switch>(R.id.crashReportingSwitch).apply {
             isChecked = com.roadconquest.app.diagnostics.CrashReporting.enabled(this@SettingsActivity)
             setOnCheckedChangeListener { _, checked ->
@@ -427,12 +428,8 @@ class SettingsActivity : Activity() {
         ViewCompat.requestApplyInsets(root)
     }
 
-    private fun openAccountPage(path: String) {
-        val url = AccountClient.publicPage(path)
-        if (url == null) {
-            Toast.makeText(this, "Road Conquest web pages are unavailable in this build.", Toast.LENGTH_LONG).show()
-            return
-        }
+    private fun openLegalPage(path: String) {
+        val url = "https://roadconquest-api.22abongiovanni.workers.dev$path"
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).addCategory(Intent.CATEGORY_BROWSABLE)
         if (SystemSettingsNavigator.launchFirst(listOf(intent), ::startActivity) == null) {
             Toast.makeText(this, getString(R.string.web_page_unavailable, url), Toast.LENGTH_LONG).show()
