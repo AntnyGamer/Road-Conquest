@@ -258,6 +258,8 @@ class SettingsActivity : Activity() {
             }
         }
 
+        findViewById<Button>(R.id.websiteButton).setOnClickListener { openWebPage(getString(R.string.road_conquest_website_url)) }
+
         findViewById<Button>(R.id.githubButton).setOnClickListener {
             val url = getString(R.string.github_repository_url)
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).addCategory(Intent.CATEGORY_BROWSABLE)
