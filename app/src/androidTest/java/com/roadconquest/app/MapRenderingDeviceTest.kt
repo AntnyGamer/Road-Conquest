@@ -76,7 +76,10 @@ class MapRenderingDeviceTest {
                             val buttons = (0 until column.childCount).count { column.getChildAt(it) is android.widget.Button }
                             val selected = TripHistoryActivity::class.java.getDeclaredField("selectedTrip")
                                 .apply { isAccessible = true }.get(activity) as? com.roadconquest.app.data.SavedTrip
-                            matches = buttons == count && (selectedPoints == null || selected?.pointCount == selectedPoints)
+                            val slider = TripHistoryActivity::class.java.getDeclaredField("seek")
+                                .apply { isAccessible = true }.get(activity) as android.widget.SeekBar
+                            matches = buttons == count && (selectedPoints == null ||
+                                selected?.pointCount == selectedPoints && slider.isEnabled)
                         }
                         if (!matches) SystemClock.sleep(50)
                     }
@@ -88,6 +91,7 @@ class MapRenderingDeviceTest {
                         .apply { isAccessible = true }.get(activity) as android.widget.LinearLayout
                     (column.getChildAt(1) as android.widget.Button).performClick()
                 }
+                awaitTrips(1, selectedPoints = 2)
                 scenario.moveToState(Lifecycle.State.CREATED)
                 // Grow the selected drive and add another while the Trips screen is hidden.
                 repository.insertLocations(listOf(fix(firstTime + 20_000), fix(firstTime + 2_000_000), fix(firstTime + 2_010_000)))
@@ -107,6 +111,19 @@ class MapRenderingDeviceTest {
                     val mode = TripHistoryActivity::class.java.getDeclaredField("replayMode")
                         .apply { isAccessible = true }.get(activity)
                     assertEquals("Returning applies the current appearance", MapMode.NIGHT, mode)
+                    val slider = TripHistoryActivity::class.java.getDeclaredField("seek")
+                        .apply { isAccessible = true }.get(activity) as android.widget.SeekBar
+                    slider.progress = 625
+                }
+                scenario.recreate()
+                awaitTrips(2, selectedPoints = 3)
+                scenario.onActivity { activity ->
+                    val slider = TripHistoryActivity::class.java.getDeclaredField("seek")
+                        .apply { isAccessible = true }.get(activity) as android.widget.SeekBar
+                    assertEquals("Rotation keeps the replay position", 625, slider.progress)
+                    val selected = TripHistoryActivity::class.java.getDeclaredField("selectedTripButton")
+                        .apply { isAccessible = true }.get(activity) as android.widget.Button
+                    assertTrue("Rotation keeps the selected drive highlighted", selected.isSelected)
                 }
             }
         } finally { Prefs.setMapMode(app, originalMode); repository.clearHistory() }
