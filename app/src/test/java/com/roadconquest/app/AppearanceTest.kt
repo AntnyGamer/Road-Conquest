@@ -296,6 +296,9 @@ class AppearanceTest {
             activity.findViewById<Button>(R.id.termsOfServiceButton).performClick()
             assertEquals("https://roadconquest-api.22abongiovanni.workers.dev/terms",
                 shadowOf(activity).nextStartedActivity.data.toString())
+            activity.findViewById<Button>(R.id.websiteButton).performClick()
+            assertEquals("https://roadconquest-api.22abongiovanni.workers.dev/",
+                shadowOf(activity).nextStartedActivity.data.toString())
             assertEquals("Delete local data", activity.findViewById<Button>(R.id.deleteDeviceDataButton).text.toString())
         } finally { controller.pause().stop().destroy() }
     }
