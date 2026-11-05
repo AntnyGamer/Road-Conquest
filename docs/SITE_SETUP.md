@@ -1,45 +1,36 @@
-# Road Conquest website and legal pages
+# Road Conquest site — GitHub Pages only
 
-The static marketing site is hosted on Render from `docs/`. Its legal links point exclusively to Road Conquest's canonical Cloudflare account Worker; the older Render privacy page is a redirect.
+This `docs/` folder contains the complete static marketing and legal website:
+- `index.html` — landing page
+- `privacy.html` — full privacy policy, adapted from the app's current privacy policy
+- `terms.html` — full terms of service
+- `app-ads.txt` — exact AdMob seller record
+- `favicon.svg`, `robots.txt`, and `.nojekyll` — supporting files
 
-## URLs
+No Cloudflare or Render service is required to **serve these public static pages**. Road Conquest's *app* still uses Cloudflare and Neon for accounts, map services, and account deletion; these APIs must **not** be deleted.
 
-- Website (Render): https://road-conquest-antnygamer.onrender.com/
-- **Canonical Privacy Policy** (Cloudflare): https://roadconquest-api.22abongiovanni.workers.dev/privacy
-- **Canonical Terms of Service** (Cloudflare, requires Worker deployment): https://roadconquest-api.22abongiovanni.workers.dev/terms
-- AdMob sellers file on Render (LIVE): https://road-conquest-antnygamer.onrender.com/app-ads.txt
-- AdMob sellers file on Cloudflare (requires Worker deployment): https://roadconquest-api.22abongiovanni.workers.dev/app-ads.txt
+## Root-domain requirement for AdMob
 
-The Google Play listing's **Privacy Policy** field should use the Cloudflare Privacy Policy URL, while **Developer website** should use the Render marketing URL. These are different Play Console fields. Do not use the GitHub Pages project path for the developer website: it does not serve `app-ads.txt` at the hostname root. These Play Console values must be changed in Play Console separately; a GitHub change cannot update them.
+The existing repository is `AntnyGamer/Road-Conquest`. A normal project Pages site would have the URL `https://antnygamer.github.io/Road-Conquest/` and serve `app-ads.txt` under `/Road-Conquest/`. **AdMob looks at the hostname root**, which means it instead checks `https://antnygamer.github.io/app-ads.txt`; a file in the project subdirectory is insufficient.
 
-## Cloudflare publishing
+**Publish this static website as a GitHub *user site***:
+1. Create a **public** GitHub repository named **`AntnyGamer.github.io`** in the `AntnyGamer` account (must match username exactly). This repository does not currently exist and cannot be created through the available GitHub connector actions.
+2. Copy the files in this `docs/` folder into the **root of that user-site repository**. The accompanying GitHub Action "Export GitHub Pages website" creates a downloadable ZIP artifact containing these root-ready files.
+3. In the new user-site repository's **Settings → Pages**, enable **Deploy from a branch**, using `main` and `/(root)`.
+4. Verify the three URLs return HTTP 200 (not a GitHub 404):
+   - `https://antnygamer.github.io/`
+   - `https://antnygamer.github.io/privacy.html`
+   - `https://antnygamer.github.io/terms.html`
+   - `https://antnygamer.github.io/app-ads.txt`
+5. **Only after verifying all live URLs**, use Play Console to set the *developer website* to `https://antnygamer.github.io/` and the *privacy-policy URL* to `https://antnygamer.github.io/privacy.html`, then request an AdMob recheck.
+6. After the new site is confirmed live, Android Settings should link to `https://antnygamer.github.io/privacy.html` and `https://antnygamer.github.io/terms.html`. Those source changes are staged on the website PR and should not be released until the pages exist.
 
-The existing `roadconquest-api` Worker is the public ingress for the Neon account API. The `server/worker/ingress.mjs` route serves `/terms` and `/app-ads.txt` directly without relying on the Neon function or database. The Terms HTML and exact AdMob seller line are stored in `server/worker/legal-pages.mjs`.
+AdMob may require a custom domain if it refuses GitHub's `github.io` domain. Never claim verification is complete until AdMob confirms it.
 
-The code change does **not** deploy the live Worker. From an authenticated Cloudflare Wrangler environment, use the existing deployment process:
+## Temporary live services and cleanup
 
-```sh
-npm --prefix server ci --ignore-scripts --no-audit --no-fund
-npm --prefix server run build:ingress
-npx wrangler deploy --config server/worker/wrangler-public.jsonc
-```
+The current marketing website on Render and public legal routes on the account backend should **not** be disabled until GitHub Pages works and Google Play and AdMob have switched to it. Rendering this static site does not require them. Render account service deletion and GitHub repository creation are not available through the current connected management actions; do not report either as completed.
 
-**Important:** `server/worker/wrangler-public.jsonc` explicitly targets `roadconquest-api`, the Worker name shown in the public hostname. The older `wrangler.jsonc` targets a DIFFERENT name (`roadconquest-ingress`); use the public config for this address. Verify the Cloudflare account and worker identity before deploying. Preserve `API_ORIGIN`, `RATE_LIMIT_IP_SIGNATURE_KEY`, and all other deployed secrets/configuration. After deployment, verify `/privacy`, `/terms`, `/app-ads.txt`, and authenticated API endpoints. Build artifacts and local repositories do not automatically update Cloudflare.
+## Keep production backends untouched
 
-## AdMob
-
-The exact line supplied by the app publisher is:
-
-```text
-google.com, pub-4489303482171969, DIRECT, f08c47fec0942fa0
-```
-
-AdMob crawls `app-ads.txt` at the host in Google Play's developer website field, not the Privacy Policy URL. The Render root file above is publicly reachable over HTTPS and is the recommended verification location; the multi-level `workers.dev` API hostname might not be treated as the root by AdMob's subdomain crawler. After changing the Play listing, use **Check for updates** in AdMob and inspect the exact domain its diagnostics report.
-
-## GitHub Pages (optional alternative)
-
-The workflow `.github/workflows/road-conquest-site.yml` also supports Pages. Enable GitHub Actions as the Pages source at https://github.com/AntnyGamer/Road-Conquest/settings/pages before attempting Pages publication. The marketing site and app-ads.txt are deployed independently to Render from the website branch.
-
-## Maintenance
-
-Android Settings opens the canonical Cloudflare legal pages regardless of custom account API build overrides. Keep `server/worker/legal-pages.mjs` updated when Terms change and `server/src/application.mjs` updated when privacy practices change; the Cloudflare `/privacy` route is still proxied to the existing Neon application. The static `docs/terms.html` is only a fallback copy.
+Cloudflare's account and map worker endpoints and the Neon account backend are part of Road Conquest's operational infrastructure, not GitHub Pages. Do not delete them, remove their Android endpoint configuration, or modify their secrets as part of a website-hosting change. The existing account deletion form remains part of the backend and is linked for that function.
