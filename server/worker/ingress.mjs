@@ -1,5 +1,4 @@
 import { createHmacSigner } from './hmac.mjs';
-import { APP_ADS_TXT, TERMS_HTML } from './legal-pages.mjs';
 
 const revision = typeof __ROADCONQUEST_INGRESS_REVISION__ === 'undefined' ? null : __ROADCONQUEST_INGRESS_REVISION__;
 const INGRESS_INFO = Object.freeze({ ok: true, service: 'account-ingress',
@@ -74,21 +73,6 @@ export function createAccountIngress(upstreamFetch = fetch, now = () => Date.now
       return new Response(request.method === 'HEAD' ? null : JSON.stringify(INGRESS_INFO), {
         headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }
       });
-    }
-    // Keep legal terms and seller declarations available even when the account
-    // backend is unconfigured or down. Only public, read-only HTTPS requests match.
-    if (incoming.protocol === 'https:' && (request.method === 'GET' || request.method === 'HEAD')) {
-      const isTerms = incoming.pathname === '/terms';
-      const isAds = incoming.pathname === '/app-ads.txt';
-      if (isTerms || isAds) {
-        const headers = {
-          'Content-Type': isTerms ? 'text/html; charset=utf-8' : 'text/plain; charset=utf-8',
-          'Cache-Control': 'public, max-age=3600',
-          'X-Content-Type-Options': 'nosniff'
-        };
-        if (isTerms) headers['Content-Security-Policy'] = "default-src 'none'; style-src 'unsafe-inline'; img-src https://road-conquest-antnygamer.onrender.com; base-uri 'none'; form-action 'none'";
-        return new Response(request.method === 'HEAD' ? null : (isTerms ? TERMS_HTML : APP_ADS_TXT), { status: 200, headers });
-      }
     }
     const originConfig = configuredOrigin(env?.API_ORIGIN);
     const key = env?.RATE_LIMIT_IP_SIGNATURE_KEY;
