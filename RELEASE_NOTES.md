@@ -1,27 +1,24 @@
 # Road Conquest 1.0.3
 
-Website migration and Android edge-to-edge theme cleanup.
+## Changes since the published 1.0.2 release
 
-## Changes since 1.0.2
+- **Website and legal links:** The app's Settings links for the Road Conquest website, Privacy Policy and Terms of Service now open `https://roadconquest.pages.dev/`. The website and its `app-ads.txt` were already published on Cloudflare Pages in the separately merged PR #138; version 1.0.3 is the first planned Android release containing those updated links.
+- **Existing app compatibility:** The Cloudflare account and map service Worker addresses are unchanged, so previously installed versions can continue using their original endpoints. The new website does not replace either backend service.
+- **System-bar theme cleanup:** Remove six deprecated `android:statusBarColor` and `android:navigationBarColor` items from the light, gold and dark themes. Keep existing AndroidX edge-to-edge setup, insets handling and light/dark system-bar icon configuration. This change alone does not guarantee that every edge-to-edge warning in Google Play Console disappears.
 
-- **New public website:** Road Conquest's homepage, Privacy Policy, Terms of Service and `app-ads.txt` are hosted at `https://roadconquest.pages.dev/` through Cloudflare Pages. Website and legal links in Android Settings use the new domain.
-- **Older versions stay functional:** The existing Cloudflare account API and map Workers retain their original addresses for previously installed app versions.
-- **Cleaner edge-to-edge themes:** Remove six obsolete `android:statusBarColor` and `android:navigationBarColor` theme items while retaining AndroidX edge-to-edge and inset handling.
-- **No backend data migration:** Road Conquest continues using its existing Neon account backend and Cloudflare map services.
+**Compatibility:** No database or account migration, no changes to backup formats, application ID, signing identity, minimum Android version or account/map service URLs.
 
-**Build:** Android `versionName` **1.0.3**, `versionCode` **100**, Android 12+ (API 31). Application ID and signing identity remain unchanged.
+**Build:** Android `versionName` **1.0.3**, `versionCode` **100**, Android 12+ (API 31).
 
-**Release tag:** `v1.0.3`. Publication is pending PR approval, merge, and successful release checks.
+**Release tag:** `v1.0.3`. GitHub release publication requires an approved merge to `main`, passing required checks and working release-signing credentials. Uploading the Play App Bundle to Google Play is a separate step.
 
 ---
 
-## Previous release notes
-
-# Road Conquest 1.0.2
+## Road Conquest 1.0.2
 
 Tracking, road-reward, export, and service-efficiency fixes.
 
-## Changes since 1.0.1
+### Changes since 1.0.1
 
 - **More reliable tracking and place discovery:** A failed optional municipal discovery enqueue no longer stops tracking after a driving fix has been saved. Delayed discovery and matched-road work preserve GPS history and existing verification rules.
 - **Correct road rewards:** Newly discovered roads receive their points even when connecting road segments merge previously counted road groups. Rewards remain atomic with the geometry transaction; retrying or rolling back cannot duplicate points.
