@@ -24,8 +24,9 @@ The static site includes:
 - `terms.html` — full Terms of Service
 - `app-ads.txt` — exact AdMob seller line
 - `favicon.svg` — icon traced from the app's own launcher vector
-- `_redirects` — /privacy and /terms aliases
 - `_headers`, `robots.txt`, `.nojekyll` — static-hosting metadata
+
+Cloudflare Pages automatically routes `/privacy` to `privacy.html` and `/terms` to `terms.html`. **Do not add explicit redirects from `/privacy` to `/privacy.html` or `/terms` to `/terms.html`:** Cloudflare canonicalizes extensionless URLs and the combination causes an infinite redirect loop.
 
 ## Only switch after verification
 
