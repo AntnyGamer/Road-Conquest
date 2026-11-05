@@ -28,6 +28,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import com.roadconquest.app.data.SavedTrip
 import com.roadconquest.app.data.SavedTripPoint
+import com.roadconquest.app.data.SavedTripInsights
 import com.roadconquest.app.data.TripHistoryRepository
 import com.roadconquest.app.data.TripReplayRoute
 import com.roadconquest.app.util.Appearance
@@ -82,6 +83,9 @@ class TripHistoryActivity : Activity() {
     private var replayProgress: TextView? = null
     private var selectedTripButton: Button? = null
     private var selectedTrip: SavedTrip? = null
+    private data class ReplaySelection(val firstId: Long, val startedAt: Long, val position: Int)
+    private var pendingReplaySelection: ReplaySelection? = null
+    private var replayPosition = 0
     private var shareSummaryReady = false
     private var insightsText: TextView? = null
     private var shareButton: Button? = null
@@ -139,6 +143,10 @@ class TripHistoryActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         setTheme(Appearance.themeRes(this))
         super.onCreate(savedInstanceState)
+        savedInstanceState?.takeIf { it.containsKey("replayFirstId") }?.let { state ->
+            pendingReplaySelection = ReplaySelection(state.getLong("replayFirstId"),
+                state.getLong("replayStartedAt"), state.getInt("replayPosition").coerceIn(0, 1000))
+        }
         savedInstanceState?.takeIf { it.containsKey("pendingGpxFirstId") }?.let { state ->
             pendingGpxTrip = SavedTrip(
                 firstId = state.getLong("pendingGpxFirstId"),
@@ -225,6 +233,7 @@ class TripHistoryActivity : Activity() {
             isEnabled = false
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(bar: SeekBar, progress: Int, fromUser: Boolean) {
+                    replayPosition = progress
                     showPosition(progress)
                 }
                 override fun onStartTrackingTouch(bar: SeekBar) { pauseReplay() }
@@ -380,7 +389,14 @@ class TripHistoryActivity : Activity() {
                     selectedTripButton = null
                     selectedTrip?.let { selected ->
                         val updated = trips.firstOrNull { it.firstId == selected.firstId }
-                        if (updated != null && updated != selected) loadTrip(updated)
+                        if (updated != null && updated != selected) loadTrip(updated, replayPosition)
+                    }
+                    pendingReplaySelection?.let { saved ->
+                        pendingReplaySelection = null
+                        // Resolve against current history rather than restoring cached GPS or
+                        // trusting IDs that a reset/restore may have assigned to another drive.
+                        trips.firstOrNull { it.firstId == saved.firstId && it.startedAt == saved.startedAt }
+                            ?.let { loadTrip(it, saved.position) }
                     }
                     if (trips.isEmpty()) {
                         column.addView(TextView(this@TripHistoryActivity).apply {
@@ -449,14 +465,30 @@ class TripHistoryActivity : Activity() {
 
     private fun refreshHistoryIfChanged() {
         val check = ++historyCheckGeneration
+        val trip = selectedTrip
+        val selectionGeneration = generation
         worker.execute {
-            val latest = runCatching { TripHistoryRepository(applicationContext).latestPointId() }
+            val result = runCatching {
+                val history = TripHistoryRepository(applicationContext)
+                history.latestPointId() to trip?.let(history::insights)
+            }
             runOnUiThread {
-                if (!isDestroyed && resumed && check == historyCheckGeneration &&
-                    latest.getOrNull()?.let { it != listedThroughPointId } == true
-                ) refreshTripList()
+                if (isDestroyed || !resumed || check != historyCheckGeneration) return@runOnUiThread
+                result.onSuccess { (latest, insights) ->
+                    if (latest != listedThroughPointId) refreshTripList()
+                    // Matching and town discovery change these counts without appending
+                    // a GPS fix. Refresh them even when the trip list itself is unchanged.
+                    if (insights != null && selectedTrip == trip && generation == selectionGeneration &&
+                        shareSummaryReady) showInsights(insights)
+                }
             }
         }
+    }
+
+    private fun showInsights(insights: SavedTripInsights) {
+        insightsText?.text = String.format(Locale.getDefault(),
+            "New roads (est.): %,d • Towns: %,d • Tiles: %,d\n%,d GPS points awaiting matching. Older tiles without visit dates are excluded.",
+            insights.newRoadGroups, insights.newTowns, insights.newTiles, insights.pendingFixes)
     }
 
     private fun isTripSafeToShare(trip: SavedTrip): Boolean {
@@ -576,8 +608,9 @@ class TripHistoryActivity : Activity() {
         }, "GpxExport").start()
     }
 
-    private fun loadTrip(trip: SavedTrip) {
+    private fun loadTrip(trip: SavedTrip, position: Int = 0) {
         pauseReplay()
+        pendingReplaySelection = null
         selectedTrip = trip
         shareSummaryReady = false
         refreshVipControls()
@@ -586,6 +619,7 @@ class TripHistoryActivity : Activity() {
         // Clear the previous drive immediately; never show its track or marker
         // while the next drive is loading or if loading fails.
         resetReplayDisplay()
+        replayPosition = position.coerceIn(0, 1000)
         routeStatus?.text = getString(R.string.ui_loading_drive)
         replayProgress?.text = getString(R.string.ui_loading_drive)
         worker.execute {
@@ -599,10 +633,7 @@ class TripHistoryActivity : Activity() {
             runOnUiThread {
                 if (isDestroyed || expected != generation) return@runOnUiThread
                 result.fold({ (loaded, insights) ->
-                    insightsText?.text = String.format(Locale.getDefault(),
-                        "New roads (est.): %,d • Towns: %,d • Tiles: %,d\n%,d GPS points awaiting matching. Older tiles without visit dates are excluded.",
-                        insights.newRoadGroups, insights.newTowns, insights.newTiles, insights.pendingFixes
-                    )
+                    showInsights(insights)
                     shareSummaryReady = loaded.size >= 2
                     refreshVipControls()
                     points = loaded
@@ -613,7 +644,7 @@ class TripHistoryActivity : Activity() {
                     lastRenderedIndex = -1
                     seek?.isEnabled = loaded.size >= 2
                     playButton?.isEnabled = loaded.size >= 2
-                    seek?.progress = 0
+                    seek?.progress = replayPosition
                     routeStatus?.text = if (loaded.size < 2) "Drive unavailable."
                         else String.format(Locale.getDefault(),
                             "%s • %d min • %d recorded fixes",
@@ -739,6 +770,13 @@ class TripHistoryActivity : Activity() {
     override fun onStop() { ForegroundSession.app.onStop(isChangingConfigurations); mapView?.onStop(); super.onStop() }
     override fun onLowMemory() { super.onLowMemory(); mapView?.onLowMemory() }
     override fun onSaveInstanceState(out: Bundle) {
+        val replay = selectedTrip?.let { ReplaySelection(it.firstId, it.startedAt, replayPosition) }
+            ?: pendingReplaySelection
+        replay?.let {
+            out.putLong("replayFirstId", it.firstId)
+            out.putLong("replayStartedAt", it.startedAt)
+            out.putInt("replayPosition", it.position)
+        }
         pendingGpxTrip?.let { trip ->
             out.putLong("pendingGpxFirstId", trip.firstId)
             out.putLong("pendingGpxLastId", trip.lastId)
