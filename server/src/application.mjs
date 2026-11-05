@@ -22,7 +22,6 @@ import { createNotifications, createFcmSender } from "./notifications.mjs";
 import { createRequestMaintenance } from "./maintenance.mjs";
 import { RATE_LIMIT_SQL, RATE_LIMIT_PAIR_SQL, RATE_LIMIT_SESSION_SQL, RATE_LIMIT_PROFILE_SQL, RATE_LIMIT_LOGOUT_SQL, LOGIN_WITH_USER_SQL } from "./rate-limits.mjs";
 import { EvidenceError } from './scoring.mjs';
-import { TERMS_HTML, APP_ADS_TXT } from '../worker/legal-pages.mjs';
 
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -284,17 +283,6 @@ async function handle(req, res) {
     return send(res, 400, { error: "HTTPS required" });
   }
 
-  if (req.method === "GET" && url.pathname === "/terms") return sendHtml(res, 200, TERMS_HTML);
-  if ((req.method === "GET" || req.method === "HEAD") && url.pathname === "/app-ads.txt") {
-    res.writeHead(200, {
-      "Content-Type": "text/plain; charset=utf-8",
-      "Content-Length": Buffer.byteLength(APP_ADS_TXT),
-      "Cache-Control": "public, max-age=3600",
-      "X-Content-Type-Options": "nosniff"
-    });
-    res.end(req.method === "HEAD" ? undefined : APP_ADS_TXT);
-    return;
-  }
   if (req.method === "GET" && url.pathname === "/privacy") return sendHtml(res, 200, PRIVACY_HTML);
   if (req.method === "GET" && url.pathname === "/delete-account") return sendHtml(res, 200, DELETE_ACCOUNT_HTML);
   if (req.method === "GET" && url.pathname === "/v1/competition") {
