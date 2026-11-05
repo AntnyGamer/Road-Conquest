@@ -430,7 +430,7 @@ class SettingsActivity : Activity() {
         ViewCompat.requestApplyInsets(root)
     }
 
-    private fun openLegalPage(path: String) = openWebPage("https://roadconquest-api.22abongiovanni.workers.dev$path")
+    private fun openLegalPage(path: String) = openWebPage(getString(R.string.road_conquest_website_url).trimEnd('/') + path)
 
     private fun openWebPage(url: String) {
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).addCategory(Intent.CATEGORY_BROWSABLE)
