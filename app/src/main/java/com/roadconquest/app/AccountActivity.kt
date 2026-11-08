@@ -488,8 +488,9 @@ class AccountActivity : Activity() {
                     429 -> "Too many login attempts. Please try again later."
                     400 -> "Account request was rejected. Check your details or app version."
                     404 -> "Account service endpoint not found. Update Road Conquest."
-                    in 500..599 -> "Road Conquest server error (HTTP $status). Please try again later."
-                    else -> "Account request failed" +
+                    else -> if (status != null && status in 500..599)
+                        "Road Conquest server error (HTTP $status). Please try again later."
+                    else "Account request failed" +
                         (status?.let { " (HTTP $it)" } ?: ": ${error.message ?: "unknown error"}") +
                         ". Please try again."
                 }
