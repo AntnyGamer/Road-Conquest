@@ -24,6 +24,7 @@ import com.roadconquest.app.account.AccountClient
 import com.roadconquest.app.account.AccountStore
 import com.roadconquest.app.util.Appearance
 import com.roadconquest.app.util.ForegroundSession
+import java.io.IOException
 import java.util.concurrent.Executors
 
 class AccountActivity : Activity() {
@@ -50,7 +51,8 @@ class AccountActivity : Activity() {
             render(session)
             statusText.text = when {
                 session != null -> "Signed in."
-                intent.getBooleanExtra(EXTRA_AUTHENTICATION_FAILED, false) -> "Account request failed. Try again."
+                intent.getBooleanExtra(EXTRA_AUTHENTICATION_FAILED, false) ->
+                    intent.getStringExtra(EXTRA_AUTHENTICATION_MESSAGE) ?: "Account request failed. Try again."
                 else -> "Signed out."
             }
             // A completed onboarding sign-in must still return to the map when
@@ -180,7 +182,9 @@ class AccountActivity : Activity() {
                 runCatching {
                     app.sendBroadcast(Intent(ACTION_SESSION_CHANGED)
                         .setPackage(app.packageName)
-                        .putExtra(EXTRA_AUTHENTICATION_FAILED, true))
+                        .putExtra(EXTRA_AUTHENTICATION_FAILED, true)
+                        .putExtra(EXTRA_AUTHENTICATION_MESSAGE,
+                            authenticationFailureMessage(result.exceptionOrNull()!!, signup)))
                 }
             }
             runOnUiThread {
@@ -199,7 +203,7 @@ class AccountActivity : Activity() {
                         }
                     },
                     onFailure = {
-                        statusText.text = it.message ?: "Account request failed."
+                        statusText.text = authenticationFailureMessage(it, signup)
                         // A newer request from another account screen may still be running.
                         setAuthEnabled(!AccountStore.isAuthenticating())
                     }
@@ -471,5 +475,32 @@ class AccountActivity : Activity() {
         private val USERNAME = Regex("[A-Za-z0-9_]{3,24}")
         private const val ACTION_SESSION_CHANGED = "com.roadconquest.app.ACCOUNT_SESSION_CHANGED"
         private const val EXTRA_AUTHENTICATION_FAILED = "com.roadconquest.app.AUTHENTICATION_FAILED"
+        private const val EXTRA_AUTHENTICATION_MESSAGE = "com.roadconquest.app.AUTHENTICATION_MESSAGE"
+
+        /** Keep credentials errors separate from connectivity/server failures, including after rotation. */
+        internal fun authenticationFailureMessage(error: Throwable, signup: Boolean): String {
+            if (error is AccountClient.ApiException) {
+                return when (val status = error.status) {
+                    401 -> if (signup) "Account creation was rejected. Try again."
+                           else "Incorrect username or password."
+                    409 -> if (signup) "That username is already taken."
+                           else "Account request conflicted with the server. Try again."
+                    429 -> "Too many login attempts. Please try again later."
+                    400 -> "Account request was rejected. Check your details or app version."
+                    404 -> "Account service endpoint not found. Update Road Conquest."
+                    in 500..599 -> "Road Conquest server error (HTTP $status). Please try again later."
+                    else -> "Account request failed" +
+                        (status?.let { " (HTTP $it)" } ?: ": ${error.message ?: "unknown error"}") +
+                        ". Please try again."
+                }
+            }
+            return when (error) {
+                is IOException -> "Network error: Could not contact the account server. Check your connection and try again."
+                is IllegalStateException -> if (error.message == "Could not persist account session")
+                    "Sign-in succeeded, but the session could not be saved on this device."
+                    else "Unexpected account error. Please try again."
+                else -> "Unexpected account error. Please try again."
+            }
+        }
     }
 }
