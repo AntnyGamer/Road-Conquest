@@ -199,16 +199,22 @@ internal object PlacePopulationLookup {
                 connection.disconnect()
             }
         }
-        if (value != null) synchronized(cacheLock) {
-            if (startedAtGeneration == cacheGeneration) {
-                cached.putIfAbsent(identity, value)
-                if (census && value.source == "2020 Census") {
-                    context.applicationContext.getSharedPreferences(CENSUS_CACHE, Context.MODE_PRIVATE)
-                        .edit().putLong(identity, value.count).apply()
-                }
-            }
+        // A reset while this HTTP request was in flight invalidates its result
+        // for the caller as well as both caches. Otherwise the old place card
+        // could display cleared population after Delete all data.
+        return value?.let { acceptLookupResult(context, identity, census, it, startedAtGeneration) }
+    }
+
+    internal fun acceptLookupResult(
+        context: Context, identity: String, census: Boolean, value: Value, startedAtGeneration: Long
+    ): Value? = synchronized(cacheLock) {
+        if (startedAtGeneration != cacheGeneration) return@synchronized null
+        cached.putIfAbsent(identity, value)
+        if (census && value.source == "2020 Census") {
+            context.applicationContext.getSharedPreferences(CENSUS_CACHE, Context.MODE_PRIVATE)
+                .edit().putLong(identity, value.count).apply()
         }
-        return value
+        value
     }
 
     internal fun parseResponse(request: Request, body: String): Value? {
