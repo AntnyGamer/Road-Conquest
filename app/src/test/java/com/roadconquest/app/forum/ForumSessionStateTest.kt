@@ -24,6 +24,25 @@ class ForumSessionStateTest {
         assertFalse(state.claimPurchase("account-b", "signed-out-receipt"))
     }
 
+    @Test fun accountSwitchDiscardsStalePurchaseTicketsAndAllowsFreshRestoreAfterReturn() {
+        val state = ForumSessionState()
+        assertFalse(state.switchTo("first-session"))
+        assertTrue(state.claimPurchase("first-session", "play-purchase"))
+        assertFalse(state.claimPurchase("first-session", "play-purchase"))
+        assertTrue(state.switchTo("second-session"))
+        assertFalse(state.claimPurchase("first-session", "play-purchase"))
+        assertTrue(state.claimPurchase("second-session", "play-purchase"))
+        assertTrue(state.switchTo("first-session"))
+        // A callback for an old session can arrive late after account changes.
+        state.finishPurchase("second-session", "play-purchase")
+        assertTrue(state.claimPurchase("first-session", "play-purchase"))
+        assertFalse(state.claimPurchase("first-session", "play-purchase"))
+        assertTrue(state.switchTo(null))
+        assertFalse(state.claimPurchase("first-session", "play-purchase"))
+        assertTrue(state.switchTo("first-session"))
+        assertTrue(state.claimPurchase("first-session", "play-purchase"))
+    }
+
     @Test fun savedComposerDraftIsRestoredOnlyToTheSameSession() {
         val firstOwner = ForumSessionState.draftOwner("first-account-token")
         assertNotNull(firstOwner)
