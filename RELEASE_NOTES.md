@@ -8,6 +8,8 @@
 - **Lower background overhead:** Avoid redundant distance-preference reads and map-budget cache lookups. Reuse permitted friend actions; retained dynamically sized SQL updates for future map quota changes.
 - **Forum Plus account switching:** Discard pending Play purchase verification tickets from the previous account session so returning users can retry without waiting for an obsolete result.
 - **Data-reset race:** Reject a population service response that completes after Delete all data, rather than displaying or caching pre-reset information.
+- **Population reset/cache consistency:** Guard in-memory population cache hits with the same generation lock as Delete all data; a stale reader cannot reuse another generation’s cached result.
+- **Country population accuracy:** Reject malformed, quoted, negative or fractional population values rather than silently rounding or coercing external API data.
 - **Precise GPS ordering:** Reject a location fix that is even a fraction of a millisecond older than the newest accepted fix; retain same-time accuracy preference and ordinary newer-fix behavior.
 - **Malformed GPS speed uncertainty:** Ignore impossible negative speed-accuracy readings rather than treating them as reliable driving speed. Keep valid measured speed and stop readings unchanged.
 - **Failed restore safety:** If an already-validated temporary backup preview was deleted or reclaimed before confirmation, reject the restore before changing tracking mode, pausing the service, revoking verified-driving consent, or producing a recovery file.
