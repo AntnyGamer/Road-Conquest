@@ -425,6 +425,32 @@ class DataImporterTest {
         }
     }
 
+    @Test fun temporaryRecoveryDirectoryCannotChangeTrackingOrConsent() {
+        val tracker = TrackingRepository(context)
+        tracker.insertLocation(fix(1_000_000))
+        val backup = prepareFixture(context, ByteArrayInputStream(export()))
+        val blocked = java.io.File(context.filesDir, "before-restore.tmp.zip")
+        assertFalse(blocked.exists())
+        assertTrue(blocked.mkdir())
+        Prefs.setManualOnly(context, false)
+        Prefs.setTrackingPaused(context, true)
+        Prefs.setDriveVerificationEnabled(context, true)
+        try {
+            val result = runCatching { DataImporter.restore(context, backup) }
+            assertTrue(result.isFailure)
+            assertEquals(1L, TrackingRepository(context).getSummary().trackPointCount)
+            assertFalse(Prefs.isManualOnly(context))
+            assertTrue(Prefs.isTrackingPaused(context))
+            assertTrue(Prefs.isDriveVerificationEnabled(context))
+            assertTrue(blocked.isDirectory)
+        } finally {
+            backup.close()
+            Prefs.setTrackingPaused(context, false)
+            Prefs.setDriveVerificationEnabled(context, false)
+            blocked.delete()
+        }
+    }
+
     @Test fun restoringRebuildsAnExhaustedGpsIdCounterAndAllowsFutureDriving() {
         val originalId = TrackingRepository(context).insertLocation(fix(1_000_000))
         val bytes = export()
