@@ -14,6 +14,13 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31], manifest = Config.NONE)
 class TownOverlayPartitionTest {
+    @Test fun emptyClippedAndAuthoritativeBordersHaveTheSameEmptyCollection() {
+        val expected = """{"type":"FeatureCollection","features":[]}"""
+        assertEquals(expected, TownOverlayPartition.authoritativeOutlines(emptyList()))
+        assertEquals(expected, TownOverlayPartition.render(emptyList()).outlines)
+        assertEquals(expected, TownOverlayPartition.renderOfficialUs(emptyList()).outlines)
+    }
+
     @Test fun mixedCensusLayerDetectionAgreesWithFullSetConstruction() {
         // Preserve the exact prior mapNotNull(...).toSet().size > 1 decision.
         val keys = listOf("us|nj|census-4-1234567", "us|nj|census-3-2345678",
