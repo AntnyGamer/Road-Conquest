@@ -60,10 +60,11 @@ object Prefs {
         prefs(context).edit().putBoolean("keep_map_screen_awake", enabled).apply()
     }
 
-    fun distanceUnits(context: Context): DistanceUnitPreference =
-        DistanceUnitPreference.entries.firstOrNull {
-            it.name == prefs(context).getString("distance_units", null)
-        } ?: DistanceUnitPreference.AUTOMATIC
+    fun distanceUnits(context: Context): DistanceUnitPreference {
+        val saved = prefs(context).getString("distance_units", null)
+        return DistanceUnitPreference.entries.firstOrNull { it.name == saved }
+            ?: DistanceUnitPreference.AUTOMATIC
+    }
 
     fun setDistanceUnits(context: Context, value: DistanceUnitPreference) {
         prefs(context).edit().putString("distance_units", value.name).apply()
