@@ -7,7 +7,6 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
-import java.time.Instant
 import kotlin.math.*
 
 /** Geoapify's contract is independent of the network provider. No API key is embedded in Android. */
@@ -44,17 +43,8 @@ class GeoapifyMatcher(
                 it.longitude.isFinite() && it.longitude in -180.0..180.0
         }
 
-    private fun payload(points: List<TrackPoint>): String {
-        return JSONObject().put("mode", "drive").put("waypoints", JSONArray().apply {
-            var previous = Long.MIN_VALUE
-            points.forEach { point ->
-                val time = if (previous == Long.MIN_VALUE) point.timestampMillis else maxOf(point.timestampMillis, previous + 1000L)
-                previous = time
-                put(JSONObject().put("location", JSONArray().put(point.longitude).put(point.latitude))
-                    .put("timestamp", Instant.ofEpochMilli(time).toString()))
-            }
-        }).toString()
-    }
+    private fun payload(points: List<TrackPoint>): String =
+        serializeMatchingTrace(points, includeAccuracy = false)
 
     @Synchronized override fun cachedMatch(points: List<TrackPoint>): MatchResult? {
         lastCallUsedNetwork = false
