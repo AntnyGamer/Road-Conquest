@@ -14,6 +14,28 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31], manifest = Config.NONE)
 class TownOverlayPartitionTest {
+    @Test fun mixedCensusLayerDetectionAgreesWithFullSetConstruction() {
+        // Preserve the exact prior mapNotNull(...).toSet().size > 1 decision.
+        val keys = listOf("us|nj|census-4-1234567", "us|nj|census-3-2345678",
+            "us|nj|census-1-3456789012", "us|nj|legacy", "us|nj|census-4-9999999")
+        for (size in 0..5) {
+            for (mask in 0 until (1 shl size)) {
+                val selected = (0 until size).map { i -> if (mask and (1 shl i) != 0) keys[i] else keys[3] }
+                    .mapIndexed { i, key -> town("Place $i", key, 1.0, square(0.0, 0.0, 1.0, 1.0)) }
+                val original = selected.mapNotNull {
+                    when {
+                        "|census-4-" in it.key -> 4
+                        "|census-3-" in it.key -> 3
+                        "|census-1-" in it.key -> 1
+                        else -> null
+                    }
+                }.toSet().size > 1
+                assertEquals("size=$size mask=$mask",
+                    original, TownOverlayPartition.hasMixedOfficialLayers(selected))
+            }
+        }
+    }
+
     @Test fun dateLineRegionsSkipPlanarOverlapClipping() {
         val ordinary = town("Ordinary region", "ordinary", 100.0,
             square(-76.0, 39.0, -74.0, 41.0)).copy(kind = PlaceKind.STATE)
