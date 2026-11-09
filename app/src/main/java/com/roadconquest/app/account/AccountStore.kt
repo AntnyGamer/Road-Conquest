@@ -52,7 +52,10 @@ object AccountStore {
 
     @Synchronized
     fun saveIfLatest(context: Context, generation: Long, session: Session): Boolean {
-        if (generation != sessionGeneration) return false
+        // The generation also remains current after a failed request finishes so its
+        // error can reach a recreated screen. Only an actively pending request may
+        // install a new bearer session; a late/duplicate success must not resurrect it.
+        if (generation != sessionGeneration || pendingAuthentication != generation) return false
         saveInternal(context, session, durable = true)
         return true
     }
