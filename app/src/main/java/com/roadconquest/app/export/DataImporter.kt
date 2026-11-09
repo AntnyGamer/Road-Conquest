@@ -248,6 +248,12 @@ object DataImporter {
             }
         }
         val temporaryBackup = File(app.filesDir, "before-restore.tmp.zip")
+        // A blocked recovery destination cannot be atomically replaced. Detect
+        // directories before stopping the service or revoking user settings;
+        // otherwise this ordinary filesystem failure strands tracking disabled.
+        check(!previousBackup(app).isDirectory && !temporaryBackup.isDirectory) {
+            "Recovery backup destination is not a file"
+        }
         Prefs.setManualOnly(app, true)
         Prefs.setTrackingPaused(app, false)
         Prefs.setDriveVerificationEnabled(app, false)
