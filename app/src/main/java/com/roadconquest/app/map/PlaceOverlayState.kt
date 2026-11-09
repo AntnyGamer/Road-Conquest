@@ -33,7 +33,10 @@ internal class OverlayBoundsCache(
     private val bounds = HashMap<PlaceOverlayData, OverlayViewport?>()
 
     fun get(place: PlaceOverlayData): OverlayViewport? {
-        if (bounds.containsKey(place)) return bounds[place]
+        // Most cached shapes have valid bounds: use one HashMap lookup instead
+        // of containsKey + get. Still remember null for malformed/date-line shapes.
+        val existing = bounds[place]
+        if (existing != null || bounds.containsKey(place)) return existing
         return readBounds(place.geometryJson).also { bounds[place] = it }
     }
 
