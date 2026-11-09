@@ -184,9 +184,6 @@ class TripHistoryRepository(context: Context) {
             // potentially slow Android cloud document provider.
             val writer = BufferedWriter(OutputStreamWriter(output, StandardCharsets.UTF_8), 32 * 1024)
             val pointLine = StringBuilder(160)
-            // Reuse this buffer instead of allocating a separate String for each GPX point.
-            // Exceptionally long lines retain the existing safe String-writing fallback.
-            val pointChars = CharArray(192)
             writer.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
             writer.write("<gpx version=\"1.1\" creator=\"Road Conquest\" xmlns=\"http://www.topografix.com/GPX/1/1\">\n<trk><name>Road Conquest drive</name>\n")
             snapshot.rawQuery(
@@ -215,10 +212,7 @@ class TripHistoryRepository(context: Context) {
                         .append("\" lon=\"").append(lon).append("\"><time>")
                         .append(formatter.format(Instant.ofEpochMilli(timestamp)))
                         .append("</time></trkpt>\n")
-                    if (pointLine.length <= pointChars.size) {
-                        pointLine.getChars(0, pointLine.length, pointChars, 0)
-                        writer.write(pointChars, 0, pointLine.length)
-                    } else writer.write(pointLine.toString())
+                    writer.write(pointLine.toString())
                     previousTimestamp = timestamp
                     written++
                 }
