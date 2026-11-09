@@ -1,14 +1,5 @@
 const DAY = 86_400_000;
 const USAGE_TABLE = 'CREATE TABLE IF NOT EXISTS usage (day TEXT, bucket TEXT, used INTEGER NOT NULL, PRIMARY KEY(day,bucket)) WITHOUT ROWID';
-// Reservation writes have exactly three rows for tiles or five for matching.
-// Keep both SQL statements stable instead of recreating placeholder arrays and
-// concatenating the same query string on every request.
-const usageUpsertSql = count =>
-  'INSERT INTO usage(day,bucket,used) VALUES' + Array(count).fill('(?,?,?)').join(',') + ' ' +
-    "ON CONFLICT(day,bucket) DO UPDATE SET used = CASE WHEN excluded.bucket = 'next-slot' " +
-    'THEN excluded.used ELSE used + excluded.used END';
-const USAGE_UPSERT_TILES = usageUpsertSql(3);
-const USAGE_UPSERT_MATCHING = usageUpsertSql(5);
 const json = (body, status = 200, extra = {}) => Response.json(body, {
   status, headers: { 'Cache-Control': 'no-store', ...extra }
 });
@@ -150,7 +141,11 @@ export class MapBudget {
     const values = [day, 'units:all', costUnits, day, 'units:' + bucket, costUnits,
       day, 'next-slot', slot + spacingMs];
     if (attemptId) values.push(day, 'attempts:all', 1, day, 'attempts:' + bucket, 1);
-    this.sql.exec(attemptId ? USAGE_UPSERT_MATCHING : USAGE_UPSERT_TILES, ...values);
+    this.sql.exec(
+      'INSERT INTO usage(day,bucket,used) VALUES' + Array(values.length / 3).fill('(?,?,?)').join(',') + ' ' +
+        "ON CONFLICT(day,bucket) DO UPDATE SET used = CASE WHEN excluded.bucket = 'next-slot' " +
+        'THEN excluded.used ELSE used + excluded.used END',
+      ...values);
     for (let i = 0; i < values.length; i += 3) {
       const key = values[i + 1], added = values[i + 2];
       remember(this.counterCache, key, key === 'next-slot' ? added : used(key) + added, 1024);
