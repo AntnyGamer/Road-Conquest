@@ -12,6 +12,17 @@ class AdMobConfigurationTest {
         assertEquals("ca-app-pub-3940256099942544/5224354917", BuildConfig.ADMOB_REWARDED_ID)
     }
 
+    @Test fun failedRequiredConsentFormRetriesOnlyWhenNoConsentIsAvailable() {
+        org.junit.Assert.assertTrue(shouldRetryConsentAfterFormError(
+            hadError = true, canRequestAds = false))
+        org.junit.Assert.assertFalse(shouldRetryConsentAfterFormError(
+            hadError = true, canRequestAds = true))
+        org.junit.Assert.assertFalse(shouldRetryConsentAfterFormError(
+            hadError = false, canRequestAds = false))
+        org.junit.Assert.assertFalse(shouldRetryConsentAfterFormError(
+            hadError = false, canRequestAds = true))
+    }
+
     @Test fun mobileAdsAndUserMessagingSdkAreBothPackaged() {
         // loadClass does not initialize Android services or request ads during a JVM test.
         val loader = javaClass.classLoader
