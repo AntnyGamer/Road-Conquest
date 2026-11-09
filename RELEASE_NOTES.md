@@ -3,7 +3,7 @@
 ## Changes since published 1.0.3
 
 - **Clear account errors:** Sign-in distinguishes incorrect username/password, network failures, server errors, temporary rate limits and local session-persistence failures. Prevent stale authentication responses from overwriting later sign-in actions, and preserve the useful message after screen recreation. No account, password, or server-schema migrations.
-- **Trip history and GPX:** Reduce per-fix allocations during replay and reuse a GPX output buffer while preserving route breaks, timestamps, privacy cutoffs, and byte-for-byte export output.
+- **Trip history and GPX:** Reduce per-fix boxing during replay and simplify GPX segment-break checks, retaining Android 12 compatibility, route breaks, timestamps, privacy cutoffs, and byte-for-byte export output.
 - **Faster map bookkeeping:** Cache constant fog-grid row limits; avoid repeated town-boundary cache lookups; detect the need for Census layer partitioning without allocating intermediate collections. Authoritative municipal boundaries and exploration scoring are unchanged.
 - **Lower background overhead:** Avoid redundant distance-preference reads and map-budget cache lookups. Reuse permitted friend actions; retained dynamically sized SQL updates for future map quota changes.
 - **AdMob and consent verification:** Keep Google Mobile Ads SDK 25.5.0 and Google UMP SDK 4.0.0. Preserve debug/test IDs and production release IDs, and verify release App ID, Advertising ID permission, and SDK integration in CI. Consent messages themselves must be created and published separately in AdMob Privacy & messaging.

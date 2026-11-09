@@ -106,8 +106,10 @@ export class MapBudget {
     const counters = new Map();
     const missing = [];
     for (const key of keys) {
-      if (this.counterCache.has(key)) counters.set(key,
-        remember(this.counterCache, key, this.counterCache.get(key), 1024));
+      // All cached counters are numbers (including zero): one lookup is
+      // enough to distinguish cached values from a missing balance.
+      const balance = this.counterCache.get(key);
+      if (balance !== undefined) counters.set(key, remember(this.counterCache, key, balance, 1024));
       else missing.push(key);
     }
     const used = key => counters.get(key) || 0;
