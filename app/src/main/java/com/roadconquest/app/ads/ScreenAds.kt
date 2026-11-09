@@ -187,7 +187,13 @@ class ScreenAds(
         formPending = false
         formShowing = true
         UserMessagingPlatform.loadAndShowConsentFormIfRequired(activity) { error ->
+            // A failed required form without cached permission must not leave
+            // consentRequested latched forever. Retry the full consent refresh
+            // once while visible, or on the next foreground visit if paused.
+            val retryConsent = shouldRetryConsentAfterFormError(error != null, consent.canRequestAds())
+            if (retryConsent) consentRequested = false
             completeConsentForm(error != null)
+            if (retryConsent) retryOnce()
         }
     }
 
@@ -454,3 +460,7 @@ private object AdSdk {
         return future
     }
 }
+
+/** Only failed required forms with no usable cached consent need another consent request. */
+internal fun shouldRetryConsentAfterFormError(hadError: Boolean, canRequestAds: Boolean): Boolean =
+    hadError && !canRequestAds
