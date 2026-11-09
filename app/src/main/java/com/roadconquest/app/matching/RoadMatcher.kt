@@ -26,6 +26,17 @@ internal fun serializeMatchingTrace(points: List<TrackPoint>, includeAccuracy: B
         }
     }).toString()
 
+/** Gateway matching endpoints share their retry/error classification. */
+internal fun matchingGatewayUnavailable(status: Int, gatewayError: String?): Boolean =
+    status == 401 || status == 403 || status == 429 ||
+        status >= 500 || status in 300..399 ||
+        (status == 409 && gatewayError == "budget_conflict")
+
+/** Common GPS coordinate checks; LocationIQ additionally requires accurate fixes. */
+internal fun TrackPoint.validMatchingCoordinates(): Boolean =
+    latitude.isFinite() && latitude in -90.0..90.0 &&
+        longitude.isFinite() && longitude in -180.0..180.0
+
 interface RoadMatcher {
     fun match(points: List<TrackPoint>): MatchResult?
     /** Context can include deferred unmatched fixes; only these IDs are eligible work. */
