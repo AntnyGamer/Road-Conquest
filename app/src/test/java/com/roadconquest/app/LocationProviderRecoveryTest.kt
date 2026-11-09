@@ -99,6 +99,31 @@ abstract class LocationProviderRecoverySuite {
             }, latest))
     }
 
+    @Test fun invalidSpeedAccuracyCannotBeUsedAsDrivingEvidence() {
+        val fix = Location("gps").apply {
+            speed = 11f
+            speedAccuracyMetersPerSecond = -0.5f
+        }
+        assertTrue(fix.hasSpeed())
+        assertTrue(fix.hasSpeedAccuracy())
+        assertNull("Negative uncertainty is invalid metadata, not a precise reading",
+            LocationProviders.measuredSpeedOrNull(fix))
+        assertEquals(0f, LocationProviders.reliableMeasuredSpeed(fix), 0f)
+
+        fix.speedAccuracyMetersPerSecond = Float.NaN
+        assertNull(LocationProviders.measuredSpeedOrNull(fix))
+        fix.speedAccuracyMetersPerSecond = 4.1f
+        assertNull(LocationProviders.measuredSpeedOrNull(fix))
+
+        // Known and well-calibrated readings still work; stopped = 0 is distinct
+        // from missing speed data, and the supported threshold is unchanged.
+        fix.speedAccuracyMetersPerSecond = 4f
+        assertEquals(11f, LocationProviders.measuredSpeedOrNull(fix)!!, 0f)
+        fix.speed = 0f
+        fix.speedAccuracyMetersPerSecond = 0f
+        assertEquals(0f, LocationProviders.measuredSpeedOrNull(fix)!!, 0f)
+    }
+
     @Test fun disablingGpsFallsBackToAvailableNetworkProvider() {
         val app = RuntimeEnvironment.getApplication()
         Shadows.shadowOf(app).grantPermissions(Manifest.permission.ACCESS_FINE_LOCATION)
