@@ -146,6 +146,34 @@ class TownCompletionTest {
         assertEquals(0, engine.calculate(town(), 2L to 5L) { _, _, _, _ -> doubleArrayOf() }!!.percent)
     }
 
+    @Test fun boundedTownShapeCacheStillEvictsLeastRecentlyUsedGeometry() {
+        fun shape(index: Int): String {
+            val west = -74.0 + index * 0.01
+            return JSONObject().put("type", "Polygon")
+                .put("coordinates", JSONArray().put(ring(west, 40.0, west + 0.005, 40.005)))
+                .toString()
+        }
+        val engine = TownCompletion()
+        val revision = 11L to 23L
+        val firstShape = shape(0)
+        assertEquals(0, engine.calculate(firstShape, revision) { _, _, _, _ ->
+            doubleArrayOf()
+        }!!.percent)
+        for (index in 1..32) {
+            assertNotNull(engine.calculate(shape(index), revision) { _, _, _, _ ->
+                doubleArrayOf()
+            })
+        }
+        // The 32 newest entries retain their prior revision and result.
+        assertEquals(0, engine.calculate(shape(32), revision) { _, _, _, _ ->
+            error("Latest geometry must remain cached")
+        }!!.percent)
+        // The first entry must be recomputed, proving it was evicted at 33.
+        assertNull(engine.calculate(firstShape, revision) { _, _, _, _ ->
+            error("The oldest geometry must have been evicted")
+        })
+    }
+
     @Test fun malformedBoundariesDoNotInventProgress() {
         assertNull(TownCompletion().calculate("{}") { _, _, _, _ -> coords(20) })
     }
