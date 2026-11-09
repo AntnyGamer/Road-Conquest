@@ -402,14 +402,24 @@ class DataImporterTest {
         assertTrue(target.mkdir())
         val marker = java.io.File(target, "existing-recovery")
         marker.writeText("preserve")
+        Prefs.setManualOnly(context, false)
+        Prefs.setTrackingPaused(context, true)
+        Prefs.setDriveVerificationEnabled(context, true)
         try {
             prepareFixture(context, ByteArrayInputStream(original)).use { backup ->
-                assertTrue(runCatching { DataImporter.restore(context, backup) }.isFailure)
+                val error = runCatching { DataImporter.restore(context, backup) }.exceptionOrNull()
+                assertNotNull(error)
+                assertTrue(error!!.message.orEmpty().contains("Recovery backup destination"))
             }
             assertEquals(before, entries(export()).filterKeys { it != "metadata.json" })
             assertEquals("preserve", marker.readText())
             assertFalse(java.io.File(context.filesDir, "before-restore.tmp.zip").exists())
+            assertFalse("Blocked recovery target must not change tracking mode", Prefs.isManualOnly(context))
+            assertTrue("Blocked recovery target must retain paused-tracking choice", Prefs.isTrackingPaused(context))
+            assertTrue("Blocked recovery target must retain verification consent", Prefs.isDriveVerificationEnabled(context))
         } finally {
+            Prefs.setTrackingPaused(context, false)
+            Prefs.setDriveVerificationEnabled(context, false)
             marker.delete()
             target.delete()
         }
