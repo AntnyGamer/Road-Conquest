@@ -125,18 +125,7 @@ internal object TownOverlayPartition {
             outlines += candidate.geometry.boundary
         }
 
-        // Node and dissolve coincident shared borders: adjacent towns have only
-        // one thin outline, not doubled/darkened boundary strokes.
-        val lines = JSONArray()
-        if (outlines.isNotEmpty()) {
-            runCatching { collectContinuousBorders(outlines, lines) }
-                .onFailure { lines.removeAll(); outlines.forEach { collectLines(it, lines) } }
-        }
-        val boundaryFeatures = JSONArray()
-        if (lines.length() > 0) {
-            boundaryFeatures.put(borderFeature(lines))
-        }
-        return Result(collection(fills), collection(boundaryFeatures), shown)
+        return Result(collection(fills), borderCollection(outlines), shown)
     }
 
     /**
@@ -148,15 +137,19 @@ internal object TownOverlayPartition {
                 polygonal(GeometryFixer.fix(decode(JSONObject(overlay.geometryJson)))).boundary
             }.getOrNull()?.takeUnless { it.isEmpty }
         }
+        return borderCollection(edges)
+    }
+
+    /** Shared by clipped and authoritative boundaries, including their identical
+     * exact-edge fallback when topology union cannot dissolve a malformed line. */
+    private fun borderCollection(edges: List<Geometry>): String {
         val lines = JSONArray()
         if (edges.isNotEmpty()) {
             runCatching { collectContinuousBorders(edges, lines) }
                 .onFailure { lines.removeAll(); edges.forEach { collectLines(it, lines) } }
         }
         val features = JSONArray()
-        if (lines.length() > 0) {
-            features.put(borderFeature(lines))
-        }
+        if (lines.length() > 0) features.put(borderFeature(lines))
         return collection(features)
     }
 
