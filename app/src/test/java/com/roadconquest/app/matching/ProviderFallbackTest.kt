@@ -28,6 +28,36 @@ class ProviderFallbackTest {
         override fun rateLimitRemainingMs() = cooldown
     }
 
+    @Test fun bothMatchingProvidersShareTheExactOrderedTraceWithoutLeakingAccuracy() {
+        val started = Instant.parse("2026-01-01T07:09:34Z").toEpochMilli()
+        val inputs = listOf(
+            points[0].copy(timestampMillis = started, accuracyMeters = 3f),
+            points[1].copy(timestampMillis = started, accuracyMeters = 7f),
+            points[1].copy(timestampMillis = started + 7_000L, accuracyMeters = 12f)
+        )
+        for (includeAccuracy in listOf(false, true)) {
+            val document = JSONObject(serializeMatchingTrace(inputs, includeAccuracy))
+            assertEquals(2, document.length())
+            assertEquals("drive", document.getString("mode"))
+            val waypoints = document.getJSONArray("waypoints")
+            assertEquals(inputs.size, waypoints.length())
+            val expectedTimes = listOf(started, started + 1000L, started + 7000L)
+            inputs.forEachIndexed { index, point ->
+                val waypoint = waypoints.getJSONObject(index)
+                assertEquals(if (includeAccuracy) 3 else 2, waypoint.length())
+                assertEquals(Instant.ofEpochMilli(expectedTimes[index]).toString(),
+                    waypoint.getString("timestamp"))
+                val coords = waypoint.getJSONArray("location")
+                assertEquals(2, coords.length())
+                assertEquals(point.longitude, coords.getDouble(0), 0.0)
+                assertEquals(point.latitude, coords.getDouble(1), 0.0)
+                assertEquals(includeAccuracy, waypoint.has("accuracyMeters"))
+                if (includeAccuracy) assertEquals(point.accuracyMeters.toDouble(),
+                    waypoint.getDouble("accuracyMeters"), 0.0)
+            }
+        }
+    }
+
     @Test fun cancelledMatchingCannotStartOrFallThroughToAnotherProvider() {
         val first = Fake(unavailable = true)
         val backup = Fake()
