@@ -49,6 +49,11 @@ internal object PlacePopulationLookup {
     }
     @Volatile private var cacheGeneration = 0L
     internal fun generation(): Long = cacheGeneration
+    /** Observe an in-memory hit and its reset epoch atomically. */
+    internal fun cachedIfCurrent(identity: String, expectedGeneration: Long): Value? =
+        synchronized(cacheLock) {
+            cached[identity].takeIf { expectedGeneration == cacheGeneration }
+        }
     private const val CENSUS_CACHE = "roadconquest_census2020_population"
     private fun key(info: PlaceOverlayInfo) = info.kind.name + "|" + info.key
 
@@ -154,7 +159,9 @@ internal object PlacePopulationLookup {
         // A queued request from before Delete all data must not issue a new
         // provider request after the saved-data generation has changed.
         if (startedAtGeneration != cacheGeneration) return null
-        cached[identity]?.let { return it }
+        // The cache can be cleared after the generation check above. Acquire
+        // the same monitor as clearCache so an old hit cannot bypass a reset.
+        cachedIfCurrent(identity, startedAtGeneration)?.let { return it }
         val request = requestFor(info)
         val census = isUnitedStates(info) && request != null
         savedCensus(context, identity, census)?.let { saved ->
