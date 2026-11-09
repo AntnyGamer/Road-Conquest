@@ -201,9 +201,10 @@ class TripHistoryRepository(context: Context) {
                     val lat = cursor.getDouble(0)
                     val lon = cursor.getDouble(1)
                     if (!lat.isFinite() || !lon.isFinite() || lat !in -90.0..90.0 || lon !in -180.0..180.0) continue
-                    if (previousTimestamp == null || timestamp <= previousTimestamp!! ||
-                        timestamp - previousTimestamp!! > 30_000L) {
-                        if (previousTimestamp != null) writer.write("</trkseg>\n")
+                    val previous = previousTimestamp
+                    if (previous == null || timestamp <= previous ||
+                        timestamp - previous > 30_000L) {
+                        if (previous != null) writer.write("</trkseg>\n")
                         writer.write("<trkseg>\n")
                     }
                     pointLine.setLength(0)
