@@ -113,6 +113,21 @@ class PlacePopulationLookupTest {
             """{"cca2":"NO","cca3":"NOR","population":5500000}"""))
     }
 
+    @Test fun foreignPopulationRequiresAnActualWholeNumber() {
+        val request = requireNotNull(PlacePopulationLookup.requestFor(
+            PlaceOverlayInfo("se", "Sweden", PlaceKind.COUNTRY, null, 1.0)))
+        val common = "\"cca2\":\"SE\",\"cca3\":\"SWE\""
+        fun population(value: String) = "{$common,\"population\":$value}"
+        assertEquals(10_500_000L, PlacePopulationLookup.parseResponse(
+            request, population("10500000"))?.count)
+        assertNull("A decimal must not be rounded down", PlacePopulationLookup.parseResponse(
+            request, population("10500000.5")))
+        assertNull("A quoted count is not a JSON number", PlacePopulationLookup.parseResponse(
+            request, population("\"10500000\"")))
+        assertNull(PlacePopulationLookup.parseResponse(request, population("-1")))
+        assertNull(PlacePopulationLookup.parseResponse(request, population("null")))
+    }
+
     @Test fun validatedHistoricalCensusCountCanBeCachedAcrossSessions() {
         val context = RuntimeEnvironment.getApplication()
         val info = PlaceOverlayInfo("us|new jersey|census-4-3428800", "Haddon Heights",
