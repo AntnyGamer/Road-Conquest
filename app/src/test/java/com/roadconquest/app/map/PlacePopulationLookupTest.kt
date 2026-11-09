@@ -162,6 +162,32 @@ class PlacePopulationLookupTest {
         }
     }
 
+    @Test fun oldCachedPopulationCannotCrossADataResetEvenAfterNewResultsArrive() {
+        val app = RuntimeEnvironment.getApplication()
+        val identity = "COUNTRY|se"
+        PlacePopulationLookup.clearCache(app)
+        try {
+            val oldGeneration = PlacePopulationLookup.generation()
+            val before = PlacePopulationLookup.Value(10_000_000, "REST Countries")
+            assertEquals(before, PlacePopulationLookup.acceptLookupResult(
+                app, identity, false, before, oldGeneration))
+            assertEquals(before, PlacePopulationLookup.cachedIfCurrent(identity, oldGeneration))
+
+            // Simulate deleting local progress between the initial generation
+            // check and the in-memory read, then another valid request.
+            PlacePopulationLookup.clearCache(app)
+            val newGeneration = PlacePopulationLookup.generation()
+            val after = PlacePopulationLookup.Value(10_100_000, "REST Countries")
+            assertEquals(after, PlacePopulationLookup.acceptLookupResult(
+                app, identity, false, after, newGeneration))
+            assertNull("A lookup from before deletion must not read the new cache",
+                PlacePopulationLookup.cachedIfCurrent(identity, oldGeneration))
+            assertEquals(after, PlacePopulationLookup.cachedIfCurrent(identity, newGeneration))
+        } finally {
+            PlacePopulationLookup.clearCache(app)
+        }
+    }
+
     @Test fun nonCensusTownNeverGetsAnotherTownPopulation() {
         assertNull(PlacePopulationLookup.requestFor(PlaceOverlayInfo(
             "us|new jersey|haddon heights", "Haddon Heights", PlaceKind.TOWN, null, 3.0)))
