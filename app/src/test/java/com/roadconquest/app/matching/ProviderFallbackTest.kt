@@ -28,6 +28,24 @@ class ProviderFallbackTest {
         override fun rateLimitRemainingMs() = cooldown
     }
 
+    @Test fun sharedMatchingGatewayPostPreservesTransportSettings() {
+        for (endpoint in listOf("/v1/mapmatching", "/v1/locationiq/mapmatching")) {
+            val connection = matchingGatewayConnection("https://example.test/gateway/", endpoint, 1234)
+            try {
+                assertEquals("https://example.test/gateway$endpoint", connection.url.toString())
+                assertEquals("POST", connection.requestMethod)
+                assertFalse(connection.instanceFollowRedirects)
+                assertEquals(8_000, connection.connectTimeout)
+                assertEquals(35_000, connection.readTimeout)
+                assertTrue(connection.doOutput)
+                assertEquals("application/json", connection.getRequestProperty("Content-Type"))
+                assertEquals("application/json", connection.getRequestProperty("Accept"))
+            } finally {
+                connection.disconnect()
+            }
+        }
+    }
+
     @Test fun matchingGatewayFailureRulesKeepTheExistingProviderCooldownPolicy() {
         for (status in listOf(301, 302, 399, 401, 403, 429, 500, 503, 599)) {
             assertTrue("HTTP $status must trigger fallback/cooldown",
