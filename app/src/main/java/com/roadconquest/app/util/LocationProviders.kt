@@ -47,7 +47,7 @@ object LocationProviders {
         if (!location.hasSpeed() || !location.speed.isFinite() || location.speed < 0f) return null
         if (location.hasSpeedAccuracy()) {
             val uncertainty = location.speedAccuracyMetersPerSecond
-            if (!uncertainty.isFinite() || uncertainty > MAX_MEASURED_SPEED_ACCURACY_MPS) return null
+            if (!uncertainty.isFinite() || uncertainty < 0f || uncertainty > MAX_MEASURED_SPEED_ACCURACY_MPS) return null
         }
         return location.speed
     }
