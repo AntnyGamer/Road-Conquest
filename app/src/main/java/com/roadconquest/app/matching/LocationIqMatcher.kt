@@ -29,10 +29,9 @@ class LocationIqMatcher(
     override fun rateLimitRemainingMs() = health.remaining(providerId)
 
     private fun validPoints(points: List<TrackPoint>): Boolean =
-        points.size in 2..maxPoints && points.none {
-            !it.latitude.isFinite() || it.latitude !in -90.0..90.0 ||
-                !it.longitude.isFinite() || it.longitude !in -180.0..180.0 ||
-                !it.accuracyMeters.isFinite() || it.accuracyMeters <= 0f || it.accuracyMeters > 1000f
+        points.size in 2..maxPoints && points.all {
+            it.validMatchingCoordinates() && it.accuracyMeters.isFinite() &&
+                it.accuracyMeters > 0f && it.accuracyMeters <= 1000f
         }
 
     private fun payload(points: List<TrackPoint>): String =
@@ -88,9 +87,7 @@ class LocationIqMatcher(
             val status = connection.responseCode
             if (status !in 200..299) {
                 val errorCode = connection.getHeaderField("X-RoadConquest-Error")
-                unavailable = status == 401 || status == 403 || status == 429 ||
-                    status >= 500 || status in 300..399 ||
-                    (status == 409 && errorCode == "budget_conflict")
+                unavailable = matchingGatewayUnavailable(status, errorCode)
                 if (unavailable) health.failed(providerId, status, connection.getHeaderField("Retry-After"),
                     errorCode)
                 return null
