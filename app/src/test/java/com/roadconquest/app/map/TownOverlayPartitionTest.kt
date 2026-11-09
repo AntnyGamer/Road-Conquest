@@ -254,6 +254,32 @@ class TownOverlayPartitionTest {
         assertEquals(closedResult.outlines, openResult.outlines)
     }
 
+    @Test fun singleAndMultiplePolygonEncodingRetainsGeometryTypesAndHoles() {
+        val single = TownOverlayPartition.render(listOf(
+            town("Single", "single", 1.0, square(0.0, 0.0, 2.0, 2.0))))
+        val singleGeometry = JSONObject(single.fills).getJSONArray("features")
+            .getJSONObject(0).getJSONObject("geometry")
+        assertEquals("Polygon", singleGeometry.getString("type"))
+        assertEquals(1, singleGeometry.getJSONArray("coordinates").length())
+        assertEquals(singleGeometry.toString(), JSONObject(single.shown.single().geometryJson).toString())
+
+        val multiSource = """{"type":"MultiPolygon","coordinates":[
+            [[[0,0],[4,0],[4,4],[0,4],[0,0]],
+             [[1,1],[1,2],[2,2],[2,1],[1,1]]],
+            [[[6,0],[7,0],[7,1],[6,1],[6,0]]]
+        ]}"""
+        val multipart = TownOverlayPartition.render(listOf(
+            town("Islands", "islands", 10.0, multiSource)))
+        val geometry = JSONObject(multipart.fills).getJSONArray("features")
+            .getJSONObject(0).getJSONObject("geometry")
+        assertEquals("MultiPolygon", geometry.getString("type"))
+        val parts = geometry.getJSONArray("coordinates")
+        assertEquals(2, parts.length())
+        assertTrue("The first island must preserve its interior hole",
+            (0 until parts.length()).any { parts.getJSONArray(it).length() == 2 })
+        assertEquals(geometry.toString(), JSONObject(multipart.shown.single().geometryJson).toString())
+    }
+
     @Test fun disjointPolygonsAndTrueInteriorHolesRemainCorrect() {
         val shape = """{"type":"MultiPolygon","coordinates":[
             [[[0,0],[4,0],[4,4],[0,4],[0,0]],
