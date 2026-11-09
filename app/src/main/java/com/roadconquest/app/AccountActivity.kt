@@ -47,6 +47,9 @@ class AccountActivity : Activity() {
     private val sessionReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action != ACTION_SESSION_CHANGED) return
+            // Ignore an old failure broadcast if a newer sign-in, sign-out or account action occurred.
+            if (intent.hasExtra(EXTRA_AUTHENTICATION_GENERATION) &&
+                !AccountStore.isCurrentAuthentication(intent.getLongExtra(EXTRA_AUTHENTICATION_GENERATION, -1L))) return
             val session = AccountStore.load(this@AccountActivity)
             render(session)
             statusText.text = when {
@@ -176,19 +179,22 @@ class AccountActivity : Activity() {
                     session
                 } else null
             }
+            // Classify once for both the current screen and a possible recreated screen.
+            val failureMessage = result.exceptionOrNull()?.let { authenticationFailureMessage(it, signup) }
             // A rotated screen has no original UI callback. Release its disabled
             // form after a failed request, without invalidating a newer login.
-            if (result.isFailure && AccountStore.finishAuthentication(generation)) {
+            if (failureMessage != null && AccountStore.finishAuthentication(generation)) {
                 runCatching {
                     app.sendBroadcast(Intent(ACTION_SESSION_CHANGED)
                         .setPackage(app.packageName)
                         .putExtra(EXTRA_AUTHENTICATION_FAILED, true)
-                        .putExtra(EXTRA_AUTHENTICATION_MESSAGE,
-                            authenticationFailureMessage(result.exceptionOrNull()!!, signup)))
+                        .putExtra(EXTRA_AUTHENTICATION_MESSAGE, failureMessage)
+                        .putExtra(EXTRA_AUTHENTICATION_GENERATION, generation))
                 }
             }
             runOnUiThread {
-                if (isDestroyed) return@runOnUiThread
+                if (isDestroyed || (failureMessage != null &&
+                    !AccountStore.isCurrentAuthentication(generation))) return@runOnUiThread
                 result.fold(
                     onSuccess = { session ->
                         if (session != null && AccountStore.load(this)?.token == session.token) {
@@ -203,7 +209,7 @@ class AccountActivity : Activity() {
                         }
                     },
                     onFailure = {
-                        statusText.text = authenticationFailureMessage(it, signup)
+                        statusText.text = failureMessage ?: "Account request failed. Try again."
                         // A newer request from another account screen may still be running.
                         setAuthEnabled(!AccountStore.isAuthenticating())
                     }
@@ -476,6 +482,7 @@ class AccountActivity : Activity() {
         private const val ACTION_SESSION_CHANGED = "com.roadconquest.app.ACCOUNT_SESSION_CHANGED"
         private const val EXTRA_AUTHENTICATION_FAILED = "com.roadconquest.app.AUTHENTICATION_FAILED"
         private const val EXTRA_AUTHENTICATION_MESSAGE = "com.roadconquest.app.AUTHENTICATION_MESSAGE"
+        private const val EXTRA_AUTHENTICATION_GENERATION = "com.roadconquest.app.AUTHENTICATION_GENERATION"
 
         /** Keep credentials errors separate from connectivity/server failures, including after rotation. */
         internal fun authenticationFailureMessage(error: Throwable, signup: Boolean): String {
