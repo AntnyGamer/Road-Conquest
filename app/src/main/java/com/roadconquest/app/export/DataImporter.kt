@@ -240,6 +240,12 @@ object DataImporter {
             check(helper.historyGeneration == prepared.generation && !Prefs.isDeviceDataDeletionPending(app)) {
                 "Device data changed. Select the backup again"
             }
+            // The preview owns a temporary SQLite database. If its Activity was
+            // closed or Android reclaimed the cache, fail before stopping tracking,
+            // changing verification consent or writing a recovery snapshot.
+            check(prepared.file.isFile && prepared.file.length() > 0L) {
+                "Validated backup preview is no longer available. Select the backup again"
+            }
         }
         val temporaryBackup = File(app.filesDir, "before-restore.tmp.zip")
         Prefs.setManualOnly(app, true)
