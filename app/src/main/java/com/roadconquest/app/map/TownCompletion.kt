@@ -39,19 +39,22 @@ internal class TownCompletion {
     private data class Shape(val geometry: Geometry, val latitude: Double, val longitude: Double,
         var revision: Pair<Long, Long>? = null, var progress: TownCompletionProgress? = null)
     private val shapes = LinkedHashMap<String, Shape>(32, 0.75f, true)
+    private var retainedPoints = 0
 
     private fun shape(json: String): Shape {
         shapes[json]?.let { return it }
         val parsed = readShape(JSONObject(json))
-        // A count-only cache can retain hundreds of huge municipal geometries.
-        // Bound both the number of towns and the actual coordinate workload.
-        if (parsed.geometry.numPoints <= 50_000) {
+        // Account for retained coordinates only when inserting/evicting.
+        // Walking every cached JTS geometry to recompute the same total is
+        // unnecessary when many distinct towns are visited on one drive.
+        val points = parsed.geometry.numPoints
+        if (points <= 50_000) {
             shapes[json] = parsed
-            var points = shapes.values.sumOf { it.geometry.numPoints }
+            retainedPoints += points
             val iterator = shapes.entries.iterator()
-            while (shapes.size > 32 || points > 50_000) {
+            while (shapes.size > 32 || retainedPoints > 50_000) {
                 val oldest = iterator.next()
-                points -= oldest.value.geometry.numPoints
+                retainedPoints -= oldest.value.geometry.numPoints
                 iterator.remove()
             }
         }
