@@ -2,6 +2,29 @@ package com.roadconquest.app.matching
 
 import com.roadconquest.app.BuildConfig
 import com.roadconquest.app.data.TrackPoint
+import org.json.JSONArray
+import org.json.JSONObject
+import java.time.Instant
+
+/**
+ * Both matching gateways use the same ordered GPS trace and one-second
+ * monotonic timestamp adjustment. LocationIQ alone receives accuracyMeters.
+ * Keep the JSON field order and timestamp behavior identical for request caches.
+ */
+internal fun serializeMatchingTrace(points: List<TrackPoint>, includeAccuracy: Boolean): String =
+    JSONObject().put("mode", "drive").put("waypoints", JSONArray().apply {
+        var previous = Long.MIN_VALUE
+        points.forEach { point ->
+            val time = if (previous == Long.MIN_VALUE) point.timestampMillis
+                else maxOf(point.timestampMillis, previous + 1000L)
+            previous = time
+            val waypoint = JSONObject()
+                .put("location", JSONArray().put(point.longitude).put(point.latitude))
+                .put("timestamp", Instant.ofEpochMilli(time).toString())
+            if (includeAccuracy) waypoint.put("accuracyMeters", point.accuracyMeters)
+            put(waypoint)
+        }
+    }).toString()
 
 interface RoadMatcher {
     fun match(points: List<TrackPoint>): MatchResult?
