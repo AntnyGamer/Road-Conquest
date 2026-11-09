@@ -215,15 +215,25 @@ internal object TownOverlayPartition {
     }
 
     private fun encodePolygonal(geometry: Geometry): JSONObject? {
-        val polygons = (0 until geometry.numGeometries)
-            .mapNotNull { geometry.getGeometryN(it) as? Polygon }
-        if (polygons.isEmpty()) return null
-        return if (polygons.size == 1) {
-            JSONObject().put("type", "Polygon").put("coordinates", polygonCoordinates(polygons[0]))
-        } else {
-            val coordinates = JSONArray()
-            polygons.forEach { coordinates.put(polygonCoordinates(it)) }
-            JSONObject().put("type", "MultiPolygon").put("coordinates", coordinates)
+        // The common single-town polygon needs no intermediate list. Promote
+        // to MultiPolygon only upon encountering a second polygon, preserving
+        // the original order and skipping non-polygon components as before.
+        var first: Polygon? = null
+        var multiple: JSONArray? = null
+        for (i in 0 until geometry.numGeometries) {
+            val polygon = geometry.getGeometryN(i) as? Polygon ?: continue
+            if (first == null) {
+                first = polygon
+            } else {
+                val coordinates = multiple ?: JSONArray()
+                    .put(polygonCoordinates(first)).also { multiple = it }
+                coordinates.put(polygonCoordinates(polygon))
+            }
+        }
+        return if (multiple != null) {
+            JSONObject().put("type", "MultiPolygon").put("coordinates", multiple)
+        } else first?.let {
+            JSONObject().put("type", "Polygon").put("coordinates", polygonCoordinates(it))
         }
     }
 
