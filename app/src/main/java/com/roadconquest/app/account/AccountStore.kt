@@ -38,6 +38,10 @@ object AccountStore {
     @Synchronized
     fun isAuthenticating(): Boolean = pendingAuthentication == sessionGeneration
 
+    /** Ignore delayed login UI callbacks from superseded requests. */
+    @Synchronized
+    fun isCurrentAuthentication(generation: Long): Boolean = generation == sessionGeneration
+
     /** Release a failed request only if a newer account action has not replaced it. */
     @Synchronized
     fun finishAuthentication(generation: Long): Boolean {
