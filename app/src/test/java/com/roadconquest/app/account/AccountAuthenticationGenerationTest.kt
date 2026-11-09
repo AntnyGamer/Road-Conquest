@@ -20,6 +20,19 @@ class AccountAuthenticationGenerationTest {
         assertFalse(AccountStore.isAuthenticating())
     }
 
+    @Test fun oldFailureCannotOverwriteLaterAccountActions() {
+        val obsolete = AccountStore.beginAuthentication()
+        val latest = AccountStore.beginAuthentication()
+        assertFalse(AccountStore.isCurrentAuthentication(obsolete))
+        assertTrue(AccountStore.isCurrentAuthentication(latest))
+        assertFalse(AccountStore.finishAuthentication(obsolete))
+        assertTrue(AccountStore.finishAuthentication(latest))
+        // The latest failure is still displayable after its pending state was released.
+        assertTrue(AccountStore.isCurrentAuthentication(latest))
+        AccountStore.clear(RuntimeEnvironment.getApplication())
+        assertFalse(AccountStore.isCurrentAuthentication(latest))
+    }
+
     @Test fun olderSuccessfulResponseCannotReplaceNewerAuthentication() {
         val staleRequest = AccountStore.beginAuthentication()
         AccountStore.beginAuthentication()
