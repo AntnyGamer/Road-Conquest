@@ -85,6 +85,21 @@ class TownCompletionTest {
         assertTrue(PlaceGeometry.contains(geometry, progress.latitude, progress.longitude))
     }
 
+    @Test fun multiPartTownAnchorStillChoosesLargestDisconnectedPolygon() {
+        val large = JSONObject(town(2))
+        val distantCenter = FogGrid.center(first.copy(column = first.column + 12))
+        val distant = FogGrid.corners(distantCenter.first, distantCenter.second)
+        val small = JSONArray().put(ring(distant[1], distant[4], distant[3], distant[0]))
+        val multi = JSONObject().put("type", "MultiPolygon").put(
+            "coordinates", JSONArray().put(large.getJSONArray("coordinates")).put(small))
+        val anchor = requireNotNull(TownCompletion().anchor(multi.toString()))
+        assertTrue("The medal must stay in the largest piece",
+            PlaceGeometry.contains(large, anchor.first, anchor.second))
+        val progress = requireNotNull(TownCompletion().calculate(multi.toString()) { _, _, _, _ -> coords(2) })
+        assertTrue(PlaceGeometry.contains(large, progress.latitude, progress.longitude))
+        assertTrue("The distant piece must still count toward total area", progress.percent in 65..67)
+    }
+
     @Test fun visualTownPartitionPreservesOriginalCompletionAndSuppliesAVisibleAnchor() {
         val engine = TownCompletion()
         val original = requireNotNull(engine.calculate(town(4)) { _, _, _, _ -> coords(1) })
