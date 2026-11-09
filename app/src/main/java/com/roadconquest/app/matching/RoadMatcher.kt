@@ -5,6 +5,8 @@ import com.roadconquest.app.data.TrackPoint
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.Instant
+import java.net.HttpURLConnection
+import java.net.URL
 
 /**
  * Both matching gateways use the same ordered GPS trace and one-second
@@ -25,6 +27,20 @@ internal fun serializeMatchingTrace(points: List<TrackPoint>, includeAccuracy: B
             put(waypoint)
         }
     }).toString()
+
+/** Identical private gateway POST configuration for both road-matching providers. */
+internal fun matchingGatewayConnection(origin: String, endpoint: String, payloadSize: Int): HttpURLConnection =
+    (URL(origin.trimEnd('/') + endpoint).openConnection() as HttpURLConnection).apply {
+        requestMethod = "POST"
+        instanceFollowRedirects = false
+        connectTimeout = 8_000
+        // Gateway may queue for 10s before the bounded 20s upstream call.
+        readTimeout = 35_000
+        doOutput = true
+        setRequestProperty("Content-Type", "application/json")
+        setRequestProperty("Accept", "application/json")
+        setFixedLengthStreamingMode(payloadSize)
+    }
 
 /** Gateway matching endpoints share their retry/error classification. */
 internal fun matchingGatewayUnavailable(status: Int, gatewayError: String?): Boolean =
