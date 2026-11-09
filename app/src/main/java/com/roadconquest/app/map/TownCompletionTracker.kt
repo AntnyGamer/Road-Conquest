@@ -34,12 +34,12 @@ internal object TownCompletionTracker {
         // snapshot() already counted persisted tiles under historyLock. New tiles
         // can only append within this generation; the next snapshot catches them.
         // Reuse that count instead of issuing another COUNT on every UI refresh.
-        val state = history to snapshot.tilesUnlocked
-        val next = Revision(database, state.first, state.second,
+        val next = Revision(database, history, snapshot.tilesUnlocked,
             PlaceOverlayCache.contentRevision(), snapshot.towns)
-        // Nothing remains to scan until tiles, history, towns or boundaries change.
-        // Avoid repository allocations and their history-lock reads on idle refreshes.
+        // Idle refreshes do not need a tile-revision Pair or repositories;
+        // construct them only when there is actual completion work to scan.
         if (next == revision && remaining == 0) return false
+        val state = history to snapshot.tilesUnlocked
         val tracking = TrackingRepository(context)
         val progression = ProgressionRepository(context)
         if (next != revision) {
