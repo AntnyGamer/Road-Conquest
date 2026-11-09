@@ -140,6 +140,28 @@ class PlacePopulationLookupTest {
         }
     }
 
+    @Test fun clearingDataDiscardsAnOlderSuccessfulPopulationResponse() {
+        val context = RuntimeEnvironment.getApplication()
+        val town = PlaceOverlayInfo("us|new jersey|census-4-3428800", "Haddon Heights",
+            PlaceKind.TOWN, null, 3.0)
+        val identity = town.kind.name + "|" + town.key
+        val value = PlacePopulationLookup.Value(7495, "2020 Census")
+        PlacePopulationLookup.clearCache(context)
+        try {
+            val requestGeneration = PlacePopulationLookup.generation()
+            PlacePopulationLookup.clearCache(context)
+            assertNull("A pre-reset network response must not reach the old place card",
+                PlacePopulationLookup.acceptLookupResult(context, identity, true, value, requestGeneration))
+            assertNull("A pre-reset response must not repopulate persistent history",
+                PlacePopulationLookup.savedCensus(context, town))
+            assertEquals(value, PlacePopulationLookup.acceptLookupResult(
+                context, identity, true, value, PlacePopulationLookup.generation()))
+            assertEquals(value, PlacePopulationLookup.savedCensus(context, town))
+        } finally {
+            PlacePopulationLookup.clearCache(context)
+        }
+    }
+
     @Test fun nonCensusTownNeverGetsAnotherTownPopulation() {
         assertNull(PlacePopulationLookup.requestFor(PlaceOverlayInfo(
             "us|new jersey|haddon heights", "Haddon Heights", PlaceKind.TOWN, null, 3.0)))
