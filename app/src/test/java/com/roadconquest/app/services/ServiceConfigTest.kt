@@ -10,6 +10,17 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31, 37], manifest = Config.NONE, application = Application::class)
 class ServiceConfigTest {
+    @Test fun missingOrExpiredConfigurationUsesDefaultsWithoutDecoding() {
+        val valid = """{"version":1,"providers":{"openfreemap":false}}"""
+        assertTrue(ServiceConfig.cachedValues(null, 0L).isEmpty())
+        assertTrue(ServiceConfig.cachedValues("", 0L).isEmpty())
+        assertTrue(ServiceConfig.cachedValues(null, 86_400_000L).isEmpty())
+        assertTrue(ServiceConfig.cachedValues(valid, -1L).isEmpty())
+        assertTrue(ServiceConfig.cachedValues(valid, 86_400_001L).isEmpty())
+        assertEquals(false, ServiceConfig.cachedValues(valid, 86_400_000L)["openfreemap"])
+        assertEquals(false, ServiceConfig.cachedValues(valid, 0L)["openfreemap"])
+    }
+
     @Test fun numericVersionMatchesTheGatewayContractWithoutCoercion() {
         val normal = ServiceConfig.parse("""{"version":1,"providers":{"openfreemap":false}}""")
         assertEquals(false, normal["openfreemap"])

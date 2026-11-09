@@ -14,6 +14,35 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [31], manifest = Config.NONE)
 class TownOverlayPartitionTest {
+    @Test fun emptyClippedAndAuthoritativeBordersHaveTheSameEmptyCollection() {
+        val expected = """{"type":"FeatureCollection","features":[]}"""
+        assertEquals(expected, TownOverlayPartition.authoritativeOutlines(emptyList()))
+        assertEquals(expected, TownOverlayPartition.render(emptyList()).outlines)
+        assertEquals(expected, TownOverlayPartition.renderOfficialUs(emptyList()).outlines)
+    }
+
+    @Test fun mixedCensusLayerDetectionAgreesWithFullSetConstruction() {
+        // Preserve the exact prior mapNotNull(...).toSet().size > 1 decision.
+        val keys = listOf("us|nj|census-4-1234567", "us|nj|census-3-2345678",
+            "us|nj|census-1-3456789012", "us|nj|legacy", "us|nj|census-4-9999999")
+        for (size in 0..5) {
+            for (mask in 0 until (1 shl size)) {
+                val selected = (0 until size).map { i -> if (mask and (1 shl i) != 0) keys[i] else keys[3] }
+                    .mapIndexed { i, key -> town("Place $i", key, 1.0, square(0.0, 0.0, 1.0, 1.0)) }
+                val original = selected.mapNotNull {
+                    when {
+                        "|census-4-" in it.key -> 4
+                        "|census-3-" in it.key -> 3
+                        "|census-1-" in it.key -> 1
+                        else -> null
+                    }
+                }.toSet().size > 1
+                assertEquals("size=$size mask=$mask",
+                    original, TownOverlayPartition.hasMixedOfficialLayers(selected))
+            }
+        }
+    }
+
     @Test fun dateLineRegionsSkipPlanarOverlapClipping() {
         val ordinary = town("Ordinary region", "ordinary", 100.0,
             square(-76.0, 39.0, -74.0, 41.0)).copy(kind = PlaceKind.STATE)
@@ -223,6 +252,32 @@ class TownOverlayPartitionTest {
         val closedResult = TownOverlayPartition.render(listOf(town("Open", "open", 16.0, closed)))
         assertEquals(closedResult.fills, openResult.fills)
         assertEquals(closedResult.outlines, openResult.outlines)
+    }
+
+    @Test fun singleAndMultiplePolygonEncodingRetainsGeometryTypesAndHoles() {
+        val single = TownOverlayPartition.render(listOf(
+            town("Single", "single", 1.0, square(0.0, 0.0, 2.0, 2.0))))
+        val singleGeometry = JSONObject(single.fills).getJSONArray("features")
+            .getJSONObject(0).getJSONObject("geometry")
+        assertEquals("Polygon", singleGeometry.getString("type"))
+        assertEquals(1, singleGeometry.getJSONArray("coordinates").length())
+        assertEquals(singleGeometry.toString(), JSONObject(single.shown.single().geometryJson).toString())
+
+        val multiSource = """{"type":"MultiPolygon","coordinates":[
+            [[[0,0],[4,0],[4,4],[0,4],[0,0]],
+             [[1,1],[1,2],[2,2],[2,1],[1,1]]],
+            [[[6,0],[7,0],[7,1],[6,1],[6,0]]]
+        ]}"""
+        val multipart = TownOverlayPartition.render(listOf(
+            town("Islands", "islands", 10.0, multiSource)))
+        val geometry = JSONObject(multipart.fills).getJSONArray("features")
+            .getJSONObject(0).getJSONObject("geometry")
+        assertEquals("MultiPolygon", geometry.getString("type"))
+        val parts = geometry.getJSONArray("coordinates")
+        assertEquals(2, parts.length())
+        assertTrue("The first island must preserve its interior hole",
+            (0 until parts.length()).any { parts.getJSONArray(it).length() == 2 })
+        assertEquals(geometry.toString(), JSONObject(multipart.shown.single().geometryJson).toString())
     }
 
     @Test fun disjointPolygonsAndTrueInteriorHolesRemainCorrect() {

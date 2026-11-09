@@ -71,9 +71,15 @@ internal object RoadGrouping {
      * multiplexed refs to the overlap supported by each connected continuation, preventing a
      * shared US-1/US-9 section from transitively merging the routes after they diverge.
      */
-    fun sharedReference(first: Road, second: Road): Boolean =
-        first.referenceKeys.isNotEmpty() && second.referenceKeys.isNotEmpty() &&
-            first.referenceKeys.any(second.referenceKeys::contains)
+    fun sharedReference(first: Road, second: Road): Boolean {
+        if (first.referenceKeys.isEmpty() || second.referenceKeys.isEmpty()) return false
+        // A direct set lookup per ref avoids constructing a bound method
+        // reference while testing many nearby saved road fragments.
+        for (reference in first.referenceKeys) {
+            if (reference in second.referenceKeys) return true
+        }
+        return false
+    }
 
     fun connected(first: Road, second: Road): Boolean {
         val sharedRef = sharedReference(first, second)

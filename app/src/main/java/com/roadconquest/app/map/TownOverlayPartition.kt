@@ -35,6 +35,26 @@ internal object TownOverlayPartition {
     internal fun safeForPlanarRegionPartition(data: List<PlaceOverlayData>): Boolean =
         data.all { OverlayViewport.ofGeometry(it.geometryJson) != null }
 
+
+    /** A second Census boundary layer is the only reason to run official overlap clipping.
+     * Stop at the first different layer without allocating a list and set of every town.
+     */
+    internal fun hasMixedOfficialLayers(data: List<PlaceOverlayData>): Boolean {
+        var firstLayer = 0
+        for (place in data) {
+            val layer = when {
+                "|census-4-" in place.key -> 4
+                "|census-3-" in place.key -> 3
+                "|census-1-" in place.key -> 1
+                else -> 0
+            }
+            if (layer == 0) continue
+            if (firstLayer == 0) firstLayer = layer
+            else if (firstLayer != layer) return true
+        }
+        return false
+    }
+
     fun render(data: List<PlaceOverlayData>): Result = render(data, officialUs = false)
 
     /**
@@ -105,18 +125,7 @@ internal object TownOverlayPartition {
             outlines += candidate.geometry.boundary
         }
 
-        // Node and dissolve coincident shared borders: adjacent towns have only
-        // one thin outline, not doubled/darkened boundary strokes.
-        val lines = JSONArray()
-        if (outlines.isNotEmpty()) {
-            runCatching { collectContinuousBorders(outlines, lines) }
-                .onFailure { lines.removeAll(); outlines.forEach { collectLines(it, lines) } }
-        }
-        val boundaryFeatures = JSONArray()
-        if (lines.length() > 0) {
-            boundaryFeatures.put(borderFeature(lines))
-        }
-        return Result(collection(fills), collection(boundaryFeatures), shown)
+        return Result(collection(fills), borderCollection(outlines), shown)
     }
 
     /**
@@ -128,15 +137,19 @@ internal object TownOverlayPartition {
                 polygonal(GeometryFixer.fix(decode(JSONObject(overlay.geometryJson)))).boundary
             }.getOrNull()?.takeUnless { it.isEmpty }
         }
+        return borderCollection(edges)
+    }
+
+    /** Shared by clipped and authoritative boundaries, including their identical
+     * exact-edge fallback when topology union cannot dissolve a malformed line. */
+    private fun borderCollection(edges: List<Geometry>): String {
         val lines = JSONArray()
         if (edges.isNotEmpty()) {
             runCatching { collectContinuousBorders(edges, lines) }
                 .onFailure { lines.removeAll(); edges.forEach { collectLines(it, lines) } }
         }
         val features = JSONArray()
-        if (lines.length() > 0) {
-            features.put(borderFeature(lines))
-        }
+        if (lines.length() > 0) features.put(borderFeature(lines))
         return collection(features)
     }
 
@@ -188,6 +201,11 @@ internal object TownOverlayPartition {
     }
 
     private fun polygonal(source: Geometry): Geometry {
+        // The common valid single polygon needs no collection or recursive
+        // traversal. Keep the same MultiPolygon result as the general path.
+        if (source is Polygon) return factory.createMultiPolygon(
+            if (!source.isEmpty && source.area > 0.0) arrayOf(source) else emptyArray()
+        )
         val polygons = ArrayList<Polygon>()
         fun flatten(geometry: Geometry) {
             when (geometry) {
@@ -202,15 +220,25 @@ internal object TownOverlayPartition {
     }
 
     private fun encodePolygonal(geometry: Geometry): JSONObject? {
-        val polygons = (0 until geometry.numGeometries)
-            .mapNotNull { geometry.getGeometryN(it) as? Polygon }
-        if (polygons.isEmpty()) return null
-        return if (polygons.size == 1) {
-            JSONObject().put("type", "Polygon").put("coordinates", polygonCoordinates(polygons[0]))
-        } else {
-            val coordinates = JSONArray()
-            polygons.forEach { coordinates.put(polygonCoordinates(it)) }
-            JSONObject().put("type", "MultiPolygon").put("coordinates", coordinates)
+        // The common single-town polygon needs no intermediate list. Promote
+        // to MultiPolygon only upon encountering a second polygon, preserving
+        // the original order and skipping non-polygon components as before.
+        var first: Polygon? = null
+        var multiple: JSONArray? = null
+        for (i in 0 until geometry.numGeometries) {
+            val polygon = geometry.getGeometryN(i) as? Polygon ?: continue
+            if (first == null) {
+                first = polygon
+            } else {
+                val coordinates = multiple ?: JSONArray()
+                    .put(polygonCoordinates(first)).also { multiple = it }
+                coordinates.put(polygonCoordinates(polygon))
+            }
+        }
+        return if (multiple != null) {
+            JSONObject().put("type", "MultiPolygon").put("coordinates", multiple)
+        } else first?.let {
+            JSONObject().put("type", "Polygon").put("coordinates", polygonCoordinates(it))
         }
     }
 

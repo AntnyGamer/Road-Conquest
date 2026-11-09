@@ -20,6 +20,32 @@ class AccountAuthenticationGenerationTest {
         assertFalse(AccountStore.isAuthenticating())
     }
 
+    @Test fun oldFailureCannotOverwriteLaterAccountActions() {
+        val obsolete = AccountStore.beginAuthentication()
+        val latest = AccountStore.beginAuthentication()
+        assertFalse(AccountStore.isCurrentAuthentication(obsolete))
+        assertTrue(AccountStore.isCurrentAuthentication(latest))
+        assertFalse(AccountStore.finishAuthentication(obsolete))
+        assertTrue(AccountStore.finishAuthentication(latest))
+        // The latest failure is still displayable after its pending state was released.
+        assertTrue(AccountStore.isCurrentAuthentication(latest))
+        AccountStore.clear(RuntimeEnvironment.getApplication())
+        assertFalse(AccountStore.isCurrentAuthentication(latest))
+    }
+
+    @Test fun completedFailedAuthenticationCannotPersistALateSuccess() {
+        val context = RuntimeEnvironment.getApplication()
+        val generation = AccountStore.beginAuthentication()
+        assertTrue(AccountStore.finishAuthentication(generation))
+        // Failed requests retain their generation for UI error delivery only.
+        assertTrue(AccountStore.isCurrentAuthentication(generation))
+        assertFalse(AccountStore.isAuthenticating())
+        assertFalse("A finished request must not silently sign in again",
+            AccountStore.saveIfLatest(context, generation,
+                AccountStore.Session("late_user", "late-token", false)))
+        assertFalse(AccountStore.isAuthenticating())
+    }
+
     @Test fun olderSuccessfulResponseCannotReplaceNewerAuthentication() {
         val staleRequest = AccountStore.beginAuthentication()
         AccountStore.beginAuthentication()

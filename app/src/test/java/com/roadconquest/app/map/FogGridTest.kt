@@ -5,6 +5,32 @@ import org.junit.Test
 import kotlin.math.cos
 
 class FogGridTest {
+    @Test fun cachedGlobalRowBoundsPreserveAllNearbyCells() {
+        val latitudeStep = 1609.344 / 111_195.0
+        val firstRow = kotlin.math.floor((90.0 - 85.05112878) / latitudeStep).toInt()
+        val lastRow = kotlin.math.floor((90.0 + 85.05112878) / latitudeStep).toInt()
+        val columns = FogGrid.cell(0.0, 179.999)!!.column + 1
+        fun expected(cell: FogGrid.Cell, radius: Int): List<FogGrid.Cell> = buildList {
+            for (row in (cell.row - radius)..(cell.row + radius)) {
+                if (row !in firstRow..lastRow) continue
+                for (offset in -radius..radius) {
+                    val column = ((cell.column + offset) % columns + columns) % columns
+                    add(FogGrid.Cell(row, column))
+                }
+            }
+        }
+        for (row in listOf(firstRow - 2, firstRow, firstRow + 1,
+            FogGrid.cell(40.0, -75.0)!!.row, lastRow - 1, lastRow, lastRow + 2)) {
+            for (column in listOf(0, 1, columns / 2, columns - 1)) {
+                val cell = FogGrid.Cell(row, column)
+                for (radius in 0..5) {
+                    assertEquals("row=$row column=$column radius=$radius",
+                        expected(cell, radius), FogGrid.neighbors(cell, radius))
+                }
+            }
+        }
+    }
+
     @Test fun competitiveServerFixturesUseTheExistingExplorationGrid() {
         assertEquals("fog-grid-v1", FogGrid.VERSION)
         javaClass.getResourceAsStream("/fog-grid-cells.csv")!!.bufferedReader().useLines { lines ->

@@ -33,6 +33,38 @@ import java.util.concurrent.TimeUnit
 @GraphicsMode(GraphicsMode.Mode.LEGACY)
 @SQLiteMode(SQLiteMode.Mode.LEGACY)
 class AccountActivityTest {
+    @Test fun failedSignInMessagesDistinguishCredentialsNetworkAndServiceErrors() {
+        assertEquals("Incorrect username or password.",
+            AccountActivity.authenticationFailureMessage(
+                AccountClient.ApiException("Invalid username or password.", 401), false))
+        assertEquals("Road Conquest server error (HTTP 503). Please try again later.",
+            AccountActivity.authenticationFailureMessage(
+                AccountClient.ApiException("Request failed.", 503), false))
+        assertEquals("Too many login attempts. Please try again later.",
+            AccountActivity.authenticationFailureMessage(
+                AccountClient.ApiException("Try again later.", 429), false))
+        assertEquals("Network error: Could not contact the account server. Check your connection and try again.",
+            AccountActivity.authenticationFailureMessage(
+                java.net.SocketTimeoutException("private network details"), false))
+        assertEquals("Unexpected account error. Please try again.",
+            AccountActivity.authenticationFailureMessage(IllegalArgumentException("private details"), false))
+    }
+
+    @Test fun failedAccountCreationMessagesDoNotMislabelConflictsAsWrongPasswords() {
+        assertEquals("That username is already taken.",
+            AccountActivity.authenticationFailureMessage(
+                AccountClient.ApiException("Username unavailable.", 409), true))
+        assertEquals("Account creation was rejected. Try again.",
+            AccountActivity.authenticationFailureMessage(
+                AccountClient.ApiException("Rejected", 401), true))
+    }
+
+    @Test fun failedSignInDueToLocalPersistenceIsNotReportedAsWrongPassword() {
+        assertEquals("Sign-in succeeded, but the session could not be saved on this device.",
+            AccountActivity.authenticationFailureMessage(
+                IllegalStateException("Could not persist account session"), false))
+    }
+
     @Before fun clearAccountState() {
         AccountClient.endpointOverrideForTests = ""
         // Config.NONE omits the manifest's signature-only receiver permission.

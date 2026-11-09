@@ -49,6 +49,11 @@ internal object PlacePopulationLookup {
     }
     @Volatile private var cacheGeneration = 0L
     internal fun generation(): Long = cacheGeneration
+    /** Observe an in-memory hit and its reset epoch atomically. */
+    internal fun cachedIfCurrent(identity: String, expectedGeneration: Long): Value? =
+        synchronized(cacheLock) {
+            cached[identity].takeIf { expectedGeneration == cacheGeneration }
+        }
     private const val CENSUS_CACHE = "roadconquest_census2020_population"
     private fun key(info: PlaceOverlayInfo) = info.kind.name + "|" + info.key
 
@@ -154,7 +159,9 @@ internal object PlacePopulationLookup {
         // A queued request from before Delete all data must not issue a new
         // provider request after the saved-data generation has changed.
         if (startedAtGeneration != cacheGeneration) return null
-        cached[identity]?.let { return it }
+        // The cache can be cleared after the generation check above. Acquire
+        // the same monitor as clearCache so an old hit cannot bypass a reset.
+        cachedIfCurrent(identity, startedAtGeneration)?.let { return it }
         val request = requestFor(info)
         val census = isUnitedStates(info) && request != null
         savedCensus(context, identity, census)?.let { saved ->
@@ -199,16 +206,22 @@ internal object PlacePopulationLookup {
                 connection.disconnect()
             }
         }
-        if (value != null) synchronized(cacheLock) {
-            if (startedAtGeneration == cacheGeneration) {
-                cached.putIfAbsent(identity, value)
-                if (census && value.source == "2020 Census") {
-                    context.applicationContext.getSharedPreferences(CENSUS_CACHE, Context.MODE_PRIVATE)
-                        .edit().putLong(identity, value.count).apply()
-                }
-            }
+        // A reset while this HTTP request was in flight invalidates its result
+        // for the caller as well as both caches. Otherwise the old place card
+        // could display cleared population after Delete all data.
+        return value?.let { acceptLookupResult(context, identity, census, it, startedAtGeneration) }
+    }
+
+    internal fun acceptLookupResult(
+        context: Context, identity: String, census: Boolean, value: Value, startedAtGeneration: Long
+    ): Value? = synchronized(cacheLock) {
+        if (startedAtGeneration != cacheGeneration) return@synchronized null
+        cached.putIfAbsent(identity, value)
+        if (census && value.source == "2020 Census") {
+            context.applicationContext.getSharedPreferences(CENSUS_CACHE, Context.MODE_PRIVATE)
+                .edit().putLong(identity, value.count).apply()
         }
-        return value
+        value
     }
 
     internal fun parseResponse(request: Request, body: String): Value? {
@@ -220,8 +233,14 @@ internal object PlacePopulationLookup {
             } else JSONObject(body)
             val code = request.countryCode
             if (code != doc.optString("cca2") && code != doc.optString("cca3")) return null
-            val count = doc.optLong("population", -1)
-            return count.takeIf { it >= 0 }?.let { Value(it, "REST Countries") }
+            // optLong silently truncates decimals and accepts numeric strings.
+            // A population count is only meaningful if the provider supplied an
+            // actual finite, non-negative whole JSON number.
+            val raw = doc.opt("population") as? Number ?: return null
+            val count = raw.toDouble()
+            return count.takeIf { it.isFinite() && it >= 0.0 &&
+                it < Long.MAX_VALUE.toDouble() && it == kotlin.math.floor(it) }
+                ?.let { Value(it.toLong(), "REST Countries") }
         }
 
         val root = JSONObject(body)

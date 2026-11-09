@@ -29,6 +29,27 @@ class TownCompletionTest {
             JSONArray().put(ring(left[1], left[4], right[3], left[0]))).toString()
     }
 
+    @Test fun closedAndUnclosedTownRingsProduceIdenticalProgressAndAnchor() {
+        val geometry = JSONObject(town(2))
+        val center = FogGrid.center(first.copy(column = first.column + 1))
+        val c = FogGrid.corners(center.first, center.second)
+        geometry.getJSONArray("coordinates").put(
+            ring(c[1] + 0.00001, c[4] + 0.00001, c[3] - 0.00001,
+                (c[0] + c[4]) / 2.0))
+        val closed = geometry.toString()
+        val rings = geometry.getJSONArray("coordinates")
+        for (index in 0 until rings.length()) {
+            val polygonRing = rings.getJSONArray(index)
+            polygonRing.remove(polygonRing.length() - 1)
+        }
+        val open = geometry.toString()
+        val points = coords(1)
+        val closedProgress = requireNotNull(TownCompletion().calculate(closed) { _, _, _, _ -> points })
+        val openProgress = requireNotNull(TownCompletion().calculate(open) { _, _, _, _ -> points })
+        assertEquals(closedProgress, openProgress)
+        assertEquals(TownCompletion().anchor(closed), TownCompletion().anchor(open))
+    }
+
     @Test fun exactTileCoverageUnlocksBronzeSilverAndGoldAt100Percent() {
         val engine = TownCompletion()
         for ((tiles, percent, medal) in listOf(
@@ -85,6 +106,21 @@ class TownCompletionTest {
         assertTrue(PlaceGeometry.contains(geometry, progress.latitude, progress.longitude))
     }
 
+    @Test fun multiPartTownAnchorStillChoosesLargestDisconnectedPolygon() {
+        val large = JSONObject(town(2))
+        val distantCenter = FogGrid.center(first.copy(column = first.column + 12))
+        val distant = FogGrid.corners(distantCenter.first, distantCenter.second)
+        val small = JSONArray().put(ring(distant[1], distant[4], distant[3], distant[0]))
+        val multi = JSONObject().put("type", "MultiPolygon").put(
+            "coordinates", JSONArray().put(large.getJSONArray("coordinates")).put(small))
+        val anchor = requireNotNull(TownCompletion().anchor(multi.toString()))
+        assertTrue("The medal must stay in the largest piece",
+            PlaceGeometry.contains(large, anchor.first, anchor.second))
+        val progress = requireNotNull(TownCompletion().calculate(multi.toString()) { _, _, _, _ -> coords(2) })
+        assertTrue(PlaceGeometry.contains(large, progress.latitude, progress.longitude))
+        assertTrue("The distant piece must still count toward total area", progress.percent in 65..67)
+    }
+
     @Test fun visualTownPartitionPreservesOriginalCompletionAndSuppliesAVisibleAnchor() {
         val engine = TownCompletion()
         val original = requireNotNull(engine.calculate(town(4)) { _, _, _, _ -> coords(1) })
@@ -108,6 +144,34 @@ class TownCompletionTest {
         assertEquals(25, engine.calculate(town(), 1L to 5L) { _, _, _, _ -> coords(5) }!!.percent)
         assertEquals(25, engine.calculate(town(), 1L to 5L) { _, _, _, _ -> error("Cached result") }!!.percent)
         assertEquals(0, engine.calculate(town(), 2L to 5L) { _, _, _, _ -> doubleArrayOf() }!!.percent)
+    }
+
+    @Test fun boundedTownShapeCacheStillEvictsLeastRecentlyUsedGeometry() {
+        fun shape(index: Int): String {
+            val west = -74.0 + index * 0.01
+            return JSONObject().put("type", "Polygon")
+                .put("coordinates", JSONArray().put(ring(west, 40.0, west + 0.005, 40.005)))
+                .toString()
+        }
+        val engine = TownCompletion()
+        val revision = 11L to 23L
+        val firstShape = shape(0)
+        assertEquals(0, engine.calculate(firstShape, revision) { _, _, _, _ ->
+            doubleArrayOf()
+        }!!.percent)
+        for (index in 1..32) {
+            assertNotNull(engine.calculate(shape(index), revision) { _, _, _, _ ->
+                doubleArrayOf()
+            })
+        }
+        // The 32 newest entries retain their prior revision and result.
+        assertEquals(0, engine.calculate(shape(32), revision) { _, _, _, _ ->
+            error("Latest geometry must remain cached")
+        }!!.percent)
+        // The first entry must be recomputed, proving it was evicted at 33.
+        assertNull(engine.calculate(firstShape, revision) { _, _, _, _ ->
+            error("The oldest geometry must have been evicted")
+        })
     }
 
     @Test fun malformedBoundariesDoNotInventProgress() {

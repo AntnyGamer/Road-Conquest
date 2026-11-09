@@ -3,11 +3,8 @@ package com.roadconquest.app.matching
 import com.roadconquest.app.data.TrackPoint
 import com.roadconquest.app.services.ProviderHealth
 import com.roadconquest.app.services.readBoundedUtf8
-import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
-import java.net.URL
-import java.time.Instant
 
 /** LocationIQ's OSRM-compatible matching response, through the private-key gateway. */
 class LocationIqMatcher(
@@ -31,23 +28,13 @@ class LocationIqMatcher(
     override fun rateLimitRemainingMs() = health.remaining(providerId)
 
     private fun validPoints(points: List<TrackPoint>): Boolean =
-        points.size in 2..maxPoints && points.none {
-            !it.latitude.isFinite() || it.latitude !in -90.0..90.0 ||
-                !it.longitude.isFinite() || it.longitude !in -180.0..180.0 ||
-                !it.accuracyMeters.isFinite() || it.accuracyMeters <= 0f || it.accuracyMeters > 1000f
+        points.size in 2..maxPoints && points.all {
+            it.validMatchingCoordinates() && it.accuracyMeters.isFinite() &&
+                it.accuracyMeters > 0f && it.accuracyMeters <= 1000f
         }
 
-    private fun payload(points: List<TrackPoint>): String {
-        return JSONObject().put("mode", "drive").put("waypoints", JSONArray().apply {
-            var previous = Long.MIN_VALUE
-            points.forEach { point ->
-                val time = if (previous == Long.MIN_VALUE) point.timestampMillis else maxOf(point.timestampMillis, previous + 1000L)
-                previous = time
-                put(JSONObject().put("location", JSONArray().put(point.longitude).put(point.latitude))
-                    .put("timestamp", Instant.ofEpochMilli(time).toString()).put("accuracyMeters", point.accuracyMeters))
-            }
-        }).toString()
-    }
+    private fun payload(points: List<TrackPoint>): String =
+        serializeMatchingTrace(points, includeAccuracy = true)
 
     @Synchronized override fun cachedMatch(points: List<TrackPoint>): MatchResult? {
         lastCallUsedNetwork = false
@@ -83,25 +70,13 @@ class LocationIqMatcher(
         val payloadBytes = payload.toByteArray(Charsets.UTF_8)
         var connection: HttpURLConnection? = null
         return try {
-            connection = (URL(origin.trimEnd('/') + "/v1/locationiq/mapmatching").openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                instanceFollowRedirects = false
-                connectTimeout = 8000
-                // Gateway may queue for 10 s before its bounded 20 s provider request.
-                readTimeout = 35_000
-                doOutput = true
-                setRequestProperty("Content-Type", "application/json")
-                setRequestProperty("Accept", "application/json")
-                setFixedLengthStreamingMode(payloadBytes.size)
-            }
+            connection = matchingGatewayConnection(origin, "/v1/locationiq/mapmatching", payloadBytes.size)
             lastCallUsedNetwork = true
             connection.outputStream.use { it.write(payloadBytes) }
             val status = connection.responseCode
             if (status !in 200..299) {
                 val errorCode = connection.getHeaderField("X-RoadConquest-Error")
-                unavailable = status == 401 || status == 403 || status == 429 ||
-                    status >= 500 || status in 300..399 ||
-                    (status == 409 && errorCode == "budget_conflict")
+                unavailable = matchingGatewayUnavailable(status, errorCode)
                 if (unavailable) health.failed(providerId, status, connection.getHeaderField("Retry-After"),
                     errorCode)
                 return null

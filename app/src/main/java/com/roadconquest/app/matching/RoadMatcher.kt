@@ -2,6 +2,56 @@ package com.roadconquest.app.matching
 
 import com.roadconquest.app.BuildConfig
 import com.roadconquest.app.data.TrackPoint
+import org.json.JSONArray
+import org.json.JSONObject
+import java.time.Instant
+import java.net.HttpURLConnection
+import java.net.URL
+
+/**
+ * Both matching gateways use the same ordered GPS trace and one-second
+ * monotonic timestamp adjustment. LocationIQ alone receives accuracyMeters.
+ * Keep the JSON field order and timestamp behavior identical for request caches.
+ */
+internal fun serializeMatchingTrace(points: List<TrackPoint>, includeAccuracy: Boolean): String =
+    JSONObject().put("mode", "drive").put("waypoints", JSONArray().apply {
+        var previous = Long.MIN_VALUE
+        points.forEach { point ->
+            val time = if (previous == Long.MIN_VALUE) point.timestampMillis
+                else maxOf(point.timestampMillis, previous + 1000L)
+            previous = time
+            val waypoint = JSONObject()
+                .put("location", JSONArray().put(point.longitude).put(point.latitude))
+                .put("timestamp", Instant.ofEpochMilli(time).toString())
+            if (includeAccuracy) waypoint.put("accuracyMeters", point.accuracyMeters)
+            put(waypoint)
+        }
+    }).toString()
+
+/** Identical private gateway POST configuration for both road-matching providers. */
+internal fun matchingGatewayConnection(origin: String, endpoint: String, payloadSize: Int): HttpURLConnection =
+    (URL(origin.trimEnd('/') + endpoint).openConnection() as HttpURLConnection).apply {
+        requestMethod = "POST"
+        instanceFollowRedirects = false
+        connectTimeout = 8_000
+        // Gateway may queue for 10s before the bounded 20s upstream call.
+        readTimeout = 35_000
+        doOutput = true
+        setRequestProperty("Content-Type", "application/json")
+        setRequestProperty("Accept", "application/json")
+        setFixedLengthStreamingMode(payloadSize)
+    }
+
+/** Gateway matching endpoints share their retry/error classification. */
+internal fun matchingGatewayUnavailable(status: Int, gatewayError: String?): Boolean =
+    status == 401 || status == 403 || status == 429 ||
+        status >= 500 || status in 300..399 ||
+        (status == 409 && gatewayError == "budget_conflict")
+
+/** Common GPS coordinate checks; LocationIQ additionally requires accurate fixes. */
+internal fun TrackPoint.validMatchingCoordinates(): Boolean =
+    latitude.isFinite() && latitude in -90.0..90.0 &&
+        longitude.isFinite() && longitude in -180.0..180.0
 
 interface RoadMatcher {
     fun match(points: List<TrackPoint>): MatchResult?

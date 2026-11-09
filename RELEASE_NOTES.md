@@ -1,3 +1,34 @@
+# Road Conquest 1.0.4
+
+## Changes since published 1.0.3
+
+- **Clear account errors:** Sign-in distinguishes incorrect username/password, network failures, server errors, temporary rate limits and local session-persistence failures. Prevent stale authentication responses from overwriting later sign-in actions, and preserve the useful message after screen recreation. No account, password, or server-schema migrations.
+- **Trip history and GPX:** Reduce per-fix boxing during replay and simplify GPX segment-break checks, retaining Android 12 compatibility, route breaks, timestamps, privacy cutoffs, and byte-for-byte export output.
+- **Faster town shape decoding and reuse:** Build JTS coordinate arrays directly instead of copying temporary per-ring lists; preserve closed/unclosed rings, holes and date-line behavior. Track bounded geometry-cache coordinate totals incrementally instead of rescanning every cached polygon on insertion. Tests cover ring equivalence, largest-piece medals, and least-recently-used eviction.
+- **Lean polygon and road-reference grouping:** Emit single and multi-town polygons without a transient polygon list, and bypass recursive collection for already-valid single polygons. Shared route-reference checks now iterate and look up set members directly rather than constructing a bound method reference. Tests confirm polygon types, holes, and equivalent route-reference decisions.
+- **Town overlays and medals:** Avoid constructing an unused revision pair on idle town-completion refreshes and an intermediate polygon list when selecting a multipart town's medal anchor. Share the identical border-dissolve/fallback routine between clipped and authoritative outlines. Regression tests cover largest-piece anchoring and empty outline results.
+- **Faster map bookkeeping:** Cache constant fog-grid row limits; avoid repeated town-boundary cache lookups; detect the need for Census layer partitioning without allocating intermediate collections. Authoritative municipal boundaries and exploration scoring are unchanged.
+- **Additional small cleanups:** Avoid parsing absent cached provider-switch JSON on fresh starts; reuse one clock reading when calculating a provider failure cooldown; skip redundant unchanged NoMatch delay comparisons. Regression tests cover empty/expired configs, retry dates, existing cooldown precedence, and original NoMatch delay thresholds.
+- **Lower background overhead:** Avoid redundant distance-preference reads and map-budget cache lookups. Reuse permitted friend actions; retained dynamically sized SQL updates for future map quota changes.
+- **Forum Plus account switching:** Discard pending Play purchase verification tickets from the previous account session so returning users can retry without waiting for an obsolete result.
+- **Data-reset race:** Reject a population service response that completes after Delete all data, rather than displaying or caching pre-reset information.
+- **Population reset/cache consistency:** Guard in-memory population cache hits with the same generation lock as Delete all data; a stale reader cannot reuse another generation’s cached result.
+- **Country population accuracy:** Reject malformed, quoted, negative or fractional population values rather than silently rounding or coercing external API data.
+- **Simpler matching adapters:** Removed duplicate Geoapify/LocationIQ GPS JSON serialization and unused imports. Both providers now share the same ordered timestamp logic while retaining LocationIQ-only accuracy metadata and existing cache/endpoint behavior; regression-tested. Shared latitude/longitude validation, retryable gateway error classification, and bounded HTTPS POST connection setup also replace identical adapter-specific copies; tests check both endpoints, transports, provider-specific accuracy, and cooldown semantics.
+- **Precise GPS ordering:** Reject a location fix that is even a fraction of a millisecond older than the newest accepted fix; retain same-time accuracy preference and ordinary newer-fix behavior.
+- **Malformed GPS speed uncertainty:** Ignore impossible negative speed-accuracy readings rather than treating them as reliable driving speed. Keep valid measured speed and stop readings unchanged.
+- **Failed restore safety:** If an already-validated temporary backup preview was deleted or reclaimed before confirmation, reject the restore before changing tracking mode, pausing the service, revoking verified-driving consent, or producing a recovery file.
+- **Account sign-in race:** Only an authentication request that is still pending may save a bearer session; a finished failed attempt cannot sign in later through a stray completion. Regression-tested.
+- **EU consent recovery:** If the UMP consent-information refresh fails with no permission to request ads, try refreshing consent again once while the screen is active; never request ads without valid consent. A pre-existing valid cached consent remains usable. If Google's required consent form itself fails to display or load, also retry the full consent flow once (or on next foreground return) only when no valid consent permits ads.
+- **AdMob and consent verification:** Keep Google Mobile Ads SDK 25.5.0 and Google UMP SDK 4.0.0. Preserve debug/test IDs and production release IDs, and verify release App ID, Advertising ID permission, and SDK integration in CI. Consent messages themselves must be created and published separately in AdMob Privacy & messaging.
+- **Build tooling:** Update the Gradle wrapper from 9.8.2 to 9.9.0 using the official SHA-256 checksum to resolve the failing out-of-date Gradle lint check without suppressing it.
+
+**Build:** Android versionName **1.0.4**, versionCode **101** (API 31+). Intended release tag `v1.0.4`. Google Play publication is separate from the GitHub release; verify code 101 remains unused in Play Console.
+
+**Compatibility:** No change to package name, signing key, GPS evidence, exploration history, payments, backup format, database schema, or account/map service URLs. Do not uninstall an existing installation to switch between Google Play and GitHub signing channels; create a verified backup first.
+
+---
+
 # Road Conquest 1.0.3
 
 ## Changes since the published 1.0.2 release

@@ -368,6 +368,30 @@ class DataImporterTest {
         assertEquals(0L, TrackingRepository(context).getSummary().trackPointCount)
     }
 
+    @Test fun missingValidatedPreviewCannotStopTrackingOrChangeVerifiedConsent() {
+        val tracker = TrackingRepository(context)
+        tracker.insertLocation(fix(1_000_000))
+        val prepared = prepareFixture(context, ByteArrayInputStream(export()))
+        prepared.close() // The Restore screen was dismissed before its confirmation ran.
+        Prefs.setManualOnly(context, false)
+        Prefs.setTrackingPaused(context, true)
+        Prefs.setDriveVerificationEnabled(context, true)
+        try {
+            val failure = runCatching { DataImporter.restore(context, prepared) }.exceptionOrNull()
+            assertNotNull("A deleted preview must not initiate a restore", failure)
+            assertTrue(failure!!.message.orEmpty().contains("preview"))
+            assertFalse("Never switch to manual tracking before checking the preview", Prefs.isManualOnly(context))
+            assertTrue("Keep the existing stop-until-open choice", Prefs.isTrackingPaused(context))
+            assertTrue("A missing file must not revoke existing verification consent",
+                Prefs.isDriveVerificationEnabled(context))
+            assertEquals(1L, TrackingRepository(context).getSummary().trackPointCount)
+            assertFalse("No recovery copy was needed", DataImporter.previousBackup(context).exists())
+        } finally {
+            Prefs.setDriveVerificationEnabled(context, false)
+            Prefs.setTrackingPaused(context, false)
+        }
+    }
+
     @Test fun failedRecoveryReplacementPreservesLiveProgressAndTheExistingTarget() {
         val tracker = TrackingRepository(context)
         tracker.insertLocation(fix(1_000_000))
@@ -378,16 +402,52 @@ class DataImporterTest {
         assertTrue(target.mkdir())
         val marker = java.io.File(target, "existing-recovery")
         marker.writeText("preserve")
+        Prefs.setManualOnly(context, false)
+        Prefs.setTrackingPaused(context, true)
+        Prefs.setDriveVerificationEnabled(context, true)
         try {
             prepareFixture(context, ByteArrayInputStream(original)).use { backup ->
-                assertTrue(runCatching { DataImporter.restore(context, backup) }.isFailure)
+                val error = runCatching { DataImporter.restore(context, backup) }.exceptionOrNull()
+                assertNotNull(error)
+                assertTrue(error!!.message.orEmpty().contains("Recovery backup destination"))
             }
             assertEquals(before, entries(export()).filterKeys { it != "metadata.json" })
             assertEquals("preserve", marker.readText())
             assertFalse(java.io.File(context.filesDir, "before-restore.tmp.zip").exists())
+            assertFalse("Blocked recovery target must not change tracking mode", Prefs.isManualOnly(context))
+            assertTrue("Blocked recovery target must retain paused-tracking choice", Prefs.isTrackingPaused(context))
+            assertTrue("Blocked recovery target must retain verification consent", Prefs.isDriveVerificationEnabled(context))
         } finally {
+            Prefs.setTrackingPaused(context, false)
+            Prefs.setDriveVerificationEnabled(context, false)
             marker.delete()
             target.delete()
+        }
+    }
+
+    @Test fun temporaryRecoveryDirectoryCannotChangeTrackingOrConsent() {
+        val tracker = TrackingRepository(context)
+        tracker.insertLocation(fix(1_000_000))
+        val backup = prepareFixture(context, ByteArrayInputStream(export()))
+        val blocked = java.io.File(context.filesDir, "before-restore.tmp.zip")
+        assertFalse(blocked.exists())
+        assertTrue(blocked.mkdir())
+        Prefs.setManualOnly(context, false)
+        Prefs.setTrackingPaused(context, true)
+        Prefs.setDriveVerificationEnabled(context, true)
+        try {
+            val result = runCatching { DataImporter.restore(context, backup) }
+            assertTrue(result.isFailure)
+            assertEquals(1L, TrackingRepository(context).getSummary().trackPointCount)
+            assertFalse(Prefs.isManualOnly(context))
+            assertTrue(Prefs.isTrackingPaused(context))
+            assertTrue(Prefs.isDriveVerificationEnabled(context))
+            assertTrue(blocked.isDirectory)
+        } finally {
+            backup.close()
+            Prefs.setTrackingPaused(context, false)
+            Prefs.setDriveVerificationEnabled(context, false)
+            blocked.delete()
         }
     }
 

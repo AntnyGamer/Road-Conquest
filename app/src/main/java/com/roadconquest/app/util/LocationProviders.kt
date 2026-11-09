@@ -47,7 +47,7 @@ object LocationProviders {
         if (!location.hasSpeed() || !location.speed.isFinite() || location.speed < 0f) return null
         if (location.hasSpeedAccuracy()) {
             val uncertainty = location.speedAccuracyMetersPerSecond
-            if (!uncertainty.isFinite() || uncertainty > MAX_MEASURED_SPEED_ACCURACY_MPS) return null
+            if (!uncertainty.isFinite() || uncertainty < 0f || uncertainty > MAX_MEASURED_SPEED_ACCURACY_MPS) return null
         }
         return location.speed
     }
@@ -56,7 +56,11 @@ object LocationProviders {
     fun isBetterFix(candidate: Location, previous: Location?): Boolean {
         if (previous == null) return true
         val elapsed = if (candidate.elapsedRealtimeNanos > 0 && previous.elapsedRealtimeNanos > 0) {
-            (candidate.elapsedRealtimeNanos - previous.elapsedRealtimeNanos) / 1_000_000L
+            val differenceNanos = candidate.elapsedRealtimeNanos - previous.elapsedRealtimeNanos
+            // Integer division truncates a negative sub-millisecond difference
+            // to zero. Reject that older fix before converting nanoseconds.
+            if (differenceNanos < 0) return false
+            differenceNanos / 1_000_000L
         } else candidate.time - previous.time
         if (elapsed < 0) return false
         if (elapsed > 2_000L) return true

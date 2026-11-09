@@ -54,6 +54,10 @@ class PreferenceLookupTest {
     @Test fun themeReadsOneCurrentValue() = checkLookup(
         "ui_theme", UiTheme.entries.map { it.name to it }, UiTheme.SYSTEM, Prefs::uiTheme)
 
+    @Test fun distanceUnitsReadOneCurrentValue() = checkLookup(
+        "distance_units", DistanceUnitPreference.entries.map { it.name to it },
+        DistanceUnitPreference.AUTOMATIC, Prefs::distanceUnits)
+
     @Test fun mapModeReadsOneCurrentValue() = checkLookup(
         "map_mode", MapMode.entries.map { it.name to it }, MapMode.STREETS, Prefs::mapMode)
 

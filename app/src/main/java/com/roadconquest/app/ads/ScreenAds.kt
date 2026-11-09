@@ -73,7 +73,14 @@ class ScreenAds(
             }
         }
     }
-    private val retryAds = Runnable { if (permitted()) enableAds() }
+    private val retryAds = Runnable {
+        if (alive() && active && vipChecked && !VipEntitlement.isActive(activity)) {
+            // An offline UMP failure must retry consent itself, not only an ad
+            // request that will keep failing the consent gate.
+            if (!consentRequested) resumeAfterVipCheck()
+            else if (permitted()) enableAds()
+        }
+    }
 
     init {
         VipEntitlement.addListener(vipListener)
@@ -116,9 +123,15 @@ class ScreenAds(
                 presentConsentForm()
             }, {
                 if (!alive() || VipEntitlement.isActive(activity)) return@requestConsentInfoUpdate
+                // Cached consent can legitimately allow ads after a network error.
+                // Without usable consent, give UMP one bounded foreground retry;
+                // the previous sticky flag otherwise blocked every retry until
+                // this Activity was recreated.
+                if (!consent.canRequestAds()) consentRequested = false
                 consentComplete = true
                 updatePrivacyButton()
                 enableAds()
+                if (!consentRequested) retryOnce()
             })
         } else if (formPending) {
             presentConsentForm()
@@ -174,7 +187,13 @@ class ScreenAds(
         formPending = false
         formShowing = true
         UserMessagingPlatform.loadAndShowConsentFormIfRequired(activity) { error ->
+            // A failed required form without cached permission must not leave
+            // consentRequested latched forever. Retry the full consent refresh
+            // once while visible, or on the next foreground visit if paused.
+            val retryConsent = shouldRetryConsentAfterFormError(error != null, consent.canRequestAds())
+            if (retryConsent) consentRequested = false
             completeConsentForm(error != null)
+            if (retryConsent) retryOnce()
         }
     }
 
@@ -441,3 +460,7 @@ private object AdSdk {
         return future
     }
 }
+
+/** Only failed required forms with no usable cached consent need another consent request. */
+internal fun shouldRetryConsentAfterFormError(hadError: Boolean, canRequestAds: Boolean): Boolean =
+    hadError && !canRequestAds

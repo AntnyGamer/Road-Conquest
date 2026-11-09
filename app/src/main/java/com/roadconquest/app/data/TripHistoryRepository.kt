@@ -201,9 +201,10 @@ class TripHistoryRepository(context: Context) {
                     val lat = cursor.getDouble(0)
                     val lon = cursor.getDouble(1)
                     if (!lat.isFinite() || !lon.isFinite() || lat !in -90.0..90.0 || lon !in -180.0..180.0) continue
-                    if (previousTimestamp == null || timestamp <= previousTimestamp!! ||
-                        timestamp - previousTimestamp!! > 30_000L) {
-                        if (previousTimestamp != null) writer.write("</trkseg>\n")
+                    val previous = previousTimestamp
+                    if (previous == null || timestamp <= previous ||
+                        timestamp - previous > 30_000L) {
+                        if (previous != null) writer.write("</trkseg>\n")
                         writer.write("<trkseg>\n")
                     }
                     pointLine.setLength(0)
@@ -241,7 +242,8 @@ class TripHistoryRepository(context: Context) {
             val stride = ceil(trip.pointCount.toDouble() / maxPoints).toInt().coerceAtLeast(1)
             val selected = ArrayList<SavedTripPoint>(minOf(maxPoints, trip.pointCount))
             var position = 0L
-            var previousTime: Long? = null
+            var previousTime = 0L
+            var hasPreviousTime = false
             var gapSinceSample = false
             var lastLatitude = 0.0
             var lastLongitude = 0.0
@@ -254,7 +256,8 @@ class TripHistoryRepository(context: Context) {
                 while (cursor.moveToNext()) {
                     requireActiveRead()
                     val time = cursor.getLong(2)
-                    previousTime?.let { if (time <= it || time - it > 30_000L) gapSinceSample = true }
+                    if (hasPreviousTime && (time <= previousTime ||
+                        time - previousTime > 30_000L)) gapSinceSample = true
                     lastLatitude = cursor.getDouble(0)
                     lastLongitude = cursor.getDouble(1)
                     lastTimestamp = time
@@ -267,6 +270,7 @@ class TripHistoryRepository(context: Context) {
                         gapSinceSample = false
                     }
                     previousTime = time
+                    hasPreviousTime = true
                     position++
                 }
             }

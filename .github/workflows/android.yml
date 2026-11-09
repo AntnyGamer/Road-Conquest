@@ -217,6 +217,26 @@ jobs:
             exit 1
           fi
 
+          # The production AAB must contain our real AdMob application ID, not
+          # the test ID used exclusively by the debug build. A missing/wrong ID
+          # can cause an initialization crash or zero ad fill at runtime.
+          if ! grep -Fq 'com.google.android.gms.ads.APPLICATION_ID' "$RUNNER_TEMP/release-aab-manifest.xml" ||
+             ! grep -Fq 'ca-app-pub-4489303482171969~1528361127' "$RUNNER_TEMP/release-aab-manifest.xml"; then
+            echo "::error::The signed Play bundle manifest lacks the production AdMob application ID."
+            exit 1
+          fi
+          if grep -Fq 'ca-app-pub-3940256099942544' "$RUNNER_TEMP/release-aab-manifest.xml"; then
+            echo "::error::The release manifest contains the Google test AdMob App ID."
+            exit 1
+          fi
+          # Enforce both ad SDK dependencies and their consent-before-request
+          # gate in the release source. Actual Google CMP messages are configured
+          # remotely in AdMob and cannot be asserted by an offline build.
+          grep -Fq 'com.google.android.gms:play-services-ads:25.5.0' app/build.gradle.kts
+          grep -Fq 'com.google.android.ump:user-messaging-platform:4.0.0' app/build.gradle.kts
+          grep -Fq 'consent.canRequestAds()' app/src/main/java/com/roadconquest/app/ads/ScreenAds.kt
+          grep -Fq 'loadAndShowConsentFormIfRequired(activity)' app/src/main/java/com/roadconquest/app/ads/ScreenAds.kt
+
       - name: Verify 16 KB native-library compatibility
         shell: bash
         run: |

@@ -113,6 +113,21 @@ class PlacePopulationLookupTest {
             """{"cca2":"NO","cca3":"NOR","population":5500000}"""))
     }
 
+    @Test fun foreignPopulationRequiresAnActualWholeNumber() {
+        val request = requireNotNull(PlacePopulationLookup.requestFor(
+            PlaceOverlayInfo("se", "Sweden", PlaceKind.COUNTRY, null, 1.0)))
+        val common = "\"cca2\":\"SE\",\"cca3\":\"SWE\""
+        fun population(value: String) = "{$common,\"population\":$value}"
+        assertEquals(10_500_000L, PlacePopulationLookup.parseResponse(
+            request, population("10500000"))?.count)
+        assertNull("A decimal must not be rounded down", PlacePopulationLookup.parseResponse(
+            request, population("10500000.5")))
+        assertNull("A quoted count is not a JSON number", PlacePopulationLookup.parseResponse(
+            request, population("\"10500000\"")))
+        assertNull(PlacePopulationLookup.parseResponse(request, population("-1")))
+        assertNull(PlacePopulationLookup.parseResponse(request, population("null")))
+    }
+
     @Test fun validatedHistoricalCensusCountCanBeCachedAcrossSessions() {
         val context = RuntimeEnvironment.getApplication()
         val info = PlaceOverlayInfo("us|new jersey|census-4-3428800", "Haddon Heights",
@@ -137,6 +152,54 @@ class PlacePopulationLookupTest {
                 PlaceOverlayInfo("se", "Sweden", PlaceKind.COUNTRY, null, 1.0)))
         } finally {
             PlacePopulationLookup.clearCache(context)
+        }
+    }
+
+    @Test fun clearingDataDiscardsAnOlderSuccessfulPopulationResponse() {
+        val context = RuntimeEnvironment.getApplication()
+        val town = PlaceOverlayInfo("us|new jersey|census-4-3428800", "Haddon Heights",
+            PlaceKind.TOWN, null, 3.0)
+        val identity = town.kind.name + "|" + town.key
+        val value = PlacePopulationLookup.Value(7495, "2020 Census")
+        PlacePopulationLookup.clearCache(context)
+        try {
+            val requestGeneration = PlacePopulationLookup.generation()
+            PlacePopulationLookup.clearCache(context)
+            assertNull("A pre-reset network response must not reach the old place card",
+                PlacePopulationLookup.acceptLookupResult(context, identity, true, value, requestGeneration))
+            assertNull("A pre-reset response must not repopulate persistent history",
+                PlacePopulationLookup.savedCensus(context, town))
+            assertEquals(value, PlacePopulationLookup.acceptLookupResult(
+                context, identity, true, value, PlacePopulationLookup.generation()))
+            assertEquals(value, PlacePopulationLookup.savedCensus(context, town))
+        } finally {
+            PlacePopulationLookup.clearCache(context)
+        }
+    }
+
+    @Test fun oldCachedPopulationCannotCrossADataResetEvenAfterNewResultsArrive() {
+        val app = RuntimeEnvironment.getApplication()
+        val identity = "COUNTRY|se"
+        PlacePopulationLookup.clearCache(app)
+        try {
+            val oldGeneration = PlacePopulationLookup.generation()
+            val before = PlacePopulationLookup.Value(10_000_000, "REST Countries")
+            assertEquals(before, PlacePopulationLookup.acceptLookupResult(
+                app, identity, false, before, oldGeneration))
+            assertEquals(before, PlacePopulationLookup.cachedIfCurrent(identity, oldGeneration))
+
+            // Simulate deleting local progress between the initial generation
+            // check and the in-memory read, then another valid request.
+            PlacePopulationLookup.clearCache(app)
+            val newGeneration = PlacePopulationLookup.generation()
+            val after = PlacePopulationLookup.Value(10_100_000, "REST Countries")
+            assertEquals(after, PlacePopulationLookup.acceptLookupResult(
+                app, identity, false, after, newGeneration))
+            assertNull("A lookup from before deletion must not read the new cache",
+                PlacePopulationLookup.cachedIfCurrent(identity, oldGeneration))
+            assertEquals(after, PlacePopulationLookup.cachedIfCurrent(identity, newGeneration))
+        } finally {
+            PlacePopulationLookup.clearCache(app)
         }
     }
 

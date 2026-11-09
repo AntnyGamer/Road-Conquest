@@ -28,6 +28,84 @@ class ProviderFallbackTest {
         override fun rateLimitRemainingMs() = cooldown
     }
 
+    @Test fun sharedMatchingGatewayPostPreservesTransportSettings() {
+        for (endpoint in listOf("/v1/mapmatching", "/v1/locationiq/mapmatching")) {
+            val connection = matchingGatewayConnection("https://example.test/gateway/", endpoint, 1234)
+            try {
+                assertEquals("https://example.test/gateway$endpoint", connection.url.toString())
+                assertEquals("POST", connection.requestMethod)
+                assertFalse(connection.instanceFollowRedirects)
+                assertEquals(8_000, connection.connectTimeout)
+                assertEquals(35_000, connection.readTimeout)
+                assertTrue(connection.doOutput)
+                assertEquals("application/json", connection.getRequestProperty("Content-Type"))
+                assertEquals("application/json", connection.getRequestProperty("Accept"))
+            } finally {
+                connection.disconnect()
+            }
+        }
+    }
+
+    @Test fun matchingGatewayFailureRulesKeepTheExistingProviderCooldownPolicy() {
+        for (status in listOf(301, 302, 399, 401, 403, 429, 500, 503, 599)) {
+            assertTrue("HTTP $status must trigger fallback/cooldown",
+                matchingGatewayUnavailable(status, null))
+        }
+        for (status in listOf(200, 201, 299, 400, 404, 408, 409, 422)) {
+            assertFalse("HTTP $status alone is not a provider outage",
+                matchingGatewayUnavailable(status, null))
+        }
+        assertTrue(matchingGatewayUnavailable(409, "budget_conflict"))
+        assertFalse(matchingGatewayUnavailable(409, "invalid_request"))
+    }
+
+    @Test fun commonCoordinateValidatorPreservesBothProviderInputContracts() {
+        assertTrue(points.all { it.validMatchingCoordinates() })
+        for (bad in listOf(
+            points[0].copy(latitude = -91.0),
+            points[0].copy(latitude = Double.NaN),
+            points[0].copy(latitude = Double.POSITIVE_INFINITY),
+            points[0].copy(longitude = -181.0),
+            points[0].copy(longitude = Double.NEGATIVE_INFINITY)
+        )) assertFalse(bad.validMatchingCoordinates())
+        assertTrue(points[0].copy(latitude = -90.0, longitude = 180.0)
+            .validMatchingCoordinates())
+        // Geoapify accepts a valid location without accuracy metadata; LocationIQ
+        // keeps its separate positive <= 1000m accuracy gate.
+        assertTrue(points[0].copy(accuracyMeters = Float.NaN)
+            .validMatchingCoordinates())
+    }
+
+    @Test fun bothMatchingProvidersShareTheExactOrderedTraceWithoutLeakingAccuracy() {
+        val started = Instant.parse("2026-01-01T07:09:34Z").toEpochMilli()
+        val inputs = listOf(
+            points[0].copy(timestampMillis = started, accuracyMeters = 3f),
+            points[1].copy(timestampMillis = started, accuracyMeters = 7f),
+            points[1].copy(timestampMillis = started + 7_000L, accuracyMeters = 12f)
+        )
+        for (includeAccuracy in listOf(false, true)) {
+            val document = JSONObject(serializeMatchingTrace(inputs, includeAccuracy))
+            assertEquals(2, document.length())
+            assertEquals("drive", document.getString("mode"))
+            val waypoints = document.getJSONArray("waypoints")
+            assertEquals(inputs.size, waypoints.length())
+            val expectedTimes = listOf(started, started + 1000L, started + 7000L)
+            inputs.forEachIndexed { index, point ->
+                val waypoint = waypoints.getJSONObject(index)
+                assertEquals(if (includeAccuracy) 3 else 2, waypoint.length())
+                assertEquals(Instant.ofEpochMilli(expectedTimes[index]).toString(),
+                    waypoint.getString("timestamp"))
+                val coords = waypoint.getJSONArray("location")
+                assertEquals(2, coords.length())
+                assertEquals(point.longitude, coords.getDouble(0), 0.0)
+                assertEquals(point.latitude, coords.getDouble(1), 0.0)
+                assertEquals(includeAccuracy, waypoint.has("accuracyMeters"))
+                if (includeAccuracy) assertEquals(point.accuracyMeters.toDouble(),
+                    waypoint.getDouble("accuracyMeters"), 0.0)
+            }
+        }
+    }
+
     @Test fun cancelledMatchingCannotStartOrFallThroughToAnotherProvider() {
         val first = Fake(unavailable = true)
         val backup = Fake()

@@ -12,6 +12,24 @@ class UnchangedNoMatchBackoffTest {
         repeat(3) { assertEquals(1_800_000L, policy.delayAfterNoMatch(ids, setOf(2L), 10_000L)) }
     }
 
+    @Test fun ordinaryAndExtendedDelaysPreserveAllExistingThresholds() {
+        for (usual in listOf(-1L, 0L, 10_000L, 900_000L, 3_000_000L)) {
+            val policy = UnchangedNoMatchBackoff()
+            val submitted = listOf(91L, 92L)
+            val pending = setOf(92L)
+            val expected = listOf(
+                usual, usual,
+                maxOf(usual, 900_000L),
+                maxOf(usual, 1_800_000L),
+                maxOf(usual, 1_800_000L)
+            )
+            expected.forEach { delay ->
+                assertEquals("ordinary delay $usual", delay,
+                    policy.delayAfterNoMatch(submitted, pending, usual))
+            }
+        }
+    }
+
     @Test fun freshAdjacentGpsOrNewPendingEvidenceRestoresNormalRetry() {
         val policy = UnchangedNoMatchBackoff()
         repeat(4) { policy.delayAfterNoMatch(listOf(1L, 2L, 3L), setOf(2L), 10_000L) }

@@ -39,19 +39,22 @@ internal class TownCompletion {
     private data class Shape(val geometry: Geometry, val latitude: Double, val longitude: Double,
         var revision: Pair<Long, Long>? = null, var progress: TownCompletionProgress? = null)
     private val shapes = LinkedHashMap<String, Shape>(32, 0.75f, true)
+    private var retainedPoints = 0
 
     private fun shape(json: String): Shape {
         shapes[json]?.let { return it }
         val parsed = readShape(JSONObject(json))
-        // A count-only cache can retain hundreds of huge municipal geometries.
-        // Bound both the number of towns and the actual coordinate workload.
-        if (parsed.geometry.numPoints <= 50_000) {
+        // Account for retained coordinates only when inserting/evicting.
+        // Walking every cached JTS geometry to recompute the same total is
+        // unnecessary when many distinct towns are visited on one drive.
+        val points = parsed.geometry.numPoints
+        if (points <= 50_000) {
             shapes[json] = parsed
-            var points = shapes.values.sumOf { it.geometry.numPoints }
+            retainedPoints += points
             val iterator = shapes.entries.iterator()
-            while (shapes.size > 32 || points > 50_000) {
+            while (shapes.size > 32 || retainedPoints > 50_000) {
                 val oldest = iterator.next()
-                points -= oldest.value.geometry.numPoints
+                retainedPoints -= oldest.value.geometry.numPoints
                 iterator.remove()
             }
         }
@@ -114,21 +117,26 @@ internal class TownCompletion {
 
     private fun readShape(json: JSONObject): Shape {
         fun ring(points: JSONArray, anchor: Double?): LinearRing {
+            val count = points.length()
+            require(count >= 3)
             var previous = anchor
-            val coords = ArrayList<Coordinate>(points.length() + 1)
-            for (i in 0 until points.length()) {
+            // JTS consumes an array directly. Avoid an ArrayList per polygon ring
+            // and the extra toTypedArray() copy for ordinary closed boundaries.
+            val coords = Array(count) { i ->
                 val point = points.getJSONArray(i)
                 val longitude = point.getDouble(0)
                 val latitude = point.getDouble(1)
                 require(longitude.isFinite() && longitude in -180.0..180.0 &&
                     latitude.isFinite() && latitude in -85.05112878..85.05112878)
                 val x = previous?.let { near(longitude, it) } ?: longitude
-                coords += Coordinate(x, sin(Math.toRadians(latitude)))
                 previous = x
+                Coordinate(x, sin(Math.toRadians(latitude)))
             }
-            require(coords.size >= 3)
-            if (!coords.first().equals2D(coords.last())) coords += Coordinate(coords.first())
-            return factory.createLinearRing(coords.toTypedArray())
+            val ring = if (coords.first().equals2D(coords.last())) coords
+                else Array(count + 1) { i ->
+                    if (i < count) coords[i] else Coordinate(coords.first())
+                }
+            return factory.createLinearRing(ring)
         }
         fun polygon(rings: JSONArray): Geometry {
             val shell = ring(rings.getJSONArray(0), null)
@@ -145,7 +153,18 @@ internal class TownCompletion {
         // Union prevents overlapping source components from counting twice.
         val geometry = org.locationtech.jts.operation.union.UnaryUnionOp.union(pieces)
         require(!geometry.isEmpty && geometry.area > 0.0)
-        val largest = (0 until geometry.numGeometries).map { geometry.getGeometryN(it) }.maxBy { it.area }
+        // Choose the first largest polygon in one pass; a temporary Geometry
+        // list is unnecessary for multi-part towns and islands.
+        var largest = geometry.getGeometryN(0)
+        var largestArea = largest.area
+        for (index in 1 until geometry.numGeometries) {
+            val candidate = geometry.getGeometryN(index)
+            val area = candidate.area
+            if (area > largestArea) {
+                largest = candidate
+                largestArea = area
+            }
+        }
         // A centroid may fall outside a concave town or inside a lake. InteriorPoint cannot.
         val center = largest.interiorPoint.coordinate
         return Shape(geometry, latitude(center.y), center.x)
