@@ -29,9 +29,12 @@ object ServiceConfig {
         val providers = root.getJSONObject("providers")
         return names.associateWith { providers.opt(it) as? Boolean ?: true }
     }
-    internal fun cachedValues(raw: String?, ageMs: Long): Map<String, Boolean> =
-        if (ageMs in 0..86_400_000L) runCatching { parse(raw.orEmpty()) }.getOrDefault(emptyMap())
-        else emptyMap()
+    internal fun cachedValues(raw: String?, ageMs: Long): Map<String, Boolean> {
+        // A fresh install has no cached response. Avoid throwing/parsing an
+        // empty JSON document on every startup or foreground refresh.
+        if (ageMs !in 0..86_400_000L || raw.isNullOrEmpty()) return emptyMap()
+        return runCatching { parse(raw) }.getOrDefault(emptyMap())
+    }
 
     @Synchronized fun refresh(context: Context) {
         val app = context.applicationContext
