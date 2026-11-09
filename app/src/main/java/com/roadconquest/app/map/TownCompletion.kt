@@ -145,7 +145,18 @@ internal class TownCompletion {
         // Union prevents overlapping source components from counting twice.
         val geometry = org.locationtech.jts.operation.union.UnaryUnionOp.union(pieces)
         require(!geometry.isEmpty && geometry.area > 0.0)
-        val largest = (0 until geometry.numGeometries).map { geometry.getGeometryN(it) }.maxBy { it.area }
+        // Choose the first largest polygon in one pass; a temporary Geometry
+        // list is unnecessary for multi-part towns and islands.
+        var largest = geometry.getGeometryN(0)
+        var largestArea = largest.area
+        for (index in 1 until geometry.numGeometries) {
+            val candidate = geometry.getGeometryN(index)
+            val area = candidate.area
+            if (area > largestArea) {
+                largest = candidate
+                largestArea = area
+            }
+        }
         // A centroid may fall outside a concave town or inside a lake. InteriorPoint cannot.
         val center = largest.interiorPoint.coordinate
         return Shape(geometry, latitude(center.y), center.x)
