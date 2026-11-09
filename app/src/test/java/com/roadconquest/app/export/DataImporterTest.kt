@@ -368,6 +368,30 @@ class DataImporterTest {
         assertEquals(0L, TrackingRepository(context).getSummary().trackPointCount)
     }
 
+    @Test fun missingValidatedPreviewCannotStopTrackingOrChangeVerifiedConsent() {
+        val tracker = TrackingRepository(context)
+        tracker.insertLocation(fix(1_000_000))
+        val prepared = prepareFixture(context, ByteArrayInputStream(export()))
+        prepared.close() // The Restore screen was dismissed before its confirmation ran.
+        Prefs.setManualOnly(context, false)
+        Prefs.setTrackingPaused(context, true)
+        Prefs.setDriveVerificationEnabled(context, true)
+        try {
+            val failure = runCatching { DataImporter.restore(context, prepared) }.exceptionOrNull()
+            assertNotNull("A deleted preview must not initiate a restore", failure)
+            assertTrue(failure!!.message.orEmpty().contains("preview"))
+            assertFalse("Never switch to manual tracking before checking the preview", Prefs.isManualOnly(context))
+            assertTrue("Keep the existing stop-until-open choice", Prefs.isTrackingPaused(context))
+            assertTrue("A missing file must not revoke existing verification consent",
+                Prefs.isDriveVerificationEnabled(context))
+            assertEquals(1L, TrackingRepository(context).getSummary().trackPointCount)
+            assertFalse("No recovery copy was needed", DataImporter.previousBackup(context).exists())
+        } finally {
+            Prefs.setDriveVerificationEnabled(context, false)
+            Prefs.setTrackingPaused(context, false)
+        }
+    }
+
     @Test fun failedRecoveryReplacementPreservesLiveProgressAndTheExistingTarget() {
         val tracker = TrackingRepository(context)
         tracker.insertLocation(fix(1_000_000))
