@@ -114,21 +114,26 @@ internal class TownCompletion {
 
     private fun readShape(json: JSONObject): Shape {
         fun ring(points: JSONArray, anchor: Double?): LinearRing {
+            val count = points.length()
+            require(count >= 3)
             var previous = anchor
-            val coords = ArrayList<Coordinate>(points.length() + 1)
-            for (i in 0 until points.length()) {
+            // JTS consumes an array directly. Avoid an ArrayList per polygon ring
+            // and the extra toTypedArray() copy for ordinary closed boundaries.
+            val coords = Array(count) { i ->
                 val point = points.getJSONArray(i)
                 val longitude = point.getDouble(0)
                 val latitude = point.getDouble(1)
                 require(longitude.isFinite() && longitude in -180.0..180.0 &&
                     latitude.isFinite() && latitude in -85.05112878..85.05112878)
                 val x = previous?.let { near(longitude, it) } ?: longitude
-                coords += Coordinate(x, sin(Math.toRadians(latitude)))
                 previous = x
+                Coordinate(x, sin(Math.toRadians(latitude)))
             }
-            require(coords.size >= 3)
-            if (!coords.first().equals2D(coords.last())) coords += Coordinate(coords.first())
-            return factory.createLinearRing(coords.toTypedArray())
+            val ring = if (coords.first().equals2D(coords.last())) coords
+                else Array(count + 1) { i ->
+                    if (i < count) coords[i] else Coordinate(coords.first())
+                }
+            return factory.createLinearRing(ring)
         }
         fun polygon(rings: JSONArray): Geometry {
             val shell = ring(rings.getJSONArray(0), null)
