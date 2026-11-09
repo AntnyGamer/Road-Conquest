@@ -56,7 +56,11 @@ object LocationProviders {
     fun isBetterFix(candidate: Location, previous: Location?): Boolean {
         if (previous == null) return true
         val elapsed = if (candidate.elapsedRealtimeNanos > 0 && previous.elapsedRealtimeNanos > 0) {
-            (candidate.elapsedRealtimeNanos - previous.elapsedRealtimeNanos) / 1_000_000L
+            val differenceNanos = candidate.elapsedRealtimeNanos - previous.elapsedRealtimeNanos
+            // Integer division truncates a negative sub-millisecond difference
+            // to zero. Reject that older fix before converting nanoseconds.
+            if (differenceNanos < 0) return false
+            differenceNanos / 1_000_000L
         } else candidate.time - previous.time
         if (elapsed < 0) return false
         if (elapsed > 2_000L) return true
