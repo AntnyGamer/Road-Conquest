@@ -3,11 +3,9 @@ package com.roadconquest.app.matching
 import com.roadconquest.app.data.TrackPoint
 import com.roadconquest.app.services.ProviderHealth
 import com.roadconquest.app.services.readBoundedUtf8
-import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
-import java.time.Instant
 
 /** LocationIQ's OSRM-compatible matching response, through the private-key gateway. */
 class LocationIqMatcher(
@@ -37,17 +35,8 @@ class LocationIqMatcher(
                 !it.accuracyMeters.isFinite() || it.accuracyMeters <= 0f || it.accuracyMeters > 1000f
         }
 
-    private fun payload(points: List<TrackPoint>): String {
-        return JSONObject().put("mode", "drive").put("waypoints", JSONArray().apply {
-            var previous = Long.MIN_VALUE
-            points.forEach { point ->
-                val time = if (previous == Long.MIN_VALUE) point.timestampMillis else maxOf(point.timestampMillis, previous + 1000L)
-                previous = time
-                put(JSONObject().put("location", JSONArray().put(point.longitude).put(point.latitude))
-                    .put("timestamp", Instant.ofEpochMilli(time).toString()).put("accuracyMeters", point.accuracyMeters))
-            }
-        }).toString()
-    }
+    private fun payload(points: List<TrackPoint>): String =
+        serializeMatchingTrace(points, includeAccuracy = true)
 
     @Synchronized override fun cachedMatch(points: List<TrackPoint>): MatchResult? {
         lastCallUsedNetwork = false
