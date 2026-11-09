@@ -201,6 +201,11 @@ internal object TownOverlayPartition {
     }
 
     private fun polygonal(source: Geometry): Geometry {
+        // The common valid single polygon needs no collection or recursive
+        // traversal. Keep the same MultiPolygon result as the general path.
+        if (source is Polygon) return factory.createMultiPolygon(
+            if (!source.isEmpty && source.area > 0.0) arrayOf(source) else emptyArray()
+        )
         val polygons = ArrayList<Polygon>()
         fun flatten(geometry: Geometry) {
             when (geometry) {
