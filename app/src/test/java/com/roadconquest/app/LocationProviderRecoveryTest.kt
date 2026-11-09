@@ -76,6 +76,29 @@ abstract class LocationProviderRecoverySuite {
         assertTrue(LocationProviders.isBetterFix(fix("gps", 13, 20f), fix("fused", 10, 4f)))
     }
 
+    @Test fun slightlyOlderNanosecondFixCannotMoveLiveLocationBackward() {
+        val latest = Location("fused").apply {
+            time = 10_000L
+            elapsedRealtimeNanos = 10_000_500_000L
+            accuracy = 20f
+        }
+        val older = Location("gps").apply {
+            time = 10_000L
+            elapsedRealtimeNanos = 10_000_000_000L
+            accuracy = 1f
+        }
+        assertFalse("Even a sub-millisecond older fix must not replace the newest fix",
+            LocationProviders.isBetterFix(older, latest))
+        assertTrue("The more accurate fix is allowed at the same exact source time",
+            LocationProviders.isBetterFix(older.apply {
+                elapsedRealtimeNanos = latest.elapsedRealtimeNanos
+            }, latest))
+        assertTrue("A more accurate fix arriving later is accepted",
+            LocationProviders.isBetterFix(older.apply {
+                elapsedRealtimeNanos += 1_000_000L
+            }, latest))
+    }
+
     @Test fun disablingGpsFallsBackToAvailableNetworkProvider() {
         val app = RuntimeEnvironment.getApplication()
         Shadows.shadowOf(app).grantPermissions(Manifest.permission.ACCESS_FINE_LOCATION)
