@@ -1162,17 +1162,9 @@ class MapRenderer(
         ) TownOverlayPartition.render(other) else null
         var badgePlaces = otherPartition?.shown ?: other
         val (fillFeatures, boundaries) = if (officialUs.isNotEmpty()) {
-            val censusLayers = officialUs.mapNotNull {
-                when {
-                    "|census-4-" in it.key -> 4
-                    "|census-3-" in it.key -> 3
-                    "|census-1-" in it.key -> 1
-                    else -> null
-                }
-            }.toSet()
-            // A single layer cannot overlap itself in normal Census geography.
-            // Avoid unnecessary polygon differences on ordinary single-layer maps.
-            val officialPartition = if (censusLayers.size > 1) {
+            // A single Census layer cannot overlap itself in normal geography.
+            // Only partition when two different source layers are present.
+            val officialPartition = if (TownOverlayPartition.hasMixedOfficialLayers(officialUs)) {
                 TownOverlayPartition.renderOfficialUs(officialUs)
             } else null
             badgePlaces = (officialPartition?.shown ?: officialUs) + (otherPartition?.shown ?: other)
