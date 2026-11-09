@@ -2,6 +2,7 @@ import { normalizeUsername } from "./security.mjs";
 import { EvidenceError } from "./scoring.mjs";
 
 const FRIEND_STATUS = ["accepted", "outgoing", "incoming"];
+const FRIEND_ACTIONS = new Set(["request", "accept", "remove"]);
 
 export function createFriends(pool, notifyRequest = async () => {}) {
   return {
@@ -17,7 +18,7 @@ export function createFriends(pool, notifyRequest = async () => {}) {
     },
     async change(user, username, action) {
       const normalized = normalizeUsername(username);
-      if (!normalized || !["request", "accept", "remove"].includes(action)) throw new EvidenceError("Invalid friend action.", 400);
+      if (!normalized || !FRIEND_ACTIONS.has(action)) throw new EvidenceError("Invalid friend action.", 400);
       const db = await pool.connect();
       let notificationTarget;
       try {
