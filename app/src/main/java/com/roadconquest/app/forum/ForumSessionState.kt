@@ -47,6 +47,10 @@ internal class ForumSessionState {
         if (token == currentToken) return false
         token = currentToken
         ownershipCheckedFor = null
+        // Requests tied to the previous bearer session cannot be reused after
+        // sign-out or account switching. An old completion may still arrive,
+        // but it must not prevent a fresh ownership verification after return.
+        pendingPurchases.clear()
         return true
     }
 
