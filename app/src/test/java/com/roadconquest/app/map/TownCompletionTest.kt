@@ -29,6 +29,27 @@ class TownCompletionTest {
             JSONArray().put(ring(left[1], left[4], right[3], left[0]))).toString()
     }
 
+    @Test fun closedAndUnclosedTownRingsProduceIdenticalProgressAndAnchor() {
+        val geometry = JSONObject(town(2))
+        val center = FogGrid.center(first.copy(column = first.column + 1))
+        val c = FogGrid.corners(center.first, center.second)
+        geometry.getJSONArray("coordinates").put(
+            ring(c[1] + 0.00001, c[4] + 0.00001, c[3] - 0.00001,
+                (c[0] + c[4]) / 2.0))
+        val closed = geometry.toString()
+        val rings = geometry.getJSONArray("coordinates")
+        for (index in 0 until rings.length()) {
+            val polygonRing = rings.getJSONArray(index)
+            polygonRing.remove(polygonRing.length() - 1)
+        }
+        val open = geometry.toString()
+        val points = coords(1)
+        val closedProgress = requireNotNull(TownCompletion().calculate(closed) { _, _, _, _ -> points })
+        val openProgress = requireNotNull(TownCompletion().calculate(open) { _, _, _, _ -> points })
+        assertEquals(closedProgress, openProgress)
+        assertEquals(TownCompletion().anchor(closed), TownCompletion().anchor(open))
+    }
+
     @Test fun exactTileCoverageUnlocksBronzeSilverAndGoldAt100Percent() {
         val engine = TownCompletion()
         for ((tiles, percent, medal) in listOf(
