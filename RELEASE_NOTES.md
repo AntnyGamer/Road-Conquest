@@ -6,6 +6,9 @@
 - **Trip history and GPX:** Reduce per-fix boxing during replay and simplify GPX segment-break checks, retaining Android 12 compatibility, route breaks, timestamps, privacy cutoffs, and byte-for-byte export output.
 - **Faster map bookkeeping:** Cache constant fog-grid row limits; avoid repeated town-boundary cache lookups; detect the need for Census layer partitioning without allocating intermediate collections. Authoritative municipal boundaries and exploration scoring are unchanged.
 - **Lower background overhead:** Avoid redundant distance-preference reads and map-budget cache lookups. Reuse permitted friend actions; retained dynamically sized SQL updates for future map quota changes.
+- **Forum Plus account switching:** Discard pending Play purchase verification tickets from the previous account session so returning users can retry without waiting for an obsolete result.
+- **Data-reset race:** Reject a population service response that completes after Delete all data, rather than displaying or caching pre-reset information.
+- **Precise GPS ordering:** Reject a location fix that is even a fraction of a millisecond older than the newest accepted fix; retain same-time accuracy preference and ordinary newer-fix behavior.
 - **AdMob and consent verification:** Keep Google Mobile Ads SDK 25.5.0 and Google UMP SDK 4.0.0. Preserve debug/test IDs and production release IDs, and verify release App ID, Advertising ID permission, and SDK integration in CI. Consent messages themselves must be created and published separately in AdMob Privacy & messaging.
 - **Build tooling:** Update the Gradle wrapper from 9.8.2 to 9.9.0 using the official SHA-256 checksum to resolve the failing out-of-date Gradle lint check without suppressing it.
 
