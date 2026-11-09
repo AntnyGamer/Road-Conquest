@@ -24,6 +24,8 @@ internal object FogGrid {
     private val columnCount = (360.0 * METERS_PER_LATITUDE_DEGREE *
         cos(Math.toRadians(REFERENCE_LATITUDE)) / MILE_METERS).roundToInt()
     private val longitudeStep = 360.0 / columnCount
+    private val firstMercatorRow = floor((90.0 - MAX_MERCATOR_LATITUDE) / LATITUDE_STEP).toInt()
+    private val lastMercatorRow = floor((90.0 + MAX_MERCATOR_LATITUDE) / LATITUDE_STEP).toInt()
 
     data class Cell(val row: Int, val column: Int) {
         val key: Long get() = (row.toLong() shl 32) or (column.toLong() and 0xffff_ffffL)
@@ -42,11 +44,10 @@ internal object FogGrid {
     /** Nearby tile goals use the same globally aligned grid, including date-line wrapping. */
     fun neighbors(cell: Cell, radius: Int = 2): List<Cell> {
         require(radius in 0..5)
-        val firstRow = floor((90.0 - MAX_MERCATOR_LATITUDE) / LATITUDE_STEP).toInt()
-        val lastRow = floor((90.0 + MAX_MERCATOR_LATITUDE) / LATITUDE_STEP).toInt()
+        // These global limits never depend on the tile or search radius.
         val output = ArrayList<Cell>((2 * radius + 1) * (2 * radius + 1))
         for (row in (cell.row - radius)..(cell.row + radius)) {
-            if (row !in firstRow..lastRow) continue
+            if (row !in firstMercatorRow..lastMercatorRow) continue
             for (offset in -radius..radius) {
                 val column = ((cell.column + offset) % columnCount + columnCount) % columnCount
                 output += Cell(row, column)
