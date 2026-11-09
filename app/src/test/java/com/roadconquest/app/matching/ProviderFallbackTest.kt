@@ -28,6 +28,36 @@ class ProviderFallbackTest {
         override fun rateLimitRemainingMs() = cooldown
     }
 
+    @Test fun matchingGatewayFailureRulesKeepTheExistingProviderCooldownPolicy() {
+        for (status in listOf(301, 302, 399, 401, 403, 429, 500, 503, 599)) {
+            assertTrue("HTTP $status must trigger fallback/cooldown",
+                matchingGatewayUnavailable(status, null))
+        }
+        for (status in listOf(200, 201, 299, 400, 404, 408, 409, 422)) {
+            assertFalse("HTTP $status alone is not a provider outage",
+                matchingGatewayUnavailable(status, null))
+        }
+        assertTrue(matchingGatewayUnavailable(409, "budget_conflict"))
+        assertFalse(matchingGatewayUnavailable(409, "invalid_request"))
+    }
+
+    @Test fun commonCoordinateValidatorPreservesBothProviderInputContracts() {
+        assertTrue(points.all { it.validMatchingCoordinates() })
+        for (bad in listOf(
+            points[0].copy(latitude = -91.0),
+            points[0].copy(latitude = Double.NaN),
+            points[0].copy(latitude = Double.POSITIVE_INFINITY),
+            points[0].copy(longitude = -181.0),
+            points[0].copy(longitude = Double.NEGATIVE_INFINITY)
+        )) assertFalse(bad.validMatchingCoordinates())
+        assertTrue(points[0].copy(latitude = -90.0, longitude = 180.0)
+            .validMatchingCoordinates())
+        // Geoapify accepts a valid location without accuracy metadata; LocationIQ
+        // keeps its separate positive <= 1000m accuracy gate.
+        assertTrue(points[0].copy(accuracyMeters = Float.NaN)
+            .validMatchingCoordinates())
+    }
+
     @Test fun bothMatchingProvidersShareTheExactOrderedTraceWithoutLeakingAccuracy() {
         val started = Instant.parse("2026-01-01T07:09:34Z").toEpochMilli()
         val inputs = listOf(
