@@ -233,8 +233,14 @@ internal object PlacePopulationLookup {
             } else JSONObject(body)
             val code = request.countryCode
             if (code != doc.optString("cca2") && code != doc.optString("cca3")) return null
-            val count = doc.optLong("population", -1)
-            return count.takeIf { it >= 0 }?.let { Value(it, "REST Countries") }
+            // optLong silently truncates decimals and accepts numeric strings.
+            // A population count is only meaningful if the provider supplied an
+            // actual finite, non-negative whole JSON number.
+            val raw = doc.opt("population") as? Number ?: return null
+            val count = raw.toDouble()
+            return count.takeIf { it.isFinite() && it >= 0.0 &&
+                it < Long.MAX_VALUE.toDouble() && it == kotlin.math.floor(it) }
+                ?.let { Value(it.toLong(), "REST Countries") }
         }
 
         val root = JSONObject(body)
