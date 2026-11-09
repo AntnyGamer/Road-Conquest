@@ -35,6 +35,26 @@ internal object TownOverlayPartition {
     internal fun safeForPlanarRegionPartition(data: List<PlaceOverlayData>): Boolean =
         data.all { OverlayViewport.ofGeometry(it.geometryJson) != null }
 
+
+    /** A second Census boundary layer is the only reason to run official overlap clipping.
+     * Stop at the first different layer without allocating a list and set of every town.
+     */
+    internal fun hasMixedOfficialLayers(data: List<PlaceOverlayData>): Boolean {
+        var firstLayer = 0
+        for (place in data) {
+            val layer = when {
+                "|census-4-" in place.key -> 4
+                "|census-3-" in place.key -> 3
+                "|census-1-" in place.key -> 1
+                else -> 0
+            }
+            if (layer == 0) continue
+            if (firstLayer == 0) firstLayer = layer
+            else if (firstLayer != layer) return true
+        }
+        return false
+    }
+
     fun render(data: List<PlaceOverlayData>): Result = render(data, officialUs = false)
 
     /**
