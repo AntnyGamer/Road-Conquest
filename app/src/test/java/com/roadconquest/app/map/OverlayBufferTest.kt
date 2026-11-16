@@ -68,6 +68,42 @@ class OverlayBufferTest {
             })
     }
 
+    @Test fun drivingStraightThroughNamedIntersectionDoesNotLoseTheBlueRoad() {
+        val before = namedFragment("North Road", 1_000L, 4_000L,
+            40.0 to -74.0005, 40.0 to -74.00025)
+        val after = namedFragment("South Road", 6_000L, 8_000L,
+            40.0 to -74.00010, 40.0 to -73.99985)
+        fun display(gps: Boolean) = OverlayRoads.prepare(listOf(before, after),
+            hasRecordedDriving = { _, _, _, _, _, _ -> gps },
+            requireMatchedConnectorGeometry = true)
+        assertEquals("Different road names alone cannot invent a connection",
+            2, display(false).starts.size - 1)
+        val connected = display(true)
+        assertEquals("GPS-proven straight travel through the junction is continuous",
+            1, connected.starts.size - 1)
+        assertTrue("The join must stay on the existing matched centerline",
+            connected.coordinates.indices.step(2).all {
+                kotlin.math.abs(connected.coordinates[it] - 40.0) < 1e-8
+            })
+    }
+
+    @Test fun passingAnIntersectionNeverConnectsToPerpendicularOrOffsetRoads() {
+        val before = namedFragment("Main Road", 1_000L, 4_000L,
+            40.0 to -74.0005, 40.0 to -74.00025)
+        val sideStreet = namedFragment("Side Road", 6_000L, 8_000L,
+            40.0 to -74.00010, 40.00025 to -74.00010)
+        val offsetParallel = namedFragment("Other Carriageway", 6_000L, 8_000L,
+            40.00004 to -74.00002, 40.00004 to -73.99978)
+        for (wrongExit in listOf(sideStreet, offsetParallel)) {
+            val result = OverlayRoads.prepare(listOf(before, wrongExit),
+                hasRecordedDriving = { _, _, _, _, _, _ -> true },
+                hasRecordedTurn = { _, _, _, _, _, _, _, _ -> false },
+                requireMatchedConnectorGeometry = true)
+            assertEquals("Proximity must not connect the wrong intersection branch: ${wrongExit.name}",
+                2, result.starts.size - 1)
+        }
+    }
+
     @Test fun productionStraightGapNeedsRecordedDrivingProof() {
         val west = namedFragment("Main Street", 1_000L, 4_000L,
             40.0 to -74.0005, 40.0 to -74.00025)

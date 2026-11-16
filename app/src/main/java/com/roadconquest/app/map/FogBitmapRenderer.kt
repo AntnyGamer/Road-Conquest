@@ -345,12 +345,15 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
                                     nodes[right.startNode].latitude, nodes[right.startNode].longitude,
                                     time, nextAt
                                 ) else false
-                            // Straight gaps still need the same name, aligned bearings
-                            // and saved GPS. A turning road never becomes a straight chord.
-                            val straightBend = if (normalTime && ordinaryBend == null &&
-                                names[from].isNotBlank() &&
+                            // Driving straight past an intersection may cross a road-name
+                            // boundary even though both matched centerlines are collinear.
+                            // Different-name fragments ALWAYS need the recorded GPS crossing:
+                            // proximity or matching orientation alone is insufficient.
+                            val sameName = names[from].isNotBlank() &&
                                 !names[from].equals("Unnamed road", ignoreCase = true) &&
                                 names[from].trim().equals(names[to].trim(), ignoreCase = true)
+                            val straightBend = if (normalTime && ordinaryBend == null &&
+                                (sameName || hasRecordedDriving != null)
                             ) supportedStraightSeam(left.coordinates, right.coordinates, distance) else null
                             val bend = ordinaryBend ?: extendedBend?.takeIf { confirmedTurn }
                                 ?: straightBend ?: continue
@@ -360,7 +363,8 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
                                 nodes[right.startNode].latitude, nodes[right.startNode].longitude,
                                 time, nextAt
                             ) == true
-                            if (isStraight && hasRecordedDriving != null && !confirmedStraight) continue
+                            if (isStraight && !confirmedStraight &&
+                                (!sameName || hasRecordedDriving != null)) continue
                             seenFrom[to] = from
                             val candidate = JunctionCandidate(from, to, distance, bend,
                                 time, nextAt, isStraight, confirmedTurn || confirmedStraight)
@@ -553,7 +557,12 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
             ) return null
             val minimumCosine = cos(Math.toRadians(MAX_STRAIGHT_SEAM_BEARING_DEGREES))
             if ((inX * gapX + inY * gapY) / (inLength * gapLength) < minimumCosine ||
-                (outX * gapX + outY * gapY) / (outLength * gapLength) < minimumCosine
+                (outX * gapX + outY * gapY) / (outLength * gapLength) < minimumCosine ||
+                // Reject parallel or offset roads that appear to continue past an
+                // intersection. Saved GPS proves motion, not that a sideways
+                // connector belongs to the road centerline.
+                abs(inX * gapY - inY * gapX) / inLength > MAX_STRAIGHT_SEAM_LATERAL_M ||
+                abs(outX * gapY - outY * gapX) / outLength > MAX_STRAIGHT_SEAM_LATERAL_M
             ) return null
             return (aLat + cLat) / 2.0 to (aLon + cLon) / 2.0
         }
@@ -709,6 +718,7 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
         private const val MAX_RECORDED_TURN_TIME_MS = 45_000L
         private const val MAX_STRAIGHT_SEAM_DISTANCE_M = 25.0
         private const val MAX_STRAIGHT_SEAM_BEARING_DEGREES = 12.0
+        private const val MAX_STRAIGHT_SEAM_LATERAL_M = 3.0
         private const val MIN_JUNCTION_DIRECTION_M = 4.0
         private const val MAX_JUNCTION_TANGENT_LOOKBACK_M = 25.0
         private const val MIN_UNIQUE_JUNCTION_MARGIN_M = 3.0
