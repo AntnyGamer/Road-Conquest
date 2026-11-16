@@ -354,15 +354,16 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
                             ) supportedStraightSeam(left.coordinates, right.coordinates, distance) else null
                             val bend = ordinaryBend ?: extendedBend?.takeIf { confirmedTurn }
                                 ?: straightBend ?: continue
-                            if (bend === straightBend && hasRecordedDriving != null &&
-                                !hasRecordedDriving(
-                                    nodes[left.endNode].latitude, nodes[left.endNode].longitude,
-                                    nodes[right.startNode].latitude, nodes[right.startNode].longitude,
-                                    time, nextAt
-                                )
-                            ) continue
+                            val isStraight = bend === straightBend
+                            val confirmedStraight = isStraight && hasRecordedDriving?.invoke(
+                                nodes[left.endNode].latitude, nodes[left.endNode].longitude,
+                                nodes[right.startNode].latitude, nodes[right.startNode].longitude,
+                                time, nextAt
+                            ) == true
+                            if (isStraight && hasRecordedDriving != null && !confirmedStraight) continue
                             seenFrom[to] = from
-                            val candidate = JunctionCandidate(from, to, distance, bend)
+                            val candidate = JunctionCandidate(from, to, distance, bend,
+                                time, nextAt, isStraight, confirmedTurn || confirmedStraight)
                             offer(from, candidate, bestFrom, secondFrom)
                             offer(to, candidate, bestTo, secondTo)
                         }
@@ -380,15 +381,29 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
                 val right = segments[candidate.to]
                 val end = nodes[left.endNode]
                 val start = nodes[right.startNode]
-                val geometry = if (geometryByName == null) {
-                    doubleArrayOf(
-                        end.latitude, end.longitude, candidate.bendLatitude, candidate.bendLongitude,
-                        start.latitude, start.longitude
-                    )
-                } else matchedConnectorShape(
-                    segments, names, geometryByName, candidate.from, candidate.to,
-                    end.latitude, end.longitude, start.latitude, start.longitude
-                ) ?: continue
+                val matchedGeometry = geometryByName?.let {
+                    matchedConnectorShape(segments, names, it, candidate.from, candidate.to,
+                        end.latitude, end.longitude, start.latitude, start.longitude)
+                }
+                if (geometryByName != null && matchedGeometry == null) {
+                    // The live map normally prefers an independently matched centerline.
+                    // For a unique short seam with no donor road, a real recorded
+                    // three-fix turn (or direction-checked same-road straight crossing)
+                    // can still close the visible gap. This is display-only: no road,
+                    // mileage, visit, or progression entry is written.
+                    val verified = candidate.verified || (!candidate.straight &&
+                        hasRecordedTurn?.invoke(
+                            end.latitude, end.longitude,
+                            candidate.bendLatitude, candidate.bendLongitude,
+                            start.latitude, start.longitude,
+                            candidate.departureTime, candidate.arrivalTime
+                        ) == true)
+                    if (!verified) continue
+                }
+                val geometry = matchedGeometry ?: doubleArrayOf(
+                    end.latitude, end.longitude, candidate.bendLatitude, candidate.bendLongitude,
+                    start.latitude, start.longitude
+                )
                 segments += Segment(geometry, left.endNode, right.startNode)
             }
         }
@@ -469,7 +484,11 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
             val from: Int,
             val to: Int,
             val distance: Double,
-            val bend: Pair<Double, Double>
+            val bend: Pair<Double, Double>,
+            val departureTime: Long,
+            val arrivalTime: Long,
+            val straight: Boolean,
+            val verified: Boolean
         ) {
             val bendLatitude get() = bend.first
             val bendLongitude get() = bend.second

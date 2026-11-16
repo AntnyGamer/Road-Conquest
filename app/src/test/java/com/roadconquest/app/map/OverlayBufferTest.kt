@@ -112,6 +112,30 @@ class OverlayBufferTest {
             1, display().starts.size - 1)
     }
 
+    @Test fun productionMapRepairsOnlyGpsConfirmedSameRoadStraightSeam() {
+        val context: android.content.Context = RuntimeEnvironment.getApplication()
+        com.roadconquest.app.data.TrackingRepository(context).clearHistory()
+        val repo = com.roadconquest.app.data.TrackingRepository(context)
+        val west = namedFragment("Main Street", 1_000L, 4_000L,
+            40.0 to -74.0005, 40.0 to -74.00025)
+        val east = namedFragment("Main Street", 6_000L, 8_000L,
+            40.0 to -74.00010, 40.0 to -73.99985)
+        fun visible() = OverlayRoads.prepare(listOf(west, east),
+            hasRecordedDriving = repo::hasRecordedDrivingAcrossGap,
+            requireMatchedConnectorGeometry = true)
+        assertEquals(2, visible().starts.size - 1)
+        for ((time, lon) in listOf(4_000L to -74.00025, 6_000L to -74.00010)) {
+            repo.insertLocation(android.location.Location("gps").apply {
+                latitude = 40.0; longitude = lon; this.time = time
+                accuracy = 4f; speed = 5f
+            })
+        }
+        assertEquals("A genuine straight crossing must connect in the production map",
+            1, visible().starts.size - 1)
+        assertEquals("No new road record is credited for an inferred display seam",
+            0L, repo.getSummary().roadSegmentCount)
+    }
+
     @Test fun actualGpsThroughIntersectionRepairsLongerMissingTurnOnlyVisually() {
         val app: android.content.Context = RuntimeEnvironment.getApplication()
         com.roadconquest.app.data.TrackingRepository(app).clearHistory()
@@ -123,7 +147,8 @@ class OverlayBufferTest {
         val exit = namedFragment("Exit", 12_000L, 14_000L,
             40.0 to -73.99947, 40.0 to -73.9989)
         fun visible() = OverlayRoads.prepare(listOf(approach, exit),
-            hasRecordedTurn = repo::hasRecordedDrivingThroughTurn)
+            hasRecordedTurn = repo::hasRecordedDrivingThroughTurn,
+            requireMatchedConnectorGeometry = true)
         assertEquals("Without a GPS-confirmed turn do not join intersection",
             2, visible().starts.size - 1)
         listOf(
@@ -168,7 +193,8 @@ class OverlayBufferTest {
             })
         }
         val result = OverlayRoads.prepare(listOf(approach, exit),
-            hasRecordedTurn = repo::hasRecordedDrivingThroughTurn)
+            hasRecordedTurn = repo::hasRecordedDrivingThroughTurn,
+            requireMatchedConnectorGeometry = true)
         assertEquals(2, result.starts.size - 1)
     }
 
