@@ -25,6 +25,21 @@ val placeOverlayConfigUrl = providers.gradleProperty("ROADCONQUEST_PLACE_OVERLAY
 val leaderboardsVisible = providers.gradleProperty("ROADCONQUEST_LEADERBOARDS_VISIBLE")
     .getOrElse("false").toBooleanStrict()
 
+// Liftoff IDs are build-time configuration, not credentials. Empty values disable ads
+// until the publisher has created and verified app/placement IDs in Liftoff Monetize.
+fun liftoffProperty(key: String): String = providers.gradleProperty(key)
+    .orElse(providers.environmentVariable(key)).getOrElse("").trim()
+val liftoffAppId = liftoffProperty("ROADCONQUEST_LIFTOFF_APP_ID")
+val liftoffBannerId = liftoffProperty("ROADCONQUEST_LIFTOFF_BANNER_ID")
+val liftoffRewardedId = liftoffProperty("ROADCONQUEST_LIFTOFF_REWARDED_ID")
+val liftoffRewardPoints = providers.gradleProperty("ROADCONQUEST_LIFTOFF_REWARD_POINTS")
+    .getOrElse("25").toInt()
+require(liftoffRewardPoints in 1..1000) { "Liftoff rewarded ad points must be between 1 and 1000." }
+val liftoffIds = listOf(liftoffAppId, liftoffBannerId, liftoffRewardedId)
+require(liftoffIds.all { it.isEmpty() } || liftoffIds.all { it.isNotEmpty() }) {
+    "Provide all three ROADCONQUEST_LIFTOFF IDs, or leave all three unset."
+}
+
 android {
     namespace = "com.roadconquest.app"
     compileSdk = 37
@@ -43,6 +58,10 @@ android {
         buildConfigField("String", "MAP_GATEWAY_URL", "\"${mapGatewayUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
         buildConfigField("String", "PLACE_OVERLAY_CONFIG_URL", "\"$escapedPlaceOverlayConfigUrl\"")
         buildConfigField("boolean", "LEADERBOARDS_VISIBLE", leaderboardsVisible.toString())
+        buildConfigField("String", "LIFTOFF_APP_ID", "\"$liftoffAppId\"")
+        buildConfigField("String", "LIFTOFF_BANNER_ID", "\"$liftoffBannerId\"")
+        buildConfigField("String", "LIFTOFF_REWARDED_ID", "\"$liftoffRewardedId\"")
+        buildConfigField("int", "LIFTOFF_REWARD_POINTS", liftoffRewardPoints.toString())
     }
 
     buildFeatures {
@@ -50,15 +69,7 @@ android {
     }
 
     buildTypes {
-        debug {
-            manifestPlaceholders["admobAppId"] = "ca-app-pub-3940256099942544~3347511713"
-            buildConfigField("String", "ADMOB_BANNER_ID", "\"ca-app-pub-3940256099942544/9214589741\"")
-            buildConfigField("String", "ADMOB_REWARDED_ID", "\"ca-app-pub-3940256099942544/5224354917\"")
-        }
         release {
-            manifestPlaceholders["admobAppId"] = "ca-app-pub-4489303482171969~1528361127"
-            buildConfigField("String", "ADMOB_BANNER_ID", "\"ca-app-pub-4489303482171969/1295506962\"")
-            buildConfigField("String", "ADMOB_REWARDED_ID", "\"ca-app-pub-4489303482171969/2621950945\"")
             // R8 and optimized resource shrinking remove unused shipped code/resources.
             // MapLibre's own consumer rules protect JNI/reflection entry points.
             isMinifyEnabled = true
@@ -100,19 +111,20 @@ tasks.withType<Test>().configureEach {
 }
 
 dependencies {
-    implementation(platform("com.google.firebase:firebase-bom:35.1.0"))
+    implementation(platform("com.google.firebase:firebase-bom:35.2.0"))
     implementation("com.google.firebase:firebase-crashlytics")
     implementation("com.google.firebase:firebase-messaging")
     implementation("com.squareup.okhttp3:okhttp:5.5.1")
     implementation("com.android.billingclient:billing:9.1.0")
-    implementation("com.google.android.gms:play-services-ads:25.5.0")
-    implementation("com.google.android.ump:user-messaging-platform:4.0.0")
+    implementation("com.vungle:vungle-ads:7.8.0")
+    implementation("com.google.android.gms:play-services-ads-identifier:18.3.0")
     implementation("com.google.android.play:integrity:1.6.0")
     implementation("androidx.core:core:1.19.1")
+    implementation("androidx.core:core-ktx:1.19.1")
     implementation("org.maplibre.gl:android-sdk-opengl:13.7.1")
     implementation("org.locationtech.jts:jts-core:1.20.0")
     testImplementation("junit:junit:4.13.2")
-    testImplementation("org.robolectric:robolectric:4.17")
+    testImplementation("org.robolectric:robolectric:4.18")
     testImplementation("com.squareup.okhttp3:mockwebserver:5.5.1")
     androidTestImplementation("androidx.test:core:1.7.0")
     androidTestImplementation("androidx.test:runner:1.7.0")

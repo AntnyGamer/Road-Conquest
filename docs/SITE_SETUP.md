@@ -2,7 +2,7 @@
 
 **Live website:** https://roadconquest.pages.dev/
 
-The public website, Privacy Policy, Terms of Service, app icon and AdMob seller file are static assets in `docs/`, deployed to the Cloudflare Pages project `roadconquest` from the existing GitHub repository `AntnyGamer/Road-Conquest`.
+The public website, Privacy Policy, Terms of Service, app icon and app advertising seller file are static assets in `docs/`, deployed to the Cloudflare Pages project `roadconquest` from the existing GitHub repository `AntnyGamer/Road-Conquest`.
 
 ## Pages configuration
 
@@ -26,7 +26,7 @@ The public website, Privacy Policy, Terms of Service, app icon and AdMob seller 
 
 Cloudflare Pages automatically canonicalizes `/privacy.html` to `/privacy` and `/terms.html` to `/terms`. **Do not create redirects in the opposite direction**: the combination caused `ERR_TOO_MANY_REDIRECTS`. The conflicting `_redirects` file was deleted and both clean and `.html` URLs were retested successfully.
 
-`app-ads.txt` contains `google.com, pub-4489303482171969, DIRECT, f08c47fec0942fa0`. Its HTTP accessibility does **not** itself confirm AdMob or Liftoff verification; Liftoff may require a registrable root domain and a separate seller authorization.
+`app-ads.txt` needs Liftoff's account-specific seller line and the current authorized seller list from the Liftoff Monetize dashboard. The AdMob seller entry has been removed. An accessible file does **not** prove Liftoff verification. Liftoff requires a registrable root domain for verification; a `pages.dev` subdomain may not qualify.
 
 ## Legacy app compatibility
 

@@ -39,7 +39,10 @@
     <string name="web_page_unavailable">No app could open this page. Open this address in a browser: %1$s</string>
     <string name="app_version">Release %1$s (%2$d)</string>
     <string name="ad_banner_label">Advertisement</string>
-    <string name="ad_reward_explanation">Optional: load an ad to see its reward before choosing to watch. Points are earned only after confirmed completion. Google may use device identifiers, ad interactions, diagnostics and your IP address.</string>
+    <string name="ad_reward_explanation">Optional: load an ad to see its reward before choosing to watch. Points are earned only after confirmed completion. Liftoff may process device identifiers, ad interactions, diagnostics and IP addresses in accordance with your ad privacy choice.</string>
+    <string name="ad_consent_description">Choose how Liftoff Monetize may use your data for ads. Personalized ads may use device identifiers, IP addresses, diagnostics and ad interactions. Limited ads use opt-out signals for personalized advertising and data sharing, but some device and ad data may still be processed. You can change this choice here at any time. VIP removes ads entirely. Recorded driving routes are not sent to ad requests.</string>
+    <string name="ad_allow_ads">Personalized ads</string>
+    <string name="ad_reject_ads">Limited ads</string>
     <string name="ad_privacy_options">Ad privacy choices</string>
     <string name="ad_unavailable">Rewarded ads unavailable</string>
     <string name="ad_load">Load rewarded ad</string>
@@ -50,7 +53,6 @@
     </plurals>
     <string name="ad_showing">Rewarded ad in progress…</string>
     <string name="ad_no_fill">No ad available right now. Try again later.</string>
-    <string name="ad_consent_error">Ad privacy settings could not be updated. The shop is still available.</string>
     <plurals name="ad_reward_saved">
         <item quantity="one">+%1$d point earned</item>
         <item quantity="other">+%1$d points earned</item>
