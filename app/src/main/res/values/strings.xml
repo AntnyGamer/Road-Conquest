@@ -53,7 +53,6 @@
     </plurals>
     <string name="ad_showing">Rewarded ad in progress…</string>
     <string name="ad_no_fill">No ad available right now. Try again later.</string>
-    <string name="ad_consent_error">Ad privacy settings could not be updated. The shop is still available.</string>
     <plurals name="ad_reward_saved">
         <item quantity="one">+%1$d point earned</item>
         <item quantity="other">+%1$d points earned</item>

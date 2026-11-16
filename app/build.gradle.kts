@@ -111,7 +111,7 @@ tasks.withType<Test>().configureEach {
 }
 
 dependencies {
-    implementation(platform("com.google.firebase:firebase-bom:35.1.0"))
+    implementation(platform("com.google.firebase:firebase-bom:35.2.0"))
     implementation("com.google.firebase:firebase-crashlytics")
     implementation("com.google.firebase:firebase-messaging")
     implementation("com.squareup.okhttp3:okhttp:5.5.1")
@@ -123,7 +123,7 @@ dependencies {
     implementation("org.maplibre.gl:android-sdk-opengl:13.7.1")
     implementation("org.locationtech.jts:jts-core:1.20.0")
     testImplementation("junit:junit:4.13.2")
-    testImplementation("org.robolectric:robolectric:4.17")
+    testImplementation("org.robolectric:robolectric:4.18")
     testImplementation("com.squareup.okhttp3:mockwebserver:5.5.1")
     androidTestImplementation("androidx.test:core:1.7.0")
     androidTestImplementation("androidx.test:runner:1.7.0")

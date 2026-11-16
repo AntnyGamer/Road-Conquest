@@ -1,5 +1,6 @@
 package com.roadconquest.app.ads
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.AlertDialog
 import android.app.Application
@@ -11,6 +12,7 @@ import android.view.View
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.Toast
+import androidx.core.content.edit
 import com.roadconquest.app.BuildConfig
 import com.roadconquest.app.R
 import com.roadconquest.app.billing.VipBilling
@@ -376,6 +378,7 @@ class ScreenAds(
         }
     }
 
+    @SuppressLint("LogNotTimber")
     private fun saveCompletedReward() {
         val points = BuildConfig.LIFTOFF_REWARD_POINTS.toLong()
         val bridge = AdRewardBridge(activity.applicationContext, points)
@@ -427,7 +430,7 @@ private object AdPrivacy {
         activity.getSharedPreferences(PREFS, 0).getBoolean(CONSENT_KEY, false)
 
     fun save(activity: Activity, allowed: Boolean) {
-        activity.getSharedPreferences(PREFS, 0).edit().putBoolean(CONSENT_KEY, allowed).apply()
+        activity.getSharedPreferences(PREFS, 0).edit { putBoolean(CONSENT_KEY, allowed) }
     }
 
     fun applyToSdk(activity: Activity) {
