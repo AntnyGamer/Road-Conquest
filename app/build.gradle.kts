@@ -25,13 +25,13 @@ val placeOverlayConfigUrl = providers.gradleProperty("ROADCONQUEST_PLACE_OVERLAY
 val leaderboardsVisible = providers.gradleProperty("ROADCONQUEST_LEADERBOARDS_VISIBLE")
     .getOrElse("false").toBooleanStrict()
 
-// Liftoff IDs are build-time configuration, not credentials. Empty values disable ads
-// until the publisher has created and verified app/placement IDs in Liftoff Monetize.
-fun liftoffProperty(key: String): String = providers.gradleProperty(key)
-    .orElse(providers.environmentVariable(key)).getOrElse("").trim()
-val liftoffAppId = liftoffProperty("ROADCONQUEST_LIFTOFF_APP_ID")
-val liftoffBannerId = liftoffProperty("ROADCONQUEST_LIFTOFF_BANNER_ID")
-val liftoffRewardedId = liftoffProperty("ROADCONQUEST_LIFTOFF_REWARDED_ID")
+// Public SDK IDs are embedded in Android builds. Nonblank Gradle properties or
+// environment variables can override these defaults for alternate placements.
+fun liftoffProperty(key: String, defaultId: String): String = providers.gradleProperty(key)
+    .orElse(providers.environmentVariable(key)).getOrElse("").trim().ifEmpty { defaultId }
+val liftoffAppId = liftoffProperty("ROADCONQUEST_LIFTOFF_APP_ID", "6afb5f83d830ee01b9af581f")
+val liftoffBannerId = liftoffProperty("ROADCONQUEST_LIFTOFF_BANNER_ID", "BANNER_AD-4938034")
+val liftoffRewardedId = liftoffProperty("ROADCONQUEST_LIFTOFF_REWARDED_ID", "REWARDED_AD-9692847")
 val liftoffRewardPoints = providers.gradleProperty("ROADCONQUEST_LIFTOFF_REWARD_POINTS")
     .getOrElse("25").toInt()
 require(liftoffRewardPoints in 1..1000) { "Liftoff rewarded ad points must be between 1 and 1000." }

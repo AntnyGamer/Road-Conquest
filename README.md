@@ -228,9 +228,10 @@ toward existing ad achievements. Rewards are local, not verified leaderboard cre
 VIP suppresses all advertising.
 
 Liftoff requires an approved publisher account, an Android app and **one banner
-placement plus one rewarded placement**. Until all three IDs exist, advertising
-is entirely disabled; this is deliberate, and no placeholder/live ad requests
-occur. Supply IDs to Gradle using environment variables or Gradle project properties:
+placement plus one rewarded placement**. Road Conquest's publisher app, banner,
+and rewarded placement IDs are embedded as build defaults (these public SDK
+identifiers are not account credentials). For alternate builds, nonempty Gradle
+project properties or environment variables can override them:
 
 - `ROADCONQUEST_LIFTOFF_APP_ID`
 - `ROADCONQUEST_LIFTOFF_BANNER_ID`
@@ -239,8 +240,9 @@ occur. Supply IDs to Gradle using environment variables or Gradle project proper
 Set `ROADCONQUEST_LIFTOFF_REWARD_POINTS` if you want to change the fixed
 25-point reward (1–1000 points); Liftoff's completion callback does not return
 an AdMob-style dynamic reward amount. Keep the displayed reward and actual
-credit identical. For GitHub builds, add Actions secrets `LIFTOFF_APP_ID`,
-`LIFTOFF_BANNER_ID`, and `LIFTOFF_REWARDED_ID`. Check **Test Mode** in the
+credit identical. GitHub builds now use the configured defaults without requiring
+Actions secrets; optional `LIFTOFF_APP_ID`, `LIFTOFF_BANNER_ID`, and
+`LIFTOFF_REWARDED_ID` secrets may override them. Check **Test Mode** in the
 Liftoff dashboard before generating test traffic; unlike AdMob, Liftoff has no
 universal public demo placement IDs.
 
