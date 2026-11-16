@@ -1,4 +1,4 @@
-# Road Conquest 1.0.4
+# Road Conquest 1.0.5
 
 Road Conquest remembers the roads you drive and the places you visit, revealing them through a
 cloud-textured fog map.
@@ -7,7 +7,7 @@ cloud-textured fog map.
 [Source and issues](https://github.com/AntnyGamer/Road-Conquest) ·
 [GNU AGPL v3 license](LICENSE)
 
-**1.0.4** clarifies sign-in errors and reduces repeated work across trip history, map overlays, grid exploration, preferences, and map quotas. The direct Liftoff Monetize SDK replaces AdMob and MAX, with consent gating and build-time ad IDs. Existing accounts, storage, account/map Worker URLs, and backup formats remain unchanged. See the [release notes](RELEASE_NOTES.md) and [backup documentation](BACKUP_AND_CHALLENGES.md).
+**1.0.5** enables configured Liftoff Monetize banner and optional rewarded placements, improves road-gap rendering at GPS-confirmed turns and intersections, repairs historical repeat-visit matching, and updates the Google Services build plugin. The 25-point reward and VIP ad-free entitlement remain unchanged. Existing accounts, storage, account/map Worker URLs, and backup formats remain unchanged. See the [release notes](RELEASE_NOTES.md) and [backup documentation](BACKUP_AND_CHALLENGES.md).
 
 Earlier beta history is available in [GitHub Releases](https://github.com/AntnyGamer/Road-Conquest/releases).
 
@@ -30,7 +30,7 @@ Grant Precise location. For automatic background tracking, choose Allow all the 
 location settings and allow background battery use. Settings includes shortcuts to the relevant
 Android screens. Allow notifications to see the tracking notification and its Stop tracking control.
 
-The 1.0.4 source declares Android application ID `com.roadconquest.app` and internal version code **101**. Its intended GitHub release tag is `v1.0.4`; this version is not released merely by opening a pull request. Google Play permanently reserves uploaded version codes, even in testing tracks, so confirm 101 is unused before uploading. The app shows its installed version in Settings → Help & about.
+The 1.0.5 source declares Android application ID `com.roadconquest.app` and internal version code **102**. Its intended GitHub release tag is `v1.0.5`; this version is not released merely by opening a pull request. Google Play permanently reserves uploaded version codes, even in testing tracks, so confirm 102 is unused before uploading. The app shows its installed version in Settings → Help & about.
 
 ## Explore
 

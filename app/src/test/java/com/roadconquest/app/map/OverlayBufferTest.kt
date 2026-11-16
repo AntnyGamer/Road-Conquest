@@ -197,22 +197,23 @@ class OverlayBufferTest {
             40.0 to -73.99980, 40.0 to -73.99950)
         val visits = mapOf(
             approach.segmentId to listOf(1_000L to 4_000L, 101_000L to 104_000L),
-            // An earlier plausible exit from this same visit window has no
-            // confirming GPS evidence; the 108 s exit does.
+            // Two exits begin within the same timestamp second. Only the later
+            // one is confirmed by three ordered GPS points.
             exit.segmentId to listOf(6_000L to 8_000L, 105_000L to 106_000L,
-                108_000L to 110_000L)
+                108_100L to 108_500L, 108_800L to 110_000L)
         )
         val inspected = mutableListOf<Pair<Long, Long>>()
         val result = OverlayRoads.prepare(listOf(approach, exit),
             visitWindows = visits,
             hasRecordedTurn = { _, _, _, _, _, _, from, to ->
                 inspected += from to to
-                from == 104_000L && to == 108_000L
+                from == 104_000L && to == 108_800L
             },
             requireMatchedConnectorGeometry = true)
         assertTrue("Both recorded visits should be inspected", inspected.contains(4_000L to 6_000L))
         assertTrue("Later evidence must not be skipped after the earlier unverified visit",
-            inspected.contains(104_000L to 108_000L))
+            inspected.contains(104_000L to 108_100L) &&
+                inspected.contains(104_000L to 108_800L))
         assertEquals("A verified second drive connects the same two road fragments",
             1, result.starts.size - 1)
     }

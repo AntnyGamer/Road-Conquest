@@ -1,3 +1,20 @@
+# Road Conquest 1.0.5
+
+## Changes since published 1.0.4
+
+- **Liftoff ads activated in the build:** Configure the registered Liftoff Monetize Android app, banner and rewarded placement IDs as public build defaults, retaining Gradle/environment overrides. This replaces the former AdMob/MAX advertising integration; actual fill still depends on publisher approval and Liftoff settings. The 25-point optional reward and VIP ad-free entitlement remain unchanged.
+- **More complete blue-road geometry:** Use genuinely recorded GPS movement to join short, uniquely supported turns and straight-through intersections on the production map even when no separate matched centerline segment covers the gap. Prefer matched route geometry if present; never connect unsupported branches, award unverified roads, or create artificial achievements or driving distance.
+- **Historical intersection repairs:** Check later recorded road visits instead of stopping after the earliest ambiguous visit. Resolve every timestamp within the same second to the specific stored visit, so an earlier unverified exit cannot suppress a subsequent GPS-proven intersection. Keep directional and parallel-road safeguards. Regression tests cover both successful repairs and rejected neighboring roads.
+- **Defensive map and distance handling:** Refuse non-finite map latitudes for minimum-zoom calculations and overflowed time intervals for driving-distance validation. Add focused regression tests.
+- **Advertising seller consistency:** Synchronize the legacy account API's `app-ads.txt` response with the Liftoff and Google seller entries already published by the Cloudflare Pages site. Regression-test that both sources match.
+- **Dependencies and tooling:** Update the Google Services Gradle plugin to **4.6.0**. Confirm the remaining pinned stable Android SDK, Firebase, Vungle, MapLibre, Gradle, GitHub Actions, and Node dependencies against their published release information; experimental/pre-release variants are not selected.
+
+**Build:** Android `versionName` **1.0.5**, `versionCode` **102** (Android API 31+, target API 37). Intended release tag `v1.0.5`. GitHub Actions can publish signed APK and Play-upload AAB only after required checks pass and this branch merges into `main`. Google Play publication is separate; confirm version code 102 is not already reserved by Play Console before uploading.
+
+**Compatibility:** No account or database migration, no change to application ID, signing key, stored history, backup format, or account/map service endpoints. Previously recorded GPS is preserved; visual gap repair does not fabricate points or rewrite recorded routes.
+
+---
+
 # Road Conquest 1.0.4
 
 ## Changes since published 1.0.3

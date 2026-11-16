@@ -256,18 +256,24 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
         ) {
             // Both passes inspect the original roads, never the already added connectors.
             val originalSize = firstTimes.size
-            val startsBySecond = HashMap<Long, MutableList<Int>>()
+            // Keep the exact visit timestamp in the index. Multiple visits to a
+            // road may start in the same second; choosing only the first one can
+            // discard a later GPS-confirmed junction.
+            val startsBySecond = HashMap<Long, MutableList<Pair<Int, Long>>>()
+            fun indexStart(road: Int, startedAt: Long) {
+                startsBySecond.getOrPut(startedAt / 1_000L) { ArrayList(2) } += road to startedAt
+            }
             for (index in 0 until originalSize) {
                 if (degree[segments[index].startNode] != 1 ||
                     segments[index].startNode in occupiedNodes) continue
                 if (visits != null) {
                     for ((startedAt, _) in visits[index]) {
-                        startsBySecond.getOrPut(startedAt / 1_000L) { ArrayList(2) } += index
+                        indexStart(index, startedAt)
                     }
                 } else {
-                    startsBySecond.getOrPut(firstTimes[index] / 1_000L) { ArrayList(2) } += index
+                    indexStart(index, firstTimes[index])
                     if (includeLastTimes && lastTimes[index] != firstTimes[index]) {
-                        startsBySecond.getOrPut(lastTimes[index] / 1_000L) { ArrayList(2) } += index
+                        indexStart(index, lastTimes[index])
                     }
                 }
             }
@@ -310,26 +316,9 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
                     val timeLimit = if (hasRecordedTurn == null) MAX_SUPPORTED_JUNCTION_TIME_MS
                         else MAX_RECORDED_TURN_TIME_MS
                     for (second in time / 1_000L..time / 1_000L + timeLimit / 1_000L) {
-                        for (to in startsBySecond[second].orEmpty()) {
-                            if (to == from || (visits == null && seenFrom[to] == from)) continue
-                            val nextAt = if (visits == null) {
-                                when {
-                                    firstTimes[to] - time in 1L..timeLimit ->
-                                        firstTimes[to]
-                                    includeLastTimes &&
-                                        lastTimes[to] - time in 1L..timeLimit ->
-                                        lastTimes[to]
-                                    else -> null
-                                }
-                            } else {
-                                // The timestamp index can contain several visits to the
-                                // same road. Use the visit in THIS second rather than
-                                // repeatedly reusing the first time in the whole window.
-                                visits[to].firstOrNull { (startedAt, _) ->
-                                    startedAt / 1_000L == second &&
-                                        startedAt - time in 1L..timeLimit
-                                }?.first
-                            } ?: continue
+                        for ((to, nextAt) in startsBySecond[second].orEmpty()) {
+                            if (to == from || (visits == null && seenFrom[to] == from) ||
+                                nextAt - time !in 1L..timeLimit) continue
                             val right = segments[to]
                             val distance = metersBetween(
                                 nodes[left.endNode].latitude, nodes[left.endNode].longitude,
