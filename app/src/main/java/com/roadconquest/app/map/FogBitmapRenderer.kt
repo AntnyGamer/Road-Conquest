@@ -322,8 +322,12 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
                                     else -> null
                                 }
                             } else {
+                                // The timestamp index can contain several visits to the
+                                // same road. Use the visit in THIS second rather than
+                                // repeatedly reusing the first time in the whole window.
                                 visits[to].firstOrNull { (startedAt, _) ->
-                                    startedAt - time in 1L..timeLimit
+                                    startedAt / 1_000L == second &&
+                                        startedAt - time in 1L..timeLimit
                                 }?.first
                             } ?: continue
                             val right = segments[to]

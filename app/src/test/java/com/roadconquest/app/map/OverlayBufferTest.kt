@@ -197,7 +197,10 @@ class OverlayBufferTest {
             40.0 to -73.99980, 40.0 to -73.99950)
         val visits = mapOf(
             approach.segmentId to listOf(1_000L to 4_000L, 101_000L to 104_000L),
-            exit.segmentId to listOf(6_000L to 8_000L, 108_000L to 110_000L)
+            // An earlier plausible exit from this same visit window has no
+            // confirming GPS evidence; the 108 s exit does.
+            exit.segmentId to listOf(6_000L to 8_000L, 105_000L to 106_000L,
+                108_000L to 110_000L)
         )
         val inspected = mutableListOf<Pair<Long, Long>>()
         val result = OverlayRoads.prepare(listOf(approach, exit),
