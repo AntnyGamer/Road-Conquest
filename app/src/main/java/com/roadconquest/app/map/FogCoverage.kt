@@ -5,7 +5,8 @@ import kotlin.math.*
 /** Camera limits and coverage checks in physical view pixels, including rotated viewports. */
 internal object FogCoverage {
     fun minimumZoom(width: Int, height: Int, pixelRatio: Float, latitude: Double): Double {
-        if (width <= 0 || height <= 0 || !pixelRatio.isFinite() || pixelRatio <= 0f) return 0.0
+        if (width <= 0 || height <= 0 || !pixelRatio.isFinite() || pixelRatio <= 0f ||
+            !latitude.isFinite()) return 0.0
         val lat = Math.toRadians(latitude.coerceIn(-85.05112878, 85.05112878))
         val y = (1.0 - ln(tan(PI / 4.0 + lat / 2.0)) / PI) / 2.0
         // A diagonal fits at every bearing. Both poles must remain beyond the nearest

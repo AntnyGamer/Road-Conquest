@@ -52,6 +52,12 @@ class FogCoverageTest {
             800.0, 1000.0, 10.0, 1000.0), 200, 400))
     }
 
+    @Test fun invalidMapLatitudeNeverProducesNanZoom() {
+        for (latitude in listOf(Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY)) {
+            assertEquals(0.0, FogCoverage.minimumZoom(1080, 2400, 2f, latitude), 0.0)
+        }
+    }
+
     @Test fun invalidOrCollapsedQuadsUseTheWorldFallback() {
         assertFalse(FogCoverage.coversViewport(DoubleArray(8), 200, 400))
         assertFalse(FogCoverage.coversViewport(DoubleArray(8) { Double.NaN }, 200, 400))

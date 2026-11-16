@@ -68,6 +68,60 @@ class OverlayBufferTest {
             })
     }
 
+    @Test fun drivingStraightThroughNamedIntersectionDoesNotLoseTheBlueRoad() {
+        val before = namedFragment("North Road", 1_000L, 4_000L,
+            40.0 to -74.0005, 40.0 to -74.00025)
+        val after = namedFragment("South Road", 6_000L, 8_000L,
+            40.0 to -74.00010, 40.0 to -73.99985)
+        fun display(gps: Boolean) = OverlayRoads.prepare(listOf(before, after),
+            hasRecordedDriving = { _, _, _, _, _, _ -> gps },
+            requireMatchedConnectorGeometry = true)
+        assertEquals("Different road names alone cannot invent a connection",
+            2, display(false).starts.size - 1)
+        val connected = display(true)
+        assertEquals("GPS-proven straight travel through the junction is continuous",
+            1, connected.starts.size - 1)
+        assertTrue("The join must stay on the existing matched centerline",
+            connected.coordinates.indices.step(2).all {
+                kotlin.math.abs(connected.coordinates[it] - 40.0) < 1e-8
+            })
+    }
+
+    @Test fun gpsConfirmedStraightTravelWinsOverShallowIntersectionRayCrossing() {
+        // These matched centerlines are only 9 degrees apart. Their tangent
+        // rays intersect, but the recorded travel went straight through the
+        // junction; the map must not invent a turning connector instead.
+        val west = namedFragment("Road Before", 1_000L, 4_000L,
+            40.0 to -74.00050, 40.0 to -74.00025)
+        val east = namedFragment("Road After", 6_000L, 8_000L,
+            40.00001 to -74.00010, 40.00004 to -73.99985)
+        val overlay = OverlayRoads.prepare(listOf(west, east),
+            hasRecordedDriving = { _, _, _, _, _, _ -> true },
+            hasRecordedTurn = { _, _, _, _, _, _, _, _ -> false },
+            requireMatchedConnectorGeometry = true)
+        assertEquals("Verified near-straight intersection is still one blue line",
+            1, overlay.starts.size - 1)
+    }
+
+    @Test fun passingAnIntersectionNeverConnectsToPerpendicularOrOffsetRoads() {
+        val before = namedFragment("Main Road", 1_000L, 4_000L,
+            40.0 to -74.0005, 40.0 to -74.00025)
+        val sideStreet = namedFragment("Side Road", 6_000L, 8_000L,
+            40.0 to -74.00010, 40.00025 to -74.00010)
+        // Only ~10.6 degrees off the approach but 4.4 m sideways: the
+        // heading check alone is not enough to exclude this parallel road.
+        val offsetParallel = namedFragment("Other Carriageway", 6_000L, 8_000L,
+            40.00004 to -73.99997, 40.00004 to -73.99973)
+        for (wrongExit in listOf(sideStreet, offsetParallel)) {
+            val result = OverlayRoads.prepare(listOf(before, wrongExit),
+                hasRecordedDriving = { _, _, _, _, _, _ -> true },
+                hasRecordedTurn = { _, _, _, _, _, _, _, _ -> false },
+                requireMatchedConnectorGeometry = true)
+            assertEquals("Proximity must not connect the wrong intersection branch: ${wrongExit.name}",
+                2, result.starts.size - 1)
+        }
+    }
+
     @Test fun productionStraightGapNeedsRecordedDrivingProof() {
         val west = namedFragment("Main Street", 1_000L, 4_000L,
             40.0 to -74.0005, 40.0 to -74.00025)
@@ -112,6 +166,92 @@ class OverlayBufferTest {
             1, display().starts.size - 1)
     }
 
+    @Test fun productionMapRepairsOnlyGpsConfirmedSameRoadStraightSeam() {
+        val context: android.content.Context = RuntimeEnvironment.getApplication()
+        com.roadconquest.app.data.TrackingRepository(context).clearHistory()
+        val repo = com.roadconquest.app.data.TrackingRepository(context)
+        val west = namedFragment("Main Street", 1_000L, 4_000L,
+            40.0 to -74.0005, 40.0 to -74.00025)
+        val east = namedFragment("Main Street", 6_000L, 8_000L,
+            40.0 to -74.00010, 40.0 to -73.99985)
+        fun visible() = OverlayRoads.prepare(listOf(west, east),
+            hasRecordedDriving = repo::hasRecordedDrivingAcrossGap,
+            requireMatchedConnectorGeometry = true)
+        assertEquals(2, visible().starts.size - 1)
+        for ((time, lon) in listOf(4_000L to -74.00025, 6_000L to -74.00010)) {
+            repo.insertLocation(android.location.Location("gps").apply {
+                latitude = 40.0; longitude = lon; this.time = time
+                accuracy = 4f; speed = 5f
+            })
+        }
+        assertEquals("A genuine straight crossing must connect in the production map",
+            1, visible().starts.size - 1)
+        assertEquals("No new road record is credited for an inferred display seam",
+            0L, repo.getSummary().roadSegmentCount)
+    }
+
+    @Test fun laterGpsConfirmedVisitRepairsTurnMissedOnTheFirstDrive() {
+        val approach = namedFragment("Approach", 1_000L, 4_000L,
+            39.9995 to -74.0, 39.99986 to -74.0)
+        val exit = namedFragment("Exit", 6_000L, 8_000L,
+            40.0 to -73.99980, 40.0 to -73.99950)
+        val visits = mapOf(
+            approach.segmentId to listOf(1_000L to 4_000L, 101_000L to 104_000L),
+            // Two exits begin within the same timestamp second. Only the later
+            // one is confirmed by three ordered GPS points.
+            exit.segmentId to listOf(6_000L to 8_000L, 105_000L to 106_000L,
+                108_100L to 108_500L, 108_800L to 110_000L)
+        )
+        val inspected = mutableListOf<Pair<Long, Long>>()
+        val result = OverlayRoads.prepare(listOf(approach, exit),
+            visitWindows = visits,
+            hasRecordedTurn = { _, _, _, _, _, _, from, to ->
+                inspected += from to to
+                from == 104_000L && to == 108_800L
+            },
+            requireMatchedConnectorGeometry = true)
+        assertTrue("Both recorded visits should be inspected", inspected.contains(4_000L to 6_000L))
+        assertTrue("Later evidence must not be skipped after the earlier unverified visit",
+            inspected.contains(104_000L to 108_100L) &&
+                inspected.contains(104_000L to 108_800L))
+        assertEquals("A verified second drive connects the same two road fragments",
+            1, result.starts.size - 1)
+    }
+
+    @Test fun productionMapRepairsShortConfirmedTurnWithoutDonorGeometry() {
+        val context: android.content.Context = RuntimeEnvironment.getApplication()
+        com.roadconquest.app.data.TrackingRepository(context).clearHistory()
+        val repo = com.roadconquest.app.data.TrackingRepository(context)
+        val approach = namedFragment("Approach", 1_000L, 4_000L,
+            39.9995 to -74.0, 39.99986 to -74.0)
+        val exit = namedFragment("Exit", 10_000L, 14_000L,
+            40.0 to -73.99980, 40.0 to -73.99950)
+        fun display() = OverlayRoads.prepare(listOf(approach, exit),
+            hasRecordedTurn = repo::hasRecordedDrivingThroughTurn,
+            requireMatchedConnectorGeometry = true)
+        assertEquals("Without the turn's GPS evidence, keep distinct roads", 2,
+            display().starts.size - 1)
+        for ((time, point) in listOf(
+            4_000L to (39.99986 to -74.0),
+            7_000L to (40.0 to -74.0),
+            10_000L to (40.0 to -73.99980)
+        )) {
+            repo.insertLocation(android.location.Location("gps").apply {
+                latitude = point.first; longitude = point.second; this.time = time
+                accuracy = 4f; speed = 8f
+            })
+        }
+        val result = display()
+        assertEquals("Short, GPS-proven intersection must have connected blue geometry",
+            1, result.starts.size - 1)
+        assertTrue("Correct centerline corner should be visible",
+            result.coordinates.indices.step(2).any {
+                kotlin.math.abs(result.coordinates[it] - 40.0) < 1e-6 &&
+                    kotlin.math.abs(result.coordinates[it + 1] + 74.0) < 1e-6
+            })
+        assertEquals(0L, repo.getSummary().roadSegmentCount)
+    }
+
     @Test fun actualGpsThroughIntersectionRepairsLongerMissingTurnOnlyVisually() {
         val app: android.content.Context = RuntimeEnvironment.getApplication()
         com.roadconquest.app.data.TrackingRepository(app).clearHistory()
@@ -123,7 +263,8 @@ class OverlayBufferTest {
         val exit = namedFragment("Exit", 12_000L, 14_000L,
             40.0 to -73.99947, 40.0 to -73.9989)
         fun visible() = OverlayRoads.prepare(listOf(approach, exit),
-            hasRecordedTurn = repo::hasRecordedDrivingThroughTurn)
+            hasRecordedTurn = repo::hasRecordedDrivingThroughTurn,
+            requireMatchedConnectorGeometry = true)
         assertEquals("Without a GPS-confirmed turn do not join intersection",
             2, visible().starts.size - 1)
         listOf(
@@ -168,7 +309,8 @@ class OverlayBufferTest {
             })
         }
         val result = OverlayRoads.prepare(listOf(approach, exit),
-            hasRecordedTurn = repo::hasRecordedDrivingThroughTurn)
+            hasRecordedTurn = repo::hasRecordedDrivingThroughTurn,
+            requireMatchedConnectorGeometry = true)
         assertEquals(2, result.starts.size - 1)
     }
 

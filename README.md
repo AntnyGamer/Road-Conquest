@@ -1,4 +1,4 @@
-# Road Conquest 1.0.4
+# Road Conquest 1.0.5
 
 Road Conquest remembers the roads you drive and the places you visit, revealing them through a
 cloud-textured fog map.
@@ -7,7 +7,7 @@ cloud-textured fog map.
 [Source and issues](https://github.com/AntnyGamer/Road-Conquest) ·
 [GNU AGPL v3 license](LICENSE)
 
-**1.0.4** clarifies sign-in errors and reduces repeated work across trip history, map overlays, grid exploration, preferences, and map quotas. The direct Liftoff Monetize SDK replaces AdMob and MAX, with consent gating and build-time ad IDs. Existing accounts, storage, account/map Worker URLs, and backup formats remain unchanged. See the [release notes](RELEASE_NOTES.md) and [backup documentation](BACKUP_AND_CHALLENGES.md).
+**1.0.5** enables configured Liftoff Monetize banner and optional rewarded placements, improves road-gap rendering at GPS-confirmed turns and intersections, repairs historical repeat-visit matching, and updates the Google Services build plugin. The 25-point reward and VIP ad-free entitlement remain unchanged. Existing accounts, storage, account/map Worker URLs, and backup formats remain unchanged. See the [release notes](RELEASE_NOTES.md) and [backup documentation](BACKUP_AND_CHALLENGES.md).
 
 Earlier beta history is available in [GitHub Releases](https://github.com/AntnyGamer/Road-Conquest/releases).
 
@@ -30,7 +30,7 @@ Grant Precise location. For automatic background tracking, choose Allow all the 
 location settings and allow background battery use. Settings includes shortcuts to the relevant
 Android screens. Allow notifications to see the tracking notification and its Stop tracking control.
 
-The 1.0.4 source declares Android application ID `com.roadconquest.app` and internal version code **101**. Its intended GitHub release tag is `v1.0.4`; this version is not released merely by opening a pull request. Google Play permanently reserves uploaded version codes, even in testing tracks, so confirm 101 is unused before uploading. The app shows its installed version in Settings → Help & about.
+The 1.0.5 source declares Android application ID `com.roadconquest.app` and internal version code **102**. Its intended GitHub release tag is `v1.0.5`; this version is not released merely by opening a pull request. Google Play permanently reserves uploaded version codes, even in testing tracks, so confirm 102 is unused before uploading. The app shows its installed version in Settings → Help & about.
 
 ## Explore
 
@@ -228,9 +228,10 @@ toward existing ad achievements. Rewards are local, not verified leaderboard cre
 VIP suppresses all advertising.
 
 Liftoff requires an approved publisher account, an Android app and **one banner
-placement plus one rewarded placement**. Until all three IDs exist, advertising
-is entirely disabled; this is deliberate, and no placeholder/live ad requests
-occur. Supply IDs to Gradle using environment variables or Gradle project properties:
+placement plus one rewarded placement**. Road Conquest's publisher app, banner,
+and rewarded placement IDs are embedded as build defaults (these public SDK
+identifiers are not account credentials). For alternate builds, nonempty Gradle
+project properties or environment variables can override them:
 
 - `ROADCONQUEST_LIFTOFF_APP_ID`
 - `ROADCONQUEST_LIFTOFF_BANNER_ID`
@@ -239,8 +240,9 @@ occur. Supply IDs to Gradle using environment variables or Gradle project proper
 Set `ROADCONQUEST_LIFTOFF_REWARD_POINTS` if you want to change the fixed
 25-point reward (1–1000 points); Liftoff's completion callback does not return
 an AdMob-style dynamic reward amount. Keep the displayed reward and actual
-credit identical. For GitHub builds, add Actions secrets `LIFTOFF_APP_ID`,
-`LIFTOFF_BANNER_ID`, and `LIFTOFF_REWARDED_ID`. Check **Test Mode** in the
+credit identical. GitHub builds now use the configured defaults without requiring
+Actions secrets; optional `LIFTOFF_APP_ID`, `LIFTOFF_BANNER_ID`, and
+`LIFTOFF_REWARDED_ID` secrets may override them. Check **Test Mode** in the
 Liftoff dashboard before generating test traffic; unlike AdMob, Liftoff has no
 universal public demo placement IDs.
 
