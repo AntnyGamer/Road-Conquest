@@ -121,7 +121,7 @@ class ScreenAds(
 
     private fun permitted(): Boolean = active && alive() && vipChecked &&
         !VipEntitlement.isActive(activity) && LiftoffConfig.isConfigured() &&
-        AdPrivacy.isAllowed(activity) && consentDialog == null
+        AdPrivacy.hasChoice(activity) && consentDialog == null
 
     private fun suspendAdsForVip() {
         epoch++
@@ -136,7 +136,7 @@ class ScreenAds(
 
     /** One bounded foreground retry per visit; no work from a hidden screen. */
     private fun retryOnce() {
-        if (!active || !alive() || recoveryUsed || !AdPrivacy.isAllowed(activity)) return
+        if (!active || !alive() || recoveryUsed || !AdPrivacy.hasChoice(activity)) return
         recoveryUsed = true
         root.postDelayed(retryAds, 60_000L)
     }
@@ -186,24 +186,22 @@ class ScreenAds(
         dialog.setOnDismissListener {
             consentDialog = null
             updatePrivacyButton()
-            if (AdPrivacy.isAllowed(activity) && active && alive()) startAdsIfAllowed()
+            if (AdPrivacy.hasChoice(activity) && active && alive()) startAdsIfAllowed()
         }
         dialog.show()
         updatePrivacyButton()
     }
 
     private fun changeConsent(allowed: Boolean) {
-        // Revocation stops new loads immediately; completed rewards still save.
+        // A choice change discards ads loaded with the previous privacy flags; earned rewards still save.
         AdPrivacy.save(activity, allowed)
         AdPrivacy.applyToSdk(activity)
         epoch++
         rewarded = null
         loadingReward = false
-        if (!allowed) {
-            sdkReady = false
-            root.removeCallbacks(retryAds)
-            destroyBanner()
-        }
+        sdkReady = false
+        root.removeCallbacks(retryAds)
+        destroyBanner()
         updateRewardButton()
     }
 
@@ -425,7 +423,7 @@ private object AdPrivacy {
     private const val VERSION = "1.0"
 
     fun hasChoice(activity: Activity) = activity.getSharedPreferences(PREFS, 0).contains(CONSENT_KEY)
-    fun isAllowed(activity: Activity) =
+    fun allowsPersonalizedAds(activity: Activity) =
         activity.getSharedPreferences(PREFS, 0).getBoolean(CONSENT_KEY, false)
 
     fun save(activity: Activity, allowed: Boolean) {
@@ -433,7 +431,7 @@ private object AdPrivacy {
     }
 
     fun applyToSdk(activity: Activity) {
-        val allowed = isAllowed(activity)
+        val allowed = allowsPersonalizedAds(activity)
         VunglePrivacySettings.setGDPRStatus(allowed, VERSION)
         VunglePrivacySettings.setCCPAStatus(allowed)
     }

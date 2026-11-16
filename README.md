@@ -244,9 +244,10 @@ credit identical. For GitHub builds, add Actions secrets `LIFTOFF_APP_ID`,
 Liftoff dashboard before generating test traffic; unlike AdMob, Liftoff has no
 universal public demo placement IDs.
 
-Before SDK initialization, the app offers opt-in advertising consent and keeps
-**Ad privacy choices** accessible on supported screens. Declining disables ads
-without blocking app features. The app transmits neither recorded routes nor
+Before SDK initialization, the app asks whether users prefer personalized or
+limited-data advertising and keeps **Ad privacy choices** accessible on
+supported screens. Limited ads propagate opt-out signals to Liftoff rather
+than offering a free ad-removal bypass. VIP removes ads entirely. The app transmits neither recorded routes nor
 account credentials to ad calls. Review the deployed `/privacy` disclosure,
 update Play Console's Data safety and advertising forms, and publish Liftoff's
 actual authorized seller list at the root-domain `/app-ads.txt`. Liftoff may
