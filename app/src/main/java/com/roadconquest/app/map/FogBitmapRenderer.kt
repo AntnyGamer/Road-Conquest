@@ -352,19 +352,26 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
                             val sameName = names[from].isNotBlank() &&
                                 !names[from].equals("Unnamed road", ignoreCase = true) &&
                                 names[from].trim().equals(names[to].trim(), ignoreCase = true)
-                            val straightBend = if (normalTime && ordinaryBend == null &&
+                            val straightBend = if (normalTime &&
                                 (sameName || hasRecordedDriving != null)
                             ) supportedStraightSeam(left.coordinates, right.coordinates, distance) else null
-                            val bend = ordinaryBend ?: extendedBend?.takeIf { confirmedTurn }
-                                ?: straightBend ?: continue
-                            val isStraight = bend === straightBend
-                            val confirmedStraight = isStraight && hasRecordedDriving?.invoke(
+                            val confirmedStraight = straightBend != null && hasRecordedDriving?.invoke(
                                 nodes[left.endNode].latitude, nodes[left.endNode].longitude,
                                 nodes[right.startNode].latitude, nodes[right.startNode].longitude,
                                 time, nextAt
                             ) == true
-                            if (isStraight && !confirmedStraight &&
-                                (!sameName || hasRecordedDriving != null)) continue
+                            // At a near-straight intersection the extrapolated rays may
+                            // also have a mathematical crossing. Real GPS evidence that
+                            // the driver went straight takes precedence over guessing a
+                            // turn from the same two centerlines.
+                            val bend = when {
+                                confirmedStraight -> straightBend
+                                ordinaryBend != null -> ordinaryBend
+                                confirmedTurn -> extendedBend
+                                sameName && hasRecordedDriving == null -> straightBend
+                                else -> null
+                            } ?: continue
+                            val isStraight = bend === straightBend
                             seenFrom[to] = from
                             val candidate = JunctionCandidate(from, to, distance, bend,
                                 time, nextAt, isStraight, confirmedTurn || confirmedStraight)

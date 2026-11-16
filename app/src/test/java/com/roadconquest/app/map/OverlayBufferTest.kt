@@ -87,6 +87,22 @@ class OverlayBufferTest {
             })
     }
 
+    @Test fun gpsConfirmedStraightTravelWinsOverShallowIntersectionRayCrossing() {
+        // These matched centerlines are only 9 degrees apart. Their tangent
+        // rays intersect, but the recorded travel went straight through the
+        // junction; the map must not invent a turning connector instead.
+        val west = namedFragment("Road Before", 1_000L, 4_000L,
+            40.0 to -74.00050, 40.0 to -74.00025)
+        val east = namedFragment("Road After", 6_000L, 8_000L,
+            40.00001 to -74.00010, 40.00004 to -73.99985)
+        val overlay = OverlayRoads.prepare(listOf(west, east),
+            hasRecordedDriving = { _, _, _, _, _, _ -> true },
+            hasRecordedTurn = { _, _, _, _, _, _, _, _ -> false },
+            requireMatchedConnectorGeometry = true)
+        assertEquals("Verified near-straight intersection is still one blue line",
+            1, overlay.starts.size - 1)
+    }
+
     @Test fun passingAnIntersectionNeverConnectsToPerpendicularOrOffsetRoads() {
         val before = namedFragment("Main Road", 1_000L, 4_000L,
             40.0 to -74.0005, 40.0 to -74.00025)
