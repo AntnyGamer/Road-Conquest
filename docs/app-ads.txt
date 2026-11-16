@@ -1,3 +1,2 @@
-# Liftoff Monetize: replace this comment with authorized seller entries from your account.
-# Example syntax only (do NOT publish invented IDs): vungle.com, YOUR_SELLER_ID, DIRECT, c107d686becd2d77
-# See https://support.vungle.com/hc/en-us/articles/360047780372-Advanced-Settings
+# Road Conquest authorized advertising seller — Liftoff Monetize
+vungle.com, 6aeca928a315ae46c89a5544, DIRECT, c107d686becd2d77
