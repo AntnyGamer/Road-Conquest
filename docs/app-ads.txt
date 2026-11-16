@@ -1,1 +1,3 @@
-# Liftoff publisher: add YOUR exact vungle.com seller ID and authorized seller lines here.\n# See https://support.vungle.com/hc/en-us/articles/360047780372-Advanced-Settings\n
+# Liftoff Monetize: replace this comment with authorized seller entries from your account.
+# Example syntax only (do NOT publish invented IDs): vungle.com, YOUR_SELLER_ID, DIRECT, c107d686becd2d77
+# See https://support.vungle.com/hc/en-us/articles/360047780372-Advanced-Settings
