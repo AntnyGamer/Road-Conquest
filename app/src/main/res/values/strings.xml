@@ -39,7 +39,10 @@
     <string name="web_page_unavailable">No app could open this page. Open this address in a browser: %1$s</string>
     <string name="app_version">Release %1$s (%2$d)</string>
     <string name="ad_banner_label">Advertisement</string>
-    <string name="ad_reward_explanation">Optional: load an ad to see its reward before choosing to watch. Points are earned only after confirmed completion. Google may use device identifiers, ad interactions, diagnostics and your IP address.</string>
+    <string name="ad_reward_explanation">Optional: load an ad to see its reward before choosing to watch. Points are earned only after confirmed completion. Liftoff may process device identifiers, ad interactions, diagnostics and IP addresses when you allow ads.</string>
+    <string name="ad_consent_description">Allow Road Conquest to show ads from Liftoff Monetize? Liftoff may collect device identifiers, IP addresses, diagnostics and ad interactions to deliver and measure ads. You can choose No ads and continue using the app, or change your choice later here. Driving routes are not sent to ad requests.</string>
+    <string name="ad_allow_ads">Allow ads</string>
+    <string name="ad_reject_ads">No ads</string>
     <string name="ad_privacy_options">Ad privacy choices</string>
     <string name="ad_unavailable">Rewarded ads unavailable</string>
     <string name="ad_load">Load rewarded ad</string>

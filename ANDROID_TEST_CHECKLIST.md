@@ -51,7 +51,7 @@ This checklist is for final device-level validation on supported Android 12+ pho
    and verify the relevant discovery count/points appear without repeated rewards on a revisit.
 3. Verify town/state/country achievement progress reflects the discovery counts.
 4. Confirm achievement categories show **Road Conquest**, **Map Tiles**, **Distance**, **Exploration**, **Town Badges** and **Ad Rewards**. Retired low-battery achievements must not appear.
-5. In Garage & Shop, complete an AdMob rewarded ad and confirm the earned points are saved once.
+5. In Garage & Shop, complete a Liftoff rewarded ad in dashboard Test Mode and confirm the earned points are saved once.
    Verify the Ads achievement count advances toward the 5/10/25/50/100 milestones. Cancel or
    fail to load an ad and confirm neither points nor achievement progress increases.
 

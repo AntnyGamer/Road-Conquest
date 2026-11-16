@@ -1,1 +1,1 @@
-google.com, pub-4489303482171969, DIRECT, f08c47fec0942fa0
+# Liftoff publisher: add YOUR exact vungle.com seller ID and authorized seller lines here.\n# See https://support.vungle.com/hc/en-us/articles/360047780372-Advanced-Settings\n

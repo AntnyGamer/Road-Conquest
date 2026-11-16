@@ -84,6 +84,10 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      ROADCONQUEST_LIFTOFF_APP_ID: ${{ secrets.LIFTOFF_APP_ID }}
+      ROADCONQUEST_LIFTOFF_BANNER_ID: ${{ secrets.LIFTOFF_BANNER_ID }}
+      ROADCONQUEST_LIFTOFF_REWARDED_ID: ${{ secrets.LIFTOFF_REWARDED_ID }}
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -198,7 +202,7 @@ jobs:
           echo "a099cfa1543f55593bc2ed16a70a7c67fe54b1747bb7301f37fdfd6d91028e29  $bundletool" | sha256sum -c -
           java -jar "$bundletool" validate --bundle=app/build/outputs/bundle/release/app-release.aab
 
-      - name: Verify Google Advertising ID permission in both release artifacts
+      - name: Verify Liftoff ad configuration and Android Advertising ID
         shell: bash
         run: |
           set -euo pipefail
@@ -206,36 +210,22 @@ jobs:
           aab="app/build/outputs/bundle/release/app-release.aab"
           permission="com.google.android.gms.permission.AD_ID"
           "$ANDROID_HOME/build-tools/36.0.0/aapt2" dump permissions "$apk" > "$RUNNER_TEMP/release-apk-permissions.txt"
-          if ! grep -Fq "$permission" "$RUNNER_TEMP/release-apk-permissions.txt"; then
-            echo "::error::The release APK is missing $permission."
-            exit 1
-          fi
+          grep -Fq "$permission" "$RUNNER_TEMP/release-apk-permissions.txt"
           bundletool="$RUNNER_TEMP/bundletool-all-1.18.3.jar"
           java -jar "$bundletool" dump manifest --bundle="$aab" --module=base > "$RUNNER_TEMP/release-aab-manifest.xml"
-          if ! grep -Fq "$permission" "$RUNNER_TEMP/release-aab-manifest.xml"; then
-            echo "::error::The Play upload AAB is missing $permission."
+          grep -Fq "$permission" "$RUNNER_TEMP/release-aab-manifest.xml"
+          if grep -Fq 'com.google.android.gms.ads.APPLICATION_ID' "$RUNNER_TEMP/release-aab-manifest.xml"; then
+            echo "::error::AdMob SDK metadata should not ship after moving to Liftoff."
             exit 1
           fi
-
-          # The production AAB must contain our real AdMob application ID, not
-          # the test ID used exclusively by the debug build. A missing/wrong ID
-          # can cause an initialization crash or zero ad fill at runtime.
-          if ! grep -Fq 'com.google.android.gms.ads.APPLICATION_ID' "$RUNNER_TEMP/release-aab-manifest.xml" ||
-             ! grep -Fq 'ca-app-pub-4489303482171969~1528361127' "$RUNNER_TEMP/release-aab-manifest.xml"; then
-            echo "::error::The signed Play bundle manifest lacks the production AdMob application ID."
+          grep -Fq 'com.vungle:vungle-ads:7.8.0' app/build.gradle.kts
+          grep -Fq 'VunglePrivacySettings.setGDPRStatus' app/src/main/java/com/roadconquest/app/ads/ScreenAds.kt
+          grep -Fq 'VunglePrivacySettings.setCCPAStatus' app/src/main/java/com/roadconquest/app/ads/ScreenAds.kt
+          grep -Fq 'onAdRewarded' app/src/main/java/com/roadconquest/app/ads/ScreenAds.kt
+          if grep -Fq 'play-services-ads:25.5.0' app/build.gradle.kts; then
+            echo "::error::Old AdMob SDK remains in the app."
             exit 1
           fi
-          if grep -Fq 'ca-app-pub-3940256099942544' "$RUNNER_TEMP/release-aab-manifest.xml"; then
-            echo "::error::The release manifest contains the Google test AdMob App ID."
-            exit 1
-          fi
-          # Enforce both ad SDK dependencies and their consent-before-request
-          # gate in the release source. Actual Google CMP messages are configured
-          # remotely in AdMob and cannot be asserted by an offline build.
-          grep -Fq 'com.google.android.gms:play-services-ads:25.5.0' app/build.gradle.kts
-          grep -Fq 'com.google.android.ump:user-messaging-platform:4.0.0' app/build.gradle.kts
-          grep -Fq 'consent.canRequestAds()' app/src/main/java/com/roadconquest/app/ads/ScreenAds.kt
-          grep -Fq 'loadAndShowConsentFormIfRequired(activity)' app/src/main/java/com/roadconquest/app/ads/ScreenAds.kt
 
       - name: Verify 16 KB native-library compatibility
         shell: bash

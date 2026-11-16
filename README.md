@@ -7,7 +7,7 @@ cloud-textured fog map.
 [Source and issues](https://github.com/AntnyGamer/Road-Conquest) ·
 [GNU AGPL v3 license](LICENSE)
 
-**1.0.4** clarifies sign-in errors and reduces repeated work across trip history, map overlays, grid exploration, preferences, and map quotas. Google Mobile Ads and UMP consent dependencies are retained at their verified stable versions, with release-build advertising configuration checks. Existing accounts, storage, account/map Worker URLs, and backup formats remain unchanged. See the [release notes](RELEASE_NOTES.md) and [backup documentation](BACKUP_AND_CHALLENGES.md).
+**1.0.4** clarifies sign-in errors and reduces repeated work across trip history, map overlays, grid exploration, preferences, and map quotas. The direct Liftoff Monetize SDK replaces AdMob and MAX, with consent gating and build-time ad IDs. Existing accounts, storage, account/map Worker URLs, and backup formats remain unchanged. See the [release notes](RELEASE_NOTES.md) and [backup documentation](BACKUP_AND_CHALLENGES.md).
 
 Earlier beta history is available in [GitHub Releases](https://github.com/AntnyGamer/Road-Conquest/releases).
 
@@ -218,27 +218,41 @@ declarations that cannot be supplied by source code alone.
 
 ## Ads
 
-AdMob anchored adaptive banners appear in separate footers on Garage, Achievements, Leaderboards,
-and Settings. The driving map and account forms remain clear. No automatic full-screen ads are used.
-Banners pause while their screen is hidden and are destroyed with it. Rewarded ads load only after
-pressing **Load rewarded ad** in the Garage; **Watch ad** shows the exact point reward configured in
-AdMob before playback. The SDK-confirmed reward is persisted once, together with the completed-view
-counter; callbacks from a deleted history session are rejected. There is no automatic rewarded-ad
-preloading or retry loop. These local points do not add verified leaderboard credit.
+Road Conquest integrates **Liftoff Monetize (Vungle SDK 7.8.0) directly**, without
+AdMob or AppLovin MAX. When configured, 320x50 or 300x50 banners appear in the
+Garage, Achievements, Leaderboards, and Settings footers; the map and account
+screens have no ads. Ads stop when a screen is hidden. The Garage loads a rewarded
+video only on request; the reward is displayed before the user chooses to watch.
+The SDK's rewarded callback saves points exactly once per ad and counts progress
+toward existing ad achievements. Rewards are local, not verified leaderboard credit.
+VIP suppresses all advertising.
 
-Release builds use the publisher's AdMob App ID and banner/rewarded units in `app/build.gradle.kts`.
-Debug builds use Google's demo App ID and ad units; use debug builds for testing to avoid invalid
-traffic on live ads. Google UMP updates consent on entry to an ad-supported screen and gates SDK
-initialization/loading through `canRequestAds()`. Applicable **Ad privacy choices** stay reachable
-in the footer even if no banner fills. Ads require a network connection and eligible inventory;
-ad failures never block the rest of the screen.
+Liftoff requires an approved publisher account, an Android app and **one banner
+placement plus one rewarded placement**. Until all three IDs exist, advertising
+is entirely disabled; this is deliberate, and no placeholder/live ad requests
+occur. Supply IDs to Gradle using environment variables or Gradle project properties:
 
-Before distributing live ads, publish the appropriate messages in AdMob **Privacy & messaging**,
-complete AdMob app/store verification and readiness review, and declare ads and the SDK's data
-collection in Play Console. Keep the account service's `/privacy` advertising disclosure deployed. GitHub release jobs
-attach the tested backend bundle but do not deploy it or modify AdMob/Play settings.
-Ads have network, memory, storage and battery costs.
+- `ROADCONQUEST_LIFTOFF_APP_ID`
+- `ROADCONQUEST_LIFTOFF_BANNER_ID`
+- `ROADCONQUEST_LIFTOFF_REWARDED_ID`
 
+Set `ROADCONQUEST_LIFTOFF_REWARD_POINTS` if you want to change the fixed
+25-point reward (1–1000 points); Liftoff's completion callback does not return
+an AdMob-style dynamic reward amount. Keep the displayed reward and actual
+credit identical. For GitHub builds, add Actions secrets `LIFTOFF_APP_ID`,
+`LIFTOFF_BANNER_ID`, and `LIFTOFF_REWARDED_ID`. Check **Test Mode** in the
+Liftoff dashboard before generating test traffic; unlike AdMob, Liftoff has no
+universal public demo placement IDs.
+
+Before SDK initialization, the app offers opt-in advertising consent and keeps
+**Ad privacy choices** accessible on supported screens. Declining disables ads
+without blocking app features. The app transmits neither recorded routes nor
+account credentials to ad calls. Review the deployed `/privacy` disclosure,
+update Play Console's Data safety and advertising forms, and publish Liftoff's
+actual authorized seller list at the root-domain `/app-ads.txt`. Liftoff may
+require a registrable root domain rather than `roadconquest.pages.dev`.
+Account approval, store listing, DNS and publisher payout settings must be
+completed in Liftoff/Play outside the Android source tree.
 ## Privacy and map credits
 
 Driving history, explored places, points and purchases stay on the phone. Already verified

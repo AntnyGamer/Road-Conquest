@@ -1,6 +1,7 @@
 package com.roadconquest.app.ads
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.app.Application
 import android.os.Bundle
 import android.os.SystemClock
@@ -10,29 +11,27 @@ import android.view.View
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.Toast
-import com.google.android.gms.ads.AdActivity
-import com.google.android.gms.ads.AdListener
-import com.google.android.gms.ads.AdRequest
-import com.google.android.gms.ads.AdSize
-import com.google.android.gms.ads.AdView
-import com.google.android.gms.ads.FullScreenContentCallback
-import com.google.android.gms.ads.LoadAdError
-import com.google.android.gms.ads.MobileAds
-import com.google.android.gms.ads.rewarded.RewardedAd
-import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback
-import com.google.android.ump.ConsentInformation
-import com.google.android.ump.ConsentRequestParameters
-import com.google.android.ump.UserMessagingPlatform
 import com.roadconquest.app.BuildConfig
 import com.roadconquest.app.R
 import com.roadconquest.app.billing.VipBilling
 import com.roadconquest.app.billing.VipEntitlement
 import com.roadconquest.app.progression.AdRewardBridge
 import com.roadconquest.app.util.ForegroundSession
+import com.vungle.ads.AdConfig
+import com.vungle.ads.BannerAdListener
+import com.vungle.ads.BaseAd
+import com.vungle.ads.InitializationListener
+import com.vungle.ads.RewardedAd
+import com.vungle.ads.RewardedAdListener
+import com.vungle.ads.VungleAdSize
+import com.vungle.ads.VungleAds
+import com.vungle.ads.VungleBannerView
+import com.vungle.ads.VungleError
+import com.vungle.ads.VunglePrivacySettings
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.atomic.AtomicBoolean
 
-/** Activity-owned ads: no requests from the map or tracking service; bounded UI-only retries. */
+/** Liftoff ads live only on visible UI screens, never in the driving or map services. */
 class ScreenAds(
     private val activity: Activity,
     private val root: View,
@@ -44,42 +43,33 @@ class ScreenAds(
     private val bannerRow = activity.findViewById<View>(R.id.adBannerRow)
     private val container = activity.findViewById<FrameLayout>(R.id.adBannerContainer)
     private val privacyButton = activity.findViewById<Button>(R.id.adPrivacyButton)
-    private val consent = UserMessagingPlatform.getConsentInformation(activity)
     private var active = false
     private var destroyed = false
-    private var epoch = 0
-    private var consentRequested = false
-    private var consentComplete = false
-    private var formPending = false
-    private var formShowing = false
+    private var vipChecked = false
     private var sdkReady = false
-    private var banner: AdView? = null
+    private var epoch = 0
+    private var recoveryUsed = false
+    private var banner: VungleBannerView? = null
     private var bannerLayoutListener: View.OnLayoutChangeListener? = null
     private var rewarded: RewardedAd? = null
-    private var rewardLoadedAt = 0L
+    private var rewardedLoadedAt = 0L
     private var loadingReward = false
     private var showingReward = false
-    private var privacyRevision = AdPrivacy.revision
-    private var recoveryUsed = false
-    private var vipChecked = false
+    private var consentDialog: AlertDialog? = null
+
     private val vipBilling = if (checkVipOwnership) VipBilling(activity) { _, checked, _ ->
         onVipOwnershipChecked(checked)
     } else null
     private val vipListener: () -> Unit = {
         activity.runOnUiThread {
-            if (alive() && active) {
+            if (active && alive()) {
                 if (VipEntitlement.isActive(activity)) suspendAdsForVip()
-                else if (vipChecked) resumeAfterVipCheck()
+                else if (vipChecked) startAdsIfAllowed()
             }
         }
     }
     private val retryAds = Runnable {
-        if (alive() && active && vipChecked && !VipEntitlement.isActive(activity)) {
-            // An offline UMP failure must retry consent itself, not only an ad
-            // request that will keep failing the consent gate.
-            if (!consentRequested) resumeAfterVipCheck()
-            else if (permitted()) enableAds()
-        }
+        if (active && alive() && vipChecked && !VipEntitlement.isActive(activity)) startAdsIfAllowed()
     }
 
     init {
@@ -90,75 +80,33 @@ class ScreenAds(
 
     fun onResume() {
         active = true
-        recoveryUsed = false
         vipChecked = false
+        recoveryUsed = false
         root.removeCallbacks(retryAds)
-        if (privacyRevision != AdPrivacy.revision) {
-            privacyRevision = AdPrivacy.revision
-            destroyBanner()
-        }
-        // Restore a prior Play purchase before initializing/loading ads. A
-        // cached offline VIP entitlement also suppresses ads immediately.
         if (VipEntitlement.isActive(activity)) suspendAdsForVip()
         vipBilling?.refresh(includeOffer = false)
+        updatePrivacyButton()
+        updateRewardButton()
     }
 
-    /** Garage shares its purchase check rather than opening a second Billing client. */
+    /** The Garage shares its purchase check with this ad manager. */
     fun onVipOwnershipChecked(checked: Boolean) {
         vipChecked = checked
         if (checked && active && alive()) {
             if (VipEntitlement.isActive(activity)) suspendAdsForVip()
-            else resumeAfterVipCheck()
+            else startAdsIfAllowed()
         }
-    }
-
-    private fun resumeAfterVipCheck() {
-        if (!active || !alive() || VipEntitlement.isActive(activity)) return
-        updateRewardButton()
-        if (!consentRequested) {
-            consentRequested = true
-            consent.requestConsentInfoUpdate(activity, ConsentRequestParameters.Builder().build(), {
-                if (!alive() || VipEntitlement.isActive(activity)) return@requestConsentInfoUpdate
-                formPending = true
-                presentConsentForm()
-            }, {
-                if (!alive() || VipEntitlement.isActive(activity)) return@requestConsentInfoUpdate
-                // Cached consent can legitimately allow ads after a network error.
-                // Without usable consent, give UMP one bounded foreground retry;
-                // the previous sticky flag otherwise blocked every retry until
-                // this Activity was recreated.
-                if (!consent.canRequestAds()) consentRequested = false
-                consentComplete = true
-                updatePrivacyButton()
-                enableAds()
-                if (!consentRequested) retryOnce()
-            })
-        } else if (formPending) {
-            presentConsentForm()
-        } else {
-            enableAds()
-        }
-    }
-
-    private fun suspendAdsForVip() {
-        epoch++
-        root.removeCallbacks(retryAds)
-        rewarded = null
-        loadingReward = false
-        destroyBanner()
-        updateRewardButton()
-        updatePrivacyButton()
     }
 
     fun onPause() {
         active = false
-        root.removeCallbacks(retryAds)
-        clearBannerLayoutListener()
         epoch++
-        // A hidden screen must never show an ad that finishes loading later.
+        root.removeCallbacks(retryAds)
+        consentDialog?.dismiss()
+        consentDialog = null
         rewarded = null
         loadingReward = false
-        banner?.pause()
+        destroyBanner()
         updateRewardButton()
     }
 
@@ -167,95 +115,107 @@ class ScreenAds(
         onPause()
         VipEntitlement.removeListener(vipListener)
         vipBilling?.close()
-        destroyBanner()
     }
 
-    private fun alive() = !destroyed && !activity.isDestroyed && !activity.isFinishing
+    private fun alive(): Boolean = !destroyed && !activity.isDestroyed && !activity.isFinishing
 
-    private fun permitted() = alive() && active && vipChecked &&
-        !VipEntitlement.isActive(activity) && consentComplete && !formShowing && consent.canRequestAds()
+    private fun permitted(): Boolean = active && alive() && vipChecked &&
+        !VipEntitlement.isActive(activity) && LiftoffConfig.isConfigured() &&
+        AdPrivacy.isAllowed(activity) && consentDialog == null
 
-    /** At most one foreground recovery attempt per screen visit; never retry while hidden. */
-    private fun retryOnce() {
-        if (!active || !alive() || recoveryUsed) return
-        recoveryUsed = true
-        root.postDelayed(retryAds, AD_RETRY_DELAY_MS)
-    }
-
-    private fun presentConsentForm() {
-        if (!alive() || !active || formShowing || !formPending) return
-        formPending = false
-        formShowing = true
-        UserMessagingPlatform.loadAndShowConsentFormIfRequired(activity) { error ->
-            // A failed required form without cached permission must not leave
-            // consentRequested latched forever. Retry the full consent refresh
-            // once while visible, or on the next foreground visit if paused.
-            val retryConsent = shouldRetryConsentAfterFormError(error != null, consent.canRequestAds())
-            if (retryConsent) consentRequested = false
-            completeConsentForm(error != null)
-            if (retryConsent) retryOnce()
-        }
-    }
-
-    private fun showPrivacyOptions() {
-        if (!alive() || !active || formShowing || showingReward) return
+    private fun suspendAdsForVip() {
         epoch++
+        root.removeCallbacks(retryAds)
         rewarded = null
         loadingReward = false
-        consentComplete = false
-        formShowing = true
+        sdkReady = false
         destroyBanner()
         updateRewardButton()
-        UserMessagingPlatform.showPrivacyOptionsForm(activity) { error ->
-            privacyRevision = ++AdPrivacy.revision
-            completeConsentForm(error != null)
-        }
-    }
-
-    private fun completeConsentForm(hadError: Boolean) {
-        if (!alive()) return
-        formShowing = false
-        consentComplete = true
-        if (hadError && active) toast(R.string.ad_consent_error)
         updatePrivacyButton()
-        enableAds()
     }
 
-    private fun updatePrivacyButton() {
-        // Paying to remove ads must not remove access to existing ad privacy
-        // choices for people who previously consented to personalized ads.
-        privacyButton.visibility = if (consent.privacyOptionsRequirementStatus ==
-            ConsentInformation.PrivacyOptionsRequirementStatus.REQUIRED) View.VISIBLE else View.GONE
-        privacyButton.isEnabled = !formShowing && !showingReward
-        updateFooter()
+    /** One bounded foreground retry per visit; no work from a hidden screen. */
+    private fun retryOnce() {
+        if (!active || !alive() || recoveryUsed || !AdPrivacy.isAllowed(activity)) return
+        recoveryUsed = true
+        root.postDelayed(retryAds, 60_000L)
     }
 
-    private fun updateFooter() {
-        footer.visibility = if (bannerRow.visibility == View.VISIBLE || privacyButton.visibility == View.VISIBLE)
-            View.VISIBLE else View.GONE
-    }
-
-    private fun enableAds() {
+    private fun startAdsIfAllowed() {
         updatePrivacyButton()
         updateRewardButton()
-        if (!permitted()) {
-            if (consentComplete && !consent.canRequestAds()) destroyBanner()
+        if (!active || !alive() || !vipChecked || VipEntitlement.isActive(activity) ||
+            !LiftoffConfig.isConfigured()) return
+        if (!AdPrivacy.hasChoice(activity)) {
+            showPrivacyOptions()
             return
         }
-        banner?.resume()
+        if (!permitted()) {
+            destroyBanner()
+            return
+        }
+        // Both network privacy flags must be established before SDK initialization.
+        AdPrivacy.applyToSdk(activity)
         val current = epoch
         AdSdk.initialize(activity.application).whenComplete { _, error ->
             activity.runOnUiThread {
                 if (!permitted() || current != epoch) return@runOnUiThread
                 sdkReady = error == null
-                if (sdkReady) root.post {
-                    if (permitted() && current == epoch) createBanner()
-                } else {
-                    retryOnce()
-                }
+                if (sdkReady) {
+                    root.post {
+                        if (permitted() && current == epoch) createBanner()
+                    }
+                } else retryOnce()
                 updateRewardButton()
             }
         }
+    }
+
+    private fun showPrivacyOptions() {
+        if (!active || !alive() || showingReward || !LiftoffConfig.isConfigured() ||
+            consentDialog != null) return
+        val firstChoice = !AdPrivacy.hasChoice(activity)
+        val dialog = AlertDialog.Builder(activity)
+            .setTitle(R.string.ad_privacy_options)
+            .setMessage(R.string.ad_consent_description)
+            .setPositiveButton(R.string.ad_allow_ads) { _, _ -> changeConsent(true) }
+            .setNegativeButton(R.string.ad_reject_ads) { _, _ -> changeConsent(false) }
+            .setCancelable(!firstChoice)
+            .create()
+        consentDialog = dialog
+        dialog.setOnDismissListener {
+            consentDialog = null
+            updatePrivacyButton()
+            if (AdPrivacy.isAllowed(activity) && active && alive()) startAdsIfAllowed()
+        }
+        dialog.show()
+        updatePrivacyButton()
+    }
+
+    private fun changeConsent(allowed: Boolean) {
+        // Revocation stops new loads immediately; completed rewards still save.
+        AdPrivacy.save(activity, allowed)
+        AdPrivacy.applyToSdk(activity)
+        epoch++
+        rewarded = null
+        loadingReward = false
+        if (!allowed) {
+            sdkReady = false
+            root.removeCallbacks(retryAds)
+            destroyBanner()
+        }
+        updateRewardButton()
+    }
+
+    private fun updatePrivacyButton() {
+        privacyButton.visibility = if (LiftoffConfig.isConfigured()) View.VISIBLE else View.GONE
+        privacyButton.isEnabled = active && !showingReward && consentDialog == null
+        updateFooter()
+    }
+
+    private fun updateFooter() {
+        footer.visibility = if (bannerRow.visibility == View.VISIBLE ||
+            privacyButton.visibility == View.VISIBLE) View.VISIBLE else View.GONE
     }
 
     private fun clearBannerLayoutListener() {
@@ -265,16 +225,13 @@ class ScreenAds(
 
     private fun createBanner() {
         if (banner != null || !sdkReady || !permitted()) return
-        val pixels = root.width - root.paddingLeft - root.paddingRight - footer.paddingLeft - footer.paddingRight
-        val widthDp = (pixels / activity.resources.displayMetrics.density).toInt()
+        val widthPx = root.width - root.paddingLeft - root.paddingRight -
+            footer.paddingLeft - footer.paddingRight
+        val widthDp = (widthPx / activity.resources.displayMetrics.density).toInt()
         if (widthDp <= 0) {
-            // Cached SDK initialization may complete before a new Activity's first layout.
-            // Wait for actual dimensions rather than silently skipping the banner.
             if (bannerLayoutListener == null) {
                 val listener = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
-                    val measuredPixels = root.width - root.paddingLeft - root.paddingRight -
-                        footer.paddingLeft - footer.paddingRight
-                    if ((measuredPixels / activity.resources.displayMetrics.density).toInt() > 0) {
+                    if (root.width > 0) {
                         clearBannerLayoutListener()
                         createBanner()
                     }
@@ -284,55 +241,69 @@ class ScreenAds(
             }
             return
         }
+        // Vungle offers fixed 320x50 and 300x50 banners, not AdMob adaptive banners.
+        if (widthDp < 300) return
         clearBannerLayoutListener()
-        val view = AdView(activity)
+        val size = if (widthDp >= 320) VungleAdSize.BANNER else VungleAdSize.BANNER_SHORT
+        val view = VungleBannerView(activity, BuildConfig.LIFTOFF_BANNER_ID, size)
         banner = view
-        view.adUnitId = BuildConfig.ADMOB_BANNER_ID
-        view.setAdSize(AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(activity, widthDp))
-        view.adListener = object : AdListener() {
-            override fun onAdLoaded() {
-                if (banner !== view || !alive()) return
-                if (!active) view.pause()
-                bannerRow.visibility = View.VISIBLE
-                updateFooter()
+        view.adListener = object : BannerAdListener {
+            override fun onAdLoaded(baseAd: BaseAd) {
+                activity.runOnUiThread {
+                    if (banner !== view || !permitted()) return@runOnUiThread
+                    bannerRow.visibility = View.VISIBLE
+                    updateFooter()
+                }
             }
-
-            override fun onAdFailedToLoad(error: LoadAdError) {
-                if (banner !== view || !alive()) return
-                // A failed first load must not leave a nonfunctional AdView blocking recovery.
-                // Keep a successfully loaded banner if an SDK refresh fails later.
-                if (bannerRow.visibility != View.VISIBLE) {
+            override fun onAdFailedToLoad(baseAd: BaseAd, error: VungleError) {
+                activity.runOnUiThread {
+                    if (banner !== view) return@runOnUiThread
                     destroyBanner()
                     retryOnce()
                 }
             }
+            override fun onAdFailedToPlay(baseAd: BaseAd, error: VungleError) {
+                activity.runOnUiThread {
+                    if (banner !== view) return@runOnUiThread
+                    destroyBanner()
+                    retryOnce()
+                }
+            }
+            override fun onAdStart(baseAd: BaseAd) {}
+            override fun onAdEnd(baseAd: BaseAd) {}
+            override fun onAdImpression(baseAd: BaseAd) {}
+            override fun onAdClicked(baseAd: BaseAd) {}
+            override fun onAdLeftApplication(baseAd: BaseAd) {}
         }
         container.addView(view, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER
         ))
-        view.loadAd(AdRequest.Builder().build())
+        view.load()
     }
 
     private fun destroyBanner() {
+        clearBannerLayoutListener()
         val view = banner
         banner = null
         container.removeAllViews()
-        view?.destroy()
+        view?.finishAd()
+        view?.adListener = null
         bannerRow.visibility = View.GONE
         updateFooter()
     }
 
     private fun updateRewardButton() {
         rewardButton?.apply {
-            val adsAvailable = permitted() && sdkReady
-            visibility = if (VipEntitlement.isActive(activity)) View.GONE else View.VISIBLE
-            isEnabled = adsAvailable && !loadingReward && !showingReward
+            val enabled = permitted() && sdkReady
+            visibility = if (VipEntitlement.isActive(activity) || !LiftoffConfig.isConfigured())
+                View.GONE else View.VISIBLE
+            isEnabled = enabled && !loadingReward && !showingReward
             text = when {
                 showingReward -> activity.getString(R.string.ad_showing)
                 loadingReward -> activity.getString(R.string.ad_loading)
-                !adsAvailable -> activity.getString(R.string.ad_unavailable)
-                rewarded != null -> activity.resources.getQuantityString(R.plurals.ad_watch,
-                    rewarded!!.rewardItem.amount, rewarded!!.rewardItem.amount)
+                !enabled -> activity.getString(R.string.ad_unavailable)
+                rewarded?.canPlayAd() == true -> activity.resources.getQuantityString(
+                    R.plurals.ad_watch, BuildConfig.LIFTOFF_REWARD_POINTS, BuildConfig.LIFTOFF_REWARD_POINTS)
                 else -> activity.getString(R.string.ad_load)
             }
         }
@@ -340,72 +311,93 @@ class ScreenAds(
 
     private fun loadOrShowReward() {
         if (!permitted() || !sdkReady || loadingReward || showingReward) return
-        val loaded = rewarded
-        // Google rewards expire after an hour; allow margin without running an expiry timer.
-        if (loaded != null && SystemClock.elapsedRealtime() - rewardLoadedAt < 55L * 60L * 1000L) {
-            showReward(loaded)
-            return
+        rewarded?.let { existing ->
+            if (SystemClock.elapsedRealtime() - rewardedLoadedAt < 45L * 60L * 1000L &&
+                existing.canPlayAd()) {
+                showReward(existing)
+                return
+            }
         }
         rewarded = null
         loadingReward = true
         updateRewardButton()
         val current = epoch
-        RewardedAd.load(activity, BuildConfig.ADMOB_REWARDED_ID, AdRequest.Builder().build(),
-            object : RewardedAdLoadCallback() {
-                override fun onAdLoaded(ad: RewardedAd) {
-                    if (!permitted() || current != epoch) return
+        val ad = RewardedAd(activity, BuildConfig.LIFTOFF_REWARDED_ID, AdConfig())
+        val awarded = AtomicBoolean(false)
+        ad.adListener = object : RewardedAdListener {
+            override fun onAdLoaded(baseAd: BaseAd) {
+                activity.runOnUiThread {
+                    if (!permitted() || current != epoch) return@runOnUiThread
                     loadingReward = false
-                    if (ad.rewardItem.amount > 0) {
-                        rewarded = ad
-                        rewardLoadedAt = SystemClock.elapsedRealtime()
-                    } else toast(R.string.ad_no_fill)
+                    rewarded = ad
+                    rewardedLoadedAt = SystemClock.elapsedRealtime()
                     updateRewardButton()
                 }
-
-                override fun onAdFailedToLoad(error: LoadAdError) {
-                    if (!permitted() || current != epoch) return
+            }
+            override fun onAdFailedToLoad(baseAd: BaseAd, error: VungleError) {
+                activity.runOnUiThread {
+                    if (current != epoch || !alive()) return@runOnUiThread
                     loadingReward = false
-                    toast(R.string.ad_no_fill)
+                    rewarded = null
+                    if (active) toast(R.string.ad_no_fill)
                     updateRewardButton()
                 }
-            })
+            }
+            override fun onAdFailedToPlay(baseAd: BaseAd, error: VungleError) {
+                activity.runOnUiThread {
+                    if (alive() && active) toast(R.string.ad_no_fill)
+                    finishReward()
+                }
+            }
+            override fun onAdRewarded(baseAd: BaseAd) {
+                if (awarded.compareAndSet(false, true)) saveCompletedReward()
+            }
+            override fun onAdEnd(baseAd: BaseAd) {
+                activity.runOnUiThread { finishReward() }
+            }
+            override fun onAdStart(baseAd: BaseAd) {}
+            override fun onAdImpression(baseAd: BaseAd) {}
+            override fun onAdClicked(baseAd: BaseAd) {}
+            override fun onAdLeftApplication(baseAd: BaseAd) {}
+        }
+        ad.load()
     }
 
     private fun showReward(ad: RewardedAd) {
-        val points = ad.rewardItem.amount.toLong()
-        val bridge = AdRewardBridge(activity.applicationContext, points)
-        val completed = AtomicBoolean(false)
         rewarded = null
+        if (!ad.canPlayAd() || !permitted()) {
+            updateRewardButton()
+            return
+        }
         showingReward = true
         updateRewardButton()
         updatePrivacyButton()
-        ad.fullScreenContentCallback = object : FullScreenContentCallback() {
-            override fun onAdDismissedFullScreenContent() { finishReward() }
-            override fun onAdFailedToShowFullScreenContent(error: com.google.android.gms.ads.AdError) {
-                finishReward()
-                if (alive() && active) toast(R.string.ad_no_fill)
+        runCatching { ad.play() }.onFailure {
+            Log.w("RoadConquest", "Rewarded ad could not start", it)
+            finishReward()
+        }
+    }
+
+    private fun saveCompletedReward() {
+        val points = BuildConfig.LIFTOFF_REWARD_POINTS.toLong()
+        val bridge = AdRewardBridge(activity.applicationContext, points)
+        // A confirmed reward is saved even if the user leaves before the ad ends.
+        Thread({
+            val result = runCatching { bridge.onCompletedAd() }
+            activity.runOnUiThread {
+                if (!alive()) return@runOnUiThread
+                result.fold(onSuccess = { saved ->
+                    if (saved) {
+                        if (active) Toast.makeText(activity, activity.resources.getQuantityString(
+                            R.plurals.ad_reward_saved, points.toInt(), points), Toast.LENGTH_SHORT).show()
+                        onRewardSaved()
+                    }
+                }, onFailure = {
+                    Log.e("RoadConquest", "Could not save completed ad reward", it)
+                    if (active) toast(R.string.ad_reward_failed)
+                })
             }
-        }
-        ad.show(activity) {
-            if (!completed.compareAndSet(false, true)) return@show
-            // A confirmed reward must finish saving even if the screen closes immediately.
-            Thread({
-                val result = runCatching { bridge.onCompletedAd() }
-                activity.runOnUiThread {
-                    if (!alive()) return@runOnUiThread
-                    result.fold(onSuccess = { saved ->
-                        if (saved) {
-                            if (active) Toast.makeText(activity, activity.resources.getQuantityString(
-                                R.plurals.ad_reward_saved, points.toInt(), points), Toast.LENGTH_SHORT).show()
-                            onRewardSaved()
-                        }
-                    }, onFailure = {
-                        Log.e("RoadConquest", "Could not save completed ad reward", it)
-                        if (active) toast(R.string.ad_reward_failed)
-                    })
-                }
-            }, "AdRewardSave").start()
-        }
+        }, "AdRewardSave").start()
     }
 
     private fun finishReward() {
@@ -417,13 +409,35 @@ class ScreenAds(
     }
 
     private fun toast(message: Int) = Toast.makeText(activity, message, Toast.LENGTH_SHORT).show()
-
-    companion object {
-        private const val AD_RETRY_DELAY_MS = 60_000L
-    }
 }
 
-private object AdPrivacy { var revision = 0 }
+internal object LiftoffConfig {
+    fun isConfigured(): Boolean = hasAdConfiguration(
+        BuildConfig.LIFTOFF_APP_ID, BuildConfig.LIFTOFF_BANNER_ID, BuildConfig.LIFTOFF_REWARDED_ID)
+}
+
+internal fun hasAdConfiguration(appId: String, bannerId: String, rewardedId: String): Boolean =
+    appId.isNotBlank() && bannerId.isNotBlank() && rewardedId.isNotBlank()
+
+private object AdPrivacy {
+    private const val PREFS = "roadconquest_ad_privacy"
+    private const val CONSENT_KEY = "allow_liftoff_ads_v1"
+    private const val VERSION = "1.0"
+
+    fun hasChoice(activity: Activity) = activity.getSharedPreferences(PREFS, 0).contains(CONSENT_KEY)
+    fun isAllowed(activity: Activity) =
+        activity.getSharedPreferences(PREFS, 0).getBoolean(CONSENT_KEY, false)
+
+    fun save(activity: Activity, allowed: Boolean) {
+        activity.getSharedPreferences(PREFS, 0).edit().putBoolean(CONSENT_KEY, allowed).apply()
+    }
+
+    fun applyToSdk(activity: Activity) {
+        val allowed = isAllowed(activity)
+        VunglePrivacySettings.setGDPRStatus(allowed, VERSION)
+        VunglePrivacySettings.setCCPAStatus(allowed)
+    }
+}
 
 private object AdSdk {
     private var initialization: CompletableFuture<Unit>? = null
@@ -431,12 +445,19 @@ private object AdSdk {
 
     @Synchronized fun initialize(application: Application): CompletableFuture<Unit> {
         initialization?.let { return it }
-        // Register once across failed initialization attempts, or AdActivity transitions
-        // would be counted multiple times and change automatic-tracking lifecycle behavior.
+        val future = CompletableFuture<Unit>()
+        initialization = future
         if (!lifecycleRegistered) {
             application.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
-                override fun onActivityStarted(activity: Activity) { if (activity is AdActivity) ForegroundSession.app.onStart() }
-                override fun onActivityStopped(activity: Activity) { if (activity is AdActivity) ForegroundSession.app.onStop(activity.isChangingConfigurations) }
+                // Fullscreen SDK Activities must not look like app exits to auto tracking.
+                private fun isAdActivity(activity: Activity) =
+                    activity.javaClass.name.startsWith("com.vungle.")
+                override fun onActivityStarted(activity: Activity) {
+                    if (isAdActivity(activity)) ForegroundSession.app.onStart()
+                }
+                override fun onActivityStopped(activity: Activity) {
+                    if (isAdActivity(activity)) ForegroundSession.app.onStop(activity.isChangingConfigurations)
+                }
                 override fun onActivityCreated(activity: Activity, state: Bundle?) {}
                 override fun onActivityResumed(activity: Activity) {}
                 override fun onActivityPaused(activity: Activity) {}
@@ -445,22 +466,21 @@ private object AdSdk {
             })
             lifecycleRegistered = true
         }
-        val future = CompletableFuture<Unit>()
-        initialization = future
-        Thread({
-            try {
-                MobileAds.initialize(application) { future.complete(Unit) }
-            } catch (error: Exception) {
-                synchronized(this) {
-                    if (initialization === future) initialization = null
+        try {
+            VungleAds.init(application, BuildConfig.LIFTOFF_APP_ID, object : InitializationListener {
+                override fun onSuccess() { future.complete(Unit) }
+                override fun onError(vungleError: VungleError) {
+                    fail(future, IllegalStateException(vungleError.localizedMessage))
                 }
-                future.completeExceptionally(error)
-            }
-        }, "AdSdkInit").start()
+            })
+        } catch (error: Exception) {
+            fail(future, error)
+        }
         return future
     }
-}
 
-/** Only failed required forms with no usable cached consent need another consent request. */
-internal fun shouldRetryConsentAfterFormError(hadError: Boolean, canRequestAds: Boolean): Boolean =
-    hadError && !canRequestAds
+    @Synchronized private fun fail(future: CompletableFuture<Unit>, error: Throwable) {
+        if (initialization === future) initialization = null
+        future.completeExceptionally(error)
+    }
+}
