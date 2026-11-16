@@ -278,6 +278,10 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
             // One segment pair can qualify at both original and recent timestamps.
             // It must count as ONE candidate, not an ambiguous second connection.
             val seenFrom = IntArray(originalSize) { -1 }
+            // Avoid treating repeated visits to the SAME two road fragments as
+            // competing exits. Preserve later GPS-confirmed crossings over
+            // earlier plausible-but-unverified visit timestamps.
+            val revisitCandidates = LinkedHashMap<Int, JunctionCandidate>()
 
             fun offer(index: Int, candidate: JunctionCandidate, best: Array<JunctionCandidate?>, second: DoubleArray) {
                 val previous = best[index]
@@ -292,6 +296,7 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
             for (from in 0 until originalSize) {
                 val left = segments[from]
                 if (degree[left.endNode] != 1 || left.endNode in occupiedNodes) continue
+                revisitCandidates.clear()
                 // Normal pass remains identical; the additional pass pairs the end of one
                 // recorded visit with the beginning of another visit.
                 for (timeIndex in 0 until (visits?.get(from)?.size ?: if (includeLastTimes) 2 else 1)) {
@@ -306,7 +311,7 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
                         else MAX_RECORDED_TURN_TIME_MS
                     for (second in time / 1_000L..time / 1_000L + timeLimit / 1_000L) {
                         for (to in startsBySecond[second].orEmpty()) {
-                            if (to == from || seenFrom[to] == from) continue
+                            if (to == from || (visits == null && seenFrom[to] == from)) continue
                             val nextAt = if (visits == null) {
                                 when {
                                     firstTimes[to] - time in 1L..timeLimit ->
@@ -338,10 +343,13 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
                                 supportedJunctionBend(left.coordinates, right.coordinates, distance,
                                     MAX_RECORDED_TURN_DISTANCE_M)
                                 else null
-                            val confirmedTurn = if (extendedBend != null && hasRecordedTurn != null)
+                            val candidateTurn = extendedBend ?: ordinaryBend.takeIf {
+                                visits != null && geometryByName != null
+                            }
+                            val confirmedTurn = if (candidateTurn != null && hasRecordedTurn != null)
                                 hasRecordedTurn(
                                     nodes[left.endNode].latitude, nodes[left.endNode].longitude,
-                                    extendedBend.first, extendedBend.second,
+                                    candidateTurn.first, candidateTurn.second,
                                     nodes[right.startNode].latitude, nodes[right.startNode].longitude,
                                     time, nextAt
                                 ) else false
@@ -372,13 +380,24 @@ class OverlayRoads(val coordinates: DoubleArray, val starts: IntArray) {
                                 else -> null
                             } ?: continue
                             val isStraight = bend === straightBend
-                            seenFrom[to] = from
                             val candidate = JunctionCandidate(from, to, distance, bend,
                                 time, nextAt, isStraight, confirmedTurn || confirmedStraight)
-                            offer(from, candidate, bestFrom, secondFrom)
-                            offer(to, candidate, bestTo, secondTo)
+                            if (visits == null) {
+                                seenFrom[to] = from
+                                offer(from, candidate, bestFrom, secondFrom)
+                                offer(to, candidate, bestTo, secondTo)
+                            } else {
+                                val previous = revisitCandidates[to]
+                                if (previous == null || (candidate.verified && !previous.verified)) {
+                                    revisitCandidates[to] = candidate
+                                }
+                            }
                         }
                     }
+                }
+                for (candidate in revisitCandidates.values) {
+                    offer(from, candidate, bestFrom, secondFrom)
+                    offer(candidate.to, candidate, bestTo, secondTo)
                 }
             }
 

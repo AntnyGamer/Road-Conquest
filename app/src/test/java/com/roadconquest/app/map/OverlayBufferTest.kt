@@ -190,6 +190,30 @@ class OverlayBufferTest {
             0L, repo.getSummary().roadSegmentCount)
     }
 
+    @Test fun laterGpsConfirmedVisitRepairsTurnMissedOnTheFirstDrive() {
+        val approach = namedFragment("Approach", 1_000L, 4_000L,
+            39.9995 to -74.0, 39.99986 to -74.0)
+        val exit = namedFragment("Exit", 6_000L, 8_000L,
+            40.0 to -73.99980, 40.0 to -73.99950)
+        val visits = mapOf(
+            approach.segmentId to listOf(1_000L to 4_000L, 101_000L to 104_000L),
+            exit.segmentId to listOf(6_000L to 8_000L, 108_000L to 110_000L)
+        )
+        val inspected = mutableListOf<Pair<Long, Long>>()
+        val result = OverlayRoads.prepare(listOf(approach, exit),
+            visitWindows = visits,
+            hasRecordedTurn = { _, _, _, _, _, _, from, to ->
+                inspected += from to to
+                from == 104_000L && to == 108_000L
+            },
+            requireMatchedConnectorGeometry = true)
+        assertTrue("Both recorded visits should be inspected", inspected.contains(4_000L to 6_000L))
+        assertTrue("Later evidence must not be skipped after the earlier unverified visit",
+            inspected.contains(104_000L to 108_000L))
+        assertEquals("A verified second drive connects the same two road fragments",
+            1, result.starts.size - 1)
+    }
+
     @Test fun productionMapRepairsShortConfirmedTurnWithoutDonorGeometry() {
         val context: android.content.Context = RuntimeEnvironment.getApplication()
         com.roadconquest.app.data.TrackingRepository(context).clearHistory()
