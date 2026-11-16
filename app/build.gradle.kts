@@ -120,6 +120,7 @@ dependencies {
     implementation("com.google.android.gms:play-services-ads-identifier:18.3.0")
     implementation("com.google.android.play:integrity:1.6.0")
     implementation("androidx.core:core:1.19.1")
+    implementation("androidx.core:core-ktx:1.19.1")
     implementation("org.maplibre.gl:android-sdk-opengl:13.7.1")
     implementation("org.locationtech.jts:jts-core:1.20.0")
     testImplementation("junit:junit:4.13.2")
