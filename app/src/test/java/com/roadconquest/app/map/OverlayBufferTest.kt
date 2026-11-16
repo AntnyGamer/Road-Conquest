@@ -136,6 +136,40 @@ class OverlayBufferTest {
             0L, repo.getSummary().roadSegmentCount)
     }
 
+    @Test fun productionMapRepairsShortConfirmedTurnWithoutDonorGeometry() {
+        val context: android.content.Context = RuntimeEnvironment.getApplication()
+        com.roadconquest.app.data.TrackingRepository(context).clearHistory()
+        val repo = com.roadconquest.app.data.TrackingRepository(context)
+        val approach = namedFragment("Approach", 1_000L, 4_000L,
+            39.9995 to -74.0, 39.99986 to -74.0)
+        val exit = namedFragment("Exit", 10_000L, 14_000L,
+            40.0 to -73.99980, 40.0 to -73.99950)
+        fun display() = OverlayRoads.prepare(listOf(approach, exit),
+            hasRecordedTurn = repo::hasRecordedDrivingThroughTurn,
+            requireMatchedConnectorGeometry = true)
+        assertEquals("Without the turn's GPS evidence, keep distinct roads", 2,
+            display().starts.size - 1)
+        for ((time, point) in listOf(
+            4_000L to (39.99986 to -74.0),
+            7_000L to (40.0 to -74.0),
+            10_000L to (40.0 to -73.99980)
+        )) {
+            repo.insertLocation(android.location.Location("gps").apply {
+                latitude = point.first; longitude = point.second; this.time = time
+                accuracy = 4f; speed = 8f
+            })
+        }
+        val result = display()
+        assertEquals("Short, GPS-proven intersection must have connected blue geometry",
+            1, result.starts.size - 1)
+        assertTrue("Correct centerline corner should be visible",
+            result.coordinates.indices.step(2).any {
+                kotlin.math.abs(result.coordinates[it] - 40.0) < 1e-6 &&
+                    kotlin.math.abs(result.coordinates[it + 1] + 74.0) < 1e-6
+            })
+        assertEquals(0L, repo.getSummary().roadSegmentCount)
+    }
+
     @Test fun actualGpsThroughIntersectionRepairsLongerMissingTurnOnlyVisually() {
         val app: android.content.Context = RuntimeEnvironment.getApplication()
         com.roadconquest.app.data.TrackingRepository(app).clearHistory()
