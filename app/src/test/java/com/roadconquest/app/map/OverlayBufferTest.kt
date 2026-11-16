@@ -108,8 +108,10 @@ class OverlayBufferTest {
             40.0 to -74.0005, 40.0 to -74.00025)
         val sideStreet = namedFragment("Side Road", 6_000L, 8_000L,
             40.0 to -74.00010, 40.00025 to -74.00010)
+        // Only ~10.6 degrees off the approach but 4.4 m sideways: the
+        // heading check alone is not enough to exclude this parallel road.
         val offsetParallel = namedFragment("Other Carriageway", 6_000L, 8_000L,
-            40.00004 to -74.00002, 40.00004 to -73.99978)
+            40.00004 to -73.99997, 40.00004 to -73.99973)
         for (wrongExit in listOf(sideStreet, offsetParallel)) {
             val result = OverlayRoads.prepare(listOf(before, wrongExit),
                 hasRecordedDriving = { _, _, _, _, _, _ -> true },
