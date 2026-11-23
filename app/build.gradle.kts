@@ -124,7 +124,7 @@ dependencies {
     implementation("org.maplibre.gl:android-sdk-opengl:13.7.1")
     implementation("org.locationtech.jts:jts-core:1.20.0")
     testImplementation("junit:junit:4.13.2")
-    testImplementation("org.robolectric:robolectric:4.18")
+    testImplementation("org.robolectric:robolectric:4.18.1")
     testImplementation("com.squareup.okhttp3:mockwebserver:5.5.1")
     androidTestImplementation("androidx.test:core:1.7.0")
     androidTestImplementation("androidx.test:runner:1.7.0")
